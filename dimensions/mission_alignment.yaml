@@ -83,15 +83,77 @@ extraction:
       # family." (T176 round 2) got past it: "your" sat after the sector word,
       # outside the window the old guard scanned. A benefit is what the
       # employer does for you; a purpose is for somebody else.
-      - pattern: "our\\s+(?:mission|purpose)\\s+is\\s+(?:to|that)\\b(?![^.;!?\\n]*\\byour?\\b)|mission-?driven|social\\s+impact"
+      #
+      # T178 round 2 (second reader on #473, head 3b131cb): the exclusion is
+      # the *full* English second-person pronoun paradigm — subject/object
+      # "you", possessive "your"/"yours", reflexive "yourself"/"yourselves" —
+      # not the two forms the previous round happened to write down. And
+      # "mission-driven" is deleted: it names no purpose at all ("Our
+      # mission-driven benefits package includes a gym." matched on the
+      # adjective alone), the exact shape the predicate requirement exists to
+      # refuse, and ES/CA never had an equivalent alternative — so the
+      # deletion closes a parity gap rather than opening one.
+      - pattern: "our\\s+(?:mission|purpose)\\s+is\\s+(?:to|that)\\b(?![^.;!?\\n]*\\b(?:you|your|yours|yourself|yourselves)\\b)|social\\s+impact"
         value: 0.7
         negatable: true
     es:
-      - pattern: "nuestra\\s+(?:misi[óo]n|prop[óo]sito)\\s+es\\s+(?:que|\\w+(?:ar|er|ir))\\b(?![^.;!?\\n]*\\b(?:tu|tus|vuestr\\w*)\\b)|impacto\\s+social"
+      # T178 round 2: two faults in the same regex, both found by re-deriving
+      # the ES/CA twins of every English case rather than trusting the
+      # English fix to generalise.
+      #
+      # 1. Gender agreement was wrong, and wrong in the fail-open direction
+      #    for one clause and the fail-closed direction for the other: "misión"
+      #    is feminine ("nuestra misión") but "propósito" is masculine
+      #    ("nuestro propósito"), and the pattern paired both nouns with the
+      #    feminine "nuestra" — so "Nuestro propósito es …" could never match
+      #    the base predicate at all, which let the two committed
+      #    "Nuestro propósito es cuidar de tu salud…" cases pass for the wrong
+      #    reason (the base phrase never matched, so the pronoun guard right
+      #    beside it was never exercised) and made a real mission statement
+      #    ("Nuestro propósito es mejorar la sanidad rural.") read as
+      #    unsettled when the tell requires 0.7.
+      # 2. The infinitive test was a bare suffix (`\w+(?:ar|er|ir)`), and
+      #    Spanish adjectives derived from Latin -aris ("similar", "singular",
+      #    "particular", "regular", "popular", "familiar", "peculiar") end in
+      #    exactly the same letters as a verb infinitive and carry the same
+      #    default word stress, so nothing in the written form tells them
+      #    apart — "Nuestra misión es similar a la de nuestros clientes." named
+      #    no purpose and still matched. Named ceiling: this blocks the
+      #    specific Latin -aris family, which is what turned up in review and
+      #    in the corpus; a novel adjective of the same shape that is not on
+      #    this list would still slip through, and closing that fully would
+      #    need a real lexicon rather than a regex.
+      #
+      # The pronoun exclusion is widened to the full paradigm this dimension
+      # needs — "tú"/"ti"/"contigo"/"te" (singular), "vosotros"/"vosotras"/
+      # "os"/"vuestro…" (plural informal), "usted(es)" (formal) — mirroring
+      # the EN and CA lists so the same sentence settles the same way in
+      # every language (T178's own finding: three enumerations that disagreed
+      # is what this closes).
+      - pattern: "(?:nuestra\\s+misi[óo]n|nuestro\\s+prop[óo]sito)\\s+es\\s+(?:que|(?!(?:similar|singular|particular|regular|popular|familiar|peculiar)(?:es)?\\b)\\w+(?:ar|er|ir))\\b(?![^.;!?\\n]*\\b(?:t[uú]|ti|contigo|te|tus?|vosotr[oa]s|os|vuestr\\w*|usted(?:es)?)\\b)|impacto\\s+social"
         value: 0.7
         negatable: true
     ca:
-      - pattern: "(?:la\\s+nostra\\s+missi[óo]|el\\s+nostre\\s+prop[òo]sit)\\s+[ée]s\\s+(?:que|\\w+(?:ar|er|ir|re))\\b(?![^.;!?\\n]*\\b(?:teu|teus|teva|teves|vostr\\w*)\\b)|impacte\\s+social"
+      # T178 round 2, the CA twin of the ES fix above, plus a shape neither
+      # ES nor EN has: Catalan writes an enclitic pronoun attached to the verb
+      # with a hyphen ("ajudar-te", "oferir-te", "formar-te") rather than as a
+      # separate word, so a guard that only looks for whole-word "teu"/"teva"
+      # never reaches it — three committed cases matched 0.7 on exactly this
+      # shape. The hyphen is the safe anchor: Catalan orthography requires it
+      # before an enclitic on an infinitive, so `-te\b` cannot collide with an
+      # ordinary word (unlike Spanish, where the same pronoun glues on with no
+      # separator at all — "ayudarte" — and a suffix test broad enough to
+      # catch it would also catch "parte", "norte", "arte"; that gap is
+      # therefore a named ceiling rather than patched here). Also added: the
+      # bare subject pronoun "tu" (Catalan uses the same spelling as Spanish),
+      # the object clitic "et", and "us"/"vosaltres"/"vostè(s)" for the
+      # plural and formal forms — the same completeness pass as ES.
+      # The infinitive suffix now excludes the same Latin -aris adjective
+      # family as ES, plus Catalan's own "clar" ("clear") and "lliure"
+      # ("free"), which end in exactly the -ar/-re shape the suffix test
+      # accepts and named the finding ("El nostre propòsit és clar…",
+      # "La nostra missió és singular.").
+      - pattern: "(?:la\\s+nostra\\s+missi[óo]|el\\s+nostre\\s+prop[òo]sit)\\s+[ée]s\\s+(?:que|(?!(?:clar[aes]?|similars?|singulars?|particulars?|regulars?|populars?|familiars?|peculiars?|lliures?)\\b)\\w+(?:ar|er|ir|re))\\b(?![^.;!?\\n]*(?:\\b(?:teu|teus|teva|teves|vostr\\w*|vost[eè]s?|vosaltres|tu|us|et)\\b|-te\\b|t['’]))|impacte\\s+social"
         value: 0.7
         negatable: true
   gold:

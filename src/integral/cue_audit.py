@@ -118,17 +118,17 @@ class Resolution:
 # an audit that accepted a finding and then lost its fixture is an audit that
 # reports success over work no longer being done. Raise this when cases are added;
 # never lower it to make a deletion pass.
-MINIMUM_CASES = 159
+MINIMUM_CASES = 176
 
 # The floor on cases whose regression direction is fail-open. Recorded separately
 # because it is the half that matters: a fail-closed bug costs a fetch, a
 # fail-open bug means a `hard` dealbreaker said yes to wording that never said it.
-MINIMUM_FAIL_OPEN_CASES = 98
+MINIMUM_FAIL_OPEN_CASES = 111
 
 # The floor on cases that pin `negated` or the raw match count as well as the
 # value. See `AuditCase` — a `None` and a `0.0` each have two distinct causes,
 # and only these cases say which one the table means.
-MINIMUM_MECHANISM_PINNED_CASES = 65
+MINIMUM_MECHANISM_PINNED_CASES = 78
 
 # The floor on individual citations verified against the YAML they name
 # (T176, round 2). One case's `cites` can name more than one field
@@ -138,7 +138,7 @@ MINIMUM_MECHANISM_PINNED_CASES = 65
 # nothing compared the two — a green `make host-gate` and a PASS verdict block
 # both saw nothing, which is exactly what this floor exists to stop happening
 # again silently.
-MINIMUM_CITATIONS_CHECKED = 167
+MINIMUM_CITATIONS_CHECKED = 186
 
 
 MISSION_DEFINITION = (
@@ -149,6 +149,14 @@ MISSION_DEFINITION = (
 MISSION_TELL = (
     "0.7 tell: 'health, education, climate, public service, or a mission named and meant'"
 )
+
+# T178 round 2 (second reader on #473, head 3b131cb, finding 4): the citation
+# gate below (`citation_check`) only verifies the fields a case's `cites`
+# string happens to name, and until this round no committed case named this
+# dimension's 0.0 rung `tell:` at all — a corruption of that specific text
+# would have passed every gate silently, the same shape as the
+# `schedule_flexibility` corruption `citation_check` exists to catch.
+MISSION_TELL_ZERO = "0.0 tell: 'the ad never says what the work is ultimately for'"
 
 CASES: tuple[AuditCase, ...] = (
     # ---------------------------------------------------------------- finding 1
@@ -1282,10 +1290,19 @@ CASES: tuple[AuditCase, ...] = (
     ),
     AuditCase(
         # The intended form still reads: neither guard costs the real word.
+        # The `cites` string now names the `definition:` field too, not only
+        # the `tell:` — the second reader's finding 4 on #473 round 2: the
+        # spec-corruption citation gate (below, `citation_check`) only ever
+        # checked the *fields a case happened to cite*, and no case cited
+        # this dimension's `definition:` at all, so half the corruption that
+        # motivated the gate (`asynchronous` -> `async\w*hronous` written into
+        # the `definition:` prose, not only the `tell:`) was invisible to it.
         "schedule_flexibility",
         "en",
         "We support an asynchronous company culture.",
         0.6,
+        "definition: 'flexible start and finish, compressed Fridays and summers, "
+        "asynchronous collaboration'; "
         "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
         "fail-closed",
         matches=1,
@@ -1337,7 +1354,7 @@ CASES: tuple[AuditCase, ...] = (
         "en",
         "- Healthcare - Employer contributions towards your healthcare.",
         None,
-        MISSION_DEFINITION,
+        f"{MISSION_DEFINITION}; {MISSION_TELL_ZERO}",
         "fail-open",
         matches=0,
     ),
@@ -1599,6 +1616,205 @@ CASES: tuple[AuditCase, ...] = (
         MISSION_TELL,
         "fail-closed",
     ),
+    # -------------------------------------------------------- T178, round 3
+    # A second-reader BLOCK on #473, head 3b131cb: the round-2 remedy fixed
+    # the three cases it was reviewed against and reopened the same shape in
+    # ES/CA, because the guard is three independently hand-typed pronoun
+    # lists rather than one shared definition — "an enumeration has no last
+    # element" (CLAUDE.md), demonstrated a second time in the same file.
+    # These cases derive each list from the language's actual second-person
+    # pronoun paradigm (subject, object, possessive, oblique, enclitic —
+    # informal and formal) rather than from what the previous round's cases
+    # happened to exercise; see the cue comments in `mission_alignment.yaml`
+    # for what each addition is and the ceilings still left named.
+    AuditCase(
+        # ES: "contigo" ("with you") is the oblique form after a preposition,
+        # missing from round 2's bare "tu|tus|vuestr\w*" list.
+        "mission_alignment",
+        "es",
+        "Nuestra misión es crecer contigo.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # CA: round 2's list carried the possessive forms (teu/teva/…) but not
+        # the bare subject pronoun "tu" itself.
+        "mission_alignment",
+        "ca",
+        "La nostra missió és créixer amb tu.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # CA: the enclitic object pronoun attached to an infinitive with a
+        # hyphen ("ajudar-te") — a shape ES and EN do not have and round 2's
+        # whole-word pronoun list cannot reach, since "-te" is not a separate
+        # word. Three forms, because the second reader's report named three
+        # and each is a different verb.
+        "mission_alignment",
+        "ca",
+        "La nostra missió és ajudar-te a créixer.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "La nostra missió és oferir-te un bon salari.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "La nostra missió és formar-te com a professional.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # EN: the reflexive form, alone — no bare "you"/"your" anywhere else in
+        # the sentence, so this genuinely exercises "yourself"/"yourselves"
+        # rather than passing on the two forms round 2 already had.
+        "mission_alignment",
+        "en",
+        "Our mission is to celebrate yourself as part of a bigger community.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    # -- finding 2: a suffix cannot tell an infinitive from an adjective --
+    # Spanish and Catalan adjectives derived from Latin -aris ("similar",
+    # "singular", "particular", "regular", "popular", "familiar", "peculiar",
+    # plus Catalan's own "clar" and "lliure") end in exactly the same letters
+    # as a verb infinitive and carry the same default stress, so nothing in
+    # the written form distinguishes "és similar" (names no purpose) from
+    # "és crear" (does). Excluded by name rather than by a wider suffix rule
+    # that could not tell them apart either.
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "El nostre propòsit és clar, i el recolzem amb una assegurança mèdica privada.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "La nostra missió és singular.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "ca",
+        "La nostra missió és similar a la dels nostres clients.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "es",
+        "Nuestra misión es similar a la de nuestros clientes.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        # The EN control was already committed ("Our purpose is clear...");
+        # the ES twin, for parity — the adjective test above is ES/CA only,
+        # but the predicate requirement that refuses a bare "is clear" is the
+        # same shape in all three languages and needs its own ES case.
+        "mission_alignment",
+        "es",
+        "Nuestro propósito es claro, y lo respaldamos con un seguro médico privado.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    # -- finding 3: "mission-driven" named no purpose and needed no predicate --
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "Our mission-driven benefits package includes a gym.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "We are a mission-driven company offering private health insurance.",
+        None,
+        MISSION_DEFINITION,
+        "fail-open",
+        matches=0,
+    ),
+    # -- findings 5 & 6: ES gender agreement ("nuestro propósito", not
+    # "nuestra propósito") — one typo with two faces. Fail-closed on its own
+    # (a real purpose statement went unsettled); the two pre-existing
+    # "Nuestro propósito es cuidar de…" cases above were the fail-open mirror
+    # — passing for the wrong reason, because the base phrase never matched
+    # at all and the pronoun guard beside it was never exercised. Mutation-
+    # verified below: deleting only the pronoun guard now flips those two
+    # cases and this one; before this fix it flipped nothing.
+    AuditCase(
+        "mission_alignment",
+        "es",
+        "Nuestro propósito es mejorar la sanidad rural.",
+        0.7,
+        MISSION_TELL,
+        "fail-closed",
+    ),
+    # -- finding 7: the subordinate-clause branch, unpinned in EN and ES --
+    # The only committed "que"/"that" case was Catalan; the PR description
+    # claimed all three languages carry it. Reverting either branch alone
+    # (leaving the infinitive branch intact) now fails exactly one case each.
+    AuditCase(
+        "mission_alignment",
+        "en",
+        "Our mission is that every child gets a fair start.",
+        0.7,
+        MISSION_TELL,
+        "fail-closed",
+    ),
+    AuditCase(
+        "mission_alignment",
+        "es",
+        "Nuestra misión es que la sanidad rural mejore.",
+        0.7,
+        MISSION_TELL,
+        "fail-closed",
+    ),
+    AuditCase(
+        # The impersonal "social impact" alternative, untouched by this round
+        # and identical across languages — a parity control, not a finding.
+        "mission_alignment",
+        "en",
+        "Measuring the social impact of redundancies is part of the role.",
+        0.7,
+        MISSION_TELL,
+        "correct",
+    ),
     AuditCase(
         # The verb, lower case, beside one real cue: one match cannot settle a
         # bipolar scale, and the verb must not be the second.
@@ -1857,6 +2073,190 @@ def _citations(
     return found
 
 
+def _all_citable_fields(dimensions: list[Dimension]) -> frozenset[tuple[str, str, float | None]]:
+    """Every `(dimension_id, field, rung_value)` a case could ever cite.
+
+    Derived from the committed dimension model itself — never from `CASES` —
+    so a dimension or rung added later joins this population the moment
+    `load_dimensions` sees it, with no second place to remember to update.
+    `label` is excluded: only `definition` and `tell` are prose a labeller or
+    a cue's own comment can quote and a diff can silently corrupt, which is
+    what this population exists to protect.
+    """
+    fields: set[tuple[str, str, float | None]] = set()
+    for dimension in dimensions:
+        fields.add((dimension.id, "definition", None))
+        for level in dimension.levels:
+            fields.add((dimension.id, "tell", level.value))
+    return frozenset(fields)
+
+
+def _cited_fields(
+    cases: tuple[AuditCase, ...], known_dimensions: frozenset[str]
+) -> frozenset[tuple[str, str, float | None]]:
+    """Every `(dimension_id, field, rung_value)` at least one case's `cites` names."""
+    cited: set[tuple[str, str, float | None]] = set()
+    for case in cases:
+        for dim_id, field, value, _text in _citations(case.cites, case.dimension, known_dimensions):
+            if field in ("definition", "tell"):
+                cited.add((dim_id, field, value))
+    return frozenset(cited)
+
+
+# T178 round 3 (second reader on #473, head 3b131cb, finding 4 — "a floor
+# counting labels rather than the things labelled"): `citation_check` only
+# ever verified the fields a case's `cites` string happened to name, so a
+# `definition:` nobody had cited could be corrupted with every gate green —
+# which is exactly what happened to `schedule_flexibility.definition` in the
+# round before this one, while the sibling `tell:` two cases cited was
+# caught. The floor below is on the *population of fields*, not on the count
+# of citations (`MINIMUM_CITATIONS_CHECKED`, which one case citing the same
+# field twice can inflate without protecting anything new).
+#
+# Reaching full coverage is not this round's job — 125 fields across 38
+# dimensions this diff never touches have no citing case today — but leaving
+# that gap unlabelled is: every one of the 125 is listed here by name, so a
+# dimension or rung added later, or a citation quietly deleted, shows up as a
+# set difference (`cue_audit_unacknowledged_uncited_fields`) rather than as
+# nothing. Closing one is a citation added to `CASES`, with this entry
+# removed in the same diff — leaving it here once it is covered is caught
+# too (`cue_audit_stale_acknowledgements`), so the list cannot only grow.
+UNCITED_FIELDS_ACKNOWLEDGED: frozenset[tuple[str, str, float | None]] = frozenset(
+    {
+        ("ai_in_the_work", "definition", None),
+        ("ai_in_the_work", "tell", 0.0),
+        ("ai_in_the_work", "tell", 0.5),
+        ("ai_in_the_work", "tell", 0.9),
+        ("ambition", "definition", None),
+        ("ambition", "tell", -0.6),
+        ("ambition", "tell", 0.0),
+        ("ambition", "tell", 0.7),
+        ("career_progression", "tell", 0.0),
+        ("collaboration_mode", "definition", None),
+        ("collaboration_mode", "tell", -0.6),
+        ("collaboration_mode", "tell", 0.0),
+        ("collaboration_mode", "tell", 0.4),
+        ("collaboration_mode", "tell", 0.8),
+        ("commute_burden", "tell", 0.0),
+        ("company_stage", "definition", None),
+        ("company_stage", "tell", -0.7),
+        ("company_stage", "tell", 0.0),
+        ("company_stage", "tell", 0.7),
+        ("compensation_transparency", "tell", 0.0),
+        ("contract_stability", "definition", None),
+        ("contracted_hours", "definition", None),
+        ("contracted_hours", "tell", 0.0),
+        ("contracted_hours", "tell", 0.2),
+        ("contracted_hours", "tell", 0.5),
+        ("contracted_hours", "tell", 0.9),
+        ("creativity", "definition", None),
+        ("creativity", "tell", -0.6),
+        ("creativity", "tell", 0.0),
+        ("creativity", "tell", 0.7),
+        ("domain_knowledge", "definition", None),
+        ("domain_knowledge", "tell", 0.0),
+        ("domain_knowledge", "tell", 0.5),
+        ("domain_knowledge", "tell", 0.8),
+        ("english_demand", "definition", None),
+        ("formal_credential", "definition", None),
+        ("formal_credential", "tell", 0.0),
+        ("formal_credential", "tell", 0.5),
+        ("formal_credential", "tell", 0.9),
+        ("hiring_process_burden", "definition", None),
+        ("hiring_process_burden", "tell", 0.0),
+        ("hiring_process_burden", "tell", 0.4),
+        ("hiring_process_burden", "tell", 0.8),
+        ("inclusion_commitment", "definition", None),
+        ("inclusion_commitment", "tell", 0.0),
+        ("inclusion_commitment", "tell", 0.6),
+        ("inclusion_commitment", "tell", 0.8),
+        ("leadership", "definition", None),
+        ("leadership", "tell", 0.0),
+        ("leadership", "tell", 0.33),
+        ("leadership", "tell", 0.67),
+        ("leadership", "tell", 1.0),
+        ("learning_orientation", "definition", None),
+        ("learning_orientation", "tell", -0.6),
+        ("learning_orientation", "tell", 0.0),
+        ("learning_orientation", "tell", 0.7),
+        ("learning_support", "tell", 0.0),
+        ("learning_support", "tell", 0.8),
+        ("local_language_demand", "definition", None),
+        ("local_language_demand", "tell", 0.0),
+        ("local_language_demand", "tell", 0.6),
+        ("local_language_demand", "tell", 1.0),
+        ("mentoring_culture", "definition", None),
+        ("mentoring_culture", "tell", 0.0),
+        ("on_call_load", "definition", None),
+        ("on_call_load", "tell", 0.0),
+        ("on_call_load", "tell", 0.4),
+        ("physical_demand", "definition", None),
+        ("physical_demand", "tell", 0.0),
+        ("physical_demand", "tell", 0.5),
+        ("physical_demand", "tell", 0.8),
+        ("process_formality", "definition", None),
+        ("process_formality", "tell", -0.6),
+        ("process_formality", "tell", 0.0),
+        ("process_formality", "tell", 0.8),
+        ("product_vs_services", "definition", None),
+        ("product_vs_services", "tell", 0.0),
+        ("remote_arrangement", "definition", None),
+        ("role_breadth", "definition", None),
+        ("role_breadth", "tell", -0.6),
+        ("role_breadth", "tell", 0.0),
+        ("role_breadth", "tell", 0.8),
+        ("schedule_flexibility", "tell", 0.0),
+        ("seniority_expectation", "definition", None),
+        ("social_intensity", "definition", None),
+        ("social_intensity", "tell", -0.5),
+        ("social_intensity", "tell", 0.0),
+        ("social_intensity", "tell", 0.6),
+        ("spare_time_engagement", "definition", None),
+        ("spare_time_engagement", "tell", -0.6),
+        ("spare_time_engagement", "tell", 0.0),
+        ("spare_time_engagement", "tell", 0.7),
+        ("stack_modernity", "definition", None),
+        ("stack_modernity", "tell", 0.0),
+        ("talking_clients", "definition", None),
+        ("talking_clients", "tell", 0.0),
+        ("talking_clients", "tell", 0.33),
+        ("talking_clients", "tell", 0.67),
+        ("team_autonomy", "definition", None),
+        ("team_autonomy", "tell", -0.6),
+        ("team_autonomy", "tell", 0.0),
+        ("team_autonomy", "tell", 0.7),
+        ("technical_depth", "definition", None),
+        ("technical_depth", "tell", -0.6),
+        ("technical_depth", "tell", 0.0),
+        ("tool_specificity", "definition", None),
+        ("tool_specificity", "tell", 0.0),
+        ("tool_specificity", "tell", 0.5),
+        ("tool_specificity", "tell", 0.8),
+        ("travel_requirement", "definition", None),
+        ("variable_pay", "definition", None),
+        ("variable_pay", "tell", 0.0),
+        ("variable_pay", "tell", 0.5),
+        ("variable_pay", "tell", 0.9),
+        ("wellbeing_benefits", "definition", None),
+        ("wellbeing_benefits", "tell", 0.0),
+        ("wellbeing_benefits", "tell", 0.4),
+        ("wellbeing_benefits", "tell", 0.7),
+        ("work_eligibility", "definition", None),
+        ("work_eligibility", "tell", 0.0),
+        ("work_eligibility", "tell", 0.5),
+        ("work_eligibility", "tell", 0.9),
+        ("work_intensity", "definition", None),
+        ("work_intensity", "tell", 0.0),
+        ("work_intensity", "tell", 0.7),
+    }
+)
+
+# A floor, never the count of the day (T100) — today's genuine coverage, so a
+# citation quietly deleted (leaving its field to fall back on
+# `UNCITED_FIELDS_ACKNOWLEDGED` instead of failing outright) still trips this.
+MINIMUM_CITABLE_FIELDS_CITED = 43
+
+
 def citation_check(case: AuditCase, by_id: dict[str, Dimension]) -> tuple[int, list[str]]:
     """How many citations `case.cites` names, and which ones are not verbatim.
 
@@ -1947,6 +2347,33 @@ def audit(
             failures.append(f"{case.dimension}[{case.language}] {case.text!r}: citation {mismatch}")
     fail_open = [case for case in cases if case.direction == "fail-open"]
     pinned = [case for case in cases if case.negated is not None or case.matches is not None]
+
+    # T178 round 3, finding 4: the field-coverage rule, not one more citation
+    # count. `citable` is every `definition:`/`tell:` the committed model
+    # actually has; `cited` is what `CASES` protects today. The difference is
+    # split against `UNCITED_FIELDS_ACKNOWLEDGED` rather than measured raw, so
+    # a *new* gap (a field neither cited nor acknowledged) fails loudly and a
+    # *closed* gap (acknowledged but now cited, or a field that no longer
+    # exists) fails until the acknowledgement is removed — the allowlist
+    # cannot silently drift stale in either direction.
+    citable = _all_citable_fields(dimensions)
+    cited = _cited_fields(cases, frozenset(by_id))
+    uncited = citable - cited
+
+    def _field_name(field: tuple[str, str, float | None]) -> str:
+        dim_id, kind, value = field
+        return f"{dim_id}.{kind}" + (f"[{value}]" if value is not None else "")
+
+    for field in sorted(uncited - UNCITED_FIELDS_ACKNOWLEDGED):
+        failures.append(
+            f"{_field_name(field)} is cited by no case in CASES and is not listed in "
+            "UNCITED_FIELDS_ACKNOWLEDGED — either cite it or acknowledge the gap"
+        )
+    for field in sorted(UNCITED_FIELDS_ACKNOWLEDGED - uncited):
+        failures.append(
+            f"{_field_name(field)} is listed in UNCITED_FIELDS_ACKNOWLEDGED but is now "
+            "cited (or no longer a field of any dimension) — remove the stale entry"
+        )
     return {
         "cue_audit_cases": len(cases),
         "cue_audit_cases_at_least": MINIMUM_CASES,
@@ -1963,6 +2390,18 @@ def audit(
         # T176 round 2's own second reader found nothing compared the two.
         "cue_audit_citations_checked": citations_checked,
         "cue_audit_citations_checked_at_least": MINIMUM_CITATIONS_CHECKED,
+        # The field-coverage census (T178 round 3, finding 4): a `definition:`
+        # or rung `tell:` protected by at least one citing case, out of every
+        # such field the committed dimension model has. A floor, and every
+        # field not yet cited is named in `UNCITED_FIELDS_ACKNOWLEDGED` —
+        # `cue_audit_unacknowledged_uncited_fields`/`cue_audit_stale_acknowledgements`
+        # being 0 is what the acknowledgement can't be gamed by growing means.
+        "cue_audit_citable_fields": len(citable),
+        "cue_audit_fields_cited": len(cited),
+        "cue_audit_fields_cited_at_least": MINIMUM_CITABLE_FIELDS_CITED,
+        "cue_audit_uncited_fields_acknowledged": len(UNCITED_FIELDS_ACKNOWLEDGED),
+        "cue_audit_unacknowledged_uncited_fields": len(uncited - UNCITED_FIELDS_ACKNOWLEDGED),
+        "cue_audit_stale_acknowledgements": len(UNCITED_FIELDS_ACKNOWLEDGED - uncited),
         "cue_audit_failures": len(failures),
         "cue_audit_failing_cases": failures,
         "cue_audit_dimensions": sorted({case.dimension for case in cases}),

@@ -21,9 +21,11 @@ import pytest
 from integral.cue_audit import (
     CASES,
     MINIMUM_CASES,
+    MINIMUM_CITABLE_FIELDS_CITED,
     MINIMUM_CITATIONS_CHECKED,
     MINIMUM_FAIL_OPEN_CASES,
     MINIMUM_MECHANISM_PINNED_CASES,
+    UNCITED_FIELDS_ACKNOWLEDGED,
     AuditCase,
     audit,
     citation_check,
@@ -167,3 +169,80 @@ def test_a_none_verdict_says_which_kind_of_none_it_is() -> None:
 
     assert silent, "no case pins a None that means 'nothing matched'"
     assert withheld, "no case pins a None that means 'a reading was withheld'"
+
+
+def test_every_definition_and_tell_is_cited_or_acknowledged() -> None:
+    """T178 round 3, finding 4 — a rule over the *fields*, not a count of citations.
+
+    `MINIMUM_CITATIONS_CHECKED` moves whenever any case cites anything, so one
+    case double-citing an already-protected field inflates it without covering
+    anything new — which is exactly how `schedule_flexibility.definition` sat
+    uncited while the floor kept climbing. This asserts the population instead:
+    every `definition:`/`tell:` in the committed model is either cited by some
+    case in `CASES` or named in `UNCITED_FIELDS_ACKNOWLEDGED`, and the
+    acknowledgement list contains nothing that is not — both directions, so it
+    cannot silently grow stale in either one.
+    """
+    audited = audit()
+    assert audited["cue_audit_unacknowledged_uncited_fields"] == 0, audited["cue_audit_failing_cases"]
+    assert audited["cue_audit_stale_acknowledgements"] == 0, audited["cue_audit_failing_cases"]
+    assert audited["cue_audit_citable_fields"] == len(UNCITED_FIELDS_ACKNOWLEDGED) + audited["cue_audit_fields_cited"]
+    assert audited["cue_audit_fields_cited"] >= MINIMUM_CITABLE_FIELDS_CITED
+    assert audited["cue_audit_fields_cited_at_least"] == MINIMUM_CITABLE_FIELDS_CITED
+
+
+def test_the_field_coverage_rule_actually_fires() -> None:
+    """The rule above reads 0/0 today; this proves that is coverage, not vacuity.
+
+    Three constructed states, each a real defect shape: a case whose citation is
+    quietly dropped (the exact accident that hid the `schedule_flexibility`
+    corruption), an acknowledgement removed while its field is still uncited
+    (the same hole, arrived at from the allowlist side), and a stale
+    acknowledgement left in place after its field became genuinely cited (the
+    allowlist rotting the other direction). Each must turn up as a named
+    failure, not as a silently-passing 0.
+    """
+    dropped = tuple(
+        AuditCase(
+            c.dimension,
+            c.language,
+            c.text,
+            c.expected,
+            "0.7 tell: 'asynchronous work, compressed weeks, or hours the person genuinely sets'",
+            c.direction,
+            c.negated,
+            c.matches,
+        )
+        if c.dimension == "schedule_flexibility" and c.text == "We support an asynchronous company culture."
+        else c
+        for c in CASES
+    )
+    result = audit(cases=dropped)
+    assert result["cue_audit_unacknowledged_uncited_fields"] == 1
+    assert any(
+        "schedule_flexibility.definition" in failure and "not listed in UNCITED_FIELDS_ACKNOWLEDGED" in failure
+        for failure in result["cue_audit_failing_cases"]
+    )
+
+    import integral.cue_audit as cue_audit_module
+
+    original = cue_audit_module.UNCITED_FIELDS_ACKNOWLEDGED
+    try:
+        cue_audit_module.UNCITED_FIELDS_ACKNOWLEDGED = frozenset(
+            original - {("ai_in_the_work", "definition", None)}
+        )
+        result = audit()
+        assert result["cue_audit_unacknowledged_uncited_fields"] == 1
+        assert any("ai_in_the_work.definition" in failure for failure in result["cue_audit_failing_cases"])
+
+        cue_audit_module.UNCITED_FIELDS_ACKNOWLEDGED = frozenset(
+            original | {("mission_alignment", "definition", None)}
+        )
+        result = audit()
+        assert result["cue_audit_stale_acknowledgements"] == 1
+        assert any(
+            "mission_alignment.definition" in failure and "remove the stale entry" in failure
+            for failure in result["cue_audit_failing_cases"]
+        )
+    finally:
+        cue_audit_module.UNCITED_FIELDS_ACKNOWLEDGED = original
