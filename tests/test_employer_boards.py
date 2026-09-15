@@ -607,6 +607,7 @@ def _detail_run(
     monkeypatch: pytest.MonkeyPatch,
     adverts_robots: str | None,
     advert_status: int = 200,
+    source_kind: str | None = None,
 ) -> tuple[Any, list[str], list[float]]:
     """Two employers, two rows each, every body on an advert host of its own."""
     import urllib.error
@@ -619,7 +620,8 @@ def _detail_run(
             "fields: {title: title, company: company, text: body}",
             "fields: {title: title, detail_url: url}",
         )
-        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n",
+        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n"
+        + (f"source_kind: {source_kind}\n" if source_kind else ""),
         encoding="utf-8",
     )
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
@@ -703,6 +705,28 @@ def test_a_refused_advert_host_is_asked_once_across_employers(
     assert (outcome.items, outcome.detail_needed, outcome.detail_fetched) == (4, 4, 1), outcome
     assert outcome.refused and "429" in outcome.refused, outcome
     assert outcome.dropped == 0 and not outcome.reached_the_board, outcome
+
+
+def test_a_refused_advert_host_names_no_employer_board(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#466 B1. `items > dropped` used to stand for "some row became an
+    offer" — true only while every row was either an offer or `dropped`. A
+    row unread because its host refused is neither: it inflates `items`
+    without `dropped`, so a board that built no offer at all was still named
+    among "the employers' own boards" (real installed shape: Lever, whose
+    every advert lives on a second host that a 429 can refuse first)."""
+    run, _, _ = _detail_run(
+        tmp_path,
+        monkeypatch,
+        adverts_robots="User-agent: *\nAllow: /\n",
+        advert_status=429,
+        source_kind="employer",
+    )
+    (outcome,) = run.outcomes
+    assert outcome.offers_built == 0, outcome
+    assert outcome.items > outcome.dropped, outcome  # the proxy that used to fool this
+    assert run.employer_boards == [], run.employer_boards
 
 
 def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> None:

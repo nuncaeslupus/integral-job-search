@@ -216,6 +216,12 @@ class BoardOutcome:
     #: T172. `"employer"` when the board read was the employer's own — the
     #: same `source_kind_of` every offer it stored carries.
     source_kind: SourceKind | None = None
+    #: Rows an offer was actually built from — added or re-sighted alike.
+    #: `items > dropped` was this exact count only while every row fell into
+    #: "offer" or "dropped"; T174 added a third bucket (refused, unread) that
+    #: `items` counts and `dropped` does not, which made `items > dropped`
+    #: true for a board that built no offer at all (#466 B1).
+    offers_built: int = 0
 
     @property
     def reached_the_board(self) -> bool:
@@ -276,15 +282,16 @@ class Run:
     def employer_boards(self) -> list[str]:
         """Declared employers' own boards a result of this round came from (T172).
 
-        `items > dropped` is "some row became an offer", which is what T144
+        `offers_built > 0` is "some row became an offer", which is what T144
         asks for — *where each result came from*. Not `reached_the_board`: a
         board refused on its first request is neither skipped nor an error, and
-        named here it would claim results it never gave. Not `items` either: a
-        row that builds no offer is not a result. And not `added`, which is 0
-        for a re-sighting that is still a result this board produced (#462
-        rounds 2 and 3, G3 and H1/H2).
+        named here it would claim results it never gave. Not `items`: a row
+        that builds no offer is not a result, and since T174 a refused row is
+        counted in `items` without being `dropped` either (#466 B1). And not
+        `added`, which is 0 for a re-sighting that is still a result this board
+        produced (#462 rounds 2 and 3, G3 and H1/H2).
         """
-        return self._boards(lambda o: o.source_kind == "employer" and o.items > o.dropped)
+        return self._boards(lambda o: o.source_kind == "employer" and o.offers_built > 0)
 
     @property
     def refused(self) -> list[str]:
@@ -594,6 +601,7 @@ def _one_board(
     items_seen = 0
     added = 0
     dropped = 0
+    offers_built = 0
     detail_needed = 0
     detail_fetched = 0
     drop_reason: str | None = None
@@ -622,6 +630,7 @@ def _one_board(
             items=items_seen,
             added=added,
             dropped=dropped,
+            offers_built=offers_built,
             drop_reason=drop_reason,
             stale=stale,
             detail_needed=detail_needed,
@@ -747,6 +756,7 @@ def _one_board(
                 drop_reason = drop_reason or why
                 continue
             collected.append(offer.id)
+            offers_built += 1
             outcome = collect_offer(store, offer, at=at)
             if outcome.added_as_new:
                 added += 1
