@@ -3781,8 +3781,10 @@ def probe_carried_disclosures_reported(root: Path) -> dict[str, Any]:
     # letter.md twice"), and every one of those lines is *also* `in approved`
     # by text, so T156's N2 filter dropped every copy from `surviving` before
     # the T157 carried-check ever ran against `intact`. Checked against
-    # `all_lines` (`all_intact`) instead, which the fix does regardless of
-    # how many of an episode's own copies collapse into `approved`.
+    # `all_lines_runs` instead (`all_lines`/`all_intact` at the time of this
+    # fix, #486 round 2 later moved it to a per-document run), which the fix
+    # does regardless of how many of an episode's own copies collapse into
+    # `approved`.
     exact = _probe_master(headline=win)
     store = fresh("kept-approval-exact-headline", exact)
     _probe_prepare(store, exact, approved=(0,))
@@ -3924,19 +3926,26 @@ def _carried_disclosure_report(measured: dict[str, Any]) -> int:
 # and blocks an otherwise-clean draft, never clears a real one — so every
 # ambiguous case below is resolved toward the draft staying sendable.
 
-MINIMUM_INTACT_SEAM_STATES = 5
-MINIMUM_INTACT_SEAM_CHECKS = 9
+# States 1, 2 and 5 check twice each (a clean/no-manufactured-finding check
+# plus an undecidable check); states 3 and 4 check once each in the golden
+# path (their own `check(False, ...)` only runs if `prepare` wrongly fails to
+# raise, which the exception skips over when it raises as expected); state 6
+# checks twice, the same shape as state 5; the aggregate checks once.
+# 2+2+1+1+2+2+1 = 11. Hand-counted against the code below, not assumed.
+MINIMUM_INTACT_SEAM_STATES = 6
+MINIMUM_INTACT_SEAM_CHECKS = 11
 
 
 def probe_intact_seam(root: Path) -> dict[str, Any]:
-    """Five constructed states: the seam across a document boundary, the
+    """Six constructed states: the seam across a document boundary, the
     same seam within one document (an approved line excluded from
     `surviving` by T156's own N2 rule stands between the two halves), a
     control that a genuine, unsplit single-line carry still confirms, a
     genuine two-line carry the per-line rewrite lost (F-1, second reader,
-    #486 round 2), and the identical cross-document seam manufactured by
+    #486 round 2), the identical cross-document seam manufactured by
     the sibling approved-and-carried branch (F-2, second reader, #486
-    round 2).
+    round 2), and that same sibling branch's own under-count of a genuine
+    two-line carry (F-3, second reader, #486 round 2).
 
     Mirrors round four's own `seam_head`/`seam_tail`/`e3_text` fixture
     (`test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match`)
@@ -4080,8 +4089,8 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     # 3 — the control this branch exists for: a genuine, unsplit single-line
     # carry must still confirm. An unapproved episode's full eight words sit
     # in one CV/letter line (the headline) with nothing split across a join,
-    # so `any(_carries(line, episode.text) for line in surviving)` must find
-    # it exactly as `_carries(intact, episode.text)` used to.
+    # so `any(_carries("\n".join(run), episode.text) for run in surviving_runs
+    # if run)` must find it exactly as `_carries(intact, episode.text)` used to.
     genuine = _FIXTURE_EPISODES[1].text
     master3 = CVMaster(
         headline=SourcedText(text=genuine.rstrip(".")),
@@ -4190,7 +4199,51 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
         "for either way vanished with no trace instead of being reported as undecided",
     )
 
-    # 6 — the aggregate the gate reads, restated directly so a state that
+    # 6 — F-3 (second reader, #486 round 2): the sibling under-count in the
+    # approved-and-carried branch. State 4's own geometry — `alfa_text` and
+    # `india_text`, genuinely adjacent, nothing excluded between them — reused
+    # here with `phantom2` *approved* instead of left unapproved, so
+    # `all_lines_runs` must confirm it a run at a time rather than one line at
+    # a time, the same under-count state 4 already pins for the unapproved
+    # branch. Mirrors state 4 the way state 5 mirrors state 1: approving
+    # `phantom2` writes it its own dedicated line and manifest row; dropping
+    # both leaves only the two genuinely adjacent skill lines as anything
+    # that could confirm it.
+    master6 = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
+    )
+    store6 = fresh("intact-seam-approved-2line", master6)
+    prepare(
+        store6,
+        master6,
+        offer_id=_PROBE_OFFER,
+        advert=_PROBE_ADVERT,
+        recipient="hiring team, probe",
+        details=_FIXTURE_DETAILS,
+        asks=("Alfa", "India"),
+        approved_episodes=(0, 1),
+    )
+    drop_episode_row(store6, phantom2)
+    drop_line(store6, phantom2)
+    measured6 = measure_prepared(store6, master6, _PROBE_OFFER, 1)
+    check(
+        phantom2 in measured6["disclosed_episode_texts"],
+        "approved two-line carry: a genuine carry spanning two adjacent lines, approved, "
+        "was not counted as a confirmed disclosure — the per-line rewrite under-counted "
+        "the approved-and-carried branch the same way it under-counted the unapproved one",
+    )
+    check(
+        not _named_undecidable(measured6, phantom2),
+        "approved two-line carry: a genuinely disclosed episode was reported as "
+        "undecidable instead of disclosed",
+    )
+
+    # 7 — the aggregate the gate reads, restated directly so a state that
     # silently stopped asserting anything cannot leave `manufactured`
     # unexamined.
     check(

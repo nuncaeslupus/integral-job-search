@@ -1312,6 +1312,57 @@ def test_intact_seam_approved_branch_does_not_manufacture_a_cross_document_discl
     assert any(phantom in item for item in measured["undecidable_episodes"])
 
 
+def test_intact_seam_approved_branch_does_not_undercount_a_genuine_two_line_carry(
+    store: ProfileStore,
+) -> None:
+    """F-3 (second reader, #486 round 2): the sibling under-count in the T157
+    approved-and-carried branch — `test_intact_seam_fix_still_finds_a_genuine_
+    two_line_carry`'s own `alfa_text`/`india_text`/`phantom` geometry (two
+    skill lines, genuinely adjacent, nothing excluded between them), here with
+    `phantom` *approved* instead of left unapproved, mirroring the way
+    `test_intact_seam_approved_branch_does_not_manufacture_a_cross_document_
+    disclosure` mirrors `test_intact_seam_across_documents_does_not_
+    manufacture_a_finding`.
+
+    Approving `phantom` writes it its own dedicated line and manifest row;
+    dropping both leaves only the two genuinely adjacent skill lines as
+    anything that could confirm it. `all_lines_runs` must still find it a run
+    at a time, not one line at a time, or a genuinely disclosed episode is
+    wrongly reported as undecidable.
+    """
+    alfa_text = "Alfa Bravo Charlie Delta Echo Foxtrot Golf Hotel"
+    india_text = "India Juliet Kilo Lima Mike November Oscar Papa"
+    phantom = "Echo Foxtrot Golf Hotel India Juliet Kilo Lima"
+    master = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("Alfa", "India"),
+        approved_episodes=(0, 1),
+    )
+    where = _where(store, payload.version)
+    _drop_episode_row(where, phantom)
+    _drop_line(where / "letter.md", phantom)
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert phantom in measured["disclosed_episode_texts"]
+    assert not any(phantom in item for item in measured["undecidable_episodes"])
+
+
 def test_a_duplicated_approved_line_does_not_conflate_a_twin(store: ProfileStore) -> None:
     """R5-1 (#435 round 5, the blocker), route (A): `unbacked` is populated by
     a Counter test (`backed[key] == 0`), never by a text test, so an

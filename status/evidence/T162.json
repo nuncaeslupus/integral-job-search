@@ -1,6 +1,6 @@
 {
-  "intact_seam_states_evaluated": 5,
-  "intact_seam_checks_evaluated": 9,
+  "intact_seam_states_evaluated": 6,
+  "intact_seam_checks_evaluated": 11,
   "intact_seam_manufactured_findings": 0,
   "intact_seam_probe_failures": [],
   "gate_status": "measured"
