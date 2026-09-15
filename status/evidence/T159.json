@@ -241,7 +241,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4507,
+      "line": 4521,
       "population": 15
     },
     {
@@ -307,7 +307,7 @@
     {
       "module": "offers",
       "name": "MINIMUM_CHECKS",
-      "line": 410,
+      "line": 431,
       "population": 10
     },
     {
@@ -468,6 +468,7 @@
     "repo_gate.MINIMUM_FILES_FORMATTED",
     "repo_gate.MINIMUM_PYTHON_FILES_FORMATTED",
     "review_reader.MAXIMUM_LOGIN_LENGTH",
+    "salary_period.MINIMUM_PERIOD_CONTRACTS",
     "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
     "salary_recovery.MINIMUM_CORPUS_ADS",
     "scoring.BATCH_THRESHOLD",

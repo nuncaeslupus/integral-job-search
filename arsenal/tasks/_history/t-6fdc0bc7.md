@@ -4,6 +4,7 @@ title: "T170: salary periods arrive in each board's own words, so the pay floor 
 priority: 5
 deps: [t-ee67736b]
 tags: [BACKEND]
+status: merged
 ---
 
 Found by the second reader on #445 (T144, finding F13), and wider than that
