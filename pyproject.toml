@@ -30,7 +30,7 @@ dev = [
     "mypy>=1.11",
     "pytest>=8.3",
     # ~3,900 tests. `make test`'s `-n auto --dist loadfile` (Makefile, not addopts
-    # here — see [tool.pytest.ini_options] below) runs them roughly 4x faster on a
+    # here — see [tool.pytest.ini_options] below) runs them 3x to 5x faster on a
     # twelve-core laptop. Every review round pays the serial cost several times
     # over (`make host-gate`, then `tools/verified_gate.sh`).
     "pytest-xdist>=3.6",
