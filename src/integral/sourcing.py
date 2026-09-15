@@ -49,7 +49,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from integral.candidate import Aim, CandidateConstraints
 from integral.candidate import Location as ConstraintLocation
@@ -219,7 +219,9 @@ class BoardOutcome:
 
     @property
     def reached_the_board(self) -> bool:
-        return self.skipped is None and self.error is None
+        # T174: a board that refused did not answer, even when it refused an
+        # advert page after its list came back.
+        return self.skipped is None and self.error is None and self.refused is None
 
 
 @dataclass
@@ -314,7 +316,8 @@ class Run:
             )
         for outcome in self.outcomes:
             if outcome.refused:
-                lines.append(f"  REFUSED {outcome.connector}: {outcome.refused}")
+                partial = f" — partial: {outcome.added} added before it" if outcome.added else ""
+                lines.append(f"  REFUSED {outcome.connector}: {outcome.refused}{partial}")
             elif outcome.stale:
                 lines.append(f"  STALE   {outcome.connector}: its emptiness proves nothing")
             elif outcome.dropped:
@@ -396,6 +399,9 @@ def source(
         save_aim(store, aim)
     run = Run(unsearched=aim.terms[PHRASE_CEILING:])
     phrases = aim.terms[:PHRASE_CEILING]
+    # T174: shared by every board and phrase, so a host's refusal is its
+    # answer for the rest of the run rather than for one request.
+    refused_origins: dict[str, str] = {}
     for package in packages_for(constraints, directory):
         # A board that does not search returns the same list whatever was
         # asked, so asking it once per phrase is N identical requests for one
@@ -419,6 +425,7 @@ def source(
                     page_count=page_count,
                     robots=adjudicator,
                     browser=browser,
+                    refused_origins=refused_origins,
                 )
             )
     return run
@@ -487,8 +494,32 @@ def _may_fetch(robots: Robots, url: str) -> bool:
         return False
 
 
-def _detail_record(connector: Connector, url: str, *, fetch: Fetch) -> dict[str, str] | None:
-    """The advert's own page, parsed for whatever `connector.detail` names.
+def _origin(url: str) -> str:
+    """RFC 6454's (scheme, host, port), with the default port filled in.
+
+    `usajobs_en`'s adverts link to `https://www.usajobs.gov:443/job/…` while its
+    list is `https://www.usajobs.gov/…` — one host, and it must be one origin,
+    or a refusal on one spelling leaves the other free to be asked (#466 F1).
+    """
+    parts = urlsplit(url)
+    scheme = parts.scheme.lower()
+    port: int | str | None
+    try:
+        port = parts.port or {"http": 80, "https": 443}.get(scheme)
+    except ValueError:  # a malformed port in a board's own link: keep it as written
+        port = parts.netloc.rpartition(":")[2].lower()
+    return f"{scheme}://{parts.hostname or ''}:{port}"
+
+
+def _detail_record(
+    connector: Connector, url: str, *, fetch: Fetch
+) -> tuple[dict[str, str] | None, str | None]:
+    """The advert's own page, parsed for whatever `connector.detail` names,
+    and why the host refused it — `(None, None)` for a page that merely failed.
+
+    T174: the refusal comes back apart from the failure because the two ask
+    for opposite things. A 404 is one missing advert and the next may be read;
+    a 429 is the host saying stop, and the caller must not ask it again.
 
     `ListRequest` is the shape `Fetch` takes; a detail page is a plain GET, so
     it is built here rather than given a second request type nothing else needs.
@@ -504,12 +535,15 @@ def _detail_record(connector: Connector, url: str, *, fetch: Fetch) -> dict[str,
     detail = connector.detail
     headers = client_headers(detail.client, detail.client_target) if detail else {}
     response = fetch(ListRequest(url=url, method="GET", headers=headers, body=None))
+    refusal = rate_limited(None, response.status)
+    if refusal is not None:
+        return None, refusal
     if response.error is not None or response.status != 200:
-        return None
+        return None, None
     try:
-        return parse_detail_page(connector, response.body)
+        return parse_detail_page(connector, response.body), None
     except ConnectorError:
-        return None
+        return None, None
 
 
 def _one_board(
@@ -523,7 +557,9 @@ def _one_board(
     page_count: int,
     robots: Robots,
     browser: Fetch | None = None,
+    refused_origins: dict[str, str] | None = None,
 ) -> BoardOutcome:
+    refused_origins = {} if refused_origins is None else refused_origins
     try:
         connector = _connector_of(package, directory)
     except (ConnectorError, OSError) as exc:
@@ -562,6 +598,7 @@ def _one_board(
     detail_fetched = 0
     drop_reason: str | None = None
     stale = False
+    refused: str | None = None
     failed: list[str] = []
     last: Response | None = None
 
@@ -597,6 +634,15 @@ def _one_board(
         )
 
     for index, request in enumerate(requests):
+        prior = refused_origins.get(_origin(request.url))
+        if prior is not None:
+            # T174: the host already said stop this run, so it is not asked
+            # again. A break, not a return, so earlier pages still count.
+            # A board that refused an advert page keeps its own reason.
+            refused = (
+                refused or f"not asked again this run — {_origin(request.url)} refused: {prior}"
+            )
+            break
         # Adjudicated per URL, before the request is made. A board that
         # disallows one path may allow another, so this cannot be hoisted to
         # the board — and a robots.txt that cannot be read is a refusal, not a
@@ -635,6 +681,7 @@ def _one_board(
             # The host refused the read — a 429 on one employer is not leave
             # to ask for the next (#445 round 2, B2). Checked before the
             # per-employer `continue` below, which it used to follow.
+            refused_origins[_origin(request.url)] = blocked
             return ended(request.url, response.status, refused=blocked)
         if response.error is not None and request.employer:
             failed.append(f"{request.employer} ({response.error})")
@@ -657,6 +704,7 @@ def _one_board(
         stale = stale or result.stale
         refusal = rate_limited(response.body, response.status, parsed_items=len(result.items))
         if refusal is not None:
+            refused_origins[_origin(request.url)] = refusal
             return ended(request.url, response.status, refused=refusal)
         items_seen += len(result.items)
         collected: list[str] = []
@@ -674,18 +722,26 @@ def _one_board(
                 # since their list rows carry no teaser — and every one of them
                 # produced zero offers for as long as nothing fetched it.
                 detail_needed += 1
+                origin = _origin(detail_url)
                 if detail_fetched >= DETAIL_FETCH_CEILING:
                     # Said as what it is: a budget stop, not a connector that
                     # produced no text (#445 round 2, N5).
                     why = (
                         f"not read this run — the {DETAIL_FETCH_CEILING}-advert-page budget ran out"
                     )
-                elif _may_fetch(robots, detail_url):
+                elif origin not in refused_origins and _may_fetch(robots, detail_url):
                     _pause(robots.delay(detail_url, 0.0))
                     detail_fetched += 1
-                    fields = _detail_record(connector, detail_url, fetch=fetch)
-                    if fields:
+                    fields, refusal = _detail_record(connector, detail_url, fetch=fetch)
+                    if refusal is not None:
+                        refused_origins[origin] = f"{refusal}, on an advert page ({detail_url})"
+                    elif fields:
                         offer, why = _offer_from(connector, item, fields, url=detail_url)
+                if origin in refused_origins:
+                    # T174: the host refused, not the row — so it is unread,
+                    # never "dropped" as a connector that produced no text.
+                    refused = refused or refused_origins[origin]
+                    continue
             if offer is None:
                 dropped += 1
                 drop_reason = drop_reason or why
@@ -714,6 +770,7 @@ def _one_board(
             if failed and len(failed) == len(requests)
             else None
         ),
+        refused=refused,
     )
 
 
@@ -935,6 +992,38 @@ def measure_fixture() -> dict[str, Any]:
             if outcome.items and not outcome.added and outcome.detail_needed
         ]
 
+        # T174. The same run with every advert page answering 429. Each host
+        # may be asked for one advert — the one that refused — and a board
+        # that refused must not be listed as one that answered.
+        adverts_asked: list[str] = []
+
+        def refusing(request: ListRequest) -> Response:
+            if urlsplit(request.url).path in list_paths:
+                return answer(request)
+            adverts_asked.append(request.url)
+            return Response(429, "Too Many Requests")
+
+        refused_run = source(
+            store,
+            constraints,
+            aim,
+            fetch=refusing,
+            at="2026-01-01T00:00:00+00:00",
+            directory=DEFAULT_CONNECTORS_DIR,
+            robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+        )
+        # Counted by hostname, never by `_origin`: a metric that shares the
+        # function it checks reads 0 whenever that function is wrong (#466 F2).
+        hosts_asked = [urlsplit(url).hostname for url in adverts_asked]
+        # Independent of the fix: a board with one advert the budget could
+        # have asked for cannot show a second request, so a zero over no such
+        # board would be vacuous. The budget is part of that — `detail_needed`
+        # alone counts rows `DETAIL_FETCH_CEILING` would never reach, which
+        # would keep the population at 2 with a ceiling of 1 (#466 N3).
+        second_advert = sum(
+            1 for o in refused_run.outcomes if min(o.detail_needed, DETAIL_FETCH_CEILING) > 1
+        )
+
         measured: dict[str, Any] = {
             "sourced_offers_without_a_recorded_fetch": len(driven),
             "sourced_offers_evaluated": collected,
@@ -949,6 +1038,15 @@ def measure_fixture() -> dict[str, Any]:
             "boards_starved_by_a_missing_detail_fetch": len(starved),
             "boards_needing_the_advert_page": sum(1 for o in run.outcomes if o.detail_needed),
             "unrecorded_offers_detected_by_the_control": detected,
+            "advert_requests_after_a_refusal": len(hosts_asked) - len(set(hosts_asked)),
+            # Boards that asked for an advert, every one of which was refused —
+            # not `Run.refused`, which is the fix's own output and would read
+            # a vacuous zero if the refusal were never recorded.
+            "refused_boards_listed_as_reached": len(
+                {o.connector for o in refused_run.outcomes if o.detail_fetched}
+                & set(refused_run.steered + refused_run.unsteered)
+            ),
+            "boards_with_a_second_advert_to_refuse": second_advert,
             "gate_status": "measured",
         }
         if collected < MINIMUM_OFFERS_COLLECTED:
@@ -966,6 +1064,12 @@ def measure_fixture() -> dict[str, Any]:
             measured["reasons"] = [
                 "no board's listing needed the advert page, so a zero starved "
                 "count says nothing about whether the advert page is fetched"
+            ]
+        elif not second_advert:
+            measured["gate_status"] = "unmeasured"
+            measured["reasons"] = [
+                "no board needed a second advert page, so a zero count of requests "
+                "after a refusal says nothing about whether a refusal stops them"
             ]
         elif detected != 1:
             measured["gate_status"] = "unmeasured"
@@ -1086,22 +1190,30 @@ def _main(argv: list[str] | None = None) -> int:
     other's `unmeasured` (second reader on #455, F1).
     """
     codes: list[int] = []
-    for path, measured, key in (
+    for path, measured, keys in (
         (
             DEFAULT_EVIDENCE_PATH,
             measure_fixture(),
-            "sourced_offers_without_a_recorded_fetch",
+            (
+                "sourced_offers_without_a_recorded_fetch",
+                # T174: a refusal must stop the host it came from, and a
+                # refused board must not be reported as one that answered.
+                "advert_requests_after_a_refusal",
+                "refused_boards_listed_as_reached",
+            ),
         ),
         (
             DEFAULT_BROWSER_EVIDENCE_PATH,
             measure_browser_route(),
-            "browser_boards_fetched_over_plain_http",
+            ("browser_boards_fetched_over_plain_http",),
         ),
     ):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(json.dumps(measured, ensure_ascii=False))
-        failed = measured[key] or measured.get("offers_collected_from_a_capture_of_another_search")
+        failed = any(measured[k] for k in keys) or measured.get(
+            "offers_collected_from_a_capture_of_another_search"
+        )
         if measured["gate_status"] == "unmeasured":
             for reason in measured.get("reasons", ()):
                 print(reason, file=sys.stderr)
