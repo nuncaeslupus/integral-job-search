@@ -184,9 +184,14 @@ def test_every_definition_and_tell_is_cited_or_acknowledged() -> None:
     cannot silently grow stale in either one.
     """
     audited = audit()
-    assert audited["cue_audit_unacknowledged_uncited_fields"] == 0, audited["cue_audit_failing_cases"]
+    assert audited["cue_audit_unacknowledged_uncited_fields"] == 0, audited[
+        "cue_audit_failing_cases"
+    ]
     assert audited["cue_audit_stale_acknowledgements"] == 0, audited["cue_audit_failing_cases"]
-    assert audited["cue_audit_citable_fields"] == len(UNCITED_FIELDS_ACKNOWLEDGED) + audited["cue_audit_fields_cited"]
+    assert (
+        audited["cue_audit_citable_fields"]
+        == len(UNCITED_FIELDS_ACKNOWLEDGED) + audited["cue_audit_fields_cited"]
+    )
     assert audited["cue_audit_fields_cited"] >= MINIMUM_CITABLE_FIELDS_CITED
     assert audited["cue_audit_fields_cited_at_least"] == MINIMUM_CITABLE_FIELDS_CITED
 
@@ -213,14 +218,16 @@ def test_the_field_coverage_rule_actually_fires() -> None:
             c.negated,
             c.matches,
         )
-        if c.dimension == "schedule_flexibility" and c.text == "We support an asynchronous company culture."
+        if c.dimension == "schedule_flexibility"
+        and c.text == "We support an asynchronous company culture."
         else c
         for c in CASES
     )
     result = audit(cases=dropped)
     assert result["cue_audit_unacknowledged_uncited_fields"] == 1
     assert any(
-        "schedule_flexibility.definition" in failure and "not listed in UNCITED_FIELDS_ACKNOWLEDGED" in failure
+        "schedule_flexibility.definition" in failure
+        and "not listed in UNCITED_FIELDS_ACKNOWLEDGED" in failure
         for failure in result["cue_audit_failing_cases"]
     )
 
@@ -233,7 +240,9 @@ def test_the_field_coverage_rule_actually_fires() -> None:
         )
         result = audit()
         assert result["cue_audit_unacknowledged_uncited_fields"] == 1
-        assert any("ai_in_the_work.definition" in failure for failure in result["cue_audit_failing_cases"])
+        assert any(
+            "ai_in_the_work.definition" in failure for failure in result["cue_audit_failing_cases"]
+        )
 
         cue_audit_module.UNCITED_FIELDS_ACKNOWLEDGED = frozenset(
             original | {("mission_alignment", "definition", None)}

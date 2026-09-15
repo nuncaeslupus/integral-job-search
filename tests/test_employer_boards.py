@@ -670,7 +670,10 @@ def test_a_paged_board_stopped_on_page_two_keeps_page_one(
 
 
 def _detail_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adverts_robots: str | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    adverts_robots: str | None,
+    advert_status: int = 200,
 ) -> tuple[Any, list[str], list[float]]:
     """Two employers, two rows each, every body on an advert host of its own."""
     import urllib.error
@@ -702,7 +705,9 @@ def _detail_run(
     def fetch(request: ListRequest) -> Response:
         if "adverts" in request.url:
             # One body per advert: identical bodies are one offer to dedup.
-            return Response(200, f"<div class='content'>the advert at {request.url}</div>")
+            return Response(
+                advert_status, f"<div class='content'>the advert at {request.url}</div>"
+            )
         slug = request.url.split("/")[-2]
         rows = [
             {"title": f"{slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"} for n in (1, 2)
@@ -749,6 +754,71 @@ def test_the_advert_host_crawl_delay_is_kept_and_a_budget_stop_is_named(
     assert (outcome.added, outcome.detail_fetched) == (3, 3)
     assert pauses.count(5.0) == 3
     assert outcome.drop_reason and "budget ran out" in outcome.drop_reason
+
+
+def test_a_refused_advert_host_is_asked_once_across_employers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T174 (#445 R3-3): Lever routes every row through jobs.lever.co. A 429
+    there on the first advert used to be followed by the rest of the budget,
+    each row reported as "no text". The list host is another origin, so the
+    second employer's list is still read; its adverts are not."""
+    run, _, _ = _detail_run(
+        tmp_path, monkeypatch, adverts_robots="User-agent: *\nAllow: /\n", advert_status=429
+    )
+    (outcome,) = run.outcomes
+    assert (outcome.items, outcome.detail_needed, outcome.detail_fetched) == (4, 4, 1), outcome
+    assert outcome.refused and "429" in outcome.refused, outcome
+    assert outcome.dropped == 0 and not outcome.reached_the_board, outcome
+
+
+def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> None:
+    """#466 N1. Most boards serve list and adverts from one host, so a refusal
+    on an advert also stops the next employer's list — and the board must keep
+    the reason it was actually given, not the carry-over wording written for a
+    board that asked for nothing."""
+    directory = _package(tmp_path)
+    (directory / "atshost_en" / "connector.yaml").write_text(
+        _yaml(
+            "https://api.ats.test/v1/boards/{employer}/jobs",
+            "  employers:\n    acme: Acme Corp\n    beta: Beta Inc\n",
+        ).replace(
+            "fields: {title: title, company: company, text: body}",
+            "fields: {title: title, detail_url: url}",
+        )
+        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n",
+        encoding="utf-8",
+    )
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        if "/advert/" in request.url:  # the advert lives on the list's own host
+            return Response(429, "Too Many Requests")
+        slug = request.url.split("/")[-2]
+        rows = [{"title": f"{slug}", "url": f"https://api.ats.test/advert/{slug}"}]
+        return Response(200, json.dumps({"jobs": rows}))
+
+    run = source(
+        ProfileStore(tmp_path / "p", "test"),
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+        Aim(state="stated", terms=("python",)),
+        fetch=fetch,
+        at=AT,
+        directory=directory,
+        robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+    )
+    (outcome,) = run.outcomes
+    # acme's list, acme's advert (429) — and then beta's list is never asked.
+    assert len(asked) == 2, asked
+    # The carry-over wording quotes the reason it carries, so testing for the
+    # reason's text passes either way: what must be absent is the carry-over
+    # itself, which says this board asked for nothing.
+    assert outcome.refused and outcome.refused.startswith("the capture records HTTP 429")
+    assert "not asked again" not in outcome.refused, outcome.refused
 
 
 def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:

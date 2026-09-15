@@ -4,8 +4,18 @@
   "dynamic_population_floors": [
     {
       "module": "approval",
+      "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
+      "line": 3391
+    },
+    {
+      "module": "approval",
+      "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
+      "line": 3390
+    },
+    {
+      "module": "approval",
       "name": "_SHINGLE",
-      "line": 427
+      "line": 428
     },
     {
       "module": "arsenal_source",
@@ -51,6 +61,16 @@
       "module": "extraction",
       "name": "_CONFIRMING_MATCHES_FOR_BIPOLAR",
       "line": 154
+    },
+    {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DETECTOR_STATES_PROBED",
+      "line": 147
+    },
+    {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DISTINCT_STATE_TRACES",
+      "line": 185
     },
     {
       "module": "gate_reader_agreement",
@@ -101,6 +121,11 @@
       "module": "profile_capture",
       "name": "MINIMUM_SUBJECT_CHECKS",
       "line": 1144
+    },
+    {
+      "module": "query_capture",
+      "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
+      "line": 116
     },
     {
       "module": "question_bank",
@@ -206,7 +231,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3999,
+      "line": 4018,
       "population": 15
     },
     {
@@ -242,14 +267,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2779,
+      "line": 2800,
       "population": 40
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2712,
-      "population": 75
+      "line": 2733,
+      "population": 80
     },
     {
       "module": "freshness",
@@ -379,6 +404,7 @@
     "corpus_scope.MINIMUM_SERVING_MODULES",
     "corpus_scope.MINIMUM_STIMULUS_POOL",
     "cue_audit.MINIMUM_CASES",
+    "cue_audit.MINIMUM_CITABLE_FIELDS_CITED",
     "cue_audit.MINIMUM_CITATIONS_CHECKED",
     "cue_audit.MINIMUM_FAIL_OPEN_CASES",
     "cue_audit.MINIMUM_MECHANISM_PINNED_CASES",
@@ -451,6 +477,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 75,
+  "floors_swept_at_least": 80,
   "floors_arithmetically_checked_at_least": 36
 }

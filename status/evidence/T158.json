@@ -1,0 +1,73 @@
+{
+  "reverted_defects_the_metric_reads_as_clean": 0,
+  "reverted_defects_clean_states": [],
+  "state_results": {
+    "classifier_reverted_detector_intact": {
+      "counted_as_asserted": 1,
+      "exit_status": 1,
+      "reported_never_read": 1,
+      "green": false,
+      "counted_but_never_read": true,
+      "defect_can_occur": true
+    },
+    "classifier_reverted_first_signal_removed": {
+      "counted_as_asserted": 1,
+      "exit_status": 1,
+      "reported_never_read": 0,
+      "green": false,
+      "counted_but_never_read": true,
+      "defect_can_occur": true
+    },
+    "classifier_reverted_second_signal_removed": {
+      "counted_as_asserted": 1,
+      "exit_status": 0,
+      "reported_never_read": 1,
+      "green": true,
+      "counted_but_never_read": true,
+      "defect_can_occur": true
+    },
+    "classifier_reverted_silent_pass_catch_removed": {
+      "counted_as_asserted": 1,
+      "exit_status": 0,
+      "reported_never_read": 0,
+      "green": true,
+      "counted_but_never_read": true,
+      "defect_can_occur": true
+    },
+    "first_signal_removed_alone": {
+      "counted_as_asserted": 0,
+      "exit_status": 1,
+      "reported_never_read": 0,
+      "green": false,
+      "counted_but_never_read": false,
+      "defect_can_occur": false
+    },
+    "second_signal_removed_alone": {
+      "counted_as_asserted": 0,
+      "exit_status": 1,
+      "reported_never_read": 0,
+      "green": false,
+      "counted_but_never_read": false,
+      "defect_can_occur": false
+    },
+    "silent_pass_catch_removed_alone": {
+      "counted_as_asserted": 0,
+      "exit_status": 1,
+      "reported_never_read": 0,
+      "green": false,
+      "counted_but_never_read": false,
+      "defect_can_occur": false
+    }
+  },
+  "gate_status": "measured",
+  "detector_states_probed_at_least": 7,
+  "detector_states_probed": [
+    "classifier_reverted_detector_intact",
+    "classifier_reverted_first_signal_removed",
+    "classifier_reverted_second_signal_removed",
+    "classifier_reverted_silent_pass_catch_removed",
+    "first_signal_removed_alone",
+    "second_signal_removed_alone",
+    "silent_pass_catch_removed_alone"
+  ]
+}
