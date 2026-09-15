@@ -29,7 +29,9 @@ cv = [
 dev = [
     "mypy>=1.11",
     "pytest>=8.3",
-    # ~3,800 tests (3793 passed, 7 skipped when this line was last measured).
+    # ~3,800 tests. The exact count sat here for a round and was already a
+    # commit out of date when a reader checked it — it moves on any PR that
+    # adds a test, and the band is what carries the argument.
     # `make test` runs them 3x to 5x faster on a twelve-core
     # laptop, under `-n auto` from the Makefile and `--dist loadfile` from
     # [tool.pytest.ini_options] below — which says why each flag is where it is.

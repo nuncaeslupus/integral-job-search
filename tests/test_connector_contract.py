@@ -817,7 +817,19 @@ def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped() -> No
     fourth directory. So the axis is derived from the tree rather than named: one
     vanished name per top-level entry git lists, all in one scan, and every one
     of them has to appear in the refusal. A directory added later is covered
-    without anyone remembering to."""
+    without anyone remembering to.
+
+    Deriving the axis was only half of it, and for one round the other half was
+    a proxy. `name in str(refusal.value)` reads the rendered list as a haystack,
+    so a point that is a suffix of another point is found inside its neighbour
+    and can never be observed to be missing: `arsenal/…` sits inside
+    `claude-arsenal/…`, and the `.` top's bare `vanished-mid-scan.md` sits inside
+    all fifteen others. Two of sixteen points were blind, exempting either
+    directory left the whole suite green, and the blind set is a function of
+    which directory names happen to end in which — so it grew silently as
+    directories were added. Recovering the list the refusal was actually built
+    from turns containment back into membership; a message that stops ending in
+    one raises here rather than passing."""
     repo = _LIBRARY.parent
     listed = _listed_files(repo)
     tops = {name.partition("/")[0] if "/" in name else "." for name in listed}
@@ -829,7 +841,10 @@ def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped() -> No
     with pytest.raises(AssertionError) as refusal:
         _quads_in(repo, [*listed, *vanished])
 
-    exempted = [name for name in vanished if name not in str(refusal.value)]
+    # The first line only: pytest rewrites the assert and appends its own
+    # `assert not [...]` explanation underneath the message.
+    reported = set(ast.literal_eval(str(refusal.value).partition(":")[2].splitlines()[0]))
+    exempted = sorted(set(vanished) - reported)
     assert not exempted, f"vanished, and the predicate carved them out of the refusal: {exempted}"
 
 
