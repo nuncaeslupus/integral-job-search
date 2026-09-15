@@ -982,6 +982,7 @@ def _main(argv: list[str]) -> int:
 #: library that lost every real probe must fail rather than pass over an empty
 #: set. Seventeen packages carry a probe today; the floor sits below that with
 #: room for one to be withdrawn without the gate going quiet.
+#: arsenal-floor-margin: value=12
 MINIMUM_PROBES_COMPARED = 12
 
 

@@ -135,6 +135,7 @@ _TERMINAL = frozenset({"done", "merged"})
 # module could state a margin against; the number is a schema minimum, argued
 # here rather than left silent (T159 found it swept, in scope, and undocumented
 # for the first time once the sweep stopped filtering names starting with `_`).
+# arsenal-floor-margin: value=4
 _MIN_TASK_CELLS = 4
 
 

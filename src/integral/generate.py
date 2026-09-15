@@ -70,6 +70,7 @@ SCHEMA_VERSION: Literal[1] = 1
 # Three regeneration rounds per offer, then stop. Spec step 11's stop rule: the
 # useful move past this is a conversation about what is wrong with the draft,
 # not a fourth draft of the same wrongness.
+# arsenal-floor-margin: value=3
 GENERATION_CAP = 3
 
 _VERSION_DIR = re.compile(r"^v(\d+)$")

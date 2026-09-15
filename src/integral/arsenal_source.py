@@ -104,11 +104,13 @@ def vendored_skills(root: Path = _REPO_ROOT) -> list[str]:
 #: T150's own gate reported a clean zero over it. The bundle holds 47 files
 #: today; the floor sits well below that, so upstream dropping a script is not a
 #: red gate and a deleted bundle still is.
+#: arsenal-floor-margin: value=30
 MINIMUM_BUNDLE_FILES = 30
 
 #: The same, for the vendored skills: `/init` owns eighteen today. This is what
 #: `_main`'s non-zero check already meant, said as a number — a tree with one
 #: skill folder left in it is not a vendored bundle either.
+#: arsenal-floor-margin: value=10
 MINIMUM_VENDORED_SKILLS = 10
 
 

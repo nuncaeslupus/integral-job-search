@@ -144,6 +144,7 @@ PROBE_ARRANGEMENT: Arrangement = next(a for a in ARRANGEMENTS if a.name == "bold
 #: below is the floor that counts the thing this one cannot — the number of
 #: distinct behaviours actually observed, not the number of names attached to
 #: a probe that may or may not have done anything.
+#: arsenal-floor-margin: value=7
 MINIMUM_DETECTOR_STATES_PROBED = 7
 
 #: A floor over **observed behaviour**, not over the state list. Each state's
@@ -182,6 +183,7 @@ MINIMUM_DETECTOR_STATES_PROBED = 7
 #: two would move this number without touching the reverted axis at all) —
 #: it is just no longer the only thing standing between a compensated
 #: mutation and a clean floor_breaches().
+#: arsenal-floor-margin: value=5
 MINIMUM_DISTINCT_STATE_TRACES = 5
 
 

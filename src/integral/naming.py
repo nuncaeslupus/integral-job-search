@@ -225,6 +225,7 @@ def measure(
 #: file a drift, `open_task_pr.sh`'s archive included. That is T100: the
 #: script archives the task file and then runs the host gate, so the committed
 #: number had to be the pre-archive value and the post-archive value at once.
+#: arsenal-floor-margin: value=500
 MINIMUM_SCANNED = 500
 
 #: T100's own record, beside T55's. Two questions of one sweep: what the
