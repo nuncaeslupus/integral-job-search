@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from integral import markup_text
 from integral.connectors import (
+    _OPAQUE_TEXT_ELEMENTS,
     JsonSource,
     Node,
     _neutralise_unterminated_tail,
@@ -268,27 +269,61 @@ def test_neutralise_unterminated_tail_does_not_open_a_comment_inside_script_or_s
     )
 
 
-def test_neutralise_unterminated_tail_recognises_the_other_two_comment_closes() -> None:
-    # F6 (second-reader round 2, non-blocking): a comment can also close on
-    # `--!>` (comment end bang state, WHATWG §13.2.5.52) or, for an empty
-    # comment, on the very next '>' (abrupt-closing-of-empty-comment,
-    # §13.2.5.44) - searching only for '-->' read both as EOF-truncated and
-    # deleted everything after them. Fixed at the termination-detection
-    # level: this function now leaves both untouched (nothing after them is
-    # lost), which is as far as its own contract goes - it only decides
-    # whether a construct is terminated, it does not rewrite `html.parser`'s
-    # own comment recognition, which does not implement either spec state
-    # (measured: `html.parser` reads a well-formed `--!>`/`<!-->` close as
-    # literal DATA, not as a comment, so the bracket syntax itself still
-    # surfaces in `text_content()` - a separate, pre-existing, lower-severity
-    # gap in the stdlib parser this task does not extend to).
-    assert _neutralise_unterminated_tail("x <!-- c --!> tail") == "x <!-- c --!> tail"
-    assert _neutralise_unterminated_tail("x <!-->tail") == "x <!-->tail"
-    # The fail-closed failure mode (deleting "tail") is what's actually
-    # fixed - confirm no content is lost end to end, even though the
-    # comment's own syntax is not stripped.
-    assert _take("html_text", "x <!-- c --!> tail") == "x <!-- c --!> tail"
-    assert "tail" in (_take("html_text", "x <!-->tail") or "")
+def test_opaque_text_elements_is_exactly_the_pinned_set() -> None:
+    # R4 (second-reader round 4): through round 3 this set also held `xmp`,
+    # `iframe`, `noembed`, `noframes`, `title` and `textarea` - none exercised
+    # by a fixture or a test, so the mutant that deleted all six survived the
+    # entire suite, and all six were three-way divergent across the
+    # interpreters this repo runs on (`html.parser` only special-cases
+    # `script`/`style` identically everywhere; measured directly, its own
+    # `CDATA_CONTENT_ELEMENTS` disagrees on the rest across patches). Pinned
+    # to exactly the two members this module can actually stand behind, so
+    # adding one back requires adding the coverage for it in the same change
+    # - not a set a future edit can silently grow again.
+    assert frozenset({"script", "style"}) == _OPAQUE_TEXT_ELEMENTS
+
+
+def test_neutralise_unterminated_tail_normalises_the_other_comment_closes() -> None:
+    # F6 (second-reader round 2) / R1, R5, R6 (second-reader round 4): a
+    # comment can also close on `--!>` (comment end bang state, WHATWG
+    # §13.2.5.52), or as an empty comment on the very next '>' with zero or
+    # one extra dash (abrupt-closing-of-empty-comment, comment start /
+    # comment start dash states, §13.2.5.44-45) - `-->`-only detection read
+    # all three as EOF-truncated and deleted everything after them.
+    #
+    # Round 2's fix (F6) widened *detection* only - these are recognised as
+    # terminated - but left the matched text untouched for `html.parser` to
+    # read, which is exactly a check pinned to a proxy: `html.parser`'s own
+    # recognition of these spellings is not settled across patches. Measured
+    # directly: 3.12.3 still extends such a comment to EOF and deletes
+    # "tail"; 3.12.11 stops in the right place but emits the bracket syntax
+    # as literal DATA instead of stripping it (so a literal `--!>` or `<!-->`
+    # then surfaces in `text_content()`); 3.13.12 strips it correctly,
+    # spec-compliant. Round 2's own test asserted the 3.12.11 behaviour
+    # (`_take` returning the bracket syntax unchanged), which is why CI —
+    # running a different 3.12 patch — failed on this exact assertion (R1),
+    # and why `<!--->` (one more extra dash) was still read as unterminated
+    # and deleted the rest of the document on every interpreter (R5).
+    #
+    # The fix: rewrite the whole matched span to the canonical empty comment
+    # `<!---->`, which every measured build parses identically, so the
+    # outcome no longer depends on which patch is running.
+    assert _neutralise_unterminated_tail("x <!-- c --!> tail") == "x <!----> tail"
+    assert _neutralise_unterminated_tail("x <!-->tail") == "x <!---->tail"
+    assert _neutralise_unterminated_tail("x <!--->tail") == "x <!---->tail"
+    # A close `html.parser` already reads identically everywhere - the
+    # canonical spelling itself, or any comment whose closing '-->' is found
+    # by a plain left-to-right search starting right after '<!--' - is left
+    # byte-for-byte untouched; only the ambiguous spellings above are
+    # rewritten.
+    assert _neutralise_unterminated_tail("x <!---->tail") == "x <!---->tail"
+    assert _neutralise_unterminated_tail("x <!-- c --> tail") == "x <!-- c --> tail"
+    # And the property that actually matters end to end: no content is
+    # lost, and the result is the spec-required text, deterministically,
+    # not merely "whatever text happens to survive".
+    assert _take("html_text", "x <!-- c --!> tail") == "x tail"
+    assert _take("html_text", "x <!-->tail") == "x tail"
+    assert _take("html_text", "x <!--->tail") == "x tail"
 
 
 def test_neutralise_unterminated_tail_still_reads_correctly_on_a_bare_lt() -> None:

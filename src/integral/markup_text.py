@@ -97,7 +97,7 @@ MINIMUM_MARKUP_VALUES_COMPARED = 6
 #: **Zero slack, unlike the two floors above**: the table only ever grows, so
 #: the first row deleted must breach this — which is T159's test for a floor
 #: that can actually fire. Raise it with the table; never lower it.
-MINIMUM_MARKUP_CONTRACTS = 66
+MINIMUM_MARKUP_CONTRACTS = 73
 
 
 #: What each member must do, as (take, input, expected output, why).
@@ -502,6 +502,77 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         "WHATWG markup declaration open state, anything else: incorrectly-"
         "opened-comment - switches to the bogus comment state right away, "
         "same EOF rule as a real comment",
+    ),
+    # --- R2 (second-reader round 4): F1's fix only covered the case where --
+    # --- the bare '<' has no '>' anywhere later in the document -------------
+    (
+        "html_text",
+        "5 < 10 years <!-- salary 200k <p>note</p>",
+        "5 < 10 years",
+        "REGRESSION, FIXED: `gt = markup.find('>', lt)` is the *next* '>' in "
+        "the whole document, not this bare '<''s own - the previous fix "
+        "jumped the scan to `gt + 1` whenever some later '>' existed "
+        "anywhere, stepping over the unterminated '<!--' in between and "
+        "welding its content (a salary, here - the table's own example of "
+        "what a CMS puts in a comment) into surviving prose. WHATWG "
+        "§13.2.5.6 tag open state, 'anything else': a '<' not followed by a "
+        "letter never opens a tag no matter what follows later",
+    ),
+    (
+        "escaped_html_text",
+        "5 &lt; 10 years &lt;!-- salary 200k &lt;p&gt;note&lt;/p&gt;",
+        "5 < 10 years",
+        "the same composition through the greenhouse-shaped route this task exists for",
+    ),
+    (
+        "html_text",
+        "Team of <5 <!-- draft <b>x</b>",
+        "Team of <5",
+        "same defect, no space around the bare '<' this time - confirms the "
+        "fix does not depend on whitespace around the character that gets "
+        "neutralised",
+    ),
+    # --- R3 (second-reader round 4): the same skip-to-the-next-'>' bug, one -
+    # --- construct later, hides a <script> open tag from the opaque branch -
+    # --- below and reads its own internal '<!--' as a real, unterminated ---
+    # --- comment - the worst direction, total loss of the rest of the doc --
+    (
+        "html_text",
+        'Ages 3 <5 <script>var s = "<!--";</script><p>Body</p>',
+        "Ages 3 <5 Body",
+        "REGRESSION, FIXED: the bare '<5' used to jump the scan past "
+        "'<script' entirely (some later '>' always exists once a script "
+        "tag follows), so `_OPAQUE_TEXT_ELEMENTS` never saw the tag open "
+        "and the '<!--' inside script data (WHATWG §13.2.5.15: not a "
+        "comment there at all) was read as an unterminated comment and "
+        "deleted the rest of the document with it - `return markup[:lt]` "
+        "on a whole page, not a field",
+    ),
+    (
+        "escaped_html_text",
+        'Ages 3 &lt;5 &lt;script&gt;var s = "&lt;!--";&lt;/script&gt;&lt;p&gt;Body&lt;/p&gt;',
+        "Ages 3 <5 Body",
+        "the same composition through the greenhouse-shaped route this task "
+        "exists for - an age range or a team size ('<5') ahead of a script "
+        "block is not exotic",
+    ),
+    # --- R5 (second-reader round 4): the close-detection literal-string ----
+    # --- list (F6) missed the one-extra-dash abrupt-empty-comment spelling -
+    (
+        "html_text",
+        "x <!--->tail",
+        "x tail",
+        "REGRESSION, FIXED: comment start dash state, '>' "
+        "(abrupt-closing-of-empty-comment, WHATWG §13.2.5.45) closes the "
+        "comment right there - searching for the literal strings '-->' or "
+        "'--!>' starting after '<!--' finds neither in '->tail', so this "
+        "was read as unterminated and dropped the rest of the document",
+    ),
+    (
+        "escaped_html_text",
+        "x &lt;!--->tail",
+        "x tail",
+        "the same composition through the greenhouse-shaped route this task exists for",
     ),
 )
 

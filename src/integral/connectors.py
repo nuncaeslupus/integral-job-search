@@ -658,26 +658,41 @@ class _TreeBuilder(HTMLParser):
             self._stack[-1].children.append(data)
 
 
-#: WHATWG's RAWTEXT state (§13.2.5.3) is entered for `style`, `xmp`, `iframe`,
-#: `noembed` and `noframes`; the script data state (§13.2.5.15) for `script`;
-#: and the RCDATA state — same family, same reason to be here — for `title`
-#: and `textarea`. In all three, `<!--`, a stray `<`, or anything else that
-#: looks like a tag or a comment is not tokenised as one: only the element's
-#: own case-insensitive end tag leaves the state. So a scan that does not know
-#: this set will mis-tokenise their content as ordinary markup — which is
-#: exactly F2: a `<!--` inside `<script>` with no later `-->` was read as an
-#: unterminated *comment* and dropped the rest of the document with it,
-#: because nothing here knew `<script>` even opened.
+#: WHATWG's script data state (§13.2.5.15, `script`) and RAWTEXT state
+#: (§13.2.5.3, `style` among others). In both, `<!--`, a stray `<`, or
+#: anything else that looks like a tag or a comment is not tokenised as one:
+#: only the element's own case-insensitive end tag leaves the state. So a scan
+#: that does not know this set will mis-tokenise their content as ordinary
+#: markup — which is exactly F2: a `<!--` inside `<script>` with no later
+#: `-->` was read as an unterminated *comment* and dropped the rest of the
+#: document with it, because nothing here knew `<script>` even opened.
 #:
-#: Deliberately not read from `html.parser.HTMLParser.CDATA_CONTENT_ELEMENTS`:
-#: that attribute is itself cross-patch unstable — measured directly, it is
-#: `('script', 'style')` on 3.12.3 and 3.12.11 but `('script', 'style', 'xmp',
-#: 'iframe', 'noembed', 'noframes')` on 3.11.15 and 3.13.12 — so reading it at
-#: import time would reintroduce the exact "proxy for the property" this
-#: function exists to remove, one constant later.
-_OPAQUE_TEXT_ELEMENTS = frozenset(
-    {"script", "style", "xmp", "iframe", "noembed", "noframes", "title", "textarea"}
-)
+#: **Limited to these two, not the full RAWTEXT/RCDATA family** (second-reader
+#: round 4, R4): `xmp`, `iframe`, `noembed`, `noframes` (RAWTEXT) and `title`,
+#: `textarea` (RCDATA) were in this set through round 3 and every one of them
+#: was wrong. None is exercised by a fixture or a test, so the mutant that
+#: deletes all six survives the entire suite; and behaviourally each is
+#: three-way divergent across the interpreters this repo runs on, because
+#: `html.parser` itself only special-cases `script`/`style` consistently —
+#: measured directly, `HTMLParser.CDATA_CONTENT_ELEMENTS` is `('script',
+#: 'style')` on 3.12.3 and 3.12.11 but adds all four RAWTEXT elements above on
+#: 3.11.15 and 3.13.12, and `title`/`textarea` are not members of that
+#: attribute on any build. So this function declining to touch a `<!--`
+#: inside e.g. `<xmp>` and handing the tag on to `html.parser` (which some
+#: builds treat as RAWTEXT and some do not) is itself the "same text
+#: regardless of interpreter" property broken, not honoured — pinning the set
+#: to fixtures that only some builds pass would be exactly the "check pinned
+#: to a proxy" this module exists to remove. Reduced to the two members whose
+#: `html.parser` treatment is identical everywhere this repo runs, until each
+#: of the other six has committed rows pinning its spec-required behaviour on
+#: every interpreter (or its own resolution that does not depend on
+#: `html.parser`'s RAWTEXT handling at all).
+#:
+#: Deliberately not read from `html.parser.HTMLParser.CDATA_CONTENT_ELEMENTS`
+#: even for these two: that attribute is itself cross-patch unstable, per the
+#: measurement above, so reading it at import time would reintroduce the same
+#: hazard for a set that happens to agree today.
+_OPAQUE_TEXT_ELEMENTS = frozenset({"script", "style"})
 
 
 def _opening_tag_name(markup: str, lt: int, gt: int) -> str | None:
@@ -709,12 +724,96 @@ def _skip_opaque_element(markup: str, tag_name: str, after_open_tag: int) -> int
     return len(markup) if close == -1 else close + 1
 
 
-#: A real comment closes on `-->` (comment end state) or `--!>` (comment end
-#: bang state, §13.2.5.52) — both are searched for here, in that either order.
-#: The zero-content case (`<!-->`, comment start state, §13.2.5.44) is handled
-#: separately at the call site: it needs no search because it always closes on
-#: the very next character.
-_COMMENT_CLOSE_RE = re.compile(r"-->|--!>")
+#: A tag really opens (or closes) only on an ASCII letter right after `<`, or
+#: right after `</` — WHATWG's tag open state (§13.2.5.6) and end tag open
+#: state (§13.2.5.7): anything else is "anything else", which never consumes
+#: past the `<` itself. Used to tell a genuine `<tag` or `</tag` apart from a
+#: bare `<` that merely has some *later*, unrelated `>` somewhere in the
+#: document (R2/R3, second-reader round 4) — the two must not be treated the
+#: same just because `str.find(">", lt)` cannot tell them apart on its own.
+_TAG_OPEN_RE = re.compile(r"</?[A-Za-z]")
+
+
+def _comment_close_end(markup: str, content_start: int) -> int | None:
+    """Index just past a comment's closing token, walking WHATWG's comment
+    states (§13.2.5.44 comment start, onward) from `content_start` — the
+    first character after the comment's own `<!--` — or `None` if the
+    comment is never closed before EOF.
+
+    Every legal close (`-->`, `--!>` comment-end-bang §13.2.5.52, and the
+    abrupt-closing-of-empty-comment forms `<!-->`/`<!--->` in comment-start
+    and comment-start-dash states, §13.2.5.44-45) is one rule here instead of
+    a fixed set of literal strings matched from a fixed offset — that fixed
+    list is what missed `<!--->` (second-reader round 4, R5): searching for
+    `-->` or `--!>` starting at `content_start` finds neither in `->tail`, so
+    the previous code read the comment as unterminated and dropped the rest
+    of the document, though the comment closes right there per spec.
+    """
+    n = len(markup)
+    i = content_start
+    state = "start"
+    while i < n:
+        ch = markup[i]
+        if state == "start":
+            if ch == "-":
+                state = "start-dash"
+                i += 1
+            elif ch == ">":
+                return i + 1
+            else:
+                state = "content"
+        elif state == "start-dash":
+            if ch == "-":
+                state = "end"
+                i += 1
+            elif ch == ">":
+                return i + 1
+            else:
+                state = "content"
+        elif state == "content":
+            if ch == "-":
+                state = "end-dash"
+            i += 1
+        elif state == "end-dash":
+            if ch == "-":
+                state = "end"
+                i += 1
+            else:
+                state = "content"
+        elif state == "end":
+            if ch == ">":
+                return i + 1
+            if ch == "!":
+                state = "end-bang"
+                i += 1
+            elif ch == "-":
+                i += 1
+            else:
+                state = "content"
+        elif state == "end-bang":
+            if ch == ">":
+                return i + 1
+            if ch == "-":
+                state = "end-dash"
+                i += 1
+            else:
+                state = "content"
+    return None
+
+
+#: A canonical, empty comment. `html.parser`'s classic implementation finds a
+#: close by searching for the literal substring `-->` starting right after
+#: the opening `<!--`, so any close this function recognises that does *not*
+#: contain that literal substring at the position such a search would find it
+#: — `--!>`'s bang, or `<!-->`/`<!--->`'s zero/one extra dash before the `>`
+#: — is read inconsistently across interpreter patches (measured: 3.12.3
+#: extends such a comment to EOF, silently deleting everything after it;
+#: 3.12.11 stops at the right place but emits the bracket syntax as literal
+#: DATA instead of stripping it; 3.13.12 strips it correctly). Rewriting the
+#: whole matched span to this literal — which every measured build parses
+#: identically — resolves the ambiguity before `html.parser` ever sees it,
+#: rather than leaving the interpreter to guess (R1, R5, R6).
+_CANONICAL_EMPTY_COMMENT = "<!---->"
 
 
 def _neutralise_unterminated_tail(markup: str) -> str:
@@ -741,13 +840,19 @@ def _neutralise_unterminated_tail(markup: str) -> str:
     * Inside `_OPAQUE_TEXT_ELEMENTS` (`<script>`, `<style>`, …), nothing is a
       tag, a comment or a declaration — only the element's own end tag ends
       the state — so no scanning happens there at all; see that constant.
-    * A comment (`<!--`) that finds its close (`-->` or `--!>`, or closes
-      immediately as `<!-->`) is left untouched; one that does not is dropped,
-      content and all — a comment contributes no text whether or not it
-      manages to close, the same rule an ordinary, *well-formed* comment
-      already follows a few lines up in `MARKUP_CONTRACTS`. A `>` inside it is
-      literal comment content, not a close, exactly as WHATWG's comment states
-      require.
+    * A comment (`<!--`) that finds its close (`-->`, `--!>`, or one of the
+      abrupt empty-comment forms, `<!-->`/`<!--->`) is left in place — content
+      and all, verbatim, if `html.parser` reads that spelling identically on
+      every interpreter this repo runs; rewritten to the canonical empty form
+      `<!---->` if it does not, so a terminated comment is removed the same
+      way regardless of build (R1, R5, R6: `_comment_close_end` walks the
+      actual comment states rather than matching a fixed set of literal
+      closing strings, and `_CANONICAL_EMPTY_COMMENT`'s docstring has the
+      per-interpreter measurement). One that never closes is dropped, content
+      and all — a comment contributes no text whether or not it manages to
+      close, the same rule an ordinary, *well-formed* comment already follows
+      a few lines up in `MARKUP_CONTRACTS`. A `>` inside it is literal comment
+      content, not a close, exactly as WHATWG's comment states require.
     * `<!` not followed by `--` (bogus comment, §13.2.5.42's "anything else",
       or a DOCTYPE, §13.2.5.53) and `<?` (also a bogus comment, tag open
       state's "anything else") are both tokens that contribute no text
@@ -755,17 +860,24 @@ def _neutralise_unterminated_tail(markup: str) -> str:
       truncated one is dropped the same way. A terminated one is left for the
       real parser, which already handles it (`<![CDATA[…]]>` and friends, via
       `parse_marked_section`).
-    * Anything else that opens with `<` and has no `>` anywhere after it can
-      never be a real tag, so only **that** `<` is neutralised to a character
-      reference and scanning resumes right after it — a later, independent
-      construct further on (another `<!--`, another `<!`) must still be
-      recognised as itself rather than welded into this stray character's
-      fallout. This is F1: the previous version neutralised every `<` to EOF
-      in one blanket pass, which welded a later unterminated comment's
-      contents into prose. Leaving the interpreter's own EOF recovery decide
-      the bare case is fail-open in the direction that matters here: it can
-      silently delete the rest of a candidate-visible field on a bare `<`
-      that was never markup at all.
+    * Anything else that opens with `<` but is not itself the start of a tag
+      — WHATWG's tag open state only treats `<` as opening one on an ASCII
+      letter, or `</` on one (`_TAG_OPEN_RE`) — is neutralised to a character
+      reference at **that `<` alone**, and scanning resumes right after it,
+      regardless of whether some later, unrelated `>` exists anywhere else in
+      the document. This is F1 (round 2) *and* R2/R3 (round 4, the same rule
+      applied generally rather than only to the `gt == -1` sub-case): the
+      round-2 fix neutralised a bare `<` this way only when no `>` followed it
+      anywhere in the document, so `5 < 10 <!-- salary` was fixed but `5 < 10
+      <!-- salary <p>x</p>` was not — `gt = markup.find(">", lt)` is the *next*
+      `>` in the whole document, not this bare `<`'s own, so the scan jumped
+      to `gt + 1` and stepped over an unclassified `<!--`, `<!`, `<?` or start
+      tag beginning in between, welding it into surviving prose (R2) or, when
+      the skipped region was a `<script>` open tag, hiding the opaque element
+      from the branch below entirely and reading its own internal `<!--` as a
+      real, unterminated comment — deleting the rest of the document (R3). The
+      scan must never step over a region it has not classified; only a
+      confirmed tag or end tag may be skipped as one.
 
     Walked left to right rather than anchored on the document's last `>`:
     an outer, never-closed comment can itself contain `<tag>`-looking text
@@ -786,8 +898,12 @@ def _neutralise_unterminated_tail(markup: str) -> str:
     here: closing it needs attribute-value-aware scanning (tracking whether
     `lt..gt` is inside a `"`/`'` pair), which is exactly the "re-validating
     markup that already has one" this function declines to do, above. Rarer
-    than F1/F2 in practice, and the one case left, of 28 spec cases checked,
-    that still depends on the interpreter.
+    than F1/F2 in practice. **Not a claim about how many cases remain
+    interpreter-dependent overall** — round 2's docstring stated a count here
+    ("the one case left, of 28 checked") that round 3's own changes made
+    false without anyone re-measuring it (second-reader round 4, R6: nothing
+    tests prose), so this paragraph now says only what it can still stand
+    behind: F4 itself is unresolved, on purpose, for the reason above.
     """
     i = 0
     while True:
@@ -796,15 +912,21 @@ def _neutralise_unterminated_tail(markup: str) -> str:
             return markup
         if markup.startswith("<!--", lt):
             content_start = lt + 4
-            if markup[content_start : content_start + 1] == ">":
-                # comment start state, '>': abrupt-closing-of-empty-comment -
-                # closes on this single character, no search needed.
-                i = content_start + 1
-                continue
-            close = _COMMENT_CLOSE_RE.search(markup, content_start)
-            if close is None:
+            close_end = _comment_close_end(markup, content_start)
+            if close_end is None:
                 return markup[:lt]
-            i = close.end()
+            # A close html.parser reads identically everywhere is left
+            # untouched; one it does not (the naive "-->"-from-content_start
+            # search a classic implementation uses disagrees with where this
+            # comment actually closes) is normalised to a plain empty
+            # comment, so the removal is deterministic instead of depending
+            # on which build reads the field (R1, R5, R6).
+            naive = markup.find("-->", content_start)
+            if naive == close_end - 3:
+                i = close_end
+            else:
+                markup = markup[:lt] + _CANONICAL_EMPTY_COMMENT + markup[close_end:]
+                i = lt + len(_CANONICAL_EMPTY_COMMENT)
             continue
         if markup[lt : lt + 2] in ("<!", "<?"):
             gt = markup.find(">", lt)
@@ -814,10 +936,22 @@ def _neutralise_unterminated_tail(markup: str) -> str:
                 return markup[:lt]
             i = gt + 1
             continue
+        if not _TAG_OPEN_RE.match(markup, lt):
+            # R2/R3 (round 4), generalising F1 (round 2): this '<' cannot
+            # open a real tag no matter what '>' the rest of the document
+            # holds - WHATWG's tag open state only starts one on an ASCII
+            # letter (or '</' + one). Neutralise only this '<' and keep
+            # scanning; a later, independent construct (another '<!--',
+            # another '<', a real tag) must never be stepped over just
+            # because this bare '<' happens to precede some unrelated '>'.
+            markup = markup[:lt] + "&lt;" + markup[lt + 1 :]
+            i = lt + 4
+            continue
         gt = markup.find(">", lt)
         if gt == -1:
-            # F1: neutralise only this one '<' and keep scanning - a later
-            # construct is still its own construct.
+            # A genuine tag open with no '>' anywhere after it: EOF-truncated
+            # start/end tag, F1's original bare-'<' rule applies the same way
+            # here — neutralise the '<' alone and keep scanning.
             markup = markup[:lt] + "&lt;" + markup[lt + 1 :]
             i = lt + 4
             continue
