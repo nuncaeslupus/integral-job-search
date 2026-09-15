@@ -1,7 +1,12 @@
 {
-  "captured_at": "2026-08-30",
-  "url": "https://www.jobfluent.com/es/empleos-barcelona?page=2",
+  "captured_at": "2026-09-10",
+  "url": "https://www.jobfluent.com/es/empleos-barcelona?q=python&page=2",
   "status": 200,
   "surface": "laptop",
-  "provenance": "unrecorded"
+  "provenance": "live",
+  "response": {
+    "file": "list.html",
+    "bytes": 135575,
+    "sha256": "fb2083e75400723bb76a3c13d134ced126ade70336290232df4aae4c1f68545e"
+  }
 }

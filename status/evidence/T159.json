@@ -53,6 +53,16 @@
       "line": 154
     },
     {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DETECTOR_STATES_PROBED",
+      "line": 147
+    },
+    {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DISTINCT_STATE_TRACES",
+      "line": 185
+    },
+    {
       "module": "gate_reader_agreement",
       "name": "MINIMUM_ARRANGEMENTS_PROBED",
       "line": 122
@@ -101,6 +111,11 @@
       "module": "profile_capture",
       "name": "MINIMUM_SUBJECT_CHECKS",
       "line": 1144
+    },
+    {
+      "module": "query_capture",
+      "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
+      "line": 116
     },
     {
       "module": "question_bank",
@@ -206,7 +221,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 3999,
+      "line": 4018,
       "population": 15
     },
     {
@@ -242,14 +257,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2779,
+      "line": 2793,
       "population": 40
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2712,
-      "population": 75
+      "line": 2726,
+      "population": 78
     },
     {
       "module": "freshness",
@@ -450,6 +465,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 75,
+  "floors_swept_at_least": 78,
   "floors_arithmetically_checked_at_least": 36
 }

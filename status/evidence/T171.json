@@ -1,0 +1,9 @@
+{
+  "steerable_queries_no_capture_measured": 0,
+  "example_packages_excluded": [
+    "examplejobs_es"
+  ],
+  "findings": [],
+  "gate_status": "measured",
+  "steerable_packages_checked_at_least": 4
+}

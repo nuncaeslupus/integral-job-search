@@ -11,11 +11,13 @@ import pytest
 
 from integral.candidate import Aim, CandidateConstraints, Location
 from integral.connectors import (
+    EMPLOYER_PLACEHOLDER,
     MAX_EMPLOYERS,
     ConnectorError,
     ListRequest,
     build_list_requests,
     build_list_urls,
+    load_connector,
     parse_connector,
 )
 from integral.employer_boards import (
@@ -315,6 +317,71 @@ def test_two_packages_on_one_host_count_once(tmp_path: Path) -> None:
     measured = measure(directory, ledger)
     assert measured["not_conforming"] == {}
     assert measured["ats_host_connectors_conforming"] == 1
+
+
+def test_a_slot_carrying_package_that_declares_nothing_does_not_count(tmp_path: Path) -> None:
+    """T176: the slot is not the declaration (T172's F1, in T144's own gate).
+
+    A job board's company page — `indeed.com/cmp/{employer}/jobs` — carries the
+    slot and is not an ATS host. Here the real Lever package keeps its slot,
+    its contract pack and its robots row, and loses only `source_kind`.
+    """
+    directory = _library(tmp_path, "lever_en")
+    package = directory / "lever_en"
+    yaml_text = (package / "connector.yaml").read_text(encoding="utf-8")
+    assert "source_kind: employer\n" in yaml_text
+    (package / "connector.yaml").write_text(
+        yaml_text.replace("source_kind: employer\n", ""), encoding="utf-8"
+    )
+    assert EMPLOYER_PLACEHOLDER in load_connector(package).list.url_pattern
+    measured = measure(directory, _LEDGER)
+    assert measured["ats_host_connectors_conforming"] == 0
+    assert measured["conforming_hosts"] == []
+
+
+def test_a_slot_carrying_package_declared_an_aggregator_does_not_count(
+    tmp_path: Path,
+) -> None:
+    """`employer` is the declaration that counts, not merely *a* declaration:
+    an aggregator with a slot is the company-page case wearing a label."""
+    directory = _library(tmp_path, "lever_en")
+    package = directory / "lever_en"
+    yaml_text = (package / "connector.yaml").read_text(encoding="utf-8")
+    (package / "connector.yaml").write_text(
+        yaml_text.replace("source_kind: employer\n", "source_kind: aggregator\n"),
+        encoding="utf-8",
+    )
+    assert load_connector(package).source_kind == "aggregator"
+    measured = measure(directory, _LEDGER)
+    assert measured["ats_host_connectors_conforming"] == 0
+
+
+def test_a_declared_package_with_no_slot_does_not_count(tmp_path: Path) -> None:
+    """The other half: one employer's own careers page is not an ATS host.
+
+    T144 counts hosts reaching thousands of employers through **one** URL
+    shape, which is what the slot buys. Lever here keeps its declaration, its
+    robots row and its host, and points at a single employer.
+    """
+    directory = _library(tmp_path, "lever_en")
+    package = directory / "lever_en"
+    lines = (package / "connector.yaml").read_text(encoding="utf-8").split("\n")
+    kept, dropping = [], False
+    for line in lines:
+        if line.startswith("  employers:"):
+            dropping = True
+            continue
+        if dropping:
+            if line.startswith("    "):
+                continue
+            dropping = False
+        kept.append(line.replace("{employer}", "lodgify") if "url_pattern:" in line else line)
+    (package / "connector.yaml").write_text("\n".join(kept), encoding="utf-8")
+    connector = load_connector(package)
+    assert EMPLOYER_PLACEHOLDER not in connector.list.url_pattern
+    assert connector.source_kind == "employer"
+    measured = measure(directory, _LEDGER)
+    assert measured["ats_host_connectors_conforming"] == 0
 
 
 def test_the_record_commits_the_floor_and_nothing_that_grows() -> None:

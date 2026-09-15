@@ -532,13 +532,16 @@ edge_blocked:
       curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
       'https://es.indeed.com/q-tecnico-farmacia-empleos.html'  # prints 403 today
   - site: opcionempleo.com
-    checked: "2026-09-10"
+    checked: "2026-09-14"
     detail: >
       robots allows /empleo-tecnico-farmacia-barcelona.html; the GET answers
-      200 with 12 KB of challenge page and no adverts. Never bypassed.
+      200 with 12 KB of challenge page and no adverts. Never bypassed. The
+      status is not the discriminator here — the challenge page IS a 200, and
+      so is a page of adverts — so the retest counts advert links in the body.
     retest: >
-      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)" -o /dev/null -w '%{http_code}\n'
-      'https://www.opcionempleo.com/empleo-tecnico-farmacia-barcelona.html'  # prints 200 and a body with no adverts today; adverts in the body mean this changed
+      curl -s -A "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)"
+      'https://www.opcionempleo.com/empleo-tecnico-farmacia-barcelona.html' |
+      grep -oE 'href="[^"]*/empleo/[^"]*"' | wc -l  # prints 0 today over a 10,624-byte challenge page; a non-zero count means the board now serves adverts
   - site: nationalevacaturebank.nl
     checked: "2026-09-06"
     detail: "robots allows /vacature/zoeken; the GET answers 403 to the tool's UA on the first request."
