@@ -11,22 +11,38 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from integral.candidate import Aim, CandidateConstraints, Location
+from integral.candidate import (
+    Aim,
+    CandidateConstraints,
+    ConstraintState,
+    Location,
+    Reach,
+    ReachMode,
+)
+from integral.connector_coverage import installed_packages
 from integral.connectors import ListRequest, build_list_requests, build_list_urls, load_connector
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
     FETCH_LOG,
+    OFFER_CEILING,
+    BoardOutcome,
+    Fetch,
     Response,
+    Run,
     browser_urls,
+    flood_board,
     from_captures,
+    matches_aim,
     measure_browser_route,
     measure_fixture,
+    measure_flood,
     offers_without_a_recorded_fetch,
     packages_for,
     read_capture,
@@ -38,6 +54,15 @@ _CONNECTORS = _REPO_ROOT / "connectors"
 
 ALLOW_ALL = "User-agent: *\nAllow: /\n"
 AT = "2026-01-01T00:00:00+00:00"
+
+#: An unsteered board keeps only rows matching a phrase (T167), and no
+#: unsteered Spanish capture carries a Python row — so the advert-page tests
+#: need a phrase those rows do carry.
+_TERMS = ("python", "developer", "engineer")
+
+#: Every precondition `measure_flood`'s guard names. Listed once so the test
+#: above can assert which are reported *and* which are not.
+_EXERCISED = ("fill the ceiling", "cut rows at the ceiling", "meet the failing page")
 
 
 def _robots(text: str = ALLOW_ALL) -> Robots:
@@ -227,22 +252,769 @@ def test_an_unreadable_robots_refuses_rather_than_permits(store: ProfileStore) -
     assert all(o.skipped for o in run.outcomes), run.summary()
 
 
-def test_a_board_that_searches_is_skipped_rather_than_searched_for_nothing(
-    store: ProfileStore,
-) -> None:
-    """And the other boards still run — one un-aimed board must not end a run."""
+def test_an_unsteered_board_without_terms_is_skipped(store: ProfileStore) -> None:
+    """T167, the owner's decision: a board that searches is not searched for
+    nothing, and one that does not search does not hand over its whole list for
+    a search nobody stated. Both say what is missing, and nothing is fetched."""
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return Response(200, "")
+
     run = source(
         store,
         _spain(),
         Aim(state="unknown"),
-        fetch=_answer_with_captures(),
+        fetch=fetch,
         at=AT,
         directory=_CONNECTORS,
         robots=_robots(),
     )
-    steerable = [o for o in run.outcomes if o.steered]
-    assert steerable and all(o.skipped for o in steerable), run.summary()
-    assert any(o.added for o in run.outcomes if not o.steered), run.summary()
+    assert {o.steered for o in run.outcomes} == {True, False}, run.summary()
+    assert all(o.skipped and "say what you are looking for" in o.skipped for o in run.outcomes)
+    assert asked == [] and run.added == 0
+
+
+# ---------------------------------------------------------------------------
+# T167 — worldwide boards, the aim filter, and the per-run ceiling
+
+
+def _remote_spain() -> CandidateConstraints:
+    return _spain().model_copy(update={"reach": Reach(state="stated", modes=("remote",))})
+
+
+@pytest.mark.parametrize(
+    ("modes", "selected"),
+    [
+        (("remote",), True),
+        (("cross_border_remote_employer",), True),
+        (("commute", "relocate"), False),
+    ],
+)
+def test_a_global_package_is_selected_by_reach(
+    tmp_path: Path, modes: tuple[ReachMode, ...], selected: bool
+) -> None:
+    flood_board(tmp_path)
+    constraints = _spain().model_copy(update={"reach": Reach(state="stated", modes=modes)})
+    assert ("flood_en" in {p.name for p in packages_for(constraints, tmp_path)}) is selected
+
+
+def test_a_global_package_is_not_selected_when_reach_is_unknown(
+    tmp_path: Path, store: ProfileStore
+) -> None:
+    """And the summary names what was left out, so a quiet run is not read as a
+    quiet world."""
+    flood_board(tmp_path / "connectors")
+    assert packages_for(_spain(), tmp_path / "connectors") == []
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.unreached == ("flood_en",)
+    assert "flood_en" in run.summary()
+
+
+def test_the_installed_global_boards_are_selected_after_the_country_s_own() -> None:
+    names = [p.name for p in packages_for(_remote_spain(), _CONNECTORS)]
+    spanish = [p.name for p in packages_for(_spain(), _CONNECTORS)]
+    assert names[: len(spanish)] == spanish
+    assert "foorilla_en" in names[len(spanish) :], names
+
+
+def _flood_run(store: ProfileStore, tmp_path: Path, page_count: int = 1) -> Any:
+    """One constructed worldwide board. Returns the run, the matching and
+    off-aim advert texts of the pages actually served, and the URLs asked."""
+    pages = flood_board(tmp_path / "connectors")
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return Response(200, pages[request.url].html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=page_count,
+        robots=_robots(),
+    )
+    matching = set().union(*(pages[url].matching for url in asked))
+    off_aim = set().union(*(pages[url].off_aim for url in asked))
+    return run, matching, off_aim, asked
+
+
+def _written(store: ProfileStore) -> list[str]:
+    from integral.offers import load_offer
+
+    return [
+        load_offer(store, path.stem).text
+        for path in Path(store.path("offers")).glob("*.json")
+        if not path.name.startswith("_")
+    ]
+
+
+def test_an_unsteered_board_keeps_only_rows_matching_a_phrase(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    run, matching, off_aim, _ = _flood_run(store, tmp_path)
+    written = _written(store)
+    assert written and set(written) <= matching, run.summary()
+    assert not set(written) & off_aim
+    (outcome,) = run.outcomes
+    assert outcome.off_aim == len(off_aim)
+    assert f"FILTERED flood_en: {len(off_aim)} of {outcome.items}" in run.summary()
+
+
+def test_the_run_stops_at_the_offer_ceiling_and_says_so(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Step 7's stop rule. The owner set 50 on 2026-09-10; pinned as a literal
+    so raising it is a visible decision, not a drift."""
+    assert OFFER_CEILING == 50
+    run, matching, _, _ = _flood_run(store, tmp_path)
+    assert len(matching) > OFFER_CEILING, "the ceiling was never reached, so this proves nothing"
+    assert len(_written(store)) == OFFER_CEILING == run.added
+    (outcome,) = run.outcomes
+    assert outcome.over_ceiling == len(matching) - OFFER_CEILING
+    assert "CEILING  flood_en" in run.summary()
+
+
+def test_boards_after_the_ceiling_are_not_asked(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A phrase after the ceiling is another request to every steerable board;
+    none may go out, and the summary names the boards left unasked."""
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 1)
+    answer: Fetch = _answer_with_detail()
+    late: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        if _written(store):
+            late.append(request.url)
+        return answer(request)
+
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=_TERMS),
+        fetch=fetch,
+        at=AT,
+        directory=_CONNECTORS,
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.added == 1, run.summary()
+    assert late == [], "a request went out after the ceiling's offer was written"
+    assert [o for o in run.outcomes if o.skipped and "ceiling" in o.skipped], run.summary()
+    # Second reader, F3: `_spain()`'s unknown reach prints its own "NOT asked"
+    # line about worldwide boards, so the bare substring never reached this one.
+    assert "NOT asked, after the ceiling: " in run.summary()
+
+
+def test_a_phrase_stopped_by_the_ceiling_is_not_reported_as_searched(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second reader, F1: the ceiling filled on the first phrase of a steerable
+    board; the second was never sent, so it is not "searched", and the summary
+    names the board **and** the phrase left unasked."""
+    import shutil
+
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 1)
+    shutil.copytree(_CONNECTORS / "tecnoempleo_es", tmp_path / "tecnoempleo_es")
+    run = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("python", "rust")),
+        fetch=_answer_with_detail(),
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+    )
+    assert run.added == 1, run.summary()
+    assert run.searched == ["python"], run.summary()
+    assert "NOT asked, after the ceiling: tecnoempleo_es (rust)" in run.summary()
+
+
+def test_a_ceiling_that_fills_at_a_page_end_is_still_reported(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second reader, F2: page one fills the ceiling exactly, so no row is over
+    it and page two is rightly never asked — and the run must still not read as
+    a complete pass."""
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 60)
+    run, matching, _, asked = _flood_run(store, tmp_path, page_count=2)
+    assert len(matching) == 60 and len(asked) == 1, (len(matching), asked)
+    assert run.added == 60 and not any(o.over_ceiling for o in run.outcomes)
+    assert "STOPPED at the 60-offer ceiling" in run.summary()
+
+
+@pytest.mark.parametrize(
+    ("reach", "says"),
+    [
+        (Reach(state="unknown"), "have not said whether you would work remotely"),
+        (Reach(state="declined"), "preferred not to say"),
+        (Reach(state="stated", modes=("commute",)), "your reach does not include remote work"),
+    ],
+)
+def test_why_worldwide_boards_were_left_out_follows_the_reach_state(
+    store: ProfileStore, tmp_path: Path, reach: Reach, says: str
+) -> None:
+    """Second reader, F8: "does not include remote work" is an answer, and an
+    unknown reach is a question step 7 still owes the candidate."""
+    flood_board(tmp_path / "connectors")
+    run = source(
+        store,
+        _spain().model_copy(update={"reach": reach}),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert says in run.summary(), run.summary()
+
+
+@pytest.mark.parametrize("failure", ["error", "refused", "robots"])
+def test_a_board_whose_later_page_fails_still_spends_the_ceiling(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Second reader round 2, N1: page one's offers are on disk, page two
+    fails — the board must still report them, or the next board is handed the
+    whole ceiling again and more than the ceiling lands."""
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 100)
+    d = tmp_path / "connectors"
+    pages = flood_board(d, "deluge") | flood_board(d, "flood")  # deluge is selected first
+    bad = "https://deluge.integral.local/jobs?page=2"
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url == bad and failure == "error":
+            return Response(None, "", error="timed out")
+        if request.url == bad and failure == "refused":
+            return Response(429, "Too Many Requests")
+        return Response(200, pages[request.url].html)
+
+    robots = (
+        _robots("User-agent: *\nDisallow: /jobs?page=2\n") if failure == "robots" else _robots()
+    )
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=d,
+        page_count=2,
+        robots=robots,
+    )
+    assert len(_written(store)) <= 100, run.summary()
+    assert run.added == len(_written(store)), run.summary()
+
+
+@pytest.mark.parametrize(
+    ("weaken", "unmet"),
+    [
+        # Pages too small to fill the ceiling: nothing to cut at it either.
+        (("_FLOOD_GATE_ROWS", 4), ("fill the ceiling", "cut rows at the ceiling")),
+        # The page that fails is one the run never asks for.
+        (
+            ("_FLOOD_FAILING", "https://nobody.integral.local/jobs?page=9"),
+            ("meet the failing page",),
+        ),
+        # Round 4, R4-1: a ceiling that fills exactly at a page's end cuts no
+        # row at it — the one construction that tells "fill" from "cut", and
+        # without it either limb could carry the other's predicate.
+        (("_FLOOD_GATE_ROWS", 50), ("cut rows at the ceiling",)),
+    ],
+)
+def test_the_flood_gate_refuses_to_measure_a_run_that_did_not_exercise_it(
+    monkeypatch: pytest.MonkeyPatch, weaken: tuple[str, object], unmet: tuple[str, ...]
+) -> None:
+    """Round 3, R1: the guard is the whole of N3's remedy, and nothing pinned
+    it — deleting it left 124 tests green. Each precondition is named, so a
+    guard that drops one goes red on the name rather than passing quietly."""
+    monkeypatch.setattr(f"integral.sourcing.{weaken[0]}", weaken[1])
+    measured = measure_flood()
+    assert measured["gate_status"] == "unmeasured", measured
+    (reason,) = measured["reasons"]
+    assert [name for name in unmet if name in reason] == list(unmet), reason
+    assert [name for name in _EXERCISED if name in reason] == list(unmet), reason
+
+
+def test_the_flood_gate_reports_a_violation_even_when_the_run_fell_short(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 3, R1's other half: "unmeasured" must never swallow a finding. A
+    run that both misbehaves and falls short of the ceiling is a failure, not
+    an unmeasured one."""
+    monkeypatch.setattr("integral.sourcing._FLOOD_GATE_ROWS", 4)
+    monkeypatch.setattr("integral.sourcing.matches_aim", lambda item, phrases: True)
+    measured = measure_flood()
+    assert measured["offers_written_off_aim"] > 0, measured
+    assert measured["gate_status"] == "measured", measured
+
+
+def test_the_flood_gate_sees_a_board_that_read_rows_and_is_not_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 3, R3: the mirror component is the pin for the attribution half,
+    so it needs a run where it fires. A report naming no board that handed over
+    its list, over boards that plainly did, is the defect it watches for."""
+    monkeypatch.setattr("integral.sourcing.Run.unsteered", property(lambda self: []))
+    measured = measure_flood()
+    assert measured["boards_that_read_rows_without_being_reported_asked"] > 0, measured
+    assert measured["flood_violations"] > 0, measured
+
+
+def test_a_board_that_answered_with_no_advert_is_not_a_board_with_no_jobs(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """`landingjobs_en` serves a JavaScript shell that parses to zero anchors —
+    `connectors/ruled-out.yaml` has said so since August — and it read as
+    "returned their whole list", which is what a board with nothing to offer
+    reads as. A refusal and a stale connector were already told apart; this is
+    the third way to answer and mean nothing."""
+    flood_board(tmp_path / "connectors")
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=lambda request: Response(200, "<html><body><div id='app'></div></body></html>"),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.added == 0
+    assert run.parsed_nothing == ["flood_en"], run.summary()
+    assert run.unsteered == [], run.summary()
+    assert "NOTHING PARSED" in run.summary()
+    assert "returned their whole list" not in run.summary()
+
+
+@pytest.mark.parametrize("terms", [("welder",), ("python engineer", "welder")])
+def test_a_searching_board_with_no_hits_answered_rather_than_failed_to_parse(
+    store: ProfileStore, tmp_path: Path, terms: tuple[str, ...]
+) -> None:
+    """Round 4, R4-4: a `{query}` board answering a query with no row has said
+    there are no jobs for that query. Calling that "no advert on the page"
+    spends the signal — a real parse failure would then arrive beside every
+    board that merely had nothing — and with two phrases it named one board in
+    both lines at once."""
+    pages = flood_board(tmp_path / "connectors", "steerable")
+    package = tmp_path / "connectors" / "steerable_en"
+    connector = (package / "connector.yaml").read_text()
+    (package / "connector.yaml").write_text(
+        connector.replace("/jobs?page={page}", "/jobs?q={query}&page={page}")
+    )
+
+    def fetch(request: ListRequest) -> Response:
+        if "welder" in request.url:
+            return Response(200, "<html><body></body></html>")
+        number = request.url.rsplit("page=", 1)[1]
+        page = pages[f"https://steerable.integral.local/jobs?page={number}"]
+        return Response(200, page.html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=terms),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.steered == ["steerable_en"], run.summary()
+    assert run.parsed_nothing == [], run.summary()
+    assert "NOTHING PARSED" not in run.summary(), run.summary()
+
+
+@pytest.mark.parametrize("status", [403, 429, 503])
+def test_a_board_that_refused_is_not_a_board_that_parsed_nothing(
+    store: ProfileStore, tmp_path: Path, status: int
+) -> None:
+    """A refusal already has its own line and its own meaning. Folding it into
+    "answered with no advert on the page" would say the board let us look and
+    had nothing, which is the opposite of what it did."""
+    flood_board(tmp_path / "connectors")
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=lambda request: Response(status, "<html><body>Forbidden</body></html>"),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.refused == ["flood_en"], run.summary()
+    assert run.parsed_nothing == [], run.summary()
+    assert "NOTHING PARSED" not in run.summary()
+    # Round 4, R4-5: and it must not read as a board that handed over its list
+    # either — the line the whole distinction was written to correct.
+    assert run.unsteered == [], run.summary()
+    assert "returned their whole list" not in run.summary(), run.summary()
+
+
+def test_a_stale_board_is_neither_empty_handed_nor_a_board_that_handed_its_list_over(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 4, R4-5: a stale connector's emptiness proves nothing, so it is
+    not "no advert on the page" and not "returned their whole list" either."""
+    from integral.sourcing import _one_board
+
+    flood_board(tmp_path / "connectors")
+    package = next(p for p in installed_packages(tmp_path / "connectors") if p.name == "flood_en")
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=lambda request: Response(200, "<html><body></body></html>"),
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=1,
+        robots=_robots(),
+        phrases=("python engineer",),
+    )
+    run = Run(outcomes=[replace(outcome, stale=True)])
+    assert run.untrusted == ["flood_en"], run.summary()
+    assert run.parsed_nothing == [], run.summary()
+    assert run.unsteered == [], run.summary()
+    assert "returned their whole list" not in run.summary(), run.summary()
+
+
+def test_a_stale_board_with_rows_is_still_named_in_unsteered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 5, F1: R4-5's own fixture above only ever fed `_one_board` an
+    empty page, so the fix it pinned (`refused or stale` excludes
+    unconditionally) could not be told apart from the narrower one this
+    needs (excludes only when there is nothing to attribute). A stale
+    connector that still parses its page has handed over real rows — that
+    is exactly what "its emptiness proves nothing" is supposed to leave
+    open — and those rows must land in `unsteered` like any other board's,
+    not disappear because the connector happens to be past `last_verified`.
+    """
+    from integral.sourcing import _one_board
+
+    pages = flood_board(tmp_path / "connectors")
+    package = next(p for p in installed_packages(tmp_path / "connectors") if p.name == "flood_en")
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=lambda request: Response(200, pages[request.url].html),
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=1,
+        robots=_robots(),
+        phrases=("python engineer",),
+    )
+    assert outcome.items > 0 and outcome.added > 0, outcome
+    run = Run(outcomes=[replace(outcome, stale=True)])
+    assert run.untrusted == ["flood_en"], run.summary()
+    assert run.unsteered == ["flood_en"], run.summary()
+    assert "returned their whole list: flood_en" in run.summary(), run.summary()
+
+
+def test_a_stale_board_whose_rows_were_all_re_sighted_is_still_named_in_unsteered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 6, F1(a): the fixture above only ever tests `added > 0`, so the
+    stale limb's fix (`_answered` gating on `added`, not `items`) could not
+    be told apart from the narrower one this needs. A page that parsed real
+    rows but re-sighted every one of them (`items > 0`, `added == 0` — a
+    board whose whole page is already on disk from an earlier run) used to
+    read exactly like a connector that parsed nothing: excluded from
+    `unsteered`, with the only line about it reading "its emptiness proves
+    nothing" over rows that were, in fact, parsed. `run.unaccounted_for`
+    (the mirror `measure_flood` checks) must agree that nothing was lost.
+
+    Gating on `items` instead of `added` closes it: staleness is about
+    whether the connector parsed anything at all, never about whether what
+    it parsed survived dedup — the stance `employer_boards`'s own docstring
+    already took for the identical `added == 0` signal (#462 rounds 2 and
+    3, G3/H1-H2); `_answered` used to disagree with it.
+    """
+    from integral.sourcing import _one_board
+
+    pages = flood_board(tmp_path / "connectors")
+    package = next(p for p in installed_packages(tmp_path / "connectors") if p.name == "flood_en")
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=lambda request: Response(200, pages[request.url].html),
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=1,
+        robots=_robots(),
+        phrases=("python engineer",),
+    )
+    assert outcome.items > 0, outcome
+    resighted = replace(outcome, stale=True, added=0)
+    run = Run(outcomes=[resighted])
+    assert run.untrusted == ["flood_en"], run.summary()
+    assert run.unsteered == ["flood_en"], run.summary()
+    assert run.unaccounted_for == [], run.summary()
+    assert "returned their whole list: flood_en" in run.summary(), run.summary()
+    assert "STALE   flood_en: its emptiness proves nothing" in run.summary(), run.summary()
+
+
+def test_a_board_refused_after_rows_is_still_named_in_unsteered(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 5, F1: page one's rows, and the offers built from them, are
+    already on disk before a 429 ends the board on page two. `_answered`
+    used to exclude every refused outcome unconditionally (round 4, R4-5),
+    which reintroduced round 3's R3 for this failure route — the offers
+    end up attributed to neither `steered` nor `unsteered`, and the only
+    line the summary prints about the board (REFUSED) never says where
+    they came from.
+    """
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 100)
+    pages = flood_board(tmp_path / "connectors", "deluge")
+    bad = "https://deluge.integral.local/jobs?page=2"
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url == bad:
+            return Response(429, "Too Many Requests")
+        return Response(200, pages[request.url].html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.refused == ["deluge_en"], run.summary()
+    assert run.unsteered == ["deluge_en"], run.summary()
+    assert run.steered == [], run.summary()
+    assert run.added == len(_written(store)) > 0, run.summary()
+    assert "returned their whole list: deluge_en" in run.summary(), run.summary()
+    assert "REFUSED deluge_en" in run.summary(), run.summary()
+
+
+def test_a_steered_board_refused_after_rows_is_still_named_in_steered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 5, F1 (second reader's steered extension): the unsteered fixture
+    above is only half of what R4-5's blanket exclusion broke. A `{query}`
+    board answers page one with rows that match the candidate's phrase and
+    writes offers for them, then a 429 ends it on page two. `run.searched`
+    already (correctly) names the phrase as sent — `_answered` used to
+    disagree with its own run and drop the board from `steered` anyway,
+    which is the sharper version of the same defect: the summary would say
+    the phrase was searched for and simultaneously deny that any board
+    searched it.
+    """
+    pages = flood_board(tmp_path / "connectors", "steerable", rows=20)
+    package = tmp_path / "connectors" / "steerable_en"
+    connector = (package / "connector.yaml").read_text()
+    (package / "connector.yaml").write_text(
+        connector.replace("/jobs?page={page}", "/jobs?q={query}&page={page}")
+    )
+
+    def fetch(request: ListRequest) -> Response:
+        number = request.url.rsplit("page=", 1)[1]
+        if number == "2":
+            return Response(429, "Too Many Requests")
+        page = pages[f"https://steerable.integral.local/jobs?page={number}"]
+        return Response(200, page.html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.searched == ["python engineer"], run.summary()
+    assert run.refused == ["steerable_en"], run.summary()
+    assert run.steered == ["steerable_en"], run.summary()
+    assert run.unsteered == [], run.summary()
+    assert run.added == len(_written(store)) > 0, run.summary()
+    assert "searched for your terms: steerable_en" in run.summary(), run.summary()
+    assert "REFUSED steerable_en" in run.summary(), run.summary()
+
+
+def test_the_headline_counts_only_the_boards_that_answered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 3, minor: deluge fills the ceiling on its own page one, so flood
+    is never asked. "from 2 board(s)" would credit the run with a board it did
+    not touch."""
+    pages = flood_board(tmp_path / "connectors", "deluge") | flood_board(
+        tmp_path / "connectors", "flood"
+    )
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=lambda request: Response(200, pages[request.url].html),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.summary().startswith(f"{OFFER_CEILING} offer(s) added from 1 board(s)"), (
+        run.summary()
+    )
+    assert "NOT asked, after the ceiling: flood_en" in run.summary()
+
+
+@pytest.mark.parametrize(
+    ("state", "phrase", "not_said"),
+    [
+        # Round 4, R4-2: "where you are" is shared by both wordings, so
+        # asserting it pinned nothing about the branch this varies. Telling
+        # somebody who said "prefer not to say" that they have not said
+        # attributes a silence they did not choose (round 1, F8).
+        ("unknown", "you have not said where you are", "preferred not to say"),
+        ("declined", "you preferred not to say where you are", "have not said"),
+    ],
+)
+@pytest.mark.parametrize(
+    "reach", [Reach(state="unknown"), Reach(state="stated", modes=("remote",))]
+)
+def test_a_run_blocked_by_an_unstated_location_says_so(
+    store: ProfileStore,
+    tmp_path: Path,
+    state: ConstraintState,
+    phrase: str,
+    not_said: str,
+    reach: Reach,
+) -> None:
+    """Round 3, R2: without a stated country `packages_for` selects nothing at
+    all, so a silent run reads as a world with no jobs — and naming the reach
+    instead hands the candidate a question whose answer changes nothing."""
+    flood_board(tmp_path / "connectors")
+    constraints = CandidateConstraints(location=Location(state=state), reach=reach)
+    run = source(
+        store,
+        constraints,
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=tmp_path / "connectors",
+        robots=_robots(),
+    )
+    assert run.unreached == ("flood_en",), run.summary()
+    assert phrase in run.summary(), run.summary()
+    assert not_said not in run.summary(), run.summary()
+    assert "work remotely" not in run.summary(), run.summary()
+
+
+def test_a_board_that_answered_before_failing_is_reported_as_read(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 3, R3: deluge served page one and failed on page two. It supplied
+    offers, so the line naming which boards handed over their list must name
+    it — the terminal reason is not what decides whether a board was read."""
+    # 40-row pages carry 20 matches, so page one cannot fill the ceiling and
+    # page two is actually reached.
+    pages = flood_board(tmp_path / "connectors", "deluge", 40)
+    bad = "https://deluge.integral.local/jobs?page=2"
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url == bad:
+            return Response(None, "", error="timed out")
+        return Response(200, pages[request.url].html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.added > 0, run.summary()
+    assert run.unsteered == ["deluge_en"], run.summary()
+    assert "ERROR   deluge_en" in run.summary()
+
+
+def test_off_aim_rows_are_never_fetched(store: ProfileStore) -> None:
+    """The filter runs before the advert page is opened — otherwise it saves
+    storage and spends every request it was meant to save."""
+    seen: list[str] = []
+    source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=("scala developer",)),
+        fetch=_answer_with_detail(seen=seen),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert len([url for url in seen if "getmanfred" in url]) == 1, seen
+
+
+def test_rows_past_the_detail_budget_are_unopened_not_dropped(
+    store: ProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is wrong with an advert nobody opened; calling it "no text" sends
+    the next reader to debug a connector that works."""
+    monkeypatch.setattr("integral.sourcing.DETAIL_FETCH_CEILING", 0)
+    run = _run(store, _answer_with_detail())
+    unopened = [o for o in run.outcomes if o.unopened]
+    assert unopened, run.summary()
+    assert all(o.dropped == 0 for o in unopened), run.summary()
+    assert "UNOPENED" in run.summary()
+
+
+@pytest.mark.parametrize(
+    ("row", "phrases", "matches"),
+    [
+        ({"title": "Senior Python Engineer"}, ("python engineer",), True),
+        ({"title": "Engineer, Python"}, ("python engineer",), True),
+        ({"title": "Python Developer"}, ("python engineer",), False),
+        ({"title": "Ingeniería de datos"}, ("ingenieria de datos",), True),
+        ({"title": "Account Manager", "text": "Python tooling"}, ("python",), True),
+        ({"title": "JavaScript Developer"}, ("java",), False),
+        ({"title": "C# Developer"}, ("c++",), False),
+        ({"title": "Anything at all"}, ("  ", "--"), False),
+        ({"title": "Anything at all"}, (), False),
+        # Second reader, F5 — ES/CA parity: `I+D+i` is three words, as `R&D&I` is.
+        ({"title": "Técnico de I+D+i"}, ("técnico i+d",), True),
+        ({"title": "Tècnic R+D+I"}, ("tecnic r+d",), True),
+        ({"title": "R&D&I Technician"}, ("r&d technician",), True),
+        ({"title": "Técnico I+D"}, ("tecnico i + d",), True),
+        ({"title": "Python+Django Developer"}, ("python developer",), True),
+        ({"title": "React+TypeScript Developer"}, ("react developer",), True),
+        ({"title": "C++ Developer"}, ("c++",), True),
+        ({"title": "C Developer"}, ("c++",), False),
+        # Round 2, N2: a version after `c++`/`c#` is a digit, not a letter.
+        ({"title": "Desarrollador C++17"}, ("c++",), True),
+        ({"title": "C++20 Developer"}, ("c++ developer",), True),
+        ({"title": "C#10 developer"}, ("c# developer",), True),
+        # F6 — NFKD, not NFD: Catalan `ŀ` (U+0140) and fullwidth letters fold.
+        ({"title": "Coŀlaborador comercial"}, ("col·laborador",), True),
+        ({"title": "\uff30\uff39\uff34\uff28\uff2f\uff2e Engineer"}, ("python engineer",), True),
+        # casefold, not lower.
+        ({"title": "STRASSE Engineer"}, ("straße engineer",), True),
+        # F7, accepted: a leading `.` is not part of a word, because boards
+        # write `.NET` as `NET` (infojobs_es's capture: "Arquitecto NET").
+        ({"title": "Arquitecto NET"}, (".net",), True),
+        ({"title": "Sales rep, net salary 40k, developer tools"}, (".net developer",), True),
+    ],
+)
+def test_the_aim_match(row: dict[str, str], phrases: tuple[str, ...], matches: bool) -> None:
+    assert matches_aim(row, phrases) is matches
 
 
 def test_an_unstated_location_sources_nothing(store: ProfileStore) -> None:
@@ -297,6 +1069,97 @@ def test_the_population_counts_adverts_the_budget_could_ask_for(
     assert measured["gate_status"] == "unmeasured", measured
 
 
+def test_the_flood_gate_measures_and_reads_clean() -> None:
+    measured = measure_flood()
+    assert measured["gate_status"] == "measured", measured
+    assert measured["flood_violations"] == 0, measured
+    assert measured["rows_reported_off_aim"] > 0
+    assert measured["rows_reported_over_the_ceiling"] > 0
+
+
+# ---------------------------------------------------------------------------
+# T172/T167 — `Run.employer_boards`'s partition, and the fields it is derived from
+
+
+def test_the_unrealized_row_fields_are_derived_not_hand_listed() -> None:
+    """Round 6, F2: `employer_boards` and `measure_flood`'s
+    `rows_not_accounted_for` each hand-listed the same four `BoardOutcome`
+    field names, separately. `_fields_outside` is the idiom
+    `tests/test_review_reader.py`'s `_twin_varying_every_non_input_field`
+    already uses for the identical shape (its `_INPUT_FIELDS`): a field is
+    included by default, so a bucket added to the dataclass later needs no
+    matching addition at either call site — only a name in the exclusion set
+    would leave one out, and this proves the function reads
+    `dataclasses.fields`, not a private, hand-typed tuple of its own."""
+    from dataclasses import dataclass as make_dataclass
+    from dataclasses import fields as dc_fields
+
+    from integral.sourcing import _fields_outside
+
+    @make_dataclass
+    class Sample:
+        kept_out: int = 0
+        also_kept_out: int = 0
+        picked_up: int = 0
+        picked_up_too: int = 0
+
+    result = _fields_outside(Sample, frozenset({"kept_out", "also_kept_out"}))
+    assert result == ("picked_up", "picked_up_too")
+    assert set(result) == {f.name for f in dc_fields(Sample)} - {"kept_out", "also_kept_out"}
+
+
+def test_the_board_outcome_unrealized_row_fields_are_todays_four_terms() -> None:
+    """Pins what `_UNREALIZED_ROW_FIELDS` resolves to today — `dropped`,
+    `off_aim`, `unopened`, `over_ceiling` — so a change to `BoardOutcome` or
+    to the exclusion set it is derived against is visible here, not only in
+    `employer_boards`'s or `rows_not_accounted_for`'s behaviour."""
+    from integral.sourcing import _UNREALIZED_ROW_FIELDS
+
+    assert set(_UNREALIZED_ROW_FIELDS) == {"dropped", "off_aim", "unopened", "over_ceiling"}
+
+
+@pytest.mark.parametrize("bucket", ["dropped", "off_aim", "unopened", "over_ceiling"])
+def test_employer_boards_excludes_a_board_whose_rows_are_all_one_bucket(bucket: str) -> None:
+    """Round 6, F2: T172's partition (`items > dropped+off_aim+unopened+
+    over_ceiling`) hand-listed four terms, and dropping either `unopened` or
+    `over_ceiling` from it left every test and every evidence key unmoved —
+    nothing exercised an employer board whose rows were consumed by exactly
+    one of those two buckets alone (the `ATTRIBUTION_BOARDS` matrix that
+    incidentally pins `off_aim` and `dropped` has no construction that
+    produces either). Each of the four buckets now gets its own board, in
+    isolation, so dropping any one of them — or a fifth bucket landing
+    outside the derived set — is caught here directly."""
+    outcome = replace(
+        BoardOutcome(
+            connector="acme_en",
+            url=None,
+            steered=False,
+            source_kind="employer",
+            items=10,
+        ),
+        **{bucket: 10},  # type: ignore[arg-type]
+    )
+    run = Run(outcomes=[outcome])
+    assert run.employer_boards == [], (bucket, run.summary())
+
+
+def test_employer_boards_includes_a_board_none_of_whose_rows_are_fully_accounted_for() -> None:
+    """The control for the parametrized exclusion above: a board whose rows
+    are not entirely consumed by the four buckets still names as an
+    employer board — the subtraction excludes boards, it does not exclude
+    all of them."""
+    outcome = BoardOutcome(
+        connector="acme_en",
+        url=None,
+        steered=False,
+        source_kind="employer",
+        items=10,
+        added=10,
+    )
+    run = Run(outcomes=[outcome])
+    assert run.employer_boards == ["acme_en"], run.summary()
+
+
 # ---------------------------------------------------------------------------
 # T130 — the advert's own page
 
@@ -319,8 +1182,9 @@ def _answer_with_detail(
         if capture.is_file() and package.site:
             details[package.site.removeprefix("www.")] = capture.read_text(encoding="utf-8")
         connector = load_connector(_CONNECTORS / package.name)
-        for url in build_list_urls(connector, query="python"):
-            list_paths.add(urlsplit(url).path)
+        for phrase in _TERMS:
+            for url in build_list_urls(connector, query=phrase):
+                list_paths.add(urlsplit(url).path)
 
     def answer(request: ListRequest) -> Response:
         host = (urlsplit(request.url).hostname or "").removeprefix("www.")
@@ -344,7 +1208,7 @@ def _run(store: ProfileStore, fetch: Any, robots: Robots | None = None) -> Any:
     return source(
         store,
         _spain(),
-        Aim(state="stated", terms=("python",)),
+        Aim(state="stated", terms=_TERMS),
         fetch=fetch,
         at=AT,
         directory=_CONNECTORS,
@@ -403,6 +1267,7 @@ def test_robots_is_consulted_for_the_detail_page_too(store: ProfileStore) -> Non
             directory=_CONNECTORS,
             page_count=1,
             robots=Robots(fetch=lambda url: robots_text),
+            phrases=_TERMS,
         )
 
     permitted: list[str] = []
@@ -581,6 +1446,11 @@ def test_a_host_that_refused_is_not_asked_again_by_the_next_phrase(
     asked_boards = [o for o in run.outcomes if o.skipped is None]
     assert asked_boards, run.summary()
     assert all(o.refused and "429" in o.refused for o in asked_boards), run.summary()
+    # T174's own task file left this the obligation of "whichever PR lands
+    # second" (#458). Nothing reached disk from any board, so nothing was
+    # searched — a phrase whose every board was refused before answering
+    # must not be listed as one this run actually asked.
+    assert run.searched == [], run.summary()
 
 
 def test_a_refused_advert_page_stops_the_next_phrases_list_too(store: ProfileStore) -> None:
@@ -608,6 +1478,7 @@ def test_a_refused_advert_page_stops_the_next_phrases_list_too(store: ProfileSto
             directory=_CONNECTORS,
             page_count=page_count,
             robots=_robots(),
+            phrases=_TERMS,
             refused_origins=refused,
         )
 
@@ -626,8 +1497,12 @@ def test_a_refused_advert_page_stops_the_next_phrases_list_too(store: ProfileSto
 
 
 def test_a_refused_board_is_not_listed_as_reached(store: ProfileStore) -> None:
-    """#445 R3-4. "Searched for your terms" and "returned their whole list" say
-    the board answered. One that refused did not, list page or advert page."""
+    """#445 R3-4, refined by round 5's F1 (T167): "searched for your terms"
+    and "returned their whole list" say the board answered. One that refused
+    with nothing to show for it did not — but one that refused only after
+    real offers were already on disk is not "unreached" either; excluding it
+    unconditionally would attribute those offers to no disposition at all
+    (round 5, F1)."""
     listed = source(
         store,
         _spain(),
@@ -644,7 +1519,66 @@ def test_a_refused_board_is_not_listed_as_reached(store: ProfileStore) -> None:
 
     advert = _run(store, _answer_with_detail(detail_status=429))
     assert advert.refused, advert.summary()
-    assert not set(advert.refused) & set(advert.steered + advert.unsteered), advert.summary()
+    # getmanfred_es needs the advert page for every row it kept, and every one
+    # of those was refused: nothing reached disk, so it stays unreached.
+    getmanfred = next(o for o in advert.outcomes if o.connector == "getmanfred_es")
+    assert getmanfred.refused and not getmanfred.added, getmanfred
+    assert "getmanfred_es" not in advert.steered + advert.unsteered, advert.summary()
+    # trabajos_es built real offers straight from its list rows before one
+    # row's own detail fetch was refused (round 5, F1, from a real connector
+    # fixture rather than a constructed one): those offers are on disk, so
+    # the board — a `{query}` board — is reached, under `steered`.
+    trabajos = next(o for o in advert.outcomes if o.connector == "trabajos_es")
+    assert trabajos.refused and trabajos.added > 0, trabajos
+    assert "trabajos_es" in advert.steered, advert.summary()
+
+
+def test_unaccounted_for_agrees_with_a_refused_boards_own_disposition(
+    store: ProfileStore,
+) -> None:
+    """Round 6, F1(b): the mirror `measure_flood` checks used to be built
+    from `{o.connector for o in outcomes if o.items or o.added}`, unscoped
+    by `reached_the_board`. On this exact fixture (`getmanfred_es`, real ES
+    captures, `items == 3, added == 0`, refused before any offer was ever
+    built) that population flagged the board as "read rows without being
+    reported asked" in the very run `test_a_refused_board_is_not_listed_
+    as_reached` (above) asserts, forty lines apart, must not list it as
+    reached — one test file asserting an invariant and its own negation.
+
+    Scoping the population by `reached_the_board` — the same predicate
+    `_answered` already requires before naming a board anywhere — makes
+    `Run.unaccounted_for` and `steered`/`unsteered`'s own exclusion agree.
+    """
+    advert = _run(store, _answer_with_detail(detail_status=429))
+    getmanfred = next(o for o in advert.outcomes if o.connector == "getmanfred_es")
+    assert getmanfred.items > 0 and not getmanfred.added and getmanfred.refused, getmanfred
+    assert "getmanfred_es" not in advert.steered + advert.unsteered, advert.summary()
+    assert advert.unaccounted_for == [], advert.summary()
+
+
+def test_the_flood_gate_catches_a_reinstated_refused_or_stale_exclusion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 5's own report closed with: "the `boards_that_read_rows_
+    without_being_reported_asked` component and `_answered` must agree …
+    otherwise the next round re-discovers this through the gate." That is
+    what round 6 found: the shipped fix generalized only for the one
+    429-with-`added>0` case actually re-run, and reinstating round 4's own
+    blanket exclusion (`not (refused or stale)`, unconditional) left
+    `flood_violations` at a clean 0 — the gate could not catch its own named
+    defect. `_FLOOD_FAILING` (deluge, page two) now answers with a real
+    refusal rather than a transport error, so deluge — which already has
+    page-one's offers on disk — is exactly F1's shape, and this mutation
+    must move the gate rather than pass silently.
+    """
+
+    def blanket(outcome: Any) -> bool:
+        return outcome.reached_the_board and not (outcome.refused or outcome.stale)
+
+    monkeypatch.setattr(Run, "_answered", staticmethod(blanket))
+    measured = measure_flood()
+    assert measured["flood_violations"] > 0, measured
+    assert measured["boards_that_read_rows_without_being_reported_asked"] > 0, measured
 
 
 def test_the_advert_page_gets_its_own_clients_headers(store: ProfileStore) -> None:
@@ -1034,6 +1968,7 @@ def test_no_installed_board_as_a_browser_board_reaches_the_plain_fetch(
             directory=root,
             page_count=2,
             robots=_robots(),
+            phrases=("python",),
             browser=browser,
         )
         assert asked == [], (name, asked)
@@ -1073,6 +2008,7 @@ def test_a_browser_board_skipped_mid_host_keeps_the_employers_it_already_lost(
         directory=root,
         page_count=1,
         robots=_robots(f"User-agent: *\nDisallow: {refused_path}$\n"),
+        phrases=("python",),
     )
     assert outcome.skipped and "real browser" in outcome.skipped, outcome
     assert first.employer is not None, first

@@ -223,8 +223,8 @@ def test_the_employer_name_fills_a_missing_company_and_never_overrides_one(
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
     store = ProfileStore(tmp_path / "p", "test")
     bodies = {
-        "acme": {"jobs": [{"title": "Role A", "body": "about A"}]},
-        "beta": {"jobs": [{"title": "Role B", "body": "about B", "company": "Beta (own)"}]},
+        "acme": {"jobs": [{"title": "Python Role A", "body": "about A"}]},
+        "beta": {"jobs": [{"title": "Python Role B", "body": "about B", "company": "Beta (own)"}]},
     }
 
     def fetch(request: ListRequest) -> Response:
@@ -553,7 +553,11 @@ def _three_employer_run(
 
 
 def _jobs(title: str) -> Response:
-    return Response(200, json.dumps({"jobs": [{"title": title, "body": f"about {title}"}]}))
+    # "Python" because the runs search for it, and an unsteered board keeps only
+    # rows matching the candidate's phrase (T167).
+    return Response(
+        200, json.dumps({"jobs": [{"title": f"Python {title}", "body": f"about {title}"}]})
+    )
 
 
 def test_one_failing_employer_does_not_end_the_host(tmp_path: Path) -> None:
@@ -710,7 +714,8 @@ def _detail_run(
             )
         slug = request.url.split("/")[-2]
         rows = [
-            {"title": f"{slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"} for n in (1, 2)
+            {"title": f"Python {slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"}
+            for n in (1, 2)
         ]
         return Response(200, json.dumps({"jobs": rows}))
 
@@ -753,7 +758,10 @@ def test_the_advert_host_crawl_delay_is_kept_and_a_budget_stop_is_named(
     (outcome,) = run.outcomes
     assert (outcome.added, outcome.detail_fetched) == (3, 3)
     assert pauses.count(5.0) == 3
-    assert outcome.drop_reason and "budget ran out" in outcome.drop_reason
+    # T167 counts a budget stop apart from `dropped`, so it cannot read as a
+    # connector fault at all; the summary names the budget.
+    assert (outcome.unopened, outcome.dropped) == (1, 0), outcome
+    assert "budget was spent" in run.summary()
 
 
 def test_a_refused_advert_host_is_asked_once_across_employers(
@@ -797,7 +805,9 @@ def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> 
         if "/advert/" in request.url:  # the advert lives on the list's own host
             return Response(429, "Too Many Requests")
         slug = request.url.split("/")[-2]
-        rows = [{"title": f"{slug}", "url": f"https://api.ats.test/advert/{slug}"}]
+        # "python engineer" (T167 filters an unsteered board's rows by
+        # phrase, and the title alone would otherwise never match one).
+        rows = [{"title": f"{slug} python engineer", "url": f"https://api.ats.test/advert/{slug}"}]
         return Response(200, json.dumps({"jobs": rows}))
 
     run = source(

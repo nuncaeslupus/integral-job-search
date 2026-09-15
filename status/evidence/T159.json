@@ -180,12 +180,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 112
+      "line": 114
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 104
+      "line": 106
     },
     {
       "module": "spec_consistency",
@@ -466,7 +466,11 @@
     "skill_budget.MIN_HEADROOM_CHARS",
     "skill_budget.UPSTREAM_DEFAULT_BUDGET_CHARS",
     "sourcing.MINIMUM_BOARDS",
+    "sourcing.OFFER_CEILING",
     "sourcing.PHRASE_CEILING",
+    "sourcing._FLOOD_GATE_ROWS",
+    "sourcing._FLOOD_PAGES",
+    "sourcing._FLOOD_PAGE_ROWS",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",
     "step_gates.UNCERTIFIABLE",
     "step_gates.VOCABULARY_SILENT",

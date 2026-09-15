@@ -324,7 +324,13 @@ def attribution_round() -> tuple[list[tuple[str, SourceKind | None]], str]:
             CandidateConstraints(
                 location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
             ),
-            Aim(state="stated", terms=("python",)),
+            # T167 filters an unsteered board's rows by phrase; every
+            # constructed row that has a body (the "offer" and "known"
+            # answers) carries the word "advert", and none of the others
+            # (badrow, norows, refused, timeout) has any text to match
+            # regardless of the phrase chosen, so this is the one term that
+            # neither starves the matrix nor privileges any one board.
+            Aim(state="stated", terms=("advert",)),
             fetch=fetch,
             at=at,
             directory=directory,

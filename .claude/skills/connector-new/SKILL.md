@@ -183,14 +183,13 @@ have shown that: it is the response, not the request.
 ```bash
 uv run python3 -c "
 from datetime import UTC, datetime
-from integral.candidate import Aim
 from integral.connector_coverage import installed_packages
 from integral.identity import ProfileStore, default_profiles_root
 from integral.robots import Robots
 from integral.sourcing import DEFAULT_CONNECTORS_DIR, _one_board
 p = next(x for x in installed_packages(DEFAULT_CONNECTORS_DIR) if x.name == '<name>')
 print(_one_board(ProfileStore(default_profiles_root(), '<handle>'), p,
-      Aim(state='stated', terms=('python',)), fetch=<a live fetcher>,
+      'python', phrases=('python',), fetch=<a live fetcher>,
       at=datetime.now(UTC).isoformat(timespec='seconds'),
       directory=DEFAULT_CONNECTORS_DIR, page_count=1, robots=Robots()))"
 ```
