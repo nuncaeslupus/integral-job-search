@@ -53,6 +53,16 @@
       "line": 154
     },
     {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DETECTOR_STATES_PROBED",
+      "line": 147
+    },
+    {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DISTINCT_STATE_TRACES",
+      "line": 185
+    },
+    {
       "module": "gate_reader_agreement",
       "name": "MINIMUM_ARRANGEMENTS_PROBED",
       "line": 122
@@ -71,16 +81,6 @@
       "module": "interview",
       "name": "MINIMUM_CHECKS",
       "line": 944
-    },
-    {
-      "module": "markup_text",
-      "name": "MINIMUM_FIXTURE_OFFERS",
-      "line": 86
-    },
-    {
-      "module": "markup_text",
-      "name": "MINIMUM_MARKUP_VALUES_COMPARED",
-      "line": 87
     },
     {
       "module": "naming",
@@ -111,6 +111,11 @@
       "module": "profile_capture",
       "name": "MINIMUM_SUBJECT_CHECKS",
       "line": 1144
+    },
+    {
+      "module": "query_capture",
+      "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
+      "line": 116
     },
     {
       "module": "question_bank",
@@ -216,7 +221,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4115,
+      "line": 4018,
       "population": 15
     },
     {
@@ -252,13 +257,13 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2779,
-      "population": 41
+      "line": 2793,
+      "population": 40
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2712,
+      "line": 2726,
       "population": 78
     },
     {

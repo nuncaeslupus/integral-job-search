@@ -7,7 +7,9 @@ Ashby, Workable, Rippling — serves thousands of employers behind one URL shape
 so one package with an `{employer}` slot and a `list.employers` table reaches
 every employer it lists (`connectors.EMPLOYER_PLACEHOLDER`).
 
-What counts, per package whose `url_pattern` carries that slot:
+What counts, per package that carries that slot **and** declares
+`source_kind: employer` (T172): the slot alone is not an ATS host, since a job
+board's company page takes one too.
 
 - it passes T53's contract pack (`connector_contract.check_package`) — its
   fixture parses to an offer, so the package is not a file that fetches nothing;
@@ -52,6 +54,7 @@ from integral.connectors import (
     ListRequest,
     build_list_urls,
     load_connector,
+    source_kind_of,
 )
 from integral.offers import SourceKind
 from integral.robots import Robots, RobotsError
@@ -78,7 +81,15 @@ def measure(
         except (ConnectorError, OSError):
             continue  # not an ATS package we can recognise; T53 reports it
         pattern = connector.list.url_pattern
-        if EMPLOYER_PLACEHOLDER not in pattern:
+        # Both, and neither alone. The slot is what makes one package reach
+        # thousands of employers, which is T144's whole economy; the
+        # declaration is what makes those boards the employers' own. A job
+        # board's company page — `indeed.com/cmp/{employer}/jobs` — takes the
+        # slot and is not an ATS host, so counting by the slot alone counts it
+        # (T172's F1, inside T144's own gate). A package that is an ATS host
+        # and forgets to declare drops the count below the floor, which is the
+        # direction this should fail in.
+        if EMPLOYER_PLACEHOLDER not in pattern or source_kind_of(connector) != "employer":
             continue
         why = list(check_package(package).violations)
         row = rows.get(f"connectors/{package.name}")

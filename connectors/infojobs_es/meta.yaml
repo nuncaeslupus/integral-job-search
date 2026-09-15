@@ -43,10 +43,23 @@ policy:
   robots_txt: respected
   authentication: none
 
-# Sampled for this purpose — two search listings taken on the date below,
-# never an advert a candidate was reading: the set of ads a person opens
-# carries their field, level, city and the fact that they are looking, and a
-# fixture in a public repository carries that forever.
+# Sampled for this purpose — search listings, never an advert a candidate was
+# reading: the set of ads a person opens carries their field, level, city and
+# the fact that they are looking, and a fixture in a public repository carries
+# that forever.
+#
+# `recorded` is `fixture/list.html`'s date and only that. The package holds a
+# second listing, `probe/list.html`, and T171 re-recorded it on **2026-09-14**
+# from a live `…/ofertas-trabajo/auxiliar-de-farmacia/barcelona` search, so
+# that the capture carries a filled `{query}` slot where
+# `integral.query_capture` requires one. Its own date is in
+# `probe/captured.json`'s `captured_at`, which is the record a reader should
+# trust; this key is not it. Said explicitly because
+# `connector_exchange.py` renders `recorded` into the contribution disclosure
+# under "Nothing here is retyped", so a date that silently covered both files
+# would be published as provenance of bytes it was never about — found by the
+# second reader on #461, which is also where the same class of claim was
+# fixed for `jobfluent_es`.
 fixture:
   provenance: sampled
   recorded: "2026-08-30"
@@ -84,8 +97,10 @@ fixture:
   bodies: excerpted
 
   # No redaction was needed and none was performed. trabajos.com writes the
-  # recording client's IP into an HTML comment; InfoJobs does not. Both
-  # committed files were grepped for an IPv4 literal and neither contains one,
-  # so this key records an absence that was checked, not an edit that was
-  # made.
+  # recording client's IP into an HTML comment; InfoJobs does not. Every
+  # committed file was grepped for an IPv4 literal and none contains one — the
+  # 2026-09-14 re-recording of `probe/list.html` included, which was also
+  # checked for a session cookie and a CSRF token, since a browser capture can
+  # carry both where a plain fetch cannot. So this key records an absence that
+  # was checked, not an edit that was made.
   client_ip: redacted
