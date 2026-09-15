@@ -28,7 +28,18 @@ test:  ## run the test suite
 	# tools/collect_ads.py, which imports py3langid from the collect extra.
 	# Without it the module fails to import and pytest aborts on collection —
 	# which passed unnoticed for as long as the venv happened to still carry it.
-	uv run --extra dev --extra collect pytest
+	# `-n auto --dist loadfile` here, not in pyproject.toml's addopts: this target
+	# always runs the whole suite, which is where parallelism pays — roughly 4x on
+	# a twelve-core laptop, same pass/fail outcome every time. Three separate
+	# measurement sessions on this tree agreed on that ratio and disagreed on the
+	# absolute seconds by ~35%, so the ratio is the part worth writing down.
+	# `--dist loadfile` keeps every test in a file on one worker, so a
+	# module-scoped fixture or module-level import is never split across
+	# processes — the suite is green under plain `--dist load` today and nothing
+	# here would catch that flag being dropped. A single-file invocation
+	# (`pytest tests/test_x.py`, what task gates and CONTRIBUTING.md use)
+	# bypasses this target and stays serial on purpose.
+	uv run --extra dev --extra collect pytest -n auto --dist loadfile
 
 gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 	@mkdir -p status/evidence

@@ -29,9 +29,10 @@ cv = [
 dev = [
     "mypy>=1.11",
     "pytest>=8.3",
-    # The suite is ~3,900 tests and ran 560s serially; `-n auto` in addopts below
-    # brings that to ~130s on twelve cores. Every review round pays that cost
-    # several times over (`make host-gate`, then `tools/verified_gate.sh`).
+    # ~3,900 tests. `make test`'s `-n auto --dist loadfile` (Makefile, not addopts
+    # here — see [tool.pytest.ini_options] below) runs them roughly 4x faster on a
+    # twelve-core laptop. Every review round pays the serial cost several times
+    # over (`make host-gate`, then `tools/verified_gate.sh`).
     "pytest-xdist>=3.6",
     "ruff>=0.6",
     "types-pyyaml>=6.0",
@@ -115,11 +116,10 @@ exclude = [
 ]
 
 [tool.pytest.ini_options]
-# `-n auto` is the whole reason pytest-xdist is a dev dependency: measured here
-# 562.71s -> 125.86s over the same tree, green both ways. `--dist loadfile`
-# keeps every test in a file on one worker, so a module-scoped fixture or a
-# module-level import is not split across processes. Debugging one test wants
-# `-n0` on the command line — `--pdb` and live `-s` output do not survive a worker.
-addopts = "-n auto --dist loadfile"
+# No `-n auto` here: addopts applies to every invocation in the repo, including
+# the single-file gate calls most task files and CONTRIBUTING.md use
+# (`pytest tests/test_x.py`) — under `--dist loadfile` a whole file lands on one
+# worker anyway, so the other eleven start up and do nothing but add ~1.5-2.4s.
+# `make test` passes the parallel flags explicitly instead, see Makefile.
 testpaths = ["tests"]
 pythonpath = ["src"]
