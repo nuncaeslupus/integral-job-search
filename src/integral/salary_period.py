@@ -155,9 +155,10 @@ class PeriodContract(NamedTuple):
     a failure; `raw` and `expected` are what `_check_contracts` actually
     compares against `normalize_period`. `connector` names the connector
     package (`connectors/<connector>/`) this row is direct evidence for — set
-    only on a positive row whose value is a real, board-documented word for
-    one specific connector's own vocabulary, never on a generic schema.org
-    row shared by several connectors or on a pure case/whitespace variant.
+    only on a positive row whose citation names that one connector's own
+    documented word or dated fixture, never on a row with no per-connector
+    fixture citation (one naming only the shared vocabulary itself, such as
+    schema.org's generic unitText enum, or a pure case/whitespace variant).
     `tests/test_salary_period.py`'s connector-coverage test reads it to check,
     against the real `connectors/` tree, that every package whose field map
     actually names `salary_period` is backed by at least one such row — a

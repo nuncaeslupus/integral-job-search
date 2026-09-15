@@ -118,6 +118,21 @@ def _maps_salary_period(connector: Connector) -> bool:
     return list_has_it or detail_has_it
 
 
+#: The floor for `mapping`'s own population — F7, second-reader report on
+#: #487: the old `assert mapping` only required a non-empty set, so blinding
+#: one of `_maps_salary_period`'s four enumerated routes (e.g. dropping the
+#: `list.from_json.fields` half) silently dropped the real population from 4
+#: to 2 — losing `himalayas_en` and `lever_en`, the exact two boards F1/F2
+#: were about — while `missing = mapping - covered` still read empty and
+#: every test in this file still passed. Four connectors map `salary_period`
+#: today (`himalayas_en`, `jobfluent_es`, `justjoin_en`, `lever_en`); a fifth
+#: only ever raises `len(mapping)` above this, so the floor never needs
+#: bumping on its own (T100's convention). This is a literal floor, not
+#: `len(mapping)` itself — a bound derived from the thing it bounds could
+#: never fire (T150's "bound derived from the thing it bounds").
+MINIMUM_CONNECTORS_MAPPING_SALARY_PERIOD = 4
+
+
 def test_every_connector_that_maps_salary_period_has_contract_coverage() -> None:
     """F3, second-reader report on #487: `MINIMUM_PERIOD_CONTRACTS` is a row
     count, and a row count can be cleared by deleting a whole board's rows as
@@ -132,6 +147,15 @@ def test_every_connector_that_maps_salary_period_has_contract_coverage() -> None
     connector`. Deleting a board's positive rows now fails this directly;
     a fifth connector mapping the field grows the requirement by itself, with
     nobody needing to remember to raise a number.
+
+    Two more ways this check itself could go quietly blind (F7, second-reader
+    report on #487): `mapping`'s own population was unpinned, so a mutation to
+    `_maps_salary_period` that blinded one of its four routes shrank `mapping`
+    and made `missing` easier, not harder, to keep empty — caught below by
+    `MINIMUM_CONNECTORS_MAPPING_SALARY_PERIOD`. And `missing = mapping -
+    covered` alone never reads `covered - mapping`, so a `CONTRACT_CASES` row
+    naming a connector package that does not exist, or no longer maps the
+    field, would go uncaught — caught below by `unknown`.
     """
     covered = {
         case.connector for case in CONTRACT_CASES if case.expected is not None and case.connector
@@ -141,9 +165,17 @@ def test_every_connector_that_maps_salary_period_has_contract_coverage() -> None
         for package in connector_packages()
         if _maps_salary_period(load_connector(package))
     }
-    assert mapping, "expected at least one connector to map salary_period"
+    assert len(mapping) >= MINIMUM_CONNECTORS_MAPPING_SALARY_PERIOD, (
+        f"expected at least {MINIMUM_CONNECTORS_MAPPING_SALARY_PERIOD} connectors mapping "
+        f"salary_period, found {len(mapping)}: {sorted(mapping)}"
+    )
     missing = mapping - covered
     assert not missing, f"connectors mapping salary_period with no positive contract row: {missing}"
+    unknown = covered - mapping
+    assert not unknown, (
+        "CONTRACT_CASES names a connector that does not map salary_period (typo, or a "
+        f"stale row for a connector that no longer maps it): {unknown}"
+    )
 
 
 def test_table_values_are_offer_periods() -> None:
