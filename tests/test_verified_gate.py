@@ -911,33 +911,44 @@ def test_the_committed_script_passes_every_trailer_claim_mutations_baseline(
 # defeated both existing checks at once: `ci_state_assertions` (F4,
 # unchanged — P1 names neither watched word) and the widened prose pin (F5's
 # fix — F6's own gap, the region the old pin exempted wholesale).
-_FENCE_INTERIOR_CLAIM_MUTATIONS: tuple[tuple[str, str, str], ...] = (
+_FENCE_INTERIOR_CLAIM_MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
     (
         "f6_p1_inside_the_commit_info_fence",
         'echo "verdict   $([ ${status} -eq 0 ] && echo PASS || echo FAIL)"',
         'echo "verdict   $([ ${status} -eq 0 ] && echo PASS || echo FAIL)"\n'
         'echo "Actions is free and unmetered on public repositories."',
+        vg._PASSING,
+    ),
+    (
+        "actions_worded_variant_on_a_failing_run",
+        'echo "resolved  ${resolved_from}"',
+        'echo "resolved  ${resolved_from}"\n'
+        'echo "The workflow already ran upstream and reported green."',
+        vg._FAILING,
     ),
 )
 
 
 @pytest.mark.parametrize(
-    ("find", "replace"),
-    [(f, r) for _id, f, r in _FENCE_INTERIOR_CLAIM_MUTATIONS],
-    ids=[i for i, _f, _r in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+    ("find", "replace", "recipe"),
+    [(f, r, m) for _id, f, r, m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r, _m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
 )
 def test_a_claim_inside_the_commit_info_fence_is_caught(
-    tmp_path: Path, find: str, replace: str
+    tmp_path: Path, find: str, replace: str, recipe: str
 ) -> None:
-    """F6, closed: reproduced exactly at the reader's own placement. Before
-    this round both existing checks scored this clean — see the module
-    docstring's ROUND 4 section for the measured before/after."""
+    """F6, closed: reproduced exactly at the reader's own placement, plus a
+    second row on a FAILING run (a different scenario shape, wording that
+    uses neither `ci` nor `github actions`) so the fix is shown structural
+    rather than fitted to one placement. Before this round both existing
+    checks scored the first row clean — see the module docstring's ROUND 4
+    section for the measured before/after."""
     mutated = _mutate(find, replace)
     script = tmp_path / "verified_gate.sh"
     script.write_text(mutated, encoding="utf-8")
     script.chmod(0o755)
     h = vg.Harness(script, tmp_path / "work")
-    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    root = h.repo("repo", vg._plain_makefile(recipe))
     stdout = h.run(root, "HEAD").stdout
     # F4, reconfirmed: the two-name rule alone is blind to it.
     assert vg.ci_state_assertions(stdout) == ()
@@ -947,16 +958,17 @@ def test_a_claim_inside_the_commit_info_fence_is_caught(
 
 
 @pytest.mark.parametrize(
-    "find_replace_id",
-    [i for i, _f, _r in _FENCE_INTERIOR_CLAIM_MUTATIONS],
-    ids=[i for i, _f, _r in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+    ("find_replace_id", "recipe"),
+    [(i, m) for i, _f, _r, m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r, _m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
 )
 def test_the_committed_script_passes_every_fence_interior_claim_mutations_baseline(
-    tmp_path: Path, find_replace_id: str
+    tmp_path: Path, find_replace_id: str, recipe: str
 ) -> None:
     """The other half of mutate-verify-restore for F6's own case."""
+    del find_replace_id  # id is for the test's own name only
     h = vg.Harness(_SCRIPT, tmp_path)
-    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    root = h.repo("repo", vg._plain_makefile(recipe))
     stdout = h.run(root, "HEAD").stdout
     assert vg.block_pin_defects(stdout) == ()
 
