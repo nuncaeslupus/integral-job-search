@@ -2708,8 +2708,10 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: the remedy is the one it prescribes: regenerate against the merged tree
 #: rather than pick a side. Zero slack is restored at the new true count.
 #: 75 since T144, whose `employer_boards.MINIMUM_CONFORMING` joined the
-#: population — the same refusal, met on purpose this time.
-#: 76 since T158, whose `gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED`
+#: population — the same refusal, met on purpose this time. 77 since T157,
+#: whose `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
+#: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` joined it together.
+#: 78 since T158, whose `gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED`
 #: joined the population — met on purpose again.
 #: 77 since T158's own review round 2 (finding F2), whose
 #: `gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES` joined the population
@@ -2723,16 +2725,25 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: digits. The merged tree holds both floors, so the true count is 78 and
 #: neither branch's number was ever right about it. Regenerated against the
 #: merge, never picked from a side. Still zero slack.
-#: **81 since T169**, merged in after this constant had already reached 78 on
-#: `main` without knowing about it: `markup_text.MINIMUM_FIXTURE_OFFERS` and
+#: **81 since T169** on the branch that added it, merged in after this
+#: constant had already reached 78 on `main` without knowing about it:
+#: `markup_text.MINIMUM_FIXTURE_OFFERS` and
 #: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` join the population (+2), and
 #: this constant's own self-referential entry — excluded from
 #: `evidence_pinned_floors` while its committed value disagreed with the
-#: population it names — rejoins the count once corrected here (+1). Not
-#: three floors added by one branch; one branch (T169) adding two, plus this
-#: constant becoming countable again now that it agrees with itself. Measured
-#: against the merged tree, not picked from either side.
-MINIMUM_FLOORS_SWEPT = 81
+#: population it names — rejoins the count once corrected here (+1).
+#: **Independently, 81 since T157 and T161 on `main`**:
+#: `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
+#: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` (T157) plus
+#: `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` (T161) — the third and fourth
+#: instances of the same collision, this branch and `main` each moving from
+#: 78 by different additions that happened to sum to the same digits. Neither
+#: 81 was ever correct about the other's tree: **84 on the merged tree**,
+#: measured with `uv run python -m integral.floor_sweep` rather than picked
+#: from either side, since the merge brings both branches' additions in at
+#: once (T169's two plus its own self-referential rejoin, T157's two, T161's
+#: one — 78 + 6 = 84, not 78 + 3 twice).
+MINIMUM_FLOORS_SWEPT = 84
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

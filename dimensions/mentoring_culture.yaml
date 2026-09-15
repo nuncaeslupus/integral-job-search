@@ -44,17 +44,17 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "mentor(ing|ship)?"
+      - pattern: "mentor\\w*"
         value: 0.8
         negatable: true
-      - pattern: "code\\s+review"
+      - pattern: "code\\s+reviews?"
         value: 0.5
         negatable: false
       - pattern: "buddy|onboarding\\s+plan"
         value: 0.6
         negatable: false
     es:
-      - pattern: "mentor(ing|[íi]a)?|tutor[íi]a"
+      - pattern: "mentor\\w*|tutor[íi]a"
         value: 0.8
         negatable: true
       - pattern: "revisi[óo]n\\s+de\\s+c[óo]digo"
@@ -64,7 +64,7 @@ extraction:
         value: 0.6
         negatable: false
     ca:
-      - pattern: "mentor(ia|atge)?|tutoria"
+      - pattern: "mentor\\w*|tutoria"
         value: 0.8
         negatable: true
       - pattern: "revisi[óo]\\s+de\\s+codi"

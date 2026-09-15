@@ -59,20 +59,20 @@ extraction:
     # names the qualification the candidate must already hold, not anything the
     # employer offers.
     es:
-      - pattern: "presupuesto\\s+de\\s+\\bformaci[óo]n|plan\\s+de\\s+\\bformaci[óo]n|pla\\s+de\\s+\\bformaci[óo]|\\bformaci[óo]n?\\s+(a\\s+cargo\\s+de\\s+la\\s+empresa|a\\s+c[àa]rrec\\s+de\\s+l['’]?\\s*empresa|financiada|finan[çc]ada|pagada|especializada|especialitzada)|\\bformacions\\s+especialitzades|\\bformaci\\w*\\s+(i|y)\\s+certificaci"
+      - pattern: "presupuesto\\s+de\\s+\\bformaci[óo]n|plan\\s+de\\s+\\bformaci[óo]n|pla\\s+de\\s+\\bformaci[óo]|\\bformaci[óo]n?\\s+(a\\s+cargo\\s+de\\s+la\\s+empresa|a\\s+c[àa]rrec\\s+de\\s+l['’]?\\s*empresa|financiada|finan[çc]ada|pagada|especializada|especialitzada)|\\bformacions\\s+especialitzades|\\bformaci\\w*\\s+(i|y)\\s+certificaci\\w*"
         value: 0.8
         negatable: true
-      - pattern: "\\bformaci\\w*\\s+(continua|continuada|cont[íi]nua|internas?|permanentes?)|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci|\\bformaci\\w*\\s+(personalizad|personalitzad|t[éeè]cnic|a\\s+medida|a\\s+mida)"
+      - pattern: "\\bformaci\\w*\\s+(continua|continuada|cont[íi]nua|internas?|permanentes?)|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci\\w*|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci\\w*|\\bformaci\\w*\\s+(personalizad\\w*|personalitzad\\w*|t[éeè]cnic\\w*|a\\s+medida|a\\s+mida)"
         value: 0.7
         negatable: false
       - pattern: "clases\\s+de\\s+ingl[ée]s|classes\\s+d['’]angl[èe]s|certificacions?\\s+(pagadas|financiadas|pagades|finan[çc]ades)|desarrollo\\s+profesional|desenvolupament\\s+professional"
         value: 0.5
         negatable: false
     ca:
-      - pattern: "pla\\s+de\\s+\\bformaci[óo]|pressupost\\s+de\\s+\\bformaci[óo]|presupuesto\\s+de\\s+\\bformaci[óo]n|\\bformaci[óo]n?\\s+(a\\s+c[àa]rrec\\s+de\\s+l['’]?\\s*empresa|a\\s+cargo\\s+de\\s+la\\s+empresa|finan[çc]ada|financiada|pagada|especialitzada|especializada)|\\bformacions\\s+especialitzades|\\bformaci\\w*\\s+(i|y)\\s+certificaci"
+      - pattern: "pla\\s+de\\s+\\bformaci[óo]|pressupost\\s+de\\s+\\bformaci[óo]|presupuesto\\s+de\\s+\\bformaci[óo]n|\\bformaci[óo]n?\\s+(a\\s+c[àa]rrec\\s+de\\s+l['’]?\\s*empresa|a\\s+cargo\\s+de\\s+la\\s+empresa|finan[çc]ada|financiada|pagada|especialitzada|especializada)|\\bformacions\\s+especialitzades|\\bformaci\\w*\\s+(i|y)\\s+certificaci\\w*"
         value: 0.8
         negatable: true
-      - pattern: "\\bformaci\\w*\\s+(cont[íi]nua|continuada|continua|internes?|internas?|permanents?|permanentes?)|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci|\\bformaci\\w*\\s+(personalitzad|personalizad|t[éeè]cnic|a\\s+mida|a\\s+medida)"
+      - pattern: "\\bformaci\\w*\\s+(cont[íi]nua|continuada|continua|internes?|internas?|permanents?|permanentes?)|acc[ée]s\\s+(continu\\s+)?a\\s+(la\\s+)?\\bformaci\\w*|acceso\\s+(continuo\\s+)?a\\s+(la\\s+)?\\bformaci\\w*|\\bformaci\\w*\\s+(personalitzad\\w*|personalizad\\w*|t[éeè]cnic\\w*|a\\s+mida|a\\s+medida)"
         value: 0.7
         negatable: false
       - pattern: "classes\\s+d['’]angl[èe]s|clases\\s+de\\s+ingl[ée]s|certificacions?\\s+(pagades|finan[çc]ades|pagadas|financiadas)|desenvolupament\\s+professional|desarrollo\\s+profesional"

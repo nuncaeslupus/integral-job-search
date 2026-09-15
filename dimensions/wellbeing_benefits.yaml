@@ -60,7 +60,7 @@ extraction:
       - pattern: "apoyo\\s+psicol[óo]gico|programa\\s+de\\s+bienestar"
         value: 0.6
         negatable: false
-      - pattern: "gimnasio|ticket\\s+restaurante|retribuci[óo]n\\s+flexible"
+      - pattern: "gimnasios?|ticket\\s+restaurante|retribuci[óo]n\\s+flexible"
         value: 0.4
         negatable: false
     ca:

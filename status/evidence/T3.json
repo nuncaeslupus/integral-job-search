@@ -60,11 +60,13 @@
     "commute_burden:en",
     "local_language_demand:en",
     "mentoring_culture:ca",
+    "mission_alignment:es",
     "on_call_load:en",
     "on_call_load:ca",
     "physical_demand:en",
     "social_intensity:es",
     "travel_requirement:en",
+    "wellbeing_benefits:ca",
     "work_eligibility:ca"
   ]
 }

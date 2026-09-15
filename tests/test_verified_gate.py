@@ -24,6 +24,7 @@ So every case here is one of two shapes:
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
@@ -555,3 +556,615 @@ def test_an_at_sign_measures_the_caller_not_origins_default_branch(tmp_path: Pat
     assert ran.fields["commit"] != upstream
     assert ran.fields["verdict"] == "FAIL"
     assert ran.returncode == 1
+
+
+# --------------------------------------------------------------------------
+# T161 — the block must not assert what it did not measure about CI.
+#
+# `tools/verified_gate.sh:143` used to print, in every verdict block, the
+# hardcoded sentence "CI is unavailable; this is the substitute CLAUDE.md
+# names" — true during the 2026-09-04 outage, false from 2026-09-07. Measured
+# against the unfixed script (before this task's edit) `measure_ci_claims()`
+# reported `verdict_block_claims_about_ci_that_are_not_measured == 3` — one
+# per scenario, since the sentence is unconditional — confirming the check is
+# not vacuously zero before a single line of the fix was written.
+#
+# ROUND 2, after a second-reader BLOCK on #472: round 1's enumeration (a
+# verb-of-being list plus a 19-word state-word list) scored a clean 0 against
+# four re-shippings of the removed defect, one of them with only the subject
+# noun swapped from "CI" to "GitHub Actions" — `CLAUDE.md`'s own other name
+# for the identical referent — and the round-1 detector's own doc comment
+# turned out to have been fitted to the exact scope sentence this diff shipped
+# (F3). The fix taken here is the report's own remedy: the block's prose now
+# says nothing about CI at all, and the check is the closed two-name
+# membership test `ci_state_assertions` now performs — see its doc comment in
+# `integral.verified_gate` for why two names, not a shaped sentence. The
+# mutation table below is rewritten to the second reader's own four
+# re-shippings plus their control, so this file carries the adversarial cases
+# that found the round-1 defect rather than a table this session invented.
+# --------------------------------------------------------------------------
+
+
+def _measure_ci_claims_text(tmp_path: Path, script_text: str) -> dict[str, Any]:
+    """`measure_ci_claims` against a script body as if it were the committed
+    one, the same shape `_measure_text` gives the contract table above."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(script_text, encoding="utf-8")
+    script.chmod(0o755)
+    return vg.measure_ci_claims(script_path=script)
+
+
+def test_the_committed_script_makes_no_ci_claim() -> None:
+    measured = vg.measure_ci_claims()
+    assert measured["ci_claims_found"] == []
+    assert measured["ci_token_hits_found"] == []
+    assert measured["verdict_block_claims_about_ci_that_are_not_measured"] == 0
+    assert measured["gate_status"] == "measured"
+    assert measured["ci_claim_scenarios_checked"] == len(vg.CI_CLAIM_SCENARIOS)
+    assert measured["ci_claim_scenarios_checked_by_name"] == [s.name for s in vg.CI_CLAIM_SCENARIOS]
+
+
+def test_every_ci_claim_scenario_has_a_reason_it_exists() -> None:
+    for scenario in vg.CI_CLAIM_SCENARIOS:
+        assert len(scenario.why) > 30, f"{scenario.name} does not say what it is for"
+    assert len({s.name for s in vg.CI_CLAIM_SCENARIOS}) == len(vg.CI_CLAIM_SCENARIOS)
+
+
+# `(id, find, replace)` — each reintroduces a CI-state assertion into the
+# COMMITTED (fixed) script. `find` is a substring of the real, current file,
+# so a rewrite of the surrounding prose that leaves this substring behind
+# does not silently stop testing anything (the same discipline `_mutate`
+# documents above). Every row was measured against the committed script:
+# green without the mutation, red with it.
+#
+# These four are not this session's invention — they are the second reader's
+# own adversarial findings on #472 (F1), the exact re-shippings that scored a
+# clean 0 against round 1's enumeration. Row 1 is the one that matters most:
+# round 1 matched only the literal token "ci", and this row reintroduces the
+# identical defect with nothing changed but the subject noun, to `CLAUDE.md`'s
+# own other name for the same referent ("GitHub Actions has runner minutes
+# again"). A check that only forbade "ci" would repeat round 1's mistake on
+# this exact row, which is why `ci_state_assertions` now checks both names.
+_CI_CLAIM_MUTATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        # #472, F1, row 1 — the removed defect with only its subject noun
+        # swapped to `CLAUDE.md`'s other name for CI. This is the row that
+        # actually caught round 1's enumeration; keep it first.
+        "the_subject_noun_swapped_to_github_actions",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'GitHub Actions is unavailable; this is the substitute."',
+    ),
+    (
+        # #472, F1, row 2.
+        "reworded_as_a_block_substitute_for_ci",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'This block substitutes for the unavailable CI."',
+    ),
+    (
+        # #472, F1, row 3 — negated past tense, no verb-of-being at all.
+        "reworded_as_ci_did_not_run",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'CI did not run for this commit."',
+    ),
+    (
+        # #472, F1, row 4 — the fail-open PASS direction: an ungrounded claim
+        # that CI already succeeded is exactly as unmeasured as an ungrounded
+        # claim that it failed or is unavailable.
+        "reworded_as_a_green_ci_check_already_covered",
+        'echo "was measured. This block is scoped to that commit only."',
+        'echo "was measured. This block is scoped to that commit only. '
+        'A green CI check already covered this head."',
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("find", "replace"),
+    [(f, r) for _id, f, r in _CI_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _CI_CLAIM_MUTATIONS],
+)
+def test_each_ci_claim_mutation_is_detected(tmp_path: Path, find: str, replace: str) -> None:
+    """Revert the fix (in miniature) and watch the metric go red."""
+    broken = _measure_ci_claims_text(tmp_path / "broken", _mutate(find, replace))
+    assert broken["verdict_block_claims_about_ci_that_are_not_measured"] > 0, broken
+    # Found on every scenario, since the mutated line is unconditional — the
+    # metric must not undercount by de-duplicating identical assertions
+    # across runs, which would hide exactly the "prints it every time"
+    # property that made the original sentence a defect on every PR.
+    assert broken["verdict_block_claims_about_ci_that_are_not_measured"] == len(
+        vg.CI_CLAIM_SCENARIOS
+    )
+
+
+@pytest.mark.parametrize(
+    "find_replace_id",
+    [i for i, _f, _r in _CI_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _CI_CLAIM_MUTATIONS],
+)
+def test_the_committed_script_passes_every_ci_claim_mutations_baseline(
+    tmp_path: Path, find_replace_id: str
+) -> None:
+    """The other half of mutate-verify-restore: the UNMUTATED script must be
+    clean, or a mutation that "breaks" a perpetually-red check proves nothing."""
+    intact = _measure_ci_claims_text(tmp_path, _SCRIPT.read_text(encoding="utf-8"))
+    assert intact["verdict_block_claims_about_ci_that_are_not_measured"] == 0
+
+
+@pytest.mark.parametrize(
+    ("text", "expect_assertion"),
+    [
+        # Positive: either of the two names this repository uses for CI,
+        # in any grammatical shape at all — there is no verb or state-word
+        # list left to satisfy, so an ungrounded claim cannot dodge this by
+        # choosing an unlisted adjective the way round 1 could be dodged.
+        ("CI is unavailable; this is the substitute CLAUDE.md names.", True),
+        ("CI has failed on this commit.", True),
+        ("CI was green on the last run.", True),
+        ("As of this run, CI is currently down for maintenance.", True),
+        ("CI: unavailable.", True),
+        ("CI — down for maintenance.", True),
+        ("(CI unavailable)", True),
+        ("ci is green", True),  # case-insensitive
+        ("Everything is fine, CI.", True),  # bare mention, no verb at all
+        # Positive — the other name, #472 F1's own finding: round 1's
+        # enumeration matched only the literal token "ci" and missed every
+        # one of these because the subject noun was never "CI".
+        ("GitHub Actions is unavailable; this is the substitute.", True),
+        ("github   actions\nhas failed on this commit.", True),  # whitespace/case
+        # Negative: no mention of either name at all.
+        ("Merge only while the head is still the SHA the block names.", False),
+        ("on origin yes — reachable from origin/main.", False),
+        ("verdict   PASS", False),
+        # Negative: "ci" appears as a substring inside a longer word, which
+        # must not match — the word-boundary is what keeps this rule from
+        # flagging ordinary English.
+        ("Traci reviewed the science and found it reciprocal and explicit.", False),
+        # Negative: "actions" alone, with no "GitHub" attached, must not
+        # match — the phrase is two words together, not either word alone.
+        ("User actions are logged for audit.", False),
+        # Negative: this IS the exact scope sentence round 1's enumeration
+        # was built to exempt (F3's finding) — under the closed rule there is
+        # no exemption to encode, so a sentence like this is simply never
+        # written; it is included here as documentation of what changed, not
+        # because the rule special-cases it.
+        (
+            "it and CI are complementary (this over the committed head, CI over the "
+            "pull request's separate merge ref), and it makes no claim about CI's "
+            "own state here.",
+            True,
+        ),
+    ],
+)
+def test_ci_state_assertions_is_the_closed_two_name_rule(text: str, expect_assertion: bool) -> None:
+    found = vg.ci_state_assertions(text)
+    assert bool(found) is expect_assertion, (text, found)
+
+
+def test_the_committed_scripts_own_preamble_mentions_neither_name() -> None:
+    """Behavioural mirror of the rule above, run against the REAL block.
+
+    This is `ci_state_assertions`'s own cheap check, and #472's round-3 report
+    (F4) showed it is exactly that and no more: eleven further re-shippings of
+    the same claim, none using either watched name, all scored `[]` here too.
+    That is why this function is no longer what the property depends on — see
+    `test_the_emitted_block_is_pinned_verbatim_on_a_pass` below, which does not
+    care what words a re-shipped claim uses, or where in the block it lands.
+    This test stays as the documented floor of the two-name rule: the
+    committed script clears even the narrow check, which is necessary and,
+    per F4, not sufficient on its own. `ci_token_hits_found` is the field this
+    reads now — round 4 (F7) moved `ci_claims_found` to be pin-derived, so a
+    test of the narrow token rule reads its own dedicated field rather than
+    the one the gate's metric now counts.
+    """
+    measured = vg.measure_ci_claims()
+    assert measured["ci_token_hits_found"] == []
+
+
+# --------------------------------------------------------------------------
+# Round 4 (#472, second reader): F5's remedy was "merely narrower, not
+# closed" — it replaced an enumeration of WORDS with an enumeration of
+# REGIONS (everything outside a fence pinned, everything inside one free),
+# and F6 placed round 3's own probe P1 one line inside the commit-info
+# fence — after the `verdict` echo, before its closing delimiter — where it
+# evaded both the token rule (F4, unchanged) and the widened prose pin (F5's
+# own gap: the injected line sits inside what the fence toggle treated as
+# wholesale-free content).
+#
+# The replacement is `vg.block_pin_defects`, which pins the WHOLE block as
+# one grammar rather than exempting a region: every line the script authors
+# — heading, preamble, the seven field LABELS in order, both fence
+# delimiters, the FAIL wrapper — is fixed; only the two spans that are
+# `make host-gate`'s own captured output (never the script's own words) are
+# free, and each is free because of WHAT it is, not because of its position
+# relative to a backtick. There is no "inside a fence" left as a hiding
+# place for content the script did not put there.
+#
+# F7: `verdict_block_claims_about_ci_that_are_not_measured` is now DERIVED
+# from `block_pin_defects`, not from `ci_state_assertions` — see
+# `integral.verified_gate.measure_ci_claims`'s docstring. The tests below
+# exercise the same function pytest and the evidence writer both call, so
+# the two cannot read differently about the same head.
+# --------------------------------------------------------------------------
+
+
+def test_the_emitted_block_is_pinned_verbatim_on_a_pass(tmp_path: Path) -> None:
+    """The token rule is deliberately loose about everything except the two
+    names, and F4/F6 showed it is loose about more than that too. This pin
+    covers the WHOLE block as one grammar — heading, preamble, every field
+    LABEL in order, both fence delimiters — leaving free only what the
+    script did not itself author: field VALUES (captured, not asserted
+    equal to anything — that is a different contract's job) and the
+    delegated command's own captured output.
+    """
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.block_pin_defects(stdout) == ()
+
+
+def test_the_emitted_block_is_pinned_verbatim_on_a_fail(tmp_path: Path) -> None:
+    """The FAIL shape's own `<details>` wrapper is authored text too — a FAIL
+    block is what a genuinely broken gate pastes, so it is exactly the case a
+    fail-open claim would be most valuable stapled to."""
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(vg._FAILING))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.block_pin_defects(stdout) == ()
+
+
+def test_a_claim_smuggled_inside_a_forged_fence_pair_is_caught(tmp_path: Path) -> None:
+    """Round 3's own adversarial case, re-run against the new pin: wrapping
+    P1 in a forged THIRD fence pair appended after the trailer no longer has
+    anywhere to hide, because the grammar requires the string to END at the
+    trailer's last line (`\\Z`) — trailing content of any shape, fenced or
+    not, breaks the match. `ci_state_assertions` still scores it `[]` (F4's
+    gap is unchanged and is not this test's subject)."""
+    mutated = _mutate(
+        'echo "block was produced makes it evidence about a commit nobody is merging."',
+        'echo "block was produced makes it evidence about a commit nobody is merging."\n'
+        "echo '```'\n"
+        'echo "Actions is free and unmetered on public repositories."\n'
+        "echo '```'\n",
+    )
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(mutated, encoding="utf-8")
+    script.chmod(0o755)
+    h = vg.Harness(script, tmp_path / "work")
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.ci_state_assertions(stdout) == ()
+    assert vg.block_pin_defects(stdout) != ()
+
+
+# `(id, find, replace)` — F5's own reproduction, kept as a regression case
+# under the new pin: `find` sits in the TRAILER. `find` is a substring of the
+# real, current file, so a rewrite of the surrounding prose that leaves this
+# substring behind does not silently stop testing anything (`_mutate`'s own
+# discipline).
+_TRAILER_CLAIM_MUTATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        # Round 3's own probe P1 — `CLAUDE.md`:641, verbatim, the sentence
+        # named as "the one a future editor is most likely to restore".
+        "p1_line_641_verbatim_in_the_trailer",
+        'echo "block was produced makes it evidence about a commit nobody is merging."',
+        'echo "block was produced makes it evidence about a commit nobody is merging. '
+        'Actions is free and unmetered on public repositories."',
+    ),
+    (
+        # F4's other two named gaps in the same sentence shape, together —
+        # "workflow" and "runner" are `CLAUDE.md`:647/649-650/671's words for
+        # the identical referent, and neither is "ci" or "github actions".
+        "workflow_and_runner_named_instead_of_ci",
+        'echo "block was produced makes it evidence about a commit nobody is merging."',
+        'echo "block was produced makes it evidence about a commit nobody is merging. '
+        'The workflow runner has minutes again."',
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("find", "replace"),
+    [(f, r) for _id, f, r in _TRAILER_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _TRAILER_CLAIM_MUTATIONS],
+)
+def test_a_claim_in_the_trailer_is_caught(tmp_path: Path, find: str, replace: str) -> None:
+    """F4 and F5, still closed: neither row here uses "ci" or "github
+    actions", so `ci_state_assertions` still scores it `[]` — F4 is not
+    fixed by the pin, it is made non-load-bearing by it."""
+    mutated = _mutate(find, replace)
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(mutated, encoding="utf-8")
+    script.chmod(0o755)
+    h = vg.Harness(script, tmp_path / "work")
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    # F4, reconfirmed on this exact row: the two-name rule alone is blind to it.
+    assert vg.ci_state_assertions(stdout) == ()
+    # F5, still closed: the pin is not blind to it.
+    assert vg.block_pin_defects(stdout) != ()
+
+
+@pytest.mark.parametrize(
+    "find_replace_id",
+    [i for i, _f, _r in _TRAILER_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _TRAILER_CLAIM_MUTATIONS],
+)
+def test_the_committed_script_passes_every_trailer_claim_mutations_baseline(
+    tmp_path: Path, find_replace_id: str
+) -> None:
+    """The other half of mutate-verify-restore: the UNMUTATED script's
+    trailer must still match the pin, or a mutation that "breaks" a
+    perpetually-red check proves nothing."""
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.block_pin_defects(stdout) == ()
+
+
+# `(id, find, replace)` — F6's own reproduction: round 3's probe P1, placed
+# one echo after `tools/verified_gate.sh`'s `verdict` field — INSIDE the
+# commit-info fence, before its closing delimiter. Before this round this
+# defeated both existing checks at once: `ci_state_assertions` (F4,
+# unchanged — P1 names neither watched word) and the widened prose pin (F5's
+# fix — F6's own gap, the region the old pin exempted wholesale).
+_FENCE_INTERIOR_CLAIM_MUTATIONS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "f6_p1_inside_the_commit_info_fence",
+        'echo "verdict   $([ ${status} -eq 0 ] && echo PASS || echo FAIL)"',
+        'echo "verdict   $([ ${status} -eq 0 ] && echo PASS || echo FAIL)"\n'
+        'echo "Actions is free and unmetered on public repositories."',
+        vg._PASSING,
+    ),
+    (
+        "actions_worded_variant_on_a_failing_run",
+        'echo "resolved  ${resolved_from}"',
+        'echo "resolved  ${resolved_from}"\n'
+        'echo "The workflow already ran upstream and reported green."',
+        vg._FAILING,
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("find", "replace", "recipe"),
+    [(f, r, m) for _id, f, r, m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r, _m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+)
+def test_a_claim_inside_the_commit_info_fence_is_caught(
+    tmp_path: Path, find: str, replace: str, recipe: str
+) -> None:
+    """F6, closed: reproduced exactly at the reader's own placement, plus a
+    second row on a FAILING run (a different scenario shape, wording that
+    uses neither `ci` nor `github actions`) so the fix is shown structural
+    rather than fitted to one placement. Before this round both existing
+    checks scored the first row clean — see the module docstring's ROUND 4
+    section for the measured before/after."""
+    mutated = _mutate(find, replace)
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(mutated, encoding="utf-8")
+    script.chmod(0o755)
+    h = vg.Harness(script, tmp_path / "work")
+    root = h.repo("repo", vg._plain_makefile(recipe))
+    stdout = h.run(root, "HEAD").stdout
+    # F4, reconfirmed: the two-name rule alone is blind to it.
+    assert vg.ci_state_assertions(stdout) == ()
+    # F6, closed: the whole-block pin is not blind to content placed inside
+    # a fence that is not one of the two genuinely free spans.
+    assert vg.block_pin_defects(stdout) != ()
+
+
+@pytest.mark.parametrize(
+    ("find_replace_id", "recipe"),
+    [(i, m) for i, _f, _r, m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r, _m in _FENCE_INTERIOR_CLAIM_MUTATIONS],
+)
+def test_the_committed_script_passes_every_fence_interior_claim_mutations_baseline(
+    tmp_path: Path, find_replace_id: str, recipe: str
+) -> None:
+    """The other half of mutate-verify-restore for F6's own case."""
+    del find_replace_id  # id is for the test's own name only
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(recipe))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.block_pin_defects(stdout) == ()
+
+
+# Self-scan finding on THIS round's own diff, before it shipped — not a
+# re-shipping of #472's: the first version of `_BLOCK_PIN_RE` captured every
+# field's value as bare `[^\n]*`, which swallows the rest of the line, so a
+# mutation that appends prose onto an EXISTING field's line (no new line
+# added) passed clean. Every row here targets one field this way; the fix
+# constrains each field's capture to the shape the script can actually
+# produce there (see `_BLOCK_PIN_RE`'s own comment).
+_FIELD_LINE_CLAIM_MUTATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        "appended_onto_the_verdict_line",
+        'echo "verdict   $([ ${status} -eq 0 ] && echo PASS || echo FAIL)"',
+        'echo "verdict   $([ ${status} -eq 0 ] && echo PASS || echo FAIL) — CI is unavailable"',
+    ),
+    (
+        "appended_onto_the_on_origin_line",
+        'echo "on origin ${pushed}"',
+        'echo "on origin ${pushed}. CI is green."',
+    ),
+    (
+        "appended_onto_the_resolved_line",
+        'echo "resolved  ${resolved_from}"',
+        'echo "resolved  ${resolved_from}. GitHub Actions has minutes again."',
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("find", "replace"),
+    [(f, r) for _id, f, r in _FIELD_LINE_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _FIELD_LINE_CLAIM_MUTATIONS],
+)
+def test_a_claim_appended_onto_an_existing_field_line_is_caught(
+    tmp_path: Path, find: str, replace: str
+) -> None:
+    """The self-scan gap: appending to a field's OWN line, not adding a new
+    one, so nothing about fence position or line count moves."""
+    mutated = _mutate(find, replace)
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(mutated, encoding="utf-8")
+    script.chmod(0o755)
+    h = vg.Harness(script, tmp_path / "work")
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.block_pin_defects(stdout) != ()
+
+
+@pytest.mark.parametrize(
+    "find_replace_id",
+    [i for i, _f, _r in _FIELD_LINE_CLAIM_MUTATIONS],
+    ids=[i for i, _f, _r in _FIELD_LINE_CLAIM_MUTATIONS],
+)
+def test_the_committed_script_passes_every_field_line_claim_mutations_baseline(
+    tmp_path: Path, find_replace_id: str
+) -> None:
+    """The other half of mutate-verify-restore for the self-scan finding."""
+    h = vg.Harness(_SCRIPT, tmp_path)
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.block_pin_defects(stdout) == ()
+
+
+def test_the_pin_ties_the_trailer_sha_to_the_commit_field(tmp_path: Path) -> None:
+    """The trailing backtick-quoted SHA must be the SAME value the `commit`
+    field carries (a backreference in `_BLOCK_PIN_RE`, not a separate
+    hand-written assertion) — a block that named the right commit in one
+    place and a different, or fixed, value in the other would be exactly
+    the kind of claim this section exists to catch."""
+    zeros = "0" * 40
+    mutated = _mutate(
+        'echo "Merge only while the pull request head is still \\`${sha}\\`. A push after this"',
+        f'echo "Merge only while the pull request head is still \\`{zeros}\\`. A push after this"',
+    )
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(mutated, encoding="utf-8")
+    script.chmod(0o755)
+    h = vg.Harness(script, tmp_path / "work")
+    root = h.repo("repo", vg._plain_makefile(vg._PASSING))
+    stdout = h.run(root, "HEAD").stdout
+    assert vg.block_pin_defects(stdout) != ()
+
+
+def test_the_ci_claim_scenario_floor_is_a_literal() -> None:
+    """AST fact, not a substring — the same idiom
+    `tests/test_gate_reader_agreement.py::test_the_floor_is_a_literal_the_population_cannot_drag`
+    uses for the identical shape, and the one this test used to be missing:
+    #472's F2 mutated `MINIMUM_CI_CLAIM_SCENARIOS = 3` to
+    `len(CI_CLAIM_SCENARIOS)` and the OLD substring-grep version of this test
+    still passed 72 green, because the decoy literal `3` still sat in a
+    trailing comment. A comment cannot satisfy an AST check."""
+    source = Path(vg.__file__).read_text(encoding="utf-8")
+    assigned = [
+        node.value
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "MINIMUM_CI_CLAIM_SCENARIOS"
+    ]
+    assert len(assigned) == 1, "the floor is assigned once, at module level"
+    assert isinstance(assigned[0], ast.Constant) and isinstance(assigned[0].value, int), (
+        "the floor must be an integer literal; written as `len(CI_CLAIM_SCENARIOS)` "
+        "it is compared against a count derived from the table itself and can "
+        "never fire — and that construction is exactly what #472's F2 mutated it "
+        "to, surviving the old substring-grep form of this test at 72 passed"
+    )
+    assert len(vg.CI_CLAIM_SCENARIOS) == assigned[0].value, (
+        "the literal must equal the population it is sized to — an added "
+        "scenario should raise the floor rather than widen the slack"
+    )
+    assert len(vg.CI_CLAIM_SCENARIOS) >= vg.MINIMUM_CI_CLAIM_SCENARIOS
+
+
+def test_a_shrunken_ci_claim_table_is_unmeasured_not_silently_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(vg, "CI_CLAIM_SCENARIOS", vg.CI_CLAIM_SCENARIOS[:1])
+    measured = vg.measure_ci_claims()
+    assert measured["ci_claim_scenarios_checked"] == 1
+    assert measured["ci_claim_scenarios_checked"] < vg.MINIMUM_CI_CLAIM_SCENARIOS
+
+
+def test_a_missing_script_is_the_maximal_ci_claim_defect() -> None:
+    measured = vg.measure_ci_claims(script_path=Path("/nonexistent/verified_gate.sh"))
+    assert measured["verdict_block_claims_about_ci_that_are_not_measured"] == -1
+    assert measured["gate_status"] == "measured"
+
+
+# --------------------------------------------------------------------------
+# `_main` writes both T121's and T161's evidence from the one bare
+# invocation `make evidence` actually makes, and a live CI-claim regression
+# fails it — end to end, not just `measure_ci_claims()` in isolation.
+# --------------------------------------------------------------------------
+
+
+def _patch_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, script: Path) -> None:
+    instructions = tmp_path / "CLAUDE.md"
+    instructions.write_text(f"Run `{script.name}`.\n", encoding="utf-8")
+    monkeypatch.setattr(vg, "DEFAULT_SCRIPT_PATH", script)
+    monkeypatch.setattr(vg, "DEFAULT_INSTRUCTIONS", instructions)
+    monkeypatch.setattr(vg, "DEFAULT_EVIDENCE_PATH", tmp_path / "T121.json")
+    monkeypatch.setattr(vg, "DEFAULT_T161_EVIDENCE_PATH", tmp_path / "T161.json")
+
+
+def test_a_bare_invocation_writes_both_evidence_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+    script.chmod(0o755)
+    _patch_defaults(monkeypatch, tmp_path, script)
+
+    assert vg._main(["prog"]) == 0
+    t121 = json.loads((tmp_path / "T121.json").read_text(encoding="utf-8"))
+    t161 = json.loads((tmp_path / "T161.json").read_text(encoding="utf-8"))
+    assert t121["verified_gate_defects"] == 0
+    assert t161["verdict_block_claims_about_ci_that_are_not_measured"] == 0
+
+
+def test_a_live_ci_claim_regression_fails_the_bare_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wiring, not just the metric: a script that reintroduces the
+    hardcoded sentence must fail `_main`'s bare invocation — the one
+    `make evidence` runs — even though T121's own ten contracts do not
+    mention CI at all and would otherwise pass it clean."""
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(
+        _mutate(
+            'echo "was measured. This block is scoped to that commit only."',
+            'echo "was measured. This block is scoped to that commit only. CI is unavailable."',
+        ),
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    _patch_defaults(monkeypatch, tmp_path, script)
+
+    assert vg._main(["prog"]) == 1
+    t161 = json.loads((tmp_path / "T161.json").read_text(encoding="utf-8"))
+    assert t161["verdict_block_claims_about_ci_that_are_not_measured"] > 0
+
+
+def test_an_explicit_target_does_not_trigger_the_ci_claim_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`options.target == DEFAULT_EVIDENCE_PATH` is the whole gate for writing
+    T161 alongside T121; an explicit, non-default target must not write it —
+    mirroring `test_measuring_another_tree_records_nothing_about_this_one`."""
+    script = tmp_path / "verified_gate.sh"
+    script.write_text(_SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+    script.chmod(0o755)
+    _patch_defaults(monkeypatch, tmp_path, script)
+    decoy = tmp_path / "T161.json"
+
+    assert vg._main(["prog", str(tmp_path / "out.json")]) == 0
+    assert not decoy.exists()

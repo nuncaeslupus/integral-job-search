@@ -1,5 +1,90 @@
 # Session handover
 
+## 0001. Four merges, and every one of them was refused by GitHub first
+
+#470, #461, #469 and #466 landed. **GitHub refused all three of the latter as
+conflicted**, which is worth leading with because nothing in the protocol warns
+that a PR sitting green on both halves of `merge-policy` is still unmergeable.
+Being green is a statement about a branch; being mergeable is a statement about
+the pair, and only the merge attempt makes it.
+
+**The census collision happened twice in one day, and the second instance has a
+shape the first did not.** On #461, `floor_sweep.MINIMUM_FLOORS_SWEPT` read 76 on
+the branch and 77 on `main` — and both were *one higher than the base each
+branched from*, for entirely different floors. The merged tree holds all of them
+at **78**, so neither number was ever right about it, and git saw nothing to
+resolve in the *evidence* because both sides had written the same digits.
+`status/evidence/T85.json`'s `gate_modules_discovered` moved the same way in the
+same merge. Regenerated against the merged tree, never picked; the constant's own
+comment now records this instance beside the first. #469 and #466 conflicted only
+on line numbers and plan rows.
+
+**What actually guards this is `floor_sweep`'s own `stale_margin_claim` refusal**,
+not review and not CI: CI tests each PR against a `main` that lacks the other, so
+it is structurally blind here. After each merge the squash's tree was compared
+against the gated commit's tree — identical every time, which is what makes
+re-gating `main` unnecessary rather than skipped.
+
+## 0002. Two findings filed against `main`, both fail-open, neither in any diff
+
+**#482** — #470's round-4 second read reported *after* that PR merged, so its two
+blocking findings are live on `main`. G1': the AST replacement for a substring
+scan is defeated by four spellings of the coupling it forbids (`getattr` in the
+identical statement, a hoisted local, a rename hop, a dict hop), and two of them
+are harmful rather than cosmetic because the test that would catch them drives
+`measure` with a **stub** verifier under which the fixture probes' verdict is the
+opposite of the real one. F-A: `_STATES_BY_NAME.get(name, _UNKNOWN_STATE)`
+resolves an unknown name to `classifier_reverted=False`, dropping *both* sides of
+the equality it exists to protect — refuting both the committed comment and the
+round-3 self-scan, which had each claimed the fallback could only ever add to
+`floor_breaches`.
+
+**#483** — `verify-gates` prints `N carry no fenced gate block` and never asserts
+it, so it has climbed 1 → 2 → 3 unremarked. Each increment is a **merged task
+whose declared measurement nothing re-asserts**. T124 has been in that state a
+long time, declaring `connectors_steerable_by_the_candidates_terms >= 1`, a key
+that appears in **no** committed evidence file. The cause is a dialect split that
+is documented on both sides: `AGENTS.md` tells task authors to fence the gate as
+```` ```bash ````, `verify_gates.py` only asserts a ```` ```gate ```` one, and
+anything else is tallied rather than failed. A count is not a check.
+
+## 0003. The identity half of `merge-policy` is unsatisfiable here — this is the standing answer
+
+Every session on this surface authenticates as `nuncaeslupus`, which is also
+every PR's author, so `review_reader check` returns **2** on every PR and cannot
+return 0. Merges proceed on the reader's verdict with the check **recorded as
+unsatisfiable in the merge commit**, per the owner's decision. Do not re-litigate
+this and do not try to repair an identity into passing — `resolve_identity` is a
+validator by design and #408 cost five rounds establishing that.
+
+## 0004. Two quota windows were spent, and a killed session leaves unsourced numbers
+
+The window went twice (reset 20:10 and 01:10 UTC), killing seven agents in total.
+After each, `git ls-remote` established what had actually been pushed before
+re-dispatching. One agent had pushed a head and died **before running its own
+gate**, which is exactly the state the repo's rule is about: its figures were
+treated as unsourced and re-measured rather than trusted.
+
+**The largest avoidable waste was agents parking on a `Monitor`** instead of
+polling their own log — at least six times across the night, each needing a
+manual nudge to resume. Writing "do not park on a Monitor" into the brief did not
+prevent it; it has to be paired with the concrete alternative (`until grep -q …;
+do sleep 15; done` as one backgrounded command) or it does not land.
+
+## 0005. Pick up here
+
+Open, with an agent on each: **#472** (T161, round-5 fix pushed, round-4 had found
+the CI-claim regex re-shippable four ways at metric 0), **#475** (T157, round-3
+fix), **#479** (T169, CI red on two `take:html_text` contracts — the first drops
+the tail of a field on a bare `<`, which is text loss rather than the HTML ceiling
+the branch labelled it).
+
+Open, needing a round and unassigned: **#473** (BLOCK, 3 fail-open) and **#458**
+(BLOCK answered by its head commit, needs the round-5 read).
+
+`review_reader check` still returns 2 everywhere; see 0003.
+
+
 ## 0000. T173 merged (#455): InfoJobs is read through the candidate's own browser
 
 The board answers every listing and advert request from this tool with a **200**

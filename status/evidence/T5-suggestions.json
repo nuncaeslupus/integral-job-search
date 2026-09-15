@@ -6,8 +6,8 @@
   "ads_with_suggestions": 176,
   "blind_control_count": 32,
   "suggestion_count": 1032,
-  "suggestion_cue_agreement": 0.4448,
-  "cue_unreachable": 573,
+  "suggestion_cue_agreement": 0.4409,
+  "cue_unreachable": 577,
   "cue_unreachable_examples": [
     "feinaactiva-09202618331:compensation_transparency",
     "feinaactiva-09202618331:schedule_flexibility",

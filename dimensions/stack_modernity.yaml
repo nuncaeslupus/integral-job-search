@@ -44,7 +44,15 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "kubernetes|terraform|rust\\b|go(lang)?\\b"
+      # "Go" is a language and an English verb, and case cannot separate them —
+      # a heading capitalises the verb ("Go Further") and scraped text loses
+      # case the other way. So the bare name counts only as an item of a
+      # delimited list ("Python, Go", "Go/Rust", "(Go)") and never before a
+      # hyphen ("Go-to-market", "go-live"); "Golang" is unambiguous. The
+      # verb reached a candidate's offer card from "helps customers go from
+      # uncertainty to answer" (T176). Ceiling: "Ready, set, Go!" still reads
+      # as a list, and needs a second agreeing cue to settle this bipolar scale.
+      - pattern: "kubernetes|terraform|rust|golang|(?-i:(?:(?<=[,/(|])|(?<=[,/(|]\\s))Go(?![-\\w]))"
         value: 0.6
         negatable: false
       - pattern: "cloud\\s*-?\\s*native|microservices"

@@ -35,7 +35,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import re
 import sys
 from pathlib import Path
 from typing import Any, Literal
@@ -268,7 +267,7 @@ def cue_agreement(
                 continue
             total += 1
             cues = dimension.extraction.cues.get(ad.language, [])
-            if any(re.search(cue.pattern, suggestion.quote, re.IGNORECASE) for cue in cues):
+            if any(cue.search(suggestion.quote) for cue in cues):
                 reachable += 1
             elif len(unreachable_examples) < 10:
                 unreachable_examples.append(f"{ad_id}:{suggestion.dimension}")

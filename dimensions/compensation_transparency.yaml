@@ -44,7 +44,7 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "salary\\s+(range|band|bracket)|\\$\\s?\\d{2,3},?\\d{3}|€\\s?\\d{2,3},?\\d{3}|\\b\\d{2,3}\\s*k\\s*[-–]\\s*\\d{2,3}\\s*k\\b"
+      - pattern: "salary\\s+(range|band|bracket)s?|\\$\\s?\\d{2,3},?\\d{3}|€\\s?\\d{2,3},?\\d{3}|\\b\\d{2,3}\\s*k\\s*[-–]\\s*\\d{2,3}\\s*k\\b"
         value: 0.9
         negatable: false
       - pattern: "competitive\\s+(salary|compensation|pay|package)"

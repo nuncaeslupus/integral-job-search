@@ -4,8 +4,18 @@
   "dynamic_population_floors": [
     {
       "module": "approval",
+      "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
+      "line": 3391
+    },
+    {
+      "module": "approval",
+      "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
+      "line": 3390
+    },
+    {
+      "module": "approval",
       "name": "_SHINGLE",
-      "line": 427
+      "line": 428
     },
     {
       "module": "arsenal_source",
@@ -231,7 +241,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4197,
+      "line": 4310,
       "population": 15
     },
     {
@@ -267,14 +277,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2802,
-      "population": 41
+      "line": 2813,
+      "population": 42
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2735,
-      "population": 81
+      "line": 2746,
+      "population": 84
     },
     {
       "module": "freshness",
@@ -371,6 +381,12 @@
       "name": "MINIMUM_PROBES",
       "line": 457,
       "population": 13
+    },
+    {
+      "module": "verified_gate",
+      "name": "MINIMUM_CI_CLAIM_SCENARIOS",
+      "line": 1040,
+      "population": 3
     }
   ],
   "bounds_read_and_out_of_scope": [
@@ -404,6 +420,8 @@
     "corpus_scope.MINIMUM_SERVING_MODULES",
     "corpus_scope.MINIMUM_STIMULUS_POOL",
     "cue_audit.MINIMUM_CASES",
+    "cue_audit.MINIMUM_CITABLE_FIELDS_CITED",
+    "cue_audit.MINIMUM_CITATIONS_CHECKED",
     "cue_audit.MINIMUM_FAIL_OPEN_CASES",
     "cue_audit.MINIMUM_MECHANISM_PINNED_CASES",
     "cv_store.MINIMUM_FIELDS_MEASURED",
@@ -475,6 +493,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 81,
+  "floors_swept_at_least": 84,
   "floors_arithmetically_checked_at_least": 36
 }

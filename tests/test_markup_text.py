@@ -270,9 +270,9 @@ def test_neutralise_unterminated_tail_does_not_open_a_comment_inside_script_or_s
 
 def test_neutralise_unterminated_tail_recognises_the_other_two_comment_closes() -> None:
     # F6 (second-reader round 2, non-blocking): a comment can also close on
-    # `--!>` (comment end bang state, WHATWG 13.2.5.52) or, for an empty
+    # `--!>` (comment end bang state, WHATWG §13.2.5.52) or, for an empty
     # comment, on the very next '>' (abrupt-closing-of-empty-comment,
-    # 13.2.5.44) - searching only for '-->' read both as EOF-truncated and
+    # §13.2.5.44) - searching only for '-->' read both as EOF-truncated and
     # deleted everything after them. Fixed at the termination-detection
     # level: this function now leaves both untouched (nothing after them is
     # lost), which is as far as its own contract goes - it only decides

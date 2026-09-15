@@ -429,8 +429,8 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         "5 < 10 years",
         "REGRESSION, FIXED: the previous fix blanket-replaced every '<' from "
         "the first unmatched one to EOF, which welded this comment's content "
-        "into prose - WHATWG 13.2.5.6 tag open state ('anything else': emit "
-        "'<', reconsume in data state) settles the bare '<'; 13.2.5.43 "
+        "into prose - WHATWG §13.2.5.6 tag open state ('anything else': emit "
+        "'<', reconsume in data state) settles the bare '<'; §13.2.5.43 "
         "comment state EOF (emit the current comment token) still drops the "
         "comment that follows it, independently",
     ),
@@ -458,7 +458,7 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         '<p>Intro</p><script>var s = "<!--";</script><p>The whole advert body</p>',
         "Intro The whole advert body",
         "REGRESSION, FIXED: a script's content is script-data-state text "
-        "(WHATWG 13.2.5.15), where '<!--' opens nothing - the previous fix "
+        "(WHATWG §13.2.5.15), where '<!--' opens nothing - the previous fix "
         "read it as an unterminated comment and dropped the rest of the "
         "document with it (return markup[:lt]), the worst direction: total "
         "content loss on a page `parse_html` sees whole, not a field",
@@ -467,7 +467,7 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         "html_text",
         '<p>Intro</p><style>a[href^="<!--"]{color:red}</style><p>The whole advert body</p>',
         "Intro The whole advert body",
-        "same for style's RAWTEXT state (WHATWG 13.2.5.3)",
+        "same for style's RAWTEXT state (WHATWG §13.2.5.3)",
     ),
     (
         "html_text",
