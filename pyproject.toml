@@ -29,7 +29,8 @@ cv = [
 dev = [
     "mypy>=1.11",
     "pytest>=8.3",
-    # ~3,900 tests. `make test` runs them 3x to 5x faster on a twelve-core
+    # ~3,800 tests (3793 passed, 7 skipped when this line was last measured).
+    # `make test` runs them 3x to 5x faster on a twelve-core
     # laptop, under `-n auto` from the Makefile and `--dist loadfile` from
     # [tool.pytest.ini_options] below — which says why each flag is where it is.
     # Every review round pays the serial cost several times over

@@ -631,7 +631,17 @@ def _quads_in_every_file() -> dict[tuple[str, str], None]:
 
 def _listed_files(repo: Path) -> list[str]:
     """What git says the repository ships right now: tracked, plus untracked and
-    not ignored, filtered to the ones that are files at this instant."""
+    not ignored — git's answer verbatim, never reconciled with the filesystem.
+
+    This filtered to `is_file()` for one round, and that filter was a second
+    place a listed name could be dropped with nothing saying so. It is not even
+    a race: `rm` a tracked file and do not stage the deletion, and the index
+    still ships it while `is_file()` is deterministically false — so the name
+    reached neither the scan nor the rule that refuses a dropped file, and an
+    indexed file carrying a live literal passed green. Whether a listed name may
+    go unread is now decided in exactly one place, the `except` in `_quads_in`,
+    and a directory or a broken link raising there is the same fail-closed
+    answer this gate already chose one line further on."""
     import subprocess
 
     listed = subprocess.run(
@@ -639,7 +649,7 @@ def _listed_files(repo: Path) -> list[str]:
         capture_output=True,
         check=True,
     ).stdout.decode("utf-8")
-    return [name for name in listed.split("\0") if name and (repo / name).is_file()]
+    return [name for name in listed.split("\0") if name]
 
 
 def _quads_in(repo: Path, names: list[str]) -> dict[tuple[str, str], None]:
@@ -736,6 +746,31 @@ def test_no_committed_file_carries_an_ip_address() -> None:
     assert not stale, f"_NOT_ADDRESSES excuses literals that no longer occur: {stale}"
 
 
+def test_the_listing_is_gits_answer_and_not_the_filesystems(tmp_path: Path) -> None:
+    """The population is what git ships, and git ships what is in its index. A
+    tracked file deleted without staging the deletion is still shipped, still
+    carries whatever it carries, and is not on disk — so a listing reconciled
+    with the filesystem drops it before the scan can read it and before the rule
+    below can refuse it. That was the fail-open the second reader measured on
+    `d85b242`: one `git add`, one plain `rm`, and the gate went from red to green
+    over an indexed file carrying a live address.
+
+    Built rather than described, because the only state that tells the two
+    readings apart is an index and a worktree that disagree, and this repository
+    is not the place to make one."""
+    import subprocess
+
+    def git(*argv: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), *argv], capture_output=True, check=True)
+
+    git("init")
+    (tmp_path / "staged-then-deleted.md").write_text("x\n", encoding="utf-8")
+    git("add", "staged-then-deleted.md")
+    (tmp_path / "staged-then-deleted.md").unlink()
+
+    assert _listed_files(tmp_path) == ["staged-then-deleted.md"]
+
+
 def test_the_scan_survives_a_probe_file_that_vanishes_between_listing_and_reading() -> None:
     """`repo_gate`'s evidence-stability measurement writes probe files into the
     live working tree and unlinks them again. `make test` puts that file and
@@ -745,9 +780,20 @@ def test_the_scan_survives_a_probe_file_that_vanishes_between_listing_and_readin
     Pinned rather than trusted: the remedy is one `except` clause, the run it
     protects goes red a few times in a hundred, and a green suite is therefore
     the expected outcome whether the clause is there or not. Being right is not
-    being pinned."""
+    being pinned.
+
+    The vanished name is sited where no writer can reach, and the absence is
+    asserted rather than assumed. `docs/<PROBE_BASENAME>` is one of the eight
+    paths `repo_gate` really writes, so appending *that* gave a case that stopped
+    being a case exactly when the writer was mid-run on another worker — the file
+    resolves, nothing is skipped, and the only assertion left is one the live
+    gate already makes. Measured by the second reader at ~2.7s of a ~20.7s
+    `tests/test_repo_gate.py` run: a fixture whose execution path need not
+    arrive."""
     repo = _LIBRARY.parent
-    names = [*_listed_files(repo), f"docs/{PROBE_BASENAME}"]
+    vanished = f"docs/never-written/{PROBE_BASENAME}"
+    assert not (repo / vanished).exists(), "the case needs a name no writer can reach"
+    names = [*_listed_files(repo), vanished]
 
     found = _quads_in(repo, names)
 
@@ -761,12 +807,30 @@ def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped() -> No
     the scan, or a defect — and a gate whose whole job is to refuse committed IP
     literals cannot drop a file and still report a clean pass. Widening the
     clause to every vanished path is the reflex the first time this goes red in
-    CI, and it is the fail-open direction."""
-    repo = _LIBRARY.parent
-    names = [*_listed_files(repo), "docs/vanished-mid-scan.md"]
+    CI, and it is the fail-open direction.
 
-    with pytest.raises(AssertionError, match="vanished-mid-scan"):
-        _quads_in(repo, names)
+    One case could not say that, and a second case would not either. The reader
+    widened the predicate by a single clause — `and not n.startswith("corpus/")`,
+    exempting the directory where whole job adverts live, the files likeliest to
+    carry an address — and the whole file stayed green, because the only case it
+    had named a path in `docs/`. A third case moves the surviving mutation to a
+    fourth directory. So the axis is derived from the tree rather than named: one
+    vanished name per top-level entry git lists, all in one scan, and every one
+    of them has to appear in the refusal. A directory added later is covered
+    without anyone remembering to."""
+    repo = _LIBRARY.parent
+    listed = _listed_files(repo)
+    tops = {name.partition("/")[0] if "/" in name else "." for name in listed}
+    vanished = sorted(str(Path(top) / "vanished-mid-scan.md") for top in tops)
+    # Its own denominator: an axis derived from an empty listing is no axis, and
+    # the emptiness would otherwise read as every point passing.
+    assert len(vanished) > 5, f"the axis collapsed to {vanished}"
+
+    with pytest.raises(AssertionError) as refusal:
+        _quads_in(repo, [*listed, *vanished])
+
+    exempted = [name for name in vanished if name not in str(refusal.value)]
+    assert not exempted, f"vanished, and the predicate carved them out of the refusal: {exempted}"
 
 
 def test_the_floor_counts_the_files_read_and_not_the_files_listed() -> None:
