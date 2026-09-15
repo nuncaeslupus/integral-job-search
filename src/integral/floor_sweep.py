@@ -2723,7 +2723,16 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: digits. The merged tree holds both floors, so the true count is 78 and
 #: neither branch's number was ever right about it. Regenerated against the
 #: merge, never picked from a side. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 78
+#: **81 since T169**, merged in after this constant had already reached 78 on
+#: `main` without knowing about it: `markup_text.MINIMUM_FIXTURE_OFFERS` and
+#: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` join the population (+2), and
+#: this constant's own self-referential entry — excluded from
+#: `evidence_pinned_floors` while its committed value disagreed with the
+#: population it names — rejoins the count once corrected here (+1). Not
+#: three floors added by one branch; one branch (T169) adding two, plus this
+#: constant becoming countable again now that it agrees with itself. Measured
+#: against the merged tree, not picked from either side.
+MINIMUM_FLOORS_SWEPT = 81
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
