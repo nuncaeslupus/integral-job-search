@@ -168,6 +168,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCRIPT_PATH = _REPO_ROOT / "tools" / "verified_gate.sh"
 DEFAULT_INSTRUCTIONS = _REPO_ROOT / "CLAUDE.md"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T121.json"
+DEFAULT_T161_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T161.json"
 
 #: The verdict block's field names. `on origin` carries a space on purpose — it
 #: is read back exactly as the block prints it, so a renamed field is a failure
@@ -757,6 +758,375 @@ def write_evidence(
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T161 — the block must not assert what it did not measure about CI
+#
+# `tools/verified_gate.sh` printed, in every verdict block, a hardcoded
+# sentence: "CI is unavailable; this is the substitute CLAUDE.md names". That
+# was true during the 2026-09-04 runner outage and false from 2026-09-07,
+# when the repository went public and Actions became unmetered — so every
+# block pasted on a pull request since carried a false claim about CI's
+# state, some of them beside a green `CI` check on the same head minutes
+# apart. The block exists so a reader can see the checking happened; a claim
+# in it that the run never grounded is this repository's own named defect
+# family (a check — here, an evidence artefact — asserting a property it did
+# not observe), inside the one file whose whole job is to be trustworthy
+# about what was measured.
+#
+# The fix is scoped, per the task: either measure what the block says about
+# CI, or say nothing about it. This repository has no live CI channel to
+# query from a sandboxed throwaway worktree (no `gh`, no network), so the
+# script now says nothing — CLAUDE.md already states the two are
+# complementary (this script over the committed head, CI over the PR's merge
+# ref), and the block can state its own scope without asserting anything
+# about the other half.
+#
+# What is measured is therefore not "is the claim true" — there must be no
+# claim left to be true or false — but "does the emitted block mention the
+# thing at all". Behavioural, in this module's established idiom (see the
+# module docstring): the check never reads the script's source, only the TEXT
+# the script prints when it is actually run, because reading the source was
+# defeated three times by comments, an unused string literal and trailing
+# comments — none of which can hide inside the text a reviewer actually reads
+# on the pull request.
+#
+# ROUND 1 of this exact check (subject "ci", a verb-of-being list, a 19-word
+# state-word list, a forward-only window) was an enumeration, and the
+# second-reader report on #472 (F1) re-shipped the removed defect four
+# different ways — including with only the subject noun swapped from "CI" to
+# "GitHub Actions", `CLAUDE.md`'s own other name for the same referent — and
+# every one scored a clean 0. F3 on the same report found the enumeration's
+# discriminator had been fitted to the exact sentence this diff was about to
+# ship ("a sentence that only *names* CI to state this script's own scope …
+# does not match" — written to describe, and evade, the very prose it sat
+# beside). That is this repository's named defect family in its own instance:
+# a check pinned against a proxy (today's grammar) rather than the property.
+#
+# The remedy taken is the one the report itself closes with, and it is not
+# "add a fifth verb" — CLAUDE.md is explicit that an enumeration has no last
+# element and the rounds that ended a thread replaced one with a closed rule.
+# So: the block's prose was rewritten (see `tools/verified_gate.sh`) to say
+# nothing about CI AT ALL — not its state, not its scope relative to this
+# script, nothing — because the only sentence that can never misrepresent CI
+# is one that does not mention it. What is left to check is therefore not
+# "is this sentence shaped like a CI-state claim" (unbounded — any English
+# sentence can assert a state without the verb-plus-adjective shape the old
+# regex assumed) but a two-item membership test: does the block use one of
+# the two names THIS repository reaches for most often for the referent —
+# "CI" (used throughout `CLAUDE.md` and this script's own former defect
+# line) and "GitHub Actions" (the term `CLAUDE.md` § *Known environment
+# state* uses for the identical fact — "GitHub Actions has runner minutes
+# again"). Both are sourced from the repository's own existing vocabulary
+# for the one thing, not guessed or derived from the sentence being shipped.
+#
+# ROUND 3 (#472, F4) found this membership test is not, in fact, closed: the
+# SAME CLAUDE.md section that supplied the two names also uses "Actions"
+# alone (twice), "workflow", and "runner" for the identical referent, and a
+# sentence built from any of those — round 3's own probe P1 is
+# `CLAUDE.md`:641 verbatim, "Actions is free and unmetered on public
+# repositories" — scores `ci_claims_found == []` here. That is this
+# repository's named defect family with *subject* substituted for *verb*:
+# round 1 closed the verb: round 3 shows the subject was never closed either,
+# and CLAUDE.md's own words for the point are "an enumeration has no last
+# element" — a fifth name would only be round 4's finding.
+#
+# So this function is kept — a cheap, real check, and the committed script
+# does still clear it — but it is NOT what `verdict_block_claims_about_ci_
+# that_are_not_measured` depends on for the property this section is about.
+# What closed F4 (this function's blindness to the vocabulary it does not
+# enumerate) and F5 (the reason that blindness was exploitable: the
+# golden-text pin in `tests/test_verified_gate.py` used to cover only the
+# three preamble lines, so a claim placed in the trailer evaded both checks
+# at once) was that pin, widened to every line the script prints OUTSIDE a
+# fenced region. F4/F5's reproduction lives in that test module's history.
+#
+# ROUND 4 (#472, second reader) found the widened pin was "merely narrower,
+# not closed": it replaced an enumeration of WORDS with an enumeration of
+# REGIONS, and there were still two — everything outside a fence was pinned,
+# everything inside one was free. That is wrong for the commit-info fence
+# specifically, because that fence is not free-form output: it is seven
+# LABELED fields (`_BLOCK_FIELDS`) the script authored in a fixed order, and
+# only their VALUES vary. F6 placed round 3's own probe P1 one line inside
+# that fence — after `tools/verified_gate.sh`'s `verdict` echo, before the
+# closing delimiter — and it passed both existing checks at once: this
+# function still scores it `[]` (F4, unchanged: P1 names neither watched
+# word), and the widened prose pin still held (F5's own gap: the injected
+# line sits inside what the toggle treats as fence content, exactly as a
+# forged third fence pair did one round earlier).
+#
+# The fix, per the second reader's own direction, does not add a third
+# region to the enumeration. `_BLOCK_PIN_RE` below pins the WHOLE block as
+# one grammar: the heading, the preamble, all seven field LABELS in order,
+# every fence delimiter, and the FAIL wrapper are literal text the script
+# authored and must appear verbatim; only two spans are free, and each is
+# free because of WHAT it is (`make host-gate`'s own captured output — the
+# one thing in the block the script did not author), not because of WHERE
+# it sits relative to a backtick. There is therefore no "inside a fence"
+# left as a hiding place: a line placed anywhere the grammar does not name
+# as free breaks the match, fence or no fence. `block_pin_defects` is what
+# `verdict_block_claims_about_ci_that_are_not_measured` now counts (F7) —
+# this function is kept only as the narrow, documented-decorative check it
+# always was; see `block_pin_defects` for what closes the property.
+_CI_REFERENT_RE = re.compile(r"\bci\b|\bgithub\s+actions\b", re.IGNORECASE)
+
+
+def ci_state_assertions(text: str) -> tuple[str, ...]:
+    """Every mention in `text` of CI by either name this repository uses for it.
+
+    Matched against emitted TEXT — a script's actual stdout for one real run —
+    never against `tools/verified_gate.sh`'s source. See the section above for
+    why: source-matching is what three prior rounds defeated. The function
+    name and return shape are unchanged from the enumeration this replaces —
+    every caller still asks "what did the block say about CI" — only what
+    counts as a hit changed, from a shaped sentence to a bare mention.
+    """
+    return tuple(match.group(0) for match in _CI_REFERENT_RE.finditer(text))
+
+
+#: The whole emitted block as one grammar (round 4, #472 F6/F7). Every line the
+#: script AUTHORS — the heading, the three preamble sentences, the seven field
+#: LABELS in `_BLOCK_FIELDS` order, every fence delimiter, and the FAIL run's
+#: `<details>` wrapper — is a literal here; only two spans are wildcards, and
+#: each is free because it is `make host-gate`'s own captured, unpredictable
+#: output (the log excerpt, and — FAIL only — the tail-40 dump), never because
+#: of where it sits relative to a backtick.
+#:
+#: A field's VALUE is an interpolation, not authored text, so it is never
+#: pinned to one expected string here — that is a different contract's job
+#: (see the `_c_*` functions above). But an early version of this pattern
+#: captured each value as bare `[^\n]*`, which is where THIS round's own
+#: self-scan found a live gap before it shipped: `[^\n]*` swallows the *rest
+#: of the line*, so a mutation that appends prose onto an EXISTING field's
+#: line — `echo "verdict   $(... PASS ...) — CI is unavailable"`, one string
+#: change, no new line added — passed the pattern clean. That is the same
+#: family this task is about, one layer in: a check pinned against "a field
+#: has a value" rather than against "a field has the SHAPE its own value can
+#: ever legitimately take". So every field's capture is now constrained to
+#: what the script can actually produce there, not to "the rest of the line":
+#: `commit` is 40 hex characters; `resolved` and `verdict` are one of the
+#: small enumerated strings `resolved_from`/the exit-status ternary can ever
+#: hold; `on origin` is one of its own two literal shapes with `\S+` for the
+#: branch name; `measured` and `command` are pinned outright (a timestamp
+#: shape, and the one fixed value `gate_command` ever holds) since neither
+#: script logic ever varies them beyond that. `ref` alone stays `\S+`: it can
+#: be `HEAD`, a branch, a bare SHA, or (this script's own header comment)
+#: `HEAD~0`, `HEAD^0`, `@{u}` — deliberately not narrowed to one character
+#: class — but `\S+` still refuses the one shape a smuggled CLAIM needs: a
+#: SPACE, which every English sentence this task has ever seen requires.
+#: The trailing backtick-quoted SHA in the last line is required to be the
+#: SAME value as the `commit` field via a backreference, which is free (not
+#: an extra assertion written by hand) rather than pinned separately.
+_BLOCK_PIN_RE = re.compile(
+    r"\A"
+    r"## Verified gate\n"
+    r"\n"
+    r"Run by `tools/verified_gate\.sh` against a clean detached checkout of the\n"
+    r"commit named below — not a working tree — and that SHA is the one that\n"
+    r"was measured\. This block is scoped to that commit only\.\n"
+    r"\n"
+    r"```\n"
+    r"commit    (?P<commit>[0-9a-f]{40})\n"
+    r"ref       (?P<ref>\S+)\n"
+    r"resolved  (?:local ref|origin, fetched just now)\n"
+    r"on origin (?:NO — not reachable from any origin/\* ref this clone knows|"
+    r"yes — reachable from \S+)\n"
+    r"measured  \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n"
+    r"command   make host-gate   \(delegated, never a listed subset\)\n"
+    r"verdict   (?:PASS|FAIL)\n"
+    r"```\n"
+    r"\n"
+    r"```\n"
+    r"(?P<log_excerpt>.*?)"
+    r"```\n"
+    r"(?:\n<details><summary>failing output</summary>\n\n```\n"
+    r"(?P<fail_tail>.*?)```\n\n</details>\n)?"
+    r"\n"
+    r"Merge only while the pull request head is still `(?P=commit)`\. A push after this\n"
+    r"block was produced makes it evidence about a commit nobody is merging\.\n?"
+    r"\Z",
+    re.DOTALL,
+)
+
+
+def block_pin_defects(stdout: str) -> tuple[str, ...]:
+    """Does `stdout` — one real run's printed block — match the grammar above?
+
+    Returns `()` when it does; a single-element tuple naming the mismatch
+    otherwise. Always at most one element: this is a structural yes/no over
+    the WHOLE block, not a per-line scan, so a caller counting occurrences
+    (`test_each_ci_claim_mutation_is_detected` requires exactly one per
+    scenario) gets exactly one regardless of how many bytes differ.
+
+    This is what closes F6 (a claim placed inside the commit-info fence, the
+    region the old prose pin exempted wholesale) and is what
+    `verdict_block_claims_about_ci_that_are_not_measured` is now DERIVED
+    FROM (F7) — before this round that metric was `len(ci_state_assertions(
+    ...))`, the two-name token scan, even on the same head this structural
+    pin already covered. `ci_state_assertions` is kept, and is genuinely
+    decorative for this metric now: the only place it still adds coverage
+    this function does not is inside the two spans this function leaves
+    free on purpose (the delegated command's own output), which is exactly
+    where a CI claim would have to come from `make host-gate` itself rather
+    than from `tools/verified_gate.sh` — out of this task's scope, per the
+    task's own "do not pin what you cannot predict."
+    """
+    if _BLOCK_PIN_RE.fullmatch(stdout):
+        return ()
+    preview = stdout[:280].replace("\n", "\\n")
+    return (
+        "the emitted block does not match the pinned grammar (heading, preamble, "
+        "the seven labeled fields in order, both fence delimiters, and the FAIL "
+        "wrapper are fixed; only the delegated command's own captured output is "
+        f"free) — stdout began: {preview!r}",
+    )
+
+
+@dataclass(frozen=True)
+class CiClaimScenario:
+    """One real run of the script, whose printed text is scanned for
+    ungrounded CI assertions. Each scenario is a distinct case a verdict
+    block is pasted from in practice, so a fix that happens to clear one
+    wording only for PASS, say, is still caught on the others."""
+
+    name: str
+    why: str
+    stdout: Callable[[Harness], str]
+
+
+def _ci_claims_on_a_passing_run(h: Harness) -> str:
+    """The ordinary case — most blocks pasted on a pull request are this one."""
+    root = h.repo("repo", _plain_makefile(_PASSING))
+    return h.run(root, "HEAD").stdout
+
+
+def _ci_claims_on_a_failing_run(h: Harness) -> str:
+    """A FAIL block still must not assert a CI state this run never checked."""
+    root = h.repo("repo", _plain_makefile(_FAILING))
+    return h.run(root, "HEAD").stdout
+
+
+def _ci_claims_on_a_pushed_commit(h: Harness) -> str:
+    """The exact case named in the task: a block pasted beside a green `CI`
+    check on the SAME head must not separately assert anything about CI —
+    reachable from origin is a fact this run *did* observe (`on origin`);
+    CI's own state is not."""
+    clone, _upstream, _local = h.clone_with_an_origin()
+    return h.run(clone, "main").stdout
+
+
+CI_CLAIM_SCENARIOS: tuple[CiClaimScenario, ...] = (
+    CiClaimScenario(
+        "ci_claims_on_a_passing_run",
+        "the ordinary case: a PASS block must not assert a CI state this run never checked",
+        _ci_claims_on_a_passing_run,
+    ),
+    CiClaimScenario(
+        "ci_claims_on_a_failing_run",
+        "a FAIL block still must not claim anything about CI, which this run never observed",
+        _ci_claims_on_a_failing_run,
+    ),
+    CiClaimScenario(
+        "ci_claims_on_a_pushed_commit",
+        "the case the task names: a block pasted beside a green CI check on the same head "
+        "must not separately assert CI is unavailable, or anything else about it",
+        _ci_claims_on_a_pushed_commit,
+    ),
+)
+
+#: A literal, on purpose — `MINIMUM_CONTRACTS`'s form and reason repeated:
+#: written as `len(CI_CLAIM_SCENARIOS)` the floor below would compare a count
+#: derived from the table against itself, `x < x`, unreachable, and deleting
+#: a scenario would move both sides together. #333, F3; T100/T122's convention.
+MINIMUM_CI_CLAIM_SCENARIOS = 3
+
+
+def measure_ci_claims(
+    script_path: Path = DEFAULT_SCRIPT_PATH,
+    scenarios: Sequence[CiClaimScenario] | None = None,
+) -> dict[str, Any]:
+    """T161's gate: `verdict_block_claims_about_ci_that_are_not_measured`.
+
+    Runs the script for real, once per scenario, against a throwaway
+    repository — never reads its source. Before the fix this was non-zero
+    (the hardcoded sentence appears in every run's block); the fix is that
+    the block stops asserting anything about CI, so a fixed script scores 0
+    here not because nothing was checked but because there is nothing left
+    to find.
+
+    `ci_claims_found` — what the metric counts — is `block_pin_defects`
+    applied to each scenario's stdout (round 4, #472 F7). It used to be
+    `ci_state_assertions`, the two-name token scan, which round 3's own
+    report (F6) showed a claim could dodge from *inside* the commit-info
+    fence without ever naming "CI" or "GitHub Actions" — so the metric and
+    the pytest fixtures that exercise the same scenarios could read
+    differently about the very same head. Deriving both from one function
+    closes that gap structurally rather than by adding a case.
+
+    `ci_token_hits_found` is kept alongside it, and is decorative for this
+    metric: the only place it can still catch something `block_pin_defects`
+    cannot is *inside* the two spans the pin deliberately leaves free (the
+    delegated `make host-gate` capture) — out of scope here, since pinning
+    output this script never produced would mean pinning content that is
+    supposed to vary from run to run in real use.
+
+    A scenario that cannot even be run (git or make missing, the harness
+    itself broken) is not "no claims found" — recording zero over a check
+    that did not run is the vacuous pass this whole task is about — so it is
+    recorded as a claim of its own, keeping the metric non-zero rather than
+    silently dropping a third of the denominator.
+    """
+    if not script_path.exists():
+        return {
+            "verdict_block_claims_about_ci_that_are_not_measured": -1,
+            "ci_claim_scenarios_checked": 0,
+            "ci_claim_scenarios_at_least": MINIMUM_CI_CLAIM_SCENARIOS,
+            "gate_status": "measured",
+            "ci_claim_scenarios_checked_by_name": [],
+            "ci_claims_found": [],
+            "ci_token_hits_found": [],
+        }
+    if scenarios is None:
+        scenarios = CI_CLAIM_SCENARIOS
+    found: list[str] = []
+    token_hits: list[str] = []
+    checked: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="verified-gate-ci-claims-") as raw:
+        base = Path(raw)
+        for scenario in scenarios:
+            checked.append(scenario.name)
+            workdir = base / scenario.name
+            workdir.mkdir(parents=True)
+            try:
+                stdout = scenario.stdout(Harness(script_path, workdir))
+            except Exception as exc:
+                found.append(f"{scenario.name}: the scenario could not be run: {exc!r}")
+                continue
+            for defect in block_pin_defects(stdout):
+                found.append(f"{scenario.name}: {defect}")
+            for assertion in ci_state_assertions(stdout):
+                token_hits.append(f"{scenario.name}: {assertion!r}")
+    return {
+        "verdict_block_claims_about_ci_that_are_not_measured": len(found),
+        "ci_claim_scenarios_checked": len(checked),
+        "ci_claim_scenarios_at_least": MINIMUM_CI_CLAIM_SCENARIOS,
+        "gate_status": "measured" if checked else "unmeasured",
+        "ci_claim_scenarios_checked_by_name": checked,
+        "ci_claims_found": found,
+        "ci_token_hits_found": token_hits,
+    }
+
+
+def write_t161_evidence(
+    evidence: Path = DEFAULT_T161_EVIDENCE_PATH,
+    script_path: Path = DEFAULT_SCRIPT_PATH,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T161.json`."""
+    measured = measure_ci_claims(script_path)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 @dataclass(frozen=True)
 class Options:
     """A parsed command line, or the reason it was refused."""
@@ -847,8 +1217,27 @@ def _main(argv: list[str]) -> int:
         for item in measured[key]:
             print(f"✗ {key}: {item}", file=sys.stderr)
     print(json.dumps(measured, ensure_ascii=False))
-    if measured["verified_gate_defects"] > 0:
-        return 1
+
+    # T161's evidence rides along with T121's, on the one invocation
+    # `make evidence` actually makes: no `--script`/`--instructions` override,
+    # and the evidence path left at its default. Naming a script or an
+    # instructions file other than this repository's already makes `options.target`
+    # `None` above (a measurement of some other tree is not evidence about this
+    # one), so `options.target == DEFAULT_EVIDENCE_PATH` alone is enough here — it
+    # is unreachable unless `own_tree` was also true when `parse_args` set it.
+    ci_measured: dict[str, Any] | None = None
+    if options.target == DEFAULT_EVIDENCE_PATH:
+        # `DEFAULT_T161_EVIDENCE_PATH` passed explicitly, not left to the
+        # function's own default: a default argument is bound once at def
+        # time, so a caller (a test, or a future host) that repoints the
+        # module-level constant would otherwise still write to the original
+        # path — the exact residue #333's F4 already found in this module
+        # once, for `DEFAULT_EVIDENCE_PATH` itself.
+        ci_measured = write_t161_evidence(DEFAULT_T161_EVIDENCE_PATH, script_path=script_path)
+        for item in ci_measured["ci_claims_found"]:
+            print(f"✗ ci_claims_found: {item}", file=sys.stderr)
+        print(json.dumps(ci_measured, ensure_ascii=False))
+
     # The floor last and below the finding, the precedence `naming` sets: a real
     # defect outranks a thin denominator. -1 is "the script is gone", which is
     # the maximal defect and not an honest "cannot measure yet" — so it fails
@@ -860,11 +1249,38 @@ def _main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 1
+    if measured["verified_gate_defects"] > 0:
+        return 1
+    if ci_measured is not None:
+        claims = ci_measured["verdict_block_claims_about_ci_that_are_not_measured"]
+        if claims != 0:
+            # Covers both directions: claims > 0 is a live regression (the
+            # hardcoded sentence, or one like it, is back); claims < 0 mirrors
+            # T121's missing-script case above and must fail the same way
+            # rather than read as an honest "unmeasured".
+            print(
+                f"verdict_block_claims_about_ci_that_are_not_measured: {claims} "
+                "— the emitted block asserts something about CI this run did not "
+                "observe",
+                file=sys.stderr,
+            )
+            return 1
     if measured["verified_gate_contracts_checked"] < MINIMUM_CONTRACTS:
         print(
             f"verified_gate_contracts_checked: {measured['verified_gate_contracts_checked']} "
             f"is below the floor of {MINIMUM_CONTRACTS} — zero defects over that few "
             "contracts is not a measurement",
+            file=sys.stderr,
+        )
+        return 3
+    if (
+        ci_measured is not None
+        and ci_measured["ci_claim_scenarios_checked"] < MINIMUM_CI_CLAIM_SCENARIOS
+    ):
+        print(
+            f"ci_claim_scenarios_checked: {ci_measured['ci_claim_scenarios_checked']} is "
+            f"below the floor of {MINIMUM_CI_CLAIM_SCENARIOS} — zero unmeasured CI claims "
+            "over that few scenarios is not a measurement",
             file=sys.stderr,
         )
         return 3
