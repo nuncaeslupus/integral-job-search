@@ -67,6 +67,7 @@ from integral.connectors import (
     collect_listing,
     load_connector,
     parse_detail_page,
+    source_kind_of,
 )
 from integral.gate_exit import worst
 from integral.identity import ProfileStore
@@ -75,7 +76,7 @@ from integral.lifecycle import (
     save_lifecycle_offer,
     track_new_offer,
 )
-from integral.offers import Offer, compute_offer_id
+from integral.offers import Offer, SourceKind, compute_offer_id
 from integral.robots import Robots, RobotsError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -212,6 +213,9 @@ class BoardOutcome:
     #: are still read, and the failures are named here rather than ending the
     #: round with every counter lost.
     employers_failed: tuple[str, ...] = ()
+    #: T172. `"employer"` when the board read was the employer's own — the
+    #: same `source_kind_of` every offer it stored carries.
+    source_kind: SourceKind | None = None
 
     @property
     def reached_the_board(self) -> bool:
@@ -267,6 +271,20 @@ class Run:
         return self._boards(lambda o: not o.steered and o.reached_the_board)
 
     @property
+    def employer_boards(self) -> list[str]:
+        """Declared employers' own boards a result of this round came from (T172).
+
+        `items > dropped` is "some row became an offer", which is what T144
+        asks for — *where each result came from*. Not `reached_the_board`: a
+        board refused on its first request is neither skipped nor an error, and
+        named here it would claim results it never gave. Not `items` either: a
+        row that builds no offer is not a result. And not `added`, which is 0
+        for a re-sighting that is still a result this board produced (#462
+        rounds 2 and 3, G3 and H1/H2).
+        """
+        return self._boards(lambda o: o.source_kind == "employer" and o.items > o.dropped)
+
+    @property
     def refused(self) -> list[str]:
         """Boards that refused the read. Never to be read as "no jobs there"."""
         return self._boards(lambda o: o.refused is not None)
@@ -290,6 +308,10 @@ class Run:
             lines.append(f"  searched for your terms: {', '.join(self.steered)}")
         if self.unsteered:
             lines.append(f"  returned their whole list: {', '.join(self.unsteered)}")
+        if self.employer_boards:
+            lines.append(
+                f"  the employers' own boards, not a job board: {', '.join(self.employer_boards)}"
+            )
         for outcome in self.outcomes:
             if outcome.refused:
                 lines.append(f"  REFUSED {outcome.connector}: {outcome.refused}")
@@ -568,6 +590,7 @@ def _one_board(
             detail_needed=detail_needed,
             detail_fetched=detail_fetched,
             employers_failed=tuple(failed),
+            source_kind=source_kind_of(connector),
             skipped=skipped,
             error=error,
             refused=refused,

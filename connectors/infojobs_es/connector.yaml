@@ -120,6 +120,18 @@ list:
   #   /ofertas-trabajo/barcelona?keyword=farmaceutico
   #       → "559 ofertas de farmaceutico en todas las ubicaciones"  ← WRONG
   #
+  # Re-measured 2026-09-14 (T171), because the probe until then was the old
+  # `/ofertas-trabajo/barcelona` — recorded 2026-08-30, before this slot
+  # existed — so no capture had ever carried the query segment this sends.
+  # `probe/` is now `/ofertas-trabajo/auxiliar-de-farmacia/barcelona`, read in
+  # a real browser as T173 requires, and the page's own title names the search.
+  # A nonsense term (`/ofertas-trabajo/zqxjvwkplm/barcelona`) returns the
+  # board's **no-results marker** — one `li.ij-OfferList-offerCardItemEmpty`
+  # holding `div.ij-OfferList-NoResults`, with no advert and no link — and not
+  # a fallback list, unlike infoempleo.com (`ruled-out.yaml`'s
+  # `engine_gap_selector`). `item: div.ij-OfferCardContent` is not inside that
+  # marker, so a miss parses to zero rows rather than to one blank one.
+  #
   # The second line is the engine's own `quote(query, safe="")` spelling, so a
   # multi-word phrase needs no slug. The third is why the slot is in the path:
   # a query string drops the location scope on this board, exactly as `?page=2`
