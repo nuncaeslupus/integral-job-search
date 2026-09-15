@@ -268,9 +268,9 @@ class BoardOutcome:
         Offers actually reaching disk is the property both fixes are really
         about, and `added` is the one field that names it directly.
         """
-        return (
-            self.skipped is None and self.error is None and self.refused is None
-        ) or bool(self.added)
+        return (self.skipped is None and self.error is None and self.refused is None) or bool(
+            self.added
+        )
 
 
 @dataclass
@@ -420,8 +420,10 @@ class Run:
         result it never gave.
         """
         return self._boards(
-            lambda o: o.source_kind == "employer"
-            and o.items > o.dropped + o.off_aim + o.unopened + o.over_ceiling
+            lambda o: (
+                o.source_kind == "employer"
+                and o.items > o.dropped + o.off_aim + o.unopened + o.over_ceiling
+            )
         )
 
     @property
@@ -1288,10 +1290,22 @@ def measure_fixture() -> dict[str, Any]:
         )
         detected = len(offers_without_a_recorded_fetch(store)) - len(driven)
 
+        # `detail_fetched < detail_needed`, not `not outcome.added`: T166 made
+        # trabajos_es steered, so this fixture asks it once per phrase against
+        # the same committed list capture, and the second and third queries'
+        # rows are all re-sighted — `detail_fetched == detail_needed` (every
+        # fetch the engine owed it, completed) but `added == 0` (nothing new).
+        # That is not the market emptying and not the engine starving it
+        # either; it is T130's own motivating case (arbeitnow_en: 35 rows,
+        # `detail_fetched` stuck at 0 because the fetch did not exist yet) told
+        # apart from a re-sighting neither `not outcome.added` nor `outcome.
+        # items` can tell apart on their own (round 5 merge finding, T167).
         starved = [
             outcome.connector
             for outcome in run.outcomes
-            if outcome.items and not outcome.added and outcome.detail_needed
+            if outcome.items
+            and outcome.detail_needed
+            and outcome.detail_fetched < outcome.detail_needed
         ]
 
         # T174. The same run with every advert page answering 429. Each host
@@ -1626,6 +1640,7 @@ def measure_flood() -> dict[str, Any]:
         ]
     return measured
 
+
 def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
     """T173's gate reading: `browser_boards_fetched_over_plain_http`.
 
@@ -1726,6 +1741,7 @@ def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
         measured["gate_status"] = "unmeasured"
         measured["reasons"] = reasons
     return measured
+
 
 def _main(argv: list[str] | None = None) -> int:
     """`python -m integral.sourcing` — T126's, T167's and T173's evidence.

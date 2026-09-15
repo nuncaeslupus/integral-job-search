@@ -180,11 +180,13 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 112    },
+      "line": 113
+    },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 104    },
+      "line": 105
+    },
     {
       "module": "spec_consistency",
       "name": "MINIMUM_DECLARATIONS_FOUND",

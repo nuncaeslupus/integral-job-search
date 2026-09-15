@@ -807,9 +807,7 @@ def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> 
         slug = request.url.split("/")[-2]
         # "python engineer" (T167 filters an unsteered board's rows by
         # phrase, and the title alone would otherwise never match one).
-        rows = [
-            {"title": f"{slug} python engineer", "url": f"https://api.ats.test/advert/{slug}"}
-        ]
+        rows = [{"title": f"{slug} python engineer", "url": f"https://api.ats.test/advert/{slug}"}]
         return Response(200, json.dumps({"jobs": rows}))
 
     run = source(
