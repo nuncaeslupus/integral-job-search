@@ -801,18 +801,20 @@ def _comment_close_end(markup: str, content_start: int) -> int | None:
     return None
 
 
-#: A canonical, empty comment. `html.parser`'s classic implementation finds a
-#: close by searching for the literal substring `-->` starting right after
-#: the opening `<!--`, so any close this function recognises that does *not*
-#: contain that literal substring at the position such a search would find it
-#: — `--!>`'s bang, or `<!-->`/`<!--->`'s zero/one extra dash before the `>`
-#: — is read inconsistently across interpreter patches (measured: 3.12.3
-#: extends such a comment to EOF, silently deleting everything after it;
-#: 3.12.11 stops at the right place but emits the bracket syntax as literal
-#: DATA instead of stripping it; 3.13.12 strips it correctly). Rewriting the
-#: whole matched span to this literal — which every measured build parses
-#: identically — resolves the ambiguity before `html.parser` ever sees it,
-#: rather than leaving the interpreter to guess (R1, R5, R6).
+#: A canonical, empty comment. `html.parser`'s own comment-close pattern is
+#: not a fixed literal, and not even stable within one minor version —
+#: measured directly against every interpreter installed in this
+#: environment: 3.12.11 (what `uv python install 3.12` draws here, and what
+#: `make host-gate`/CI run on) closes a comment on `--\s*>`
+#: (whitespace-tolerant), while 3.12.13, 3.12.14 and 3.14.4 all close on
+#: `--!?>` (bang-tolerant, not whitespace-tolerant) instead — so no fixed
+#: pattern this function could search for agrees with every build it has to
+#: run on, and the literal substring `-->` that a naive reading of
+#: `html.parser` suggests is not what *any* of them actually search for.
+#: Rewriting the whole matched span to this literal — which every measured
+#: build parses identically — resolves the ambiguity before `html.parser`
+#: ever sees it, rather than leaving the interpreter to guess (R1, R5, R6,
+#: second-reader round 5, S2).
 _CANONICAL_EMPTY_COMMENT = "<!---->"
 
 
@@ -841,29 +843,49 @@ def _neutralise_unterminated_tail(markup: str) -> str:
       tag, a comment or a declaration — only the element's own end tag ends
       the state — so no scanning happens there at all; see that constant.
     * A comment (`<!--`) that finds its close (`-->`, `--!>`, or one of the
-      abrupt empty-comment forms, `<!-->`/`<!--->`) is left in place — content
-      and all, verbatim, if `html.parser` reads that spelling identically on
-      every interpreter this repo runs; rewritten to the canonical empty form
-      `<!---->` if it does not, so a terminated comment is removed the same
-      way regardless of build (R1, R5, R6: `_comment_close_end` walks the
-      actual comment states rather than matching a fixed set of literal
-      closing strings, and `_CANONICAL_EMPTY_COMMENT`'s docstring has the
-      per-interpreter measurement). One that never closes is dropped, content
-      and all — a comment contributes no text whether or not it manages to
-      close, the same rule an ordinary, *well-formed* comment already follows
-      a few lines up in `MARKUP_CONTRACTS`. A `>` inside it is literal comment
-      content, not a close, exactly as WHATWG's comment states require.
+      abrupt empty-comment forms, `<!-->`/`<!--->`) is rewritten to the
+      canonical empty form `<!---->` unconditionally — a terminated comment
+      contributes no text either way, and `html.parser`'s own close pattern
+      is not stable even within one minor version (`_CANONICAL_EMPTY_COMMENT`'s
+      docstring has the measurement), so no spelling of the original is safe
+      to leave for the real parser to re-read (R1, R5, R6, second-reader
+      round 5, S2: `_comment_close_end` walks the actual comment states
+      rather than matching a fixed set of literal closing strings). One that
+      never closes is dropped, content and all — a comment contributes no
+      text whether or not it manages to close, the same rule an ordinary,
+      *well-formed* comment already follows a few lines up in
+      `MARKUP_CONTRACTS`. A `>` inside it is literal comment content, not a
+      close, exactly as WHATWG's comment states require.
     * `<!` not followed by `--` (bogus comment, §13.2.5.42's "anything else",
       or a DOCTYPE, §13.2.5.53) and `<?` (also a bogus comment, tag open
       state's "anything else") are both tokens that contribute no text
       whether or not they close either — the *same* rule as a comment, so a
       truncated one is dropped the same way. A terminated one is left for the
-      real parser, which already handles it (`<![CDATA[…]]>` and friends, via
-      `parse_marked_section`).
-    * Anything else that opens with `<` but is not itself the start of a tag
-      — WHATWG's tag open state only treats `<` as opening one on an ASCII
-      letter, or `</` on one (`_TAG_OPEN_RE`) — is neutralised to a character
-      reference at **that `<` alone**, and scanning resumes right after it,
+      real parser, which already handles it — `<![CDATA[…]]>` (exact,
+      case-sensitive literal only) on its own, literal `]]>`-searching path
+      inside `html.parser`'s own `parse_html_declaration`, not through
+      `_markupbase.ParserBase.parse_marked_section`, which empirically is
+      never reached from `HTMLParser.feed()`/`goahead()` on this
+      interpreter; every other `<![…` spelling — lower-cased, or an
+      unrecognised keyword — is a bogus comment ending at the next literal
+      `>`, the same as this branch's own fallback (second-reader round 5,
+      S3).
+    * `</` immediately followed by anything other than an ASCII letter, a
+      `>`, or EOF is WHATWG's end tag open state "anything else"
+      (§13.2.5.7): a bogus comment, ending at the next `>` and contributing
+      no text — the same rule and the same shape as the `<!`/`<?` branch
+      just above, not the bare-`<` neutralisation below, which would
+      otherwise leave the comment's own content as surviving prose. `</>`
+      (the `>` comes immediately) is the same bogus-comment search, landing
+      on that very next `>` with nothing consumed in between. `</` at EOF is
+      deliberately left to the bare-`<` rule below instead: WHATWG emits `<`
+      and `/` as literal characters there, which that rule already produces
+      without a dedicated branch (second-reader round 5, S1).
+    * Anything else that opens with `<` but is not itself the start of a tag,
+      and was not already handled by the `</` rule just above — WHATWG's tag
+      open state only treats `<` as opening one on an ASCII letter, or `</`
+      on one (`_TAG_OPEN_RE`) — is neutralised to a character reference at
+      **that `<` alone**, and scanning resumes right after it,
       regardless of whether some later, unrelated `>` exists anywhere else in
       the document. This is F1 (round 2) *and* R2/R3 (round 4, the same rule
       applied generally rather than only to the `gt == -1` sub-case): the
@@ -915,24 +937,65 @@ def _neutralise_unterminated_tail(markup: str) -> str:
             close_end = _comment_close_end(markup, content_start)
             if close_end is None:
                 return markup[:lt]
-            # A close html.parser reads identically everywhere is left
-            # untouched; one it does not (the naive "-->"-from-content_start
-            # search a classic implementation uses disagrees with where this
-            # comment actually closes) is normalised to a plain empty
-            # comment, so the removal is deterministic instead of depending
-            # on which build reads the field (R1, R5, R6).
-            naive = markup.find("-->", content_start)
-            if naive == close_end - 3:
-                i = close_end
-            else:
-                markup = markup[:lt] + _CANONICAL_EMPTY_COMMENT + markup[close_end:]
-                i = lt + len(_CANONICAL_EMPTY_COMMENT)
+            # Every terminated comment contributes no text either way, so
+            # it is rewritten to the canonical empty form unconditionally
+            # instead of being left verbatim for html.parser to close
+            # itself - no build this repo runs on actually closes a
+            # comment at the literal substring "-->" (see
+            # _CANONICAL_EMPTY_COMMENT), so leaving any spelling for the
+            # real parser to re-read was never safe (R1, R5, R6,
+            # second-reader round 5, S2).
+            markup = markup[:lt] + _CANONICAL_EMPTY_COMMENT + markup[close_end:]
+            i = lt + len(_CANONICAL_EMPTY_COMMENT)
             continue
         if markup[lt : lt + 2] in ("<!", "<?"):
+            if markup.startswith("<![CDATA[", lt):
+                # html.parser's own dispatch (parse_html_declaration)
+                # recognises only this exact, case-sensitive 9-character
+                # literal as CDATA, and closes it on a plain,
+                # non-whitespace-tolerant substring search for ']]>' -
+                # never the next '>' - confirmed by reading that method's
+                # source directly. Every other '<![' spelling, including a
+                # lower-cased '<![cdata[' or an unrecognised marked-section
+                # keyword, gets no such treatment and falls through to the
+                # same "next literal '>'" handling as DOCTYPE and a bogus
+                # comment below (measured directly against the real
+                # parser), so only this one exact prefix needs its own
+                # branch (second-reader round 5, S3).
+                close = markup.find("]]>", lt + 9)
+                if close == -1:
+                    # EOF-truncated CDATA: once close() is called with no
+                    # ']]>' found, html.parser's own EOF fallback consumes
+                    # everything from just past '<![' to EOF as one
+                    # declaration - the same "contributes no text" outcome
+                    # as any other unterminated token here.
+                    return markup[:lt]
+                i = close + 3
+                continue
             gt = markup.find(">", lt)
             if gt == -1:
                 # Bogus comment or DOCTYPE, EOF-truncated: still a token that
                 # contributes no text, exactly like an unterminated comment.
+                return markup[:lt]
+            i = gt + 1
+            continue
+        if (
+            markup[lt : lt + 2] == "</"
+            and lt + 2 < len(markup)
+            and not _TAG_OPEN_RE.match(markup, lt)
+        ):
+            # WHATWG end tag open state (§13.2.5.7): '</' followed by
+            # anything but a letter is "invalid-first-character-of-
+            # tag-name" -> bogus comment (§13.2.5.41), which consumes to
+            # the next '>' and contributes no text - a comment token, not
+            # a character token - the same shape as the '<!'/'<?' branch
+            # above, not the bare-'<' rule below it. '</' at EOF is
+            # excluded on purpose: WHATWG's own EOF case there emits '<'
+            # and '/' as literal characters, which the bare-'<'
+            # neutralisation below already produces without help
+            # (second-reader round 5, S1).
+            gt = markup.find(">", lt)
+            if gt == -1:
                 return markup[:lt]
             i = gt + 1
             continue

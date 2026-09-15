@@ -208,6 +208,32 @@ def test_neutralise_unterminated_tail_kills_the_last_gt_anchored_mutant() -> Non
     assert _neutralise_unterminated_tail("<!-- <p>nested-looking</p> unterminated") == ""
 
 
+def test_neutralise_unterminated_tail_drops_an_eof_truncated_bogus_comment() -> None:
+    # S1 (second-reader round 5): same laundering risk as the mutant above,
+    # one construct over. Leaving 'Remote </! salary 200k' untouched at EOF
+    # and letting html.parser recover it also yields "Remote" through
+    # `_take` - real html.parser reconsumes '</!' in the bogus comment state
+    # (WHATWG §13.2.5.41) and still emits a comment token, contributing no
+    # text, at its own EOF. So a mutant that skips this function's own
+    # `gt == -1: return markup[:lt]` and leaves the tail for html.parser to
+    # sort out passes the `_take`-level fixture by accident, the same way
+    # the mutant above did. Asserted directly for the same reason.
+    assert _neutralise_unterminated_tail("Remote </! salary 200k") == "Remote "
+
+
+def test_neutralise_unterminated_tail_drops_an_eof_truncated_cdata_section() -> None:
+    # S3 (second-reader round 5): the same laundering risk again, for the
+    # CDATA branch's own EOF case - html.parser's dedicated `_support_cdata`
+    # EOF fallback (goahead) also consumes an untouched, EOF-truncated
+    # '<![CDATA[...' to EOF on its own, so a mutant that lets this function
+    # fall through instead of returning `markup[:lt]` here also passes the
+    # `_take`-level fixture by accident. Asserted directly, as above.
+    assert (
+        _neutralise_unterminated_tail('<p>Remote</p><![CDATA[<script>var s = "<!--')
+        == "<p>Remote</p>"
+    )
+
+
 def test_neutralise_unterminated_tail_is_a_no_op_on_well_formed_markup() -> None:
     # Every construct in these already finds its own '>' (or, for the entity
     # rows, has no literal '<' at all) - the function must leave them
@@ -232,11 +258,11 @@ def test_neutralise_unterminated_tail_does_not_weld_an_independent_later_constru
     assert _neutralise_unterminated_tail("5 < 10 years <!-- salary 200k") == "5 &lt; 10 years "
     # And the reverse composition, which the pre-fix code never broke - a
     # regression that only reorders the two constructs must still be caught.
-    # The (terminated) comment is left untouched here, not stripped - only an
-    # EOF-truncated construct is ever dropped by this function; a well-formed
-    # one is left for the real parser, which already removes it.
+    # The (terminated) comment's content is stripped here too, the same as
+    # any other terminated comment (S2, second-reader round 5): rewritten to
+    # the canonical empty form rather than left for html.parser to read.
     assert _neutralise_unterminated_tail("<!-- salary 200k --> 5 < 10 years") == (
-        "<!-- salary 200k --> 5 &lt; 10 years"
+        "<!----> 5 &lt; 10 years"
     )
 
 
@@ -311,13 +337,18 @@ def test_neutralise_unterminated_tail_normalises_the_other_comment_closes() -> N
     assert _neutralise_unterminated_tail("x <!-- c --!> tail") == "x <!----> tail"
     assert _neutralise_unterminated_tail("x <!-->tail") == "x <!---->tail"
     assert _neutralise_unterminated_tail("x <!--->tail") == "x <!---->tail"
-    # A close `html.parser` already reads identically everywhere - the
-    # canonical spelling itself, or any comment whose closing '-->' is found
-    # by a plain left-to-right search starting right after '<!--' - is left
-    # byte-for-byte untouched; only the ambiguous spellings above are
-    # rewritten.
+    # Idempotent on the canonical spelling itself - rewriting it produces the
+    # same string back.
     assert _neutralise_unterminated_tail("x <!---->tail") == "x <!---->tail"
-    assert _neutralise_unterminated_tail("x <!-- c --> tail") == "x <!-- c --> tail"
+    # S2 (second-reader round 5): even a close every measured build already
+    # reads identically - the plain "-->" a naive model of html.parser
+    # expects - is rewritten too. No build this repo runs on actually
+    # searches for that literal substring (see _CANONICAL_EMPTY_COMMENT's
+    # docstring), so there was never a spelling safe to leave verbatim for
+    # the real parser to re-read; the "close html.parser already reads
+    # identically, so leave it alone" branch this test used to exercise is
+    # gone.
+    assert _neutralise_unterminated_tail("x <!-- c --> tail") == "x <!----> tail"
     # And the property that actually matters end to end: no content is
     # lost, and the result is the spec-required text, deterministically,
     # not merely "whatever text happens to survive".

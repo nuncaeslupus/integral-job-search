@@ -97,7 +97,7 @@ MINIMUM_MARKUP_VALUES_COMPARED = 6
 #: **Zero slack, unlike the two floors above**: the table only ever grows, so
 #: the first row deleted must breach this — which is T159's test for a floor
 #: that can actually fire. Raise it with the table; never lower it.
-MINIMUM_MARKUP_CONTRACTS = 73
+MINIMUM_MARKUP_CONTRACTS = 81
 
 
 #: What each member must do, as (take, input, expected output, why).
@@ -573,6 +573,90 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         "x &lt;!--->tail",
         "x tail",
         "the same composition through the greenhouse-shaped route this task exists for",
+    ),
+    # --- S1 (second-reader round 5): '</' followed by anything but a letter -
+    # --- is a bogus comment (WHATWG §13.2.5.7), not an ordinary bare '<' - --
+    # --- neutralising the '<' let the comment's own content reach the -------
+    # --- candidate verbatim --------------------------------------------------
+    (
+        "html_text",
+        "<p>Remote</p></!-- internal: pay band 45-60k -->",
+        "Remote",
+        "REGRESSION, FIXED: the bare-'<' rule used to neutralise this '<' as "
+        "an ordinary character, which left the internal comment's own "
+        "content - a salary, this table's own running example of what a CMS "
+        "hides in a comment - for html.parser to read as literal prose. "
+        "WHATWG §13.2.5.7 end tag open state, 'anything else': invalid-"
+        "first-character-of-tag-name, create a comment token and reconsume "
+        "in the bogus comment state (§13.2.5.41) - a comment token, not a "
+        "character token, exactly like the '<!' branch a few rows up, not "
+        "the bare-'<' rule below it",
+    ),
+    (
+        "escaped_html_text",
+        "<p>Remote</p>&lt;/!-- internal: pay band 45-60k --&gt;",
+        "Remote",
+        "the same composition through the greenhouse-shaped route this task exists for",
+    ),
+    (
+        "html_text",
+        "Remote </! salary 200k --><p>Body</p>",
+        "Remote Body",
+        "a bogus comment consumes to the next literal '>' and contributes "
+        "no text, exactly like the '<!'/'<?' branch it shares its handling "
+        "with - parsing resumes correctly right after it, the same shape "
+        "as R2's fix one branch over",
+    ),
+    (
+        "escaped_html_text",
+        "Remote &lt;/! salary 200k --&gt;&lt;p&gt;Body&lt;/p&gt;",
+        "Remote Body",
+        "the same composition through the greenhouse-shaped route this task exists for",
+    ),
+    (
+        "html_text",
+        "Remote </! salary 200k",
+        "Remote",
+        "EOF before the bogus comment's closing '>': still a token that "
+        "contributes no text, the same EOF rule already pinned above for a "
+        "real unterminated comment and an unterminated DOCTYPE",
+    ),
+    # --- S3 (second-reader round 5): the '<!'/'<?' branch's "next literal ---
+    # --- '>'" rule does not hold for CDATA, which R3 already fixed one ------
+    # --- construct over - CDATA ends at ']]>', so a '>' inside a <script> ---
+    # --- nested in it must not end the scan early ----------------------------
+    (
+        "html_text",
+        '<p>Remote</p><![CDATA[<script>var s = "<!--";</script>]]><p>Apply now</p>',
+        "Remote Apply now",
+        "REGRESSION, FIXED: the '<!'/'<?' branch's `markup.find('>', lt)` is "
+        "the next '>' in the whole document, not this CDATA section's own - "
+        "R2/R3's own rule ('the scan must never step over a region it has "
+        "not classified') applied one branch too narrowly. A CDATA section "
+        "ends at ']]>' (WHATWG cdata-in-html-content; rows above already "
+        "pin the two-bracket spelling), so resuming at the first bare '>' "
+        "lands inside the nested <script>, hides its opening tag from "
+        "_OPAQUE_TEXT_ELEMENTS, and reads the script's own '<!--' as a real "
+        "unterminated comment - dropping the rest of the document with it, "
+        "R3's exact mechanism one construct over",
+    ),
+    (
+        "escaped_html_text",
+        '&lt;p&gt;Remote&lt;/p&gt;&lt;![CDATA[&lt;script&gt;var s = "&lt;!--"'
+        ";&lt;/script&gt;]]&gt;&lt;p&gt;Apply now&lt;/p&gt;",
+        "Remote Apply now",
+        "the same composition through the greenhouse-shaped route this task exists for",
+    ),
+    (
+        "html_text",
+        '<p>Remote</p><![CDATA[<script>var s = "<!--',
+        "Remote",
+        "EOF-truncated CDATA, no closing ']]>': html.parser's own EOF "
+        "fallback (goahead's dedicated _support_cdata branch) consumes "
+        "everything from just past '<![' to EOF as one declaration, "
+        "contributing no text - the same outcome as any other unterminated "
+        "construct in this table, so this needs no special EOF handling of "
+        "its own",
     ),
 )
 
