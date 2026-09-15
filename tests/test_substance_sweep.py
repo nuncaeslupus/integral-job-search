@@ -35,6 +35,8 @@ from integral.approval import (
     MINIMUM_CARRIED_DISCLOSURE_CHECKS,
     MINIMUM_CARRIED_DISCLOSURE_STATES,
     MINIMUM_DISCLOSURE_PROBES,
+    MINIMUM_INTACT_SEAM_CHECKS,
+    MINIMUM_INTACT_SEAM_STATES,
     MINIMUM_MANIFEST_DISCLOSURES_COMPARED,
     MINIMUM_PARAPHRASE_CHECKS,
     MINIMUM_PARAPHRASE_STATES,
@@ -42,6 +44,7 @@ from integral.approval import (
     PersonalDetails,
     _carried_disclosure_report,
     _disclosure_report,
+    _intact_seam_report,
     _normalised_equal,
     _paraphrase_report,
     _refuse_unbacked_disclosures,
@@ -52,12 +55,14 @@ from integral.approval import (
     payload_digest,
     prepare,
     probe_carried_disclosures_reported,
+    probe_intact_seam,
     probe_paraphrase_undecidability,
     probe_unbacked_disclosures,
     read_payload,
     record_sent,
     write_carried_disclosure_evidence,
     write_disclosure_evidence,
+    write_intact_seam_evidence,
     write_paraphrase_evidence,
 )
 from integral.cv_store import (
@@ -1100,6 +1105,269 @@ def test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match(
     assert any(e3_text in item for item in measured["undecidable_episodes"])
 
 
+def test_intact_seam_across_documents_does_not_manufacture_a_finding(
+    store: ProfileStore,
+) -> None:
+    """T162 (#443): `intact` — `"\\n".join(surviving)` — carried the same seam
+    round four (F1, above) removed from `unbacked`, in the opposite
+    direction. `unbacked`'s seam wrongly *cleared* a real finding
+    (fail-open); `intact`'s wrongly *adds* one and blocks an otherwise-clean
+    draft (fail-closed), because `prepare` refuses to write a payload over
+    any finding at all.
+
+    `seam_head` is a skill (rendered onto both `cv.md` and `letter.md`, last
+    in each, since nothing else is chosen); `seam_tail` is the headline
+    (rendered onto both, first in each). Neither carries all eight words of
+    `phantom` alone. Both documents' own real order is headline then skill —
+    never the reverse — so the tail-of-one-document, head-of-the-next
+    pairing that manufactures `phantom` is never adjacent on any page a
+    candidate could look at.
+    """
+    seam_head = "Kilo Lima Mike November Oscar Papa Quebec Romeo"
+    seam_tail = "Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu"
+    phantom = "Oscar Papa Quebec Romeo Sierra Tango Uniform Victor"
+    master = CVMaster(
+        headline=SourcedText(text=seam_tail),
+        skills=(Skill(name=seam_head, level=None),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    # The whole point: a genuinely clean draft must not be refused over a
+    # shingle the join manufactured. A pre-fix build raises `ApprovalError`
+    # here.
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("Kilo",),
+        approved_episodes=(0,),
+    )
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert not any(phantom in item for item in measured["unapproved_episodes"])
+    # Never written anywhere, whole, on any page — undecided, not silently
+    # dropped either.
+    assert any(phantom in item for item in measured["undecidable_episodes"])
+
+
+def test_intact_seam_within_one_document_does_not_manufacture_a_finding(
+    store: ProfileStore,
+) -> None:
+    """T162's other named shape: the two halves are non-adjacent on the real
+    page not because they are split across documents, but because an
+    *approved* line sits between them on the page and T156's own N2 rule
+    drops it from `surviving` — so the two halves land back to back in
+    `surviving` even though the actual page reads `alfa_text`, `WIN`,
+    `india_text`, in that order.
+    """
+    alfa_text = "Alfa Bravo Charlie Delta Echo Foxtrot Golf Hotel"
+    india_text = "India Juliet Kilo Lima Mike November Oscar Papa"
+    phantom = "Echo Foxtrot Golf Hotel India Juliet Kilo Lima"
+    master = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=WIN, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("Alfa", "India", "billing"),
+        approved_episodes=(0,),
+    )
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert not any(phantom in item for item in measured["unapproved_episodes"])
+    assert any(phantom in item for item in measured["undecidable_episodes"])
+
+
+def test_intact_seam_fix_still_confirms_a_genuine_unsplit_carry(store: ProfileStore) -> None:
+    """The control the branch exists for: a genuine, unsplit single-line
+    carry must still be reported as a finding under the per-line rewrite,
+    exactly as `_carries(intact, episode.text)` reported it before — the
+    fix must not over-correct into the fail-open direction.
+    """
+    master = _master(store, headline=FAILURE.rstrip("."))
+    with pytest.raises(ApprovalError):
+        # FAILURE is never approved here — only WIN (index 0) is — so its
+        # full substance, sitting unsplit in the headline, must refuse the
+        # draft rather than send it as if it were undecidable.
+        _prepare(store, master, approved=(0,))
+
+    measured = measure_prepared(store, master, OFFER, 1)
+
+    assert any(
+        "the substance of a story-bank episode" in finding and FAILURE in finding
+        for finding in measured["unapproved_episodes"]
+    )
+
+
+def test_intact_seam_fix_still_finds_a_genuine_two_line_carry(store: ProfileStore) -> None:
+    """F-1 (second reader, #486 round 2, fail-open blocker): the per-line
+    rewrite that closed T162's seam narrowed the carried-check's unit from
+    *document* to *single line*, and lost a genuine carry that spans two
+    lines truly adjacent on the page — the regression this state pins.
+
+    Same `alfa_text`/`india_text`/`phantom` text as
+    `test_intact_seam_within_one_document_does_not_manufacture_a_finding`,
+    but with no `WIN` skill between them: nothing excluded sits between the
+    two skill lines on the real page, so this is not a seam — it is exactly
+    the adjacency `genuinely_carried` (this module's own ground truth,
+    reading straight off disk) already confirms, and `prepare` must refuse.
+    """
+    alfa_text = "Alfa Bravo Charlie Delta Echo Foxtrot Golf Hotel"
+    india_text = "India Juliet Kilo Lima Mike November Oscar Papa"
+    phantom = "Echo Foxtrot Golf Hotel India Juliet Kilo Lima"
+    master = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    with pytest.raises(ApprovalError):
+        # phantom is never approved — its substance sits unsplit across two
+        # genuinely adjacent lines, and must refuse the draft rather than
+        # send it as if it were undecidable.
+        prepare(
+            store,
+            master,
+            offer_id=OFFER,
+            advert=ADVERT,
+            recipient="hiring team, Girona",
+            details=DETAILS,
+            asks=("Alfa", "India"),
+            approved_episodes=(0,),
+        )
+
+    measured = measure_prepared(store, master, OFFER, 1)
+
+    assert any(
+        "the substance of a story-bank episode" in finding and phantom in finding
+        for finding in measured["unapproved_episodes"]
+    )
+
+
+def test_intact_seam_approved_branch_does_not_manufacture_a_cross_document_disclosure(
+    store: ProfileStore,
+) -> None:
+    """F-2 (second reader, #486 round 2): the sibling join in the T157
+    approved-and-carried branch (`all_intact = "\\n".join(all_lines)`) joined
+    across a document boundary exactly the way the unapproved branch's
+    now-closed seam did — `test_intact_seam_across_documents_does_not_
+    manufacture_a_finding`'s own `seam_head`/`seam_tail`/`phantom` geometry,
+    here with `phantom` *approved* instead, so the branch that must never
+    raise a finding is the one exercised.
+
+    Approving `phantom` writes it its own dedicated line and manifest row
+    (generate.py renders an approved episode only into `letter.md`, its own
+    line) — T157's own `_drop_episode_row`/`_drop_line` construction strips
+    both, leaving only the manufactured `cv.md`-tail/`letter.md`-head join as
+    anything that could confirm it. `genuinely_carried` reads neither
+    document as carrying it, so it must not be counted as disclosed, and
+    must not be manufactured as a finding either — this branch never raises
+    one.
+    """
+    seam_head = "Kilo Lima Mike November Oscar Papa Quebec Romeo"
+    seam_tail = "Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu"
+    phantom = "Oscar Papa Quebec Romeo Sierra Tango Uniform Victor"
+    master = CVMaster(
+        headline=SourcedText(text=seam_tail),
+        skills=(Skill(name=seam_head, level=None),),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("Kilo",),
+        approved_episodes=(0, 1),
+    )
+    where = _where(store, payload.version)
+    _drop_episode_row(where, phantom)
+    _drop_line(where / "letter.md", phantom)
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert phantom not in measured["disclosed_episode_texts"]
+    assert not any(phantom in item for item in measured["unapproved_episodes"])
+    assert any(phantom in item for item in measured["undecidable_episodes"])
+
+
+def test_intact_seam_approved_branch_does_not_undercount_a_genuine_two_line_carry(
+    store: ProfileStore,
+) -> None:
+    """F-3 (second reader, #486 round 2): the sibling under-count in the T157
+    approved-and-carried branch — `test_intact_seam_fix_still_finds_a_genuine_
+    two_line_carry`'s own `alfa_text`/`india_text`/`phantom` geometry (two
+    skill lines, genuinely adjacent, nothing excluded between them), here with
+    `phantom` *approved* instead of left unapproved, mirroring the way
+    `test_intact_seam_approved_branch_does_not_manufacture_a_cross_document_
+    disclosure` mirrors `test_intact_seam_across_documents_does_not_
+    manufacture_a_finding`.
+
+    Approving `phantom` writes it its own dedicated line and manifest row;
+    dropping both leaves only the two genuinely adjacent skill lines as
+    anything that could confirm it. `all_lines_runs` must still find it a run
+    at a time, not one line at a time, or a genuinely disclosed episode is
+    wrongly reported as undecidable.
+    """
+    alfa_text = "Alfa Bravo Charlie Delta Echo Foxtrot Golf Hotel"
+    india_text = "India Juliet Kilo Lima Mike November Oscar Papa"
+    phantom = "Echo Foxtrot Golf Hotel India Juliet Kilo Lima"
+    master = CVMaster(
+        headline=SourcedText(text="Backend engineer — data platforms"),
+        skills=(
+            Skill(name=alfa_text, level=None),
+            Skill(name=india_text, level=None),
+        ),
+        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+    )
+    write_master(store, master)
+
+    payload = prepare(
+        store,
+        master,
+        offer_id=OFFER,
+        advert=ADVERT,
+        recipient="hiring team, Girona",
+        details=DETAILS,
+        asks=("Alfa", "India"),
+        approved_episodes=(0, 1),
+    )
+    where = _where(store, payload.version)
+    _drop_episode_row(where, phantom)
+    _drop_line(where / "letter.md", phantom)
+
+    measured = measure_prepared(store, master, OFFER, payload.version)
+
+    assert phantom in measured["disclosed_episode_texts"]
+    assert not any(phantom in item for item in measured["undecidable_episodes"])
+
+
 def test_a_duplicated_approved_line_does_not_conflate_a_twin(store: ProfileStore) -> None:
     """R5-1 (#435 round 5, the blocker), route (A): `unbacked` is populated by
     a Counter test (`backed[key] == 0`), never by a text test, so an
@@ -1859,3 +2127,85 @@ def test_the_carried_disclosure_report_fails_on_a_nonzero_metric(
     written = write_carried_disclosure_evidence(tmp_path / "T157.json")
     assert written["gate_status"] == "unmeasured"
     assert _carried_disclosure_report(written) == 1
+
+
+def test_the_intact_seam_probes_catch_every_planted_case(tmp_path: Path) -> None:
+    measured = probe_intact_seam(tmp_path / "profiles")
+
+    assert measured["intact_seam_probe_failures"] == []
+    assert measured["intact_seam_states_evaluated"] >= MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] >= MINIMUM_INTACT_SEAM_CHECKS
+    assert measured["gate_status"] == "measured"
+    assert measured["intact_seam_manufactured_findings"] == 0
+
+
+def test_the_recorded_intact_seam_evidence_clears_its_own_floors(tmp_path: Path) -> None:
+    measured = write_intact_seam_evidence(tmp_path / "T162.json")
+
+    assert measured["intact_seam_states_evaluated"] >= MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] >= MINIMUM_INTACT_SEAM_CHECKS
+    # Both signals, not the metric alone — a metric severed from the per-state
+    # assertions that feed it would still read 0 over a real regression; this
+    # is the redundant, non-circular pairing `_intact_seam_report` also checks
+    # both halves of at the CLI boundary.
+    assert measured["intact_seam_probe_failures"] == []
+    assert measured["intact_seam_manufactured_findings"] == 0
+    assert measured["gate_status"] == "measured"
+    assert json.loads((tmp_path / "T162.json").read_text(encoding="utf-8")) == measured
+
+
+def test_deleting_an_intact_seam_state_breaches_its_floor(tmp_path: Path) -> None:
+    """Both floors guard the population they name, not merely each other.
+
+    A states count that shrank by one, or a checks count that shrank by one,
+    each has to fall below its own floor on its own — pinned directly against
+    the actual measured counts rather than trusted to the constants' comments,
+    per CLAUDE.md's fixtures section on a floor counting the wrong population.
+    """
+    measured = probe_intact_seam(tmp_path / "profiles")
+
+    assert measured["intact_seam_states_evaluated"] == MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] == MINIMUM_INTACT_SEAM_CHECKS
+    assert measured["intact_seam_states_evaluated"] - 1 < MINIMUM_INTACT_SEAM_STATES
+    assert measured["intact_seam_checks_evaluated"] - 1 < MINIMUM_INTACT_SEAM_CHECKS
+
+
+def test_the_intact_seam_report_fails_on_a_nonzero_metric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_intact_seam_report` must fail the gate itself, not merely print it."""
+    passing = {
+        "intact_seam_states_evaluated": MINIMUM_INTACT_SEAM_STATES,
+        "intact_seam_checks_evaluated": MINIMUM_INTACT_SEAM_CHECKS,
+        "intact_seam_manufactured_findings": 0,
+        "intact_seam_probe_failures": [],
+        "gate_status": "measured",
+    }
+    assert _intact_seam_report(dict(passing)) == 0
+    assert _intact_seam_report({**passing, "intact_seam_manufactured_findings": 1}) == 1
+    assert (
+        _intact_seam_report(
+            {**passing, "intact_seam_states_evaluated": 0, "gate_status": "unmeasured"}
+        )
+        == 1
+    )
+    # The checks floor, on its own, guards against a states count padded with
+    # an empty state — the "floor counting the wrong population" shape — by
+    # catching a states count that clears its own floor while the checks
+    # beneath it thin out.
+    assert _intact_seam_report({**passing, "intact_seam_checks_evaluated": 0}) == 1
+
+    monkeypatch.setattr(
+        approval,
+        "probe_intact_seam",
+        lambda root: {
+            "intact_seam_states_evaluated": 0,
+            "intact_seam_checks_evaluated": 0,
+            "intact_seam_manufactured_findings": 0,
+            "intact_seam_probe_failures": [],
+            "gate_status": "unmeasured",
+        },
+    )
+    written = write_intact_seam_evidence(tmp_path / "T162.json")
+    assert written["gate_status"] == "unmeasured"
+    assert _intact_seam_report(written) == 1
