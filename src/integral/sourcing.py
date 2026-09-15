@@ -237,6 +237,10 @@ class BoardOutcome:
     unopened: int = 0
     #: Matching rows left uncollected because the run reached `OFFER_CEILING`.
     over_ceiling: int = 0
+    #: #466 B1. Rows whose detail page was needed and never completed because
+    #: the host refused it — never `dropped`, which means the advert page
+    #: answered and produced no offer; this one never got an answer at all.
+    unread: int = 0
     #: T144. On an ATS host each request is a different employer's board, so
     #: one employer's failure is that employer's, never the host's: the others
     #: are still read, and the failures are named here rather than ending the
@@ -499,41 +503,34 @@ class Run:
         a fifth bucket a future task adds joins both call sites the moment it
         is declared.
 
-        #466 B1: `_unrealized_rows` only ever subtracts *counted* buckets.
-        `refused` is a message, not a count — the list page can come back
-        with every row parsed (`items > 0`) while every one of those rows'
-        detail pages was then refused (Lever-style, one host answering for
-        every employer): `dropped`, `off_aim`, `unopened` and `over_ceiling`
-        are all still 0, so the subtraction left `items > 0` standing on its
-        own and this board was still named among the employers' own,
-        despite `added == 0` — no offer of its ever reaching disk.
+        #466 B1: `_unrealized_rows` used to only ever subtract *counted*
+        buckets. `refused` is a message, not a count — the list page can come
+        back with every row parsed (`items > 0`) while every one of those
+        rows' detail pages was then refused (Lever-style, one host answering
+        for every employer): `dropped`, `off_aim`, `unopened` and
+        `over_ceiling` were all still 0, so the subtraction left `items > 0`
+        standing on its own and this board was still named among the
+        employers' own, despite `added == 0` — no offer of its ever reaching
+        disk.
 
-        `reached_the_board` already states that same property and is
-        already pinned against this exact shape
-        (`test_a_refused_advert_host_is_asked_once_across_employers`), but
-        it is scoped to a *whole* board's outcome, and this outcome can be
-        two employers merged into one (T144's ATS slot). A list-level
-        refusal is per employer — one employer's 429 does not undo the
-        *other* employer's list having genuinely come back with a row
-        (`ATTRIBUTION_BOARDS`' `known+refused` shape: one employer re-sights
-        an already-known advert, the other is refused, and the board is
-        still named for the one that answered). Only a refusal that stops
-        the *detail* phase invalidates the items it already parsed — `items`
-        there names rows the list produced but whose completion (the
-        advert page) never happened, which nothing else in
-        `_unrealized_rows` counts. So the added condition is scoped to a
-        board with a detail phase (`detail_needed`) whose refusal left
-        nothing added, rather than the whole of `reached_the_board`, which
-        would also exclude a board with no detail phase at all merely
-        because a *different* employer's list was refused.
+        Round 2's first fix reused `reached_the_board`'s shape directly
+        (`detail_needed and added == 0 and refused is not None`), and that
+        re-opened the exact failure at the detail level: a board whose rows
+        were genuinely re-sighted (`added == 0` for the legitimate reason
+        stated two paragraphs up) and whose *other* employer's advert host
+        then refused was erased too — a second reader caught it (F1) with a
+        two-employer board where one employer's rows were re-sighted and the
+        other's were refused. `BoardOutcome.unread` (#466 B1 round 2) counts
+        the actual thing instead of approximating it from `added`: a row
+        whose detail page was needed and never completed because the host
+        refused it, incremented exactly where that row is skipped. Declared
+        on the dataclass and not excluded from `_UNREALIZED_ROW_FIELDS`, it
+        joins `_unrealized_rows` the same way a sixth bucket would, and the
+        predicate below is the same one-line subtraction this property
+        always used — no separate refusal clause to keep in sync with what
+        counts as a legitimate `added == 0`.
         """
-        return self._boards(
-            lambda o: (
-                o.source_kind == "employer"
-                and o.items > _unrealized_rows(o)
-                and not (o.detail_needed and o.added == 0 and o.refused is not None)
-            )
-        )
+        return self._boards(lambda o: o.source_kind == "employer" and o.items > _unrealized_rows(o))
 
     @property
     def unaccounted_for(self) -> list[str]:
@@ -1023,6 +1020,7 @@ def _one_board(
     off_aim = 0
     unopened = 0
     over_ceiling = 0
+    unread = 0
     drop_reason: str | None = None
     stale = False
     refused: str | None = None
@@ -1056,6 +1054,7 @@ def _one_board(
             off_aim=off_aim,
             unopened=unopened,
             over_ceiling=over_ceiling,
+            unread=unread,
             employers_failed=tuple(failed),
             source_kind=source_kind_of(connector),
             skipped=skipped,
@@ -1177,6 +1176,7 @@ def _one_board(
                 if origin in refused_origins:
                     # T174: the host refused, not the row — so it is unread,
                     # never "dropped" as a connector that produced no text.
+                    unread += 1
                     refused = refused or refused_origins[origin]
                     continue
             if offer is None:

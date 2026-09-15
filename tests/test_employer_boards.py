@@ -787,6 +787,74 @@ def test_a_refused_advert_host_is_asked_once_across_employers(
     assert run.employer_boards == [], run.employer_boards
 
 
+def test_one_employers_refusal_does_not_erase_anothers_re_sighted_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#466 B1 round 2 (second-reader F1): round 2's first attempt excluded
+    any detail-phase board with `added == 0` and a refusal, which erases a
+    board whose rows are genuine re-sightings — `added == 0` for the same
+    legitimate reason `employer_boards`' own docstring states, not because
+    nothing was ever read — merely because a *different* employer on the
+    same board was then refused. Two employers, two advert hosts of their
+    own: acme's rows are re-sighted from an earlier run, beta's host then
+    refuses. acme's read is still a result this board produced."""
+    import integral.sourcing as sourcing_module
+
+    monkeypatch.setattr(sourcing_module, "source_kind_of", lambda connector: "employer")
+    monkeypatch.setattr(sourcing_module, "_pause", lambda *_: None)
+    directory = _package(tmp_path)
+    (directory / "atshost_en" / "connector.yaml").write_text(
+        _yaml(GOOD, "  employers:\n    acme: Acme Corp\n    beta: Beta Inc\n").replace(
+            "fields: {title: title, company: company, text: body}",
+            "fields: {title: title, detail_url: url}",
+        )
+        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n",
+        encoding="utf-8",
+    )
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    store = ProfileStore(tmp_path / "p", "test")
+    refuse: set[str] = set()
+
+    def fetch(request: ListRequest) -> Response:
+        if "adverts-" in request.url:
+            employer = request.url.split("adverts-")[1].split(".")[0]
+            status = 429 if employer in refuse else 200
+            return Response(status, f"<div class='content'>the advert at {request.url}</div>")
+        employer = request.url.split("/")[-2]
+        rows = [
+            {
+                "title": f"Python {employer} {n}",
+                "url": f"https://adverts-{employer}.ats.test/{employer}/{n}",
+            }
+            for n in (1, 2)
+        ]
+        return Response(200, json.dumps({"jobs": rows}))
+
+    def run_once() -> Any:
+        return source(
+            store,
+            CandidateConstraints(
+                location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+            ),
+            Aim(state="stated", terms=("python",)),
+            fetch=fetch,
+            at=AT,
+            directory=directory,
+            robots=Robots(fetch=lambda _url: "User-agent: *\nAllow: /\n"),
+        )
+
+    first = run_once()
+    (first_outcome,) = first.outcomes
+    assert first_outcome.added == 4, first_outcome
+
+    refuse.add("beta")
+    second = run_once()
+    (outcome,) = second.outcomes
+    assert (outcome.items, outcome.added, outcome.unread) == (4, 0, 2), outcome
+    assert outcome.refused and "429" in outcome.refused, outcome
+    assert second.employer_boards == ["atshost_en"], second.employer_boards
+
+
 def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> None:
     """#466 N1. Most boards serve list and adverts from one host, so a refusal
     on an advert also stops the next employer's list — and the board must keep

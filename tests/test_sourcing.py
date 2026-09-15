@@ -1108,17 +1108,24 @@ def test_the_unrealized_row_fields_are_derived_not_hand_listed() -> None:
     assert set(result) == {f.name for f in dc_fields(Sample)} - {"kept_out", "also_kept_out"}
 
 
-def test_the_board_outcome_unrealized_row_fields_are_todays_four_terms() -> None:
+def test_the_board_outcome_unrealized_row_fields_are_todays_five_terms() -> None:
     """Pins what `_UNREALIZED_ROW_FIELDS` resolves to today — `dropped`,
-    `off_aim`, `unopened`, `over_ceiling` — so a change to `BoardOutcome` or
-    to the exclusion set it is derived against is visible here, not only in
-    `employer_boards`'s or `rows_not_accounted_for`'s behaviour."""
+    `off_aim`, `unopened`, `over_ceiling`, `unread` (#466 B1 round 2) — so a
+    change to `BoardOutcome` or to the exclusion set it is derived against is
+    visible here, not only in `employer_boards`'s or `rows_not_accounted_for`'s
+    behaviour."""
     from integral.sourcing import _UNREALIZED_ROW_FIELDS
 
-    assert set(_UNREALIZED_ROW_FIELDS) == {"dropped", "off_aim", "unopened", "over_ceiling"}
+    assert set(_UNREALIZED_ROW_FIELDS) == {
+        "dropped",
+        "off_aim",
+        "unopened",
+        "over_ceiling",
+        "unread",
+    }
 
 
-@pytest.mark.parametrize("bucket", ["dropped", "off_aim", "unopened", "over_ceiling"])
+@pytest.mark.parametrize("bucket", ["dropped", "off_aim", "unopened", "over_ceiling", "unread"])
 def test_employer_boards_excludes_a_board_whose_rows_are_all_one_bucket(bucket: str) -> None:
     """Round 6, F2: T172's partition (`items > dropped+off_aim+unopened+
     over_ceiling`) hand-listed four terms, and dropping either `unopened` or
