@@ -67,6 +67,16 @@ list:
   # method="get">`). Measured live 2026-09-05: "python" and "product manager"
   # return different first cards with titles matching their terms.
   #
+  # Re-measured 2026-09-10 (T171), because the probe until then was
+  # `?page=2` with no `q`, so no capture had ever carried the key this sends.
+  # `q=python&page=1` and `q=product%20manager&page=2` give 25 and 7 rows with
+  # different titles. A nonsense `q=zqxjvwkplm` gives **0 rows** and no offer
+  # markup at all, so a miss is empty, not a fallback list (unlike
+  # infoempleo.com, `ruled-out.yaml`'s `engine_gap_selector`). `probe/` is
+  # now the raw `q=python&page=2` response with the two Rails CSRF token values
+  # (`authenticity_token`, `csrf-token`) replaced by `REDACTED`. It has no
+  # client IP.
+  #
   # ponytail: the city is still in the path. `empleos-barcelona` is one
   # candidate's commutable region baked into a shared package — the same class
   # of defect `{query}` just fixed for the search term. A `{location}` slot is

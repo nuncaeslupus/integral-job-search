@@ -2738,17 +2738,21 @@ def test_deleting_the_capture_is_not_the_cheapest_way_to_pass(
 
 
 def test_the_committed_library_has_no_unenforced_provenance() -> None:
-    """The gate itself, over the twenty shipped captures — nineteen truthfully
+    """The gate itself, over the twenty shipped captures — eighteen truthfully
     `unrecorded`, one `transcribed` naming a ledger line that carries its URL
-    and its body."""
+    and its body, and one `live` (`jobfluent_es`, re-recorded by T171) whose
+    response bytes are committed beside it."""
     measured = cp.measure(_LIBRARY)
 
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
-    # 19, plus T144's five ATS-host probes, which say `unrecorded` too — less
-    # T166's `trabajos_es`, recorded live with its response committed, the
-    # first capture in the library to substantiate that claim.
-    assert measured["claims"] == {"live": 1, "transcribed": 1, "unrecorded": 23}
+    # 18, plus T144's five ATS-host probes, which say `unrecorded` too, less
+    # the two recorded `live` with their responses committed: T166's
+    # `trabajos_es` and T171's `jobfluent_es`. Both branches asserted one
+    # `live` for their own package, in the same words, so the merge kept a
+    # number neither side measured — `CLAUDE.md`'s census collision, in a test
+    # rather than in evidence.
+    assert measured["claims"] == {"live": 2, "transcribed": 1, "unrecorded": 22}
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 
@@ -2939,11 +2943,14 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
         record = json.loads(path.read_text(encoding="utf-8"))
         # T113 shipped `transcribed` on usajobs_en and nothing anywhere else;
         # `transcribed_from` is this task's, and so is every `unrecorded`.
+        # A later `live` (T171's jobfluent_es) did not exist then either.
         record.pop("transcribed_from", None)
-        # A capture recorded `live` since (T166's `trabajos_es`) carried no
-        # provenance in T113's library either, so it reverts to `absent`.
-        if record.get("provenance") in (pc.UNRECORDED, pc.LIVE):
-            record.pop("provenance")
+        # Anything but `transcribed` reverts to `absent`, and its `response`
+        # block goes with it: T113's library had neither. Stated as "not
+        # transcribed" rather than as a list of the values seen so far, so a
+        # fourth one later cannot quietly survive the reconstruction.
+        if record.get("provenance") != pc.TRANSCRIBED:
+            record.pop("provenance", None)
             record.pop("response", None)
         path.write_text(json.dumps(record, indent=2), encoding="utf-8")
 

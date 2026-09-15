@@ -5,6 +5,7 @@ priority: 10
 deps: [t-6d3fac96]
 tags: [APPROVAL]
 workspace: BACKEND
+status: merged
 ---
 
 ## Acceptance gate

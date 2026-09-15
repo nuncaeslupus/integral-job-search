@@ -407,6 +407,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T46.json"
 DEFAULT_D24_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-24.json"
 DEFAULT_T114_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T114.json"
 DEFAULT_T156_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T156.json"
+DEFAULT_T157_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T157.json"
 
 SCHEMA_VERSION: Literal[1] = 1
 
@@ -950,8 +951,12 @@ def measure_prepared(
     # "anywhere `surviving` or `unbacked` happens to include." `surviving`
     # and `intact` (below) still exclude approved lines on purpose (T156's
     # N2 fix; scanning them there would let an approved line falsely confirm
-    # a different episode again) — this list is for message wording only,
-    # never for a confirm branch.
+    # a different episode again) — this list is for message wording **and**
+    # (T157 round 2, F-1, via `all_intact` below) for the `episode.text in
+    # approved` confirm branch, where N2's exclusion does not apply because
+    # that branch never raises a finding. It is never used for the
+    # unapproved-finding branch a few lines down, where N2's exclusion is
+    # still load-bearing (`intact`, not `all_intact`).
     all_lines: list[str] = []
     for name, body in documents.items():
         for line in _claim_lines(body):
@@ -1050,12 +1055,84 @@ def measure_prepared(
     # names text: a position in `master.episodes` is not a stable handle
     # across the one loop that reads it.
     undecidable: list[str] = []
+    # F-3 (second reader, #475 round 2): per-episode ground truth for what
+    # `episode_disclosures` counts, not just its total. Seeded from `disclosed`
+    # (the manifest-backed texts already established above) and then grown by
+    # every `text` this loop itself adds to `carried` — the T157 branch's
+    # approved-and-carried case included — so a caller (the T157 evidence
+    # probe, in particular) can ask "was *this* episode counted" instead of
+    # reading a whole-version total that a second, correctly-disclosed episode
+    # can hold above zero while this one's own disclosure is still missing.
+    disclosed_episode_texts: set[str] = set(disclosed)
     intact = "\n".join(surviving)
+    # F-1 (second reader, #475 round 2): the T157 branch below used to check
+    # `_carries(intact, ...)` — `intact` is `surviving`, joined, and `surviving`
+    # deliberately excludes a line that is itself `in approved` (T156's N2 fix,
+    # a few names up). N2's exclusion exists so an *approved* line cannot
+    # falsely confirm a *different*, unapproved episode's finding — a concern
+    # the T157 branch does not have, because it never raises a finding. Applied
+    # to it anyway, the exclusion was a pure undercount: a headline spelled
+    # **exactly** like the approved episode text is itself a line `in
+    # approved`, so it was dropped from `surviving` before the carried-check
+    # ever ran, and the story went to the employer verbatim while
+    # `episode_disclosures` stayed 0. `all_intact` joins `all_lines` instead —
+    # every claim line on the page, backed or not, approved or not, already
+    # collected above for the identical "is this anywhere on the page"
+    # question the shingle-match branch below asks — so an approved line
+    # carrying the story is found the same way an unapproved one already is.
+    all_intact = "\n".join(all_lines)
     for episode in master.episodes:
-        if episode.text in disclosed or episode.text in approved:
+        if episode.text in disclosed:
+            continue
+        if episode.text in approved:
+            # T157: `disclosed` requires a manifest row that is still backed by
+            # an on-disk line; an approval can outlive that row — removed by a
+            # post-draft edit, or never written because `generate` chose not
+            # to use this episode's own line — while the episode's substance
+            # still reaches a document through a *different*, backed entry (a
+            # headline or a CV bullet retelling the same story). §6.2 is
+            # satisfied here: the candidate approved this exact text for this
+            # use, so nothing below may raise a finding — that would be the
+            # over-refusal this task must not become. But `episode_disclosures`
+            # still has to count it: skipping the carried-check unconditionally
+            # on `approved` (as this loop used to) left a document that
+            # genuinely carries the story reporting zero disclosures, which is
+            # a payload the candidate reads as "withheld" the moment before a
+            # headline carries it to the employer. Weighted fail-open over
+            # fail-closed per the module docstring: an *undercount* here is the
+            # harm (the candidate confirms a send they were told is quieter
+            # than it is), so this only ever adds to the count and never
+            # subtracts or refuses.
+            if _carries(all_intact, episode.text):
+                carried += 1
+                disclosed_episode_texts.add(episode.text)
+                continue
+            # F-2 (second reader, #475 round 2): this used to fall through to
+            # a bare `continue` here, on a comment claiming that landing this
+            # episode in `undecidable_episodes` would itself be the
+            # over-refusal this task forbids. That claim is false:
+            # `undecidable_episodes` does not stop `prepare` or `record_sent`
+            # by itself — see the module docstring's T156 section and
+            # `_undecidable_suffix`, which only ever *appends* to a refusal
+            # already raised for a different, confirmed reason. So the silence
+            # bought nothing but inconsistency: every other episode this loop
+            # cannot confirm is reported as undecided rather than dropped
+            # (below); an approved one, uniquely, vanished with no trace in
+            # `payload.json` at all. `_carries` can only ever confirm
+            # *presence*, never *absence* (the module docstring's own stated
+            # limit), so "not carried here" is not "confirmed withheld" —
+            # reported the same way the rest of this function already reports
+            # "no evidence either way", never silently.
+            undecidable.append(
+                f"{offer_id}/v{version}: {episode.text} — a per-use approval names this "
+                "text, but no manifest row backs it any more and no shingle match "
+                "confirms it present anywhere on the page — this sweep has no evidence "
+                "either way, so it is reported as undecided rather than silently dropped"
+            )
             continue
         if _carries(intact, episode.text):
             carried += 1
+            disclosed_episode_texts.add(episode.text)
             findings.append(
                 f"{offer_id}/v{version}: {episode.text} — the substance of a story-bank "
                 "episode, carried by an entry no per-use approval names"
@@ -1215,6 +1292,13 @@ def measure_prepared(
         # `payload.json` and the boundary can say what they actually know.
         "episodes_undecidable": len(undecidable),
         "undecidable_episodes": sorted(undecidable),
+        # F-3 (second reader, #475 round 2): per-episode, never only the
+        # whole-version total `episode_disclosures` is. A caller asking "does
+        # the payload account for *this* episode" over the total alone reads a
+        # different episode's legitimate disclosure as covering this one, the
+        # moment a version carries more than one — see
+        # `probe_carried_disclosures_reported`'s two-episode state.
+        "disclosed_episode_texts": tuple(sorted(disclosed_episode_texts)),
     }
 
 
@@ -2461,8 +2545,10 @@ MINIMUM_PARAPHRASE_STATES = 28
 # -> 29 (states 14-15, two checks each) -> 30 (one more check added to state
 # 9 itself, isolating the `approved` disjunct of its skip guard) -> 42 (states
 # 16-21, six new states, two checks each) -> 48 (states 22-24, two checks
-# each) -> 56 (states 25-28, two checks each).
-MINIMUM_PARAPHRASE_CHECKS = 56
+# each) -> 56 (states 25-28, two checks each) -> 57 (T157 round 2, F-2, #475:
+# state 9's R7-2 case split into two checks — undecidable now positively
+# expected, and a second check that it is still never a finding).
+MINIMUM_PARAPHRASE_CHECKS = 57
 
 
 def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
@@ -2735,8 +2821,39 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     # *is* independently pinnable, unchanged from before: strip win's line
     # from `letter.md` after drafting (T114's own class of edit) while its
     # approval and manifest claim both stand. Its literal text is gone, so
-    # nothing is left in `unbacked` to self-match against, and only the
-    # `approved` half of the guard stops it landing in `undecidable`.
+    # nothing is left in `unbacked` to self-match against, and the `approved`
+    # half of the guard is what is reached instead of the shingle-match rule
+    # below it — this is the state that proves the branch is live, which is
+    # what R7-2 was ever about.
+    #
+    # T157 round 2 (F-2, #475): what that branch does with a reached-but-
+    # uncarried case changed. Through T157 round 1 `approved` alone still
+    # meant a bare `continue` — no finding, no `undecidable` entry, nothing —
+    # which is what this check used to assert. F-2 named that silence a false
+    # economy: `undecidable_episodes` never gates `prepare` or `record_sent`
+    # (`_undecidable_suffix` only ever appends to a refusal raised for a
+    # different, confirmed reason), so there was no over-refusal it was
+    # buying. This state is genuinely uncarried-and-unconfirmed — nothing
+    # else on the page repeats win's wording — so it now gets the same
+    # honest "no evidence either way" report every other unconfirmable
+    # episode in this function already gets, rather than vanishing from
+    # `payload.json` with no trace. `approved` still means "never a finding,
+    # never a refusal" — that half is unchanged.
+    #
+    # B (second reader, #475 round 3): the check below used to be
+    # `_named_undecidable(measured, win)` — a substring test over every
+    # `undecidable_episodes` message, satisfied just as well by the generic,
+    # unapproved shingle-miss path a few lines down (R7-1's branch), which
+    # also appends an entry naming `win` when nothing confirms it. Deleting
+    # the `approved` disjunct from the guard entirely — the exact mutation
+    # this state exists to catch — left that check green: the fall-through
+    # path raises no finding either, so both of the old assertions passed
+    # over a branch that was never reached. The two branches' messages differ
+    # (`"a per-use approval names this text"` only appears in the approved
+    # branch's own wording, a few lines above), so the check now asserts that
+    # wording specifically rather than mere presence in the list — this is
+    # the state that proves the `approved` branch itself is live, which is
+    # what R7-2 was ever about.
     letter = store.path(*_version_parts(_PROBE_OFFER, 1), "letter.md")
     letter.write_text(
         "\n".join(line for line in letter.read_text(encoding="utf-8").splitlines() if line != win)
@@ -2745,8 +2862,17 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     )
     measured = measure_prepared(store, plain, _PROBE_OFFER, 1)
     check(
-        not _named_undecidable(measured, win),
-        "the `approved` disjunct alone did not exempt a disclosed-but-deleted line",
+        any(
+            "a per-use approval names this text" in item and win in item
+            for item in measured["undecidable_episodes"]
+        ),
+        "F-2: the approved branch's own undecidable report is gone — this state no "
+        "longer distinguishes it from the generic shingle-miss path below",
+    )
+    check(
+        not _named_as_finding(measured, win),
+        "the `approved` disjunct stopped exempting a disclosed-but-deleted line from a "
+        "finding — the over-refusal this task forbids",
     )
 
     # 10 — `payload.json` carries the third state rather than staying silent
@@ -3225,6 +3351,461 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# T157 — an approved, carried episode must not be reported as withheld
+#
+# Found as C10 by the second reader on #409 and left out of T114's diff as
+# pre-existing: the manifest's episode row is removed, the per-use approval is
+# kept, the episode's own line is deleted from the letter, and a headline or a
+# CV bullet still carries the substance word for word. §6.2 is satisfied — the
+# candidate approved this exact text for this use — so the draft is correctly
+# sendable, and `episode_disclosures` (the count `payload.json`'s account of
+# what went out is built from) reported zero anyway, because the loop below
+# used to `continue` on `episode.text in approved` before ever asking whether
+# anything carried it.
+#
+# This is the T114 divergence on the other axis: T114 is about a manifest row
+# whose line no document carries any more (the payload overstates what is
+# disclosed — a scarier summary than the truth); this is about a document
+# whose line no manifest row or finding names any more (the payload
+# understates it — a candidate confirming a send they were told is quieter
+# than it is). The module docstring's own weighting says only the second is
+# the harm this file exists to refuse, so the fix only ever adds to the
+# count and never adds a finding or refuses a send — either would be the
+# over-refusal CLAUDE.md's fixtures section (and this task) explicitly rules
+# out. It *may* add an `undecidable_episodes` entry (round 2, F-2): that list
+# does not gate `prepare` or `record_sent` by itself (see `_undecidable_
+# suffix`), so reporting an approved-but-unconfirmed episode there is honesty,
+# not refusal — the same thing this module already does for every other
+# episode it cannot confirm.
+#
+# Every state below is derived from §6.2 (an approval, once given, covers the
+# text it names wherever it lands, so a missing manifest row cannot revoke
+# it) and from the module's own third-sweep rule (an episode's substance
+# carried by *any* backed entry reaches the employer, not only its own
+# manifest row). Ground truth for "was this genuinely carried" is `_carries`
+# applied directly to the raw, on-disk document text — the same primitive
+# every sweep in this module is already built on and already pinned
+# elsewhere, not a re-derivation of `measure_prepared`'s own bookkeeping.
+
+MINIMUM_CARRIED_DISCLOSURE_STATES = 9
+MINIMUM_CARRIED_DISCLOSURE_CHECKS = 24
+
+
+def probe_carried_disclosures_reported(root: Path) -> dict[str, Any]:
+    """Nine constructed states — two shapes of the defect, controls in both
+    directions, and (round 2, #475) a regression state for a headline spelled
+    exactly like the episode (F-1) and a two-episode state that pins the
+    metric per episode rather than as a whole-version total (F-3) — each
+    backed by more than one assertion.
+
+    Two floors, in `naming.MINIMUM_SCANNED`'s style, because a floor over one
+    population cannot catch shrinkage in the other (T156's own F-3): `states`
+    counts the fresh trees `fresh()` builds, so padding the assertion count
+    inside one state cannot move it; `checks` counts every `check()` call, so
+    thinning a state down to zero assertions cannot hide behind an unmoved
+    `states` count either. Both are literals, never a `len()` of the states
+    list below.
+    """
+    failures: list[str] = []
+    states = 0
+    checks = 0
+    reported_withheld = 0
+
+    def check(condition: bool, message: str) -> None:
+        nonlocal checks
+        checks += 1
+        if not condition:
+            failures.append(message)
+
+    def fresh(handle: str, master: CVMaster) -> ProfileStore:
+        nonlocal states
+        states += 1
+        identity = create_profile(root, "Probe", handle=handle, language="en")
+        store = ProfileStore(root, identity.handle)
+        write_master(store, master)
+        return store
+
+    def where(store: ProfileStore) -> Path:
+        return store.path(*_version_parts(_PROBE_OFFER, 1))
+
+    def drop_line(store: ProfileStore, text: str, document: str = "letter.md") -> None:
+        path = where(store) / document
+        kept = [line for line in path.read_text(encoding="utf-8").splitlines() if line != text]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+    def drop_episode_row(store: ProfileStore, text: str) -> None:
+        """Remove the manifest's row for one episode, leaving every other row."""
+        path = where(store) / "manifest.json"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw["claims"] = [
+            claim
+            for claim in raw["claims"]
+            if not (claim["section"] == "episodes" and claim["text"] == text)
+        ]
+        path.write_text(json.dumps(raw), encoding="utf-8")
+
+    def genuinely_carried(store: ProfileStore, text: str) -> bool:
+        """Ground truth, read straight off disk — never through `measure_prepared`."""
+        return any(
+            _carries(path.read_text(encoding="utf-8"), text)
+            for path in sorted(where(store).glob("*.md"))
+        )
+
+    def measured_of(store: ProfileStore, master: CVMaster) -> dict[str, Any]:
+        result: dict[str, Any] = measure_prepared(store, master, _PROBE_OFFER, 1)
+        return result
+
+    def score(store: ProfileStore, master: CVMaster, text: str) -> tuple[bool, dict[str, Any]]:
+        """Tally a state against the metric itself, then hand back what to assert on.
+
+        F-3 (second reader, #475 round 2): this used to read `measured[
+        "episode_disclosures"] == 0` — a whole-*version* total — as "the
+        payload does not account for this episode". That coincided with the
+        real question only because every state above has exactly one episode.
+        `disclosed_episode_texts` (T157's own addition, next to
+        `episode_disclosures` in `measure_prepared`'s return) names which
+        *specific* episode texts were counted, so this now asks about `text`
+        itself: a second, correctly-disclosed episode in the same version
+        holds the total above zero without saying anything about whether
+        *this* one was counted, which state 9 below constructs and confirms.
+        """
+        nonlocal reported_withheld
+        carried_here = genuinely_carried(store, text)
+        measured = measured_of(store, master)
+        if carried_here and text not in measured["disclosed_episode_texts"]:
+            reported_withheld += 1
+        return carried_here, measured
+
+    win, _failure = (episode.text for episode in _FIXTURE_EPISODES)
+
+    # 1 — the defect, headline route: the task's own case. Approved, the
+    # manifest row removed, the letter's own line deleted, the headline still
+    # carries it word for word.
+    smuggled = _probe_master(headline=win.rstrip("."))
+    store = fresh("kept-approval-headline", smuggled)
+    _probe_prepare(store, smuggled, approved=(0,))
+    drop_episode_row(store, win)
+    drop_line(store, win)
+    carried_here, measured = score(store, smuggled, win)
+    check(carried_here, "the headline fixture stopped carrying the episode's substance")
+    check(
+        measured["episode_disclosures"] >= 1,
+        "an approved, headline-carried episode with its manifest row removed reported "
+        "zero disclosures",
+    )
+    check(
+        measured["unapproved_episode_disclosures"] == 0
+        and not any(win in item for item in measured["undecidable_episodes"]),
+        "an approved episode's carried substance was reported as a finding or as "
+        "undecidable instead of simply counted — the over-refusal this task forbids",
+    )
+
+    # 2 — the defect, CV-bullet route. Same shape, a second document: §6.2 asks
+    # whether the substance reaches an employer, never which line carries it.
+    bulleted = _probe_master(
+        headline="Data platform engineer",
+        experience=(
+            Experience(
+                title="Data engineer", organisation="Vall S.A.", description=win.rstrip(".")
+            ),
+        ),
+    )
+    store = fresh("kept-approval-bullet", bulleted)
+    _probe_prepare(store, bulleted, approved=(0,))
+    drop_episode_row(store, win)
+    drop_line(store, win)
+    carried_here, measured = score(store, bulleted, win)
+    check(carried_here, "the CV-bullet fixture stopped carrying the episode's substance")
+    check(
+        measured["episode_disclosures"] >= 1,
+        "an approved, CV-bullet-carried episode with its manifest row removed reported "
+        "zero disclosures",
+    )
+
+    # 3 — the over-refusal control the task requires by name: an approved,
+    # manifest-declared, document-carried episode, entirely untouched, must
+    # still send cleanly and must not be double-counted or flagged.
+    plain = _probe_master()
+    store = fresh("normal-clean", plain)
+    payload = _probe_prepare(store, plain, approved=(0,))
+    carried_here, measured = score(store, plain, win)
+    check(
+        measured["episode_disclosures"] == 1 and measured["unapproved_episode_disclosures"] == 0,
+        "an untouched, approved, manifest-declared, document-carried episode was not "
+        "reported as exactly one clean disclosure",
+    )
+    # F-3 self-scan (second reader, #475 round 2, on this diff's own addition):
+    # `disclosed_episode_texts` has to *discriminate*, not merely grow — a
+    # mutant returning every `master.episodes` text unconditionally would
+    # still pass every check above (only episode 0 is approved here,
+    # `_probe_prepare(store, plain, approved=(0,))`; only it is ever
+    # disclosed). `plain`'s second episode (never approved, never disclosed,
+    # never carried) is the counter-example: present in the same
+    # `measured()` call, absent from the field.
+    check(
+        win in measured["disclosed_episode_texts"]
+        and _FIXTURE_EPISODES[1].text not in measured["disclosed_episode_texts"],
+        "F-3 self-scan: `disclosed_episode_texts` did not discriminate a genuinely "
+        "undisclosed episode from a genuinely disclosed one in the same version",
+    )
+    try:
+        record_sent(store, plain, _PROBE_OFFER, 1, confirms=payload_digest(payload))
+        sent = True
+    except ApprovalError:
+        sent = False
+    check(sent, "an approved, manifest-declared, document-carried episode did not send cleanly")
+
+    # 4 — the control in the other direction: the same headline-carries-it
+    # shape as state 1, but the approval is also gone (T114's original shape).
+    # This must stay a *finding*, correctly flagged, never silently withheld —
+    # a fix that quietly buys the metric by refusing more would leave this
+    # state's `unapproved_episode_disclosures` at 0 too.
+    store = fresh("unapproved-and-carried", smuggled)
+    _probe_prepare(store, smuggled, approved=(0,))
+    drop_episode_row(store, win)
+    drop_line(store, win)
+    (where(store) / "approvals.json").unlink()
+    carried_here, measured = score(store, smuggled, win)
+    check(carried_here, "the unapproved-carried control stopped carrying the substance")
+    check(
+        measured["unapproved_episode_disclosures"] >= 1 and measured["episode_disclosures"] >= 1,
+        "a genuinely unapproved, carried disclosure was not flagged as a finding",
+    )
+
+    # 5 — the control that must not manufacture a disclosure: an approved
+    # episode whose row is removed and whose line is deleted, with nothing
+    # anywhere else on the page carrying its substance. Ground truth says "not
+    # carried", so `episode_disclosures` must not count it and it must not
+    # become a *finding* (that would be the over-refusal this task forbids).
+    #
+    # F-2 (second reader, #475 round 2): this state used to also require
+    # `undecidable_episodes` to stay silent about it, on the theory that
+    # landing it there would itself be an over-refusal. It is not — see
+    # `_undecidable_suffix` and the module's own T156 docstring section:
+    # `undecidable_episodes` never stops `prepare` or `record_sent` by itself.
+    # `_carries` can only ever confirm *presence*, never *absence*, so "not
+    # carried" here is not "confirmed withheld" either; every other episode
+    # this loop cannot confirm is reported as undecided rather than dropped
+    # (below), and this control now pins that an approved one gets the same
+    # honesty rather than vanishing with no trace in `payload.json`. The
+    # `record_sent` call at the end pins the other half of F-2's finding
+    # directly: reporting it as undecided must not cost the send.
+    store = fresh("approved-unused", plain)
+    payload = _probe_prepare(store, plain, approved=(0,))
+    drop_episode_row(store, win)
+    drop_line(store, win)
+    carried_here, measured = score(store, plain, win)
+    check(not carried_here, "the approved-unused control unexpectedly carries the substance")
+    check(
+        measured["episode_disclosures"] == 0 and measured["unapproved_episode_disclosures"] == 0,
+        "an approved episode never carried anywhere was manufactured into a disclosure or a "
+        "finding",
+    )
+    check(
+        any(win in item for item in measured["undecidable_episodes"]),
+        "F-2: an approved episode this sweep has no evidence for either way vanished with no "
+        "trace instead of being reported as undecided, like every other unconfirmable episode",
+    )
+    # A (second reader, #475 round 3): the mirror of state 3's F-3 self-scan.
+    # State 3 pins that `disclosed_episode_texts` is present for a genuinely
+    # disclosed episode; nothing anywhere pinned it *absent* for an episode
+    # that is approved but genuinely uncarried — so a field seeded from
+    # `set(disclosed) | set(approved)` (growing with the *permission* rather
+    # than with what was actually counted) survived every check above and the
+    # whole gate at 0 failures. That is exactly the coupling T157's own "What
+    # the metric counts" section rules out by name: the defect is the
+    # description, not the permission. `win` here is approved (this state's
+    # own `_probe_prepare(store, plain, approved=(0,))` call, a few lines up)
+    # and `score()` has just confirmed `carried_here` is `False`, so this is
+    # the one state that can tell "grew with the approval" apart from "grew
+    # with the count".
+    check(
+        win not in measured["disclosed_episode_texts"],
+        "`disclosed_episode_texts` named an approved episode nothing on the page "
+        "carries — the field grew with the approval instead of with the count",
+    )
+    try:
+        record_sent(store, plain, _PROBE_OFFER, 1, confirms=payload_digest(payload))
+        sent = True
+    except ApprovalError:
+        sent = False
+    check(
+        sent,
+        "F-2: reporting an approved-but-unconfirmed episode as undecided cost the send — "
+        "undecidable_episodes must never refuse",
+    )
+
+    # 6 — two overlapping episodes, both approved and disclosed normally,
+    # nothing removed: the aggregate must not over- or under-count when
+    # nothing about the state is broken.
+    twins = _probe_master(
+        headline="Data platform engineer", episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN)
+    )
+    store = fresh("overlapping-normal", twins)
+    _probe_prepare(store, twins, approved=(0, 1))
+    measured = measured_of(store, twins)
+    check(
+        measured["episode_disclosures"] == 2 and measured["unapproved_episode_disclosures"] == 0,
+        "two untouched, approved, overlapping episodes were not both counted disclosed",
+    )
+
+    # 7 — the sendability check for the defect itself, driven end to end
+    # through the public boundary rather than through `measure_prepared`
+    # alone: the fix must leave a §6.2-covered send sendable.
+    store = fresh("defect-still-sendable", smuggled)
+    payload = _probe_prepare(store, smuggled, approved=(0,))
+    drop_episode_row(store, win)
+    drop_line(store, win)
+    try:
+        record_sent(store, smuggled, _PROBE_OFFER, 1, confirms=payload_digest(payload))
+        sent = True
+    except ApprovalError:
+        sent = False
+    check(sent, "an approved, headline-carried episode with its row removed was refused")
+
+    # 8 — F-1 (second reader, #475 round 2): the headline spelled **exactly**
+    # like the approved episode text — not truncated by even the trailing
+    # period state 1 above drops. Reproduced against the pre-fix code on
+    # #475 round 2: `episode_disclosures` measured 0. The mechanism: an
+    # episode text that is itself `in approved` renders identically in *two*
+    # places here (T114's own reservation comment above already names this —
+    # "a headline spelled exactly like the story puts that sentence in
+    # letter.md twice"), and every one of those lines is *also* `in approved`
+    # by text, so T156's N2 filter dropped every copy from `surviving` before
+    # the T157 carried-check ever ran against `intact`. Checked against
+    # `all_lines` (`all_intact`) instead, which the fix does regardless of
+    # how many of an episode's own copies collapse into `approved`.
+    exact = _probe_master(headline=win)
+    store = fresh("kept-approval-exact-headline", exact)
+    _probe_prepare(store, exact, approved=(0,))
+    drop_episode_row(store, win)
+    drop_line(store, win)
+    carried_here, measured = score(store, exact, win)
+    check(
+        carried_here, "the exact-spelling headline fixture stopped carrying the episode's substance"
+    )
+    check(
+        measured["episode_disclosures"] >= 1,
+        "F-1: an approved episode spelled identically to its own headline, with its manifest "
+        "row removed, reported zero disclosures",
+    )
+    check(
+        measured["unapproved_episode_disclosures"] == 0
+        and not any(win in item for item in measured["undecidable_episodes"]),
+        "an approved episode's carried substance was reported as a finding or as undecidable "
+        "instead of simply counted",
+    )
+
+    # 9 — F-3 (second reader, #475 round 2): the gate's own `score()` used to
+    # read "the payload does not account for *this* episode" as
+    # `measured["episode_disclosures"] == 0` — a whole-*version* total. That
+    # coincided with the real, per-episode question only because every state
+    # above has exactly one episode ever at stake. Here a second episode
+    # (`_FIXTURE_TWIN`) is disclosed correctly and normally, nothing about it
+    # touched, sitting in the *same* version as state 8's defect shape for
+    # `win`: the reader's own reproduction showed the old formula reading
+    # `episode_disclosures >= 1` (from the twin alone) and concluding "not
+    # withheld" even on a build where `win`'s own disclosure was never
+    # counted — the metric was clean over a live bug the moment a second,
+    # innocent episode shared the version. Checked here against
+    # `disclosed_episode_texts` for **both** texts individually — the only
+    # way to ask the per-episode question the whole total cannot answer —
+    # never against the total alone.
+    twins = _probe_master(headline=win, episodes=(_FIXTURE_EPISODES[0], _FIXTURE_TWIN))
+    store = fresh("second-episode-masks-none", twins)
+    _probe_prepare(store, twins, approved=(0, 1))
+    drop_episode_row(store, win)
+    drop_line(store, win)
+    carried_here, measured = score(store, twins, win)
+    check(carried_here, "the two-episode fixture stopped carrying win's own substance")
+    check(
+        win in measured["disclosed_episode_texts"]
+        and _FIXTURE_TWIN.text in measured["disclosed_episode_texts"],
+        "F-3: a correctly-disclosed second episode's presence in the total was not enough to "
+        "also confirm this specific episode was counted, per episode",
+    )
+    check(
+        measured["episode_disclosures"] == 2 and measured["unapproved_episode_disclosures"] == 0,
+        "the two-episode state did not measure exactly two clean disclosures",
+    )
+
+    # 10 — the aggregate the gate reads. Restated directly rather than only
+    # through the per-state checks above, so a state that silently stopped
+    # asserting anything cannot leave `reported_withheld` unexamined.
+    check(
+        reported_withheld == 0,
+        f"{reported_withheld} constructed state(s) reported a genuinely carried, "
+        "approved episode as withheld",
+    )
+
+    return {
+        "carried_disclosure_states_evaluated": states,
+        "carried_disclosure_checks_evaluated": checks,
+        "payloads_reporting_a_carried_story_as_withheld": reported_withheld,
+        "carried_disclosure_probe_failures": failures,
+        "gate_status": "measured" if states else "unmeasured",
+    }
+
+
+def write_carried_disclosure_evidence(
+    evidence: Path = DEFAULT_T157_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T157.json` — beside T46's, never inside it.
+
+    Probes only, in `MINIMUM_CARRIED_DISCLOSURE_STATES`'s `naming.MINIMUM_SCANNED`
+    style: the states list is the denominator, and a states list that shrank to
+    nothing must not still clear `== 0`.
+    """
+    with tempfile.TemporaryDirectory(prefix="integral-t157-") as scratch:
+        measured = probe_carried_disclosures_reported(Path(scratch) / "profiles")
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
+def _carried_disclosure_report(measured: dict[str, Any]) -> int:
+    """Print T157's measurement and say whether it fails the gate."""
+    print(json.dumps(measured, ensure_ascii=False))
+    failures = 0
+    for name in measured["carried_disclosure_probe_failures"]:
+        print(
+            f"✗ the carried-disclosure boundary failed a constructed case: {name}", file=sys.stderr
+        )
+        failures += 1
+    if measured["carried_disclosure_states_evaluated"] < MINIMUM_CARRIED_DISCLOSURE_STATES:
+        print(
+            f"carried_disclosure_states_evaluated is "
+            f"{measured['carried_disclosure_states_evaluated']}, below the floor of "
+            f"{MINIMUM_CARRIED_DISCLOSURE_STATES}",
+            file=sys.stderr,
+        )
+        failures += 1
+    if measured["carried_disclosure_checks_evaluated"] < MINIMUM_CARRIED_DISCLOSURE_CHECKS:
+        print(
+            f"carried_disclosure_checks_evaluated is "
+            f"{measured['carried_disclosure_checks_evaluated']}, below the floor of "
+            f"{MINIMUM_CARRIED_DISCLOSURE_CHECKS}",
+            file=sys.stderr,
+        )
+        failures += 1
+    if measured["payloads_reporting_a_carried_story_as_withheld"] != 0:
+        print(
+            f"payloads_reporting_a_carried_story_as_withheld is "
+            f"{measured['payloads_reporting_a_carried_story_as_withheld']}, not 0",
+            file=sys.stderr,
+        )
+        failures += 1
+    if measured["gate_status"] != "measured":
+        print(
+            "no constructed state was evaluated for a carried-but-unreported disclosure — "
+            "nothing was measured",
+            file=sys.stderr,
+        )
+        failures += 1
+    return 1 if failures else 0
+
+
+# ---------------------------------------------------------------------------
 # the gate — measured over the real corpus, against a stated fixture candidate
 
 # How many prepared applications the measurement also carries through the send
@@ -3533,7 +4114,22 @@ def _main(argv: list[str] | None = None) -> int:
     paraphrase_exit = _paraphrase_report(
         write_paraphrase_evidence(target.with_name(DEFAULT_T156_EVIDENCE_PATH.name))
     )
-    return 1 if (failures or retraction_exit or disclosure_exit or paraphrase_exit) else 0
+    # T157's record, written on the same unconditional terms as the three above
+    # and for the same reason.
+    carried_disclosure_exit = _carried_disclosure_report(
+        write_carried_disclosure_evidence(target.with_name(DEFAULT_T157_EVIDENCE_PATH.name))
+    )
+    return (
+        1
+        if (
+            failures
+            or retraction_exit
+            or disclosure_exit
+            or paraphrase_exit
+            or carried_disclosure_exit
+        )
+        else 0
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
