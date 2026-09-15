@@ -3614,10 +3614,11 @@ def probe_carried_disclosures_reported(root: Path) -> dict[str, Any]:
     # than with what was actually counted) survived every check above and the
     # whole gate at 0 failures. That is exactly the coupling T157's own "What
     # the metric counts" section rules out by name: the defect is the
-    # description, not the permission. `win` here is approved (line 3572) and
-    # `score()` has just confirmed `carried_here` is `False`, so this is the
-    # one state that can tell "grew with the approval" apart from "grew with
-    # the count".
+    # description, not the permission. `win` here is approved (this state's
+    # own `_probe_prepare(store, plain, approved=(0,))` call, a few lines up)
+    # and `score()` has just confirmed `carried_here` is `False`, so this is
+    # the one state that can tell "grew with the approval" apart from "grew
+    # with the count".
     check(
         win not in measured["disclosed_episode_texts"],
         "`disclosed_episode_texts` named an approved episode nothing on the page "
