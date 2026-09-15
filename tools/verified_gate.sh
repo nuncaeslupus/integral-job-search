@@ -141,8 +141,8 @@ status=$?
 echo '## Verified gate'
 echo
 echo "Run by \`tools/verified_gate.sh\` against a clean detached checkout of the"
-echo "commit named below — not a working tree. CI is unavailable; this is the"
-echo "substitute \`CLAUDE.md\` names, and that SHA is the one that was measured."
+echo "commit named below — not a working tree — and that SHA is the one that"
+echo "was measured. This block is scoped to that commit only."
 echo
 echo "\`\`\`"
 echo "commit    ${sha}"

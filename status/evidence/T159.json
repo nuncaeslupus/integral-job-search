@@ -267,14 +267,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2800,
-      "population": 40
+      "line": 2806,
+      "population": 41
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2733,
-      "population": 80
+      "line": 2739,
+      "population": 81
     },
     {
       "module": "freshness",
@@ -371,6 +371,12 @@
       "name": "MINIMUM_PROBES",
       "line": 457,
       "population": 13
+    },
+    {
+      "module": "verified_gate",
+      "name": "MINIMUM_CI_CLAIM_SCENARIOS",
+      "line": 1040,
+      "population": 3
     }
   ],
   "bounds_read_and_out_of_scope": [
@@ -475,6 +481,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 80,
+  "floors_swept_at_least": 81,
   "floors_arithmetically_checked_at_least": 36
 }

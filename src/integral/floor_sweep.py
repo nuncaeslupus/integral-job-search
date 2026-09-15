@@ -2730,7 +2730,13 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: instance of the same collision, this time between this branch and main's
 #: T171/T175 moving in parallel. Regenerated again rather than picked. Still
 #: zero slack.
-MINIMUM_FLOORS_SWEPT = 80
+#: **81 since T161**, whose `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` joined
+#: it — the fourth instance, and by now the pattern rather than the accident.
+#: This branch resolved its own collision to 78 while main went 78 → 80 by two
+#: more of them; both numbers were correct about the tree each was measuring
+#: and neither is correct about this one. Regenerated, never picked. Still
+#: zero slack.
+MINIMUM_FLOORS_SWEPT = 81
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
