@@ -2724,19 +2724,26 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: git saw no conflict in the *evidence* because both sides wrote the same
 #: digits. The merged tree holds both floors, so the true count is 78 and
 #: neither branch's number was ever right about it. Regenerated against the
-#: merge, never picked from a side.
-#: **80 since T157**, whose `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
-#: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` joined it together — the third
-#: instance of the same collision, this time between this branch and main's
-#: T171/T175 moving in parallel. Regenerated again rather than picked. Still
-#: zero slack.
-#: **81 since T161**, whose `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` joined
-#: it — the fourth instance, and by now the pattern rather than the accident.
-#: This branch resolved its own collision to 78 while main went 78 → 80 by two
-#: more of them; both numbers were correct about the tree each was measuring
-#: and neither is correct about this one. Regenerated, never picked. Still
-#: zero slack.
-MINIMUM_FLOORS_SWEPT = 81
+#: merge, never picked from a side. Still zero slack.
+#: **81 since T169** on the branch that added it, merged in after this
+#: constant had already reached 78 on `main` without knowing about it:
+#: `markup_text.MINIMUM_FIXTURE_OFFERS` and
+#: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` join the population (+2), and
+#: this constant's own self-referential entry — excluded from
+#: `evidence_pinned_floors` while its committed value disagreed with the
+#: population it names — rejoins the count once corrected here (+1).
+#: **Independently, 81 since T157 and T161 on `main`**:
+#: `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
+#: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` (T157) plus
+#: `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` (T161) — the third and fourth
+#: instances of the same collision, this branch and `main` each moving from
+#: 78 by different additions that happened to sum to the same digits. Neither
+#: 81 was ever correct about the other's tree: **84 on the merged tree**,
+#: measured with `uv run python -m integral.floor_sweep` rather than picked
+#: from either side, since the merge brings both branches' additions in at
+#: once (T169's two plus its own self-referential rejoin, T157's two, T161's
+#: one — 78 + 6 = 84, not 78 + 3 twice).
+MINIMUM_FLOORS_SWEPT = 84
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

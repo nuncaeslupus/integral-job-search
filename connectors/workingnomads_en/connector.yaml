@@ -31,7 +31,10 @@ list:
       detail_url: url
       title: title
       company: company_name
-      text: description
+      # Raw HTML (`<p>…`) (T169).
+      text:
+        path: description
+        take: html_text
       location_raw: location
 # No salary fields: this feed carries none. Nothing here is guessed from the
 # body text — an estimate the candidate cannot check against the advert is
