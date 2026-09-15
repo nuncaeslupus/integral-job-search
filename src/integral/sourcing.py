@@ -249,12 +249,29 @@ class Run:
 
     @staticmethod
     def _answered(outcome: BoardOutcome) -> bool:
-        """The board let us read it. A refusal and a stale connector are not
-        that, and naming either under "searched for your terms" or "returned
-        their whole list" contradicts the line printed two below (round 4,
-        R4-5) — the same conflation `parsed_nothing` exists to end.
+        """The board let us read it, or read enough that some of what it
+        handed over is now on disk.
+
+        Round 4 (R4-5) excluded every refused or stale outcome from both
+        `steered` and `unsteered`, unconditionally — which silently
+        reintroduced the exact defect round 3's R3 had just closed for the
+        `error` route: a board that served page one and only then failed
+        (a 429 on page two, or `last_verified` gone stale after a page that
+        still parsed) has real rows and real offers on disk, and hiding it
+        from every disposition attributes them to nothing. `outcome.items`
+        is the same signal `_parsed_nothing` already uses to tell "answered
+        and truly gave us nothing" apart from "answered normally" — refused
+        and stale only override the disposition in exactly that case, where
+        there is nothing to attribute in the first place (round 5, F1).
+        Naming a refused-but-productive board under "searched for your
+        terms" or "returned their whole list" does not contradict the
+        REFUSED/STALE line printed two below; the two report different
+        things — one where the offers came from, the other why the board
+        stopped.
         """
-        return outcome.reached_the_board and not (outcome.refused or outcome.stale)
+        return outcome.reached_the_board and not (
+            (outcome.refused or outcome.stale) and not outcome.items
+        )
 
     @property
     def steered(self) -> list[str]:

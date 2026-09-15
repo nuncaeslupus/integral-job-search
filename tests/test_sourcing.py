@@ -681,6 +681,124 @@ def test_a_stale_board_is_neither_empty_handed_nor_a_board_that_handed_its_list_
     assert "returned their whole list" not in run.summary(), run.summary()
 
 
+def test_a_stale_board_with_rows_is_still_named_in_unsteered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 5, F1: R4-5's own fixture above only ever fed `_one_board` an
+    empty page, so the fix it pinned (`refused or stale` excludes
+    unconditionally) could not be told apart from the narrower one this
+    needs (excludes only when there is nothing to attribute). A stale
+    connector that still parses its page has handed over real rows — that
+    is exactly what "its emptiness proves nothing" is supposed to leave
+    open — and those rows must land in `unsteered` like any other board's,
+    not disappear because the connector happens to be past `last_verified`.
+    """
+    from integral.sourcing import _one_board
+
+    pages = flood_board(tmp_path / "connectors")
+    package = next(p for p in installed_packages(tmp_path / "connectors") if p.name == "flood_en")
+    outcome = _one_board(
+        store,
+        package,
+        None,
+        fetch=lambda request: Response(200, pages[request.url].html),
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=1,
+        robots=_robots(),
+        phrases=("python engineer",),
+    )
+    assert outcome.items > 0 and outcome.added > 0, outcome
+    run = Run(outcomes=[replace(outcome, stale=True)])
+    assert run.untrusted == ["flood_en"], run.summary()
+    assert run.unsteered == ["flood_en"], run.summary()
+    assert "returned their whole list: flood_en" in run.summary(), run.summary()
+
+
+def test_a_board_refused_after_rows_is_still_named_in_unsteered(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 5, F1: page one's rows, and the offers built from them, are
+    already on disk before a 429 ends the board on page two. `_answered`
+    used to exclude every refused outcome unconditionally (round 4, R4-5),
+    which reintroduced round 3's R3 for this failure route — the offers
+    end up attributed to neither `steered` nor `unsteered`, and the only
+    line the summary prints about the board (REFUSED) never says where
+    they came from.
+    """
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 100)
+    pages = flood_board(tmp_path / "connectors", "deluge")
+    bad = "https://deluge.integral.local/jobs?page=2"
+
+    def fetch(request: ListRequest) -> Response:
+        if request.url == bad:
+            return Response(429, "Too Many Requests")
+        return Response(200, pages[request.url].html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.refused == ["deluge_en"], run.summary()
+    assert run.unsteered == ["deluge_en"], run.summary()
+    assert run.steered == [], run.summary()
+    assert run.added == len(_written(store)) > 0, run.summary()
+    assert "returned their whole list: deluge_en" in run.summary(), run.summary()
+    assert "REFUSED deluge_en" in run.summary(), run.summary()
+
+
+def test_a_steered_board_refused_after_rows_is_still_named_in_steered(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """Round 5, F1 (second reader's steered extension): the unsteered fixture
+    above is only half of what R4-5's blanket exclusion broke. A `{query}`
+    board answers page one with rows that match the candidate's phrase and
+    writes offers for them, then a 429 ends it on page two. `run.searched`
+    already (correctly) names the phrase as sent — `_answered` used to
+    disagree with its own run and drop the board from `steered` anyway,
+    which is the sharper version of the same defect: the summary would say
+    the phrase was searched for and simultaneously deny that any board
+    searched it.
+    """
+    pages = flood_board(tmp_path / "connectors", "steerable", rows=20)
+    package = tmp_path / "connectors" / "steerable_en"
+    connector = (package / "connector.yaml").read_text()
+    (package / "connector.yaml").write_text(
+        connector.replace("/jobs?page={page}", "/jobs?q={query}&page={page}")
+    )
+
+    def fetch(request: ListRequest) -> Response:
+        number = request.url.rsplit("page=", 1)[1]
+        if number == "2":
+            return Response(429, "Too Many Requests")
+        page = pages[f"https://steerable.integral.local/jobs?page={number}"]
+        return Response(200, page.html)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=_robots(),
+    )
+    assert run.searched == ["python engineer"], run.summary()
+    assert run.refused == ["steerable_en"], run.summary()
+    assert run.steered == ["steerable_en"], run.summary()
+    assert run.unsteered == [], run.summary()
+    assert run.added == len(_written(store)) > 0, run.summary()
+    assert "searched for your terms: steerable_en" in run.summary(), run.summary()
+    assert "REFUSED steerable_en" in run.summary(), run.summary()
+
+
 def test_the_headline_counts_only_the_boards_that_answered(
     store: ProfileStore, tmp_path: Path
 ) -> None:
