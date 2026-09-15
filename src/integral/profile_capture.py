@@ -1141,6 +1141,7 @@ def write_subject_evidence(evidence: Path = DEFAULT_D8_EVIDENCE_PATH) -> dict[st
 #: scripted scenario run *is* the fixture. Raised to what the probe carries —
 #: 16, zero slack — because this floor sat undocumented and four checks under
 #: the real count, unreached by T159 round 1's narrower sweep (T159 round 2).
+#: arsenal-floor-margin: value=16
 MINIMUM_SUBJECT_CHECKS = 16
 
 
@@ -1149,6 +1150,7 @@ MINIMUM_SUBJECT_CHECKS = 16
 #: scenario run *is* the fixture. Raised to what the probe carries — 20, zero
 #: slack — because this floor sat undocumented and five checks under the real
 #: count, unreached by T159 round 1's narrower sweep (T159 round 2).
+#: arsenal-floor-margin: value=20
 MINIMUM_CHECKS = 20
 
 

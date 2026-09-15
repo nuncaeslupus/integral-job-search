@@ -123,15 +123,18 @@ def measure(probes=PROBES):
 
 
 def test_a_margin_argued_in_writing_is_not_flagged(tmp_path: Path) -> None:
-    """`salary_recovery.MINIMUM_WORDING_CASES`'s shape: below population, explained."""
+    """`salary_recovery.MINIMUM_WORDING_CASES`'s shape: below population,
+    explained — and (T163) carrying the marker that makes the explanation
+    checkable rather than merely present."""
     _write(
         tmp_path,
-        """
+        f"""
 CASES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
 
-# Raised from 5 when the audit landed more cases; deliberately kept some slack
-# below the table because this floor is pinned to a third party's behaviour,
-# not to this table's own size.
+#: {floor_sweep.margin_marker(12, 20)}
+#: Raised from 5 when the audit landed more cases; deliberately kept some slack
+#: below the table because this floor is pinned to a third party's behaviour,
+#: not to this table's own size.
 MINIMUM_CASES = 12
 
 
@@ -353,9 +356,10 @@ def check():
 def test_a_dynamic_population_with_a_comment_is_compliant(tmp_path: Path) -> None:
     _write(
         tmp_path,
-        """
-# Deliberately small: the scripted scenario is expected to grow over time and
-# this floor is raised alongside it, never derived from it.
+        f"""
+#: {floor_sweep.margin_marker(3)}
+#: Deliberately small: the scripted scenario is expected to grow over time and
+#: this floor is raised alongside it, never derived from it.
 MINIMUM_TURNS = 3
 
 
@@ -363,7 +367,7 @@ def probe():
     turns = 0
     for _ in range(5):
         turns += 1
-    return {"turns_evaluated": turns}
+    return {{"turns_evaluated": turns}}
 
 
 def check():
@@ -430,9 +434,10 @@ def test_two_floors_declared_together_both_read_the_shared_comment(tmp_path: Pat
     comment above the first of a pair, nothing directly above the second."""
     _write(
         tmp_path,
-        """
-# Deliberately small design minimum, not derived from either collection below —
-# raised together and explained once for both.
+        f"""
+#: {floor_sweep.margin_marker(2)}
+#: Deliberately small design minimum, not derived from either collection below —
+#: raised together and explained once for both.
 MINIMUM_A = 2
 MINIMUM_B = 2
 
@@ -444,7 +449,7 @@ def probe():
     b = []
     for _ in range(5):
         b.append(1)
-    return {"a_count": len(a), "b_count": len(b)}
+    return {{"a_count": len(a), "b_count": len(b)}}
 
 
 def check():
@@ -799,9 +804,10 @@ def test_a_stale_zero_slack_claim_in_the_dynamic_branch_is_a_violation(tmp_path:
     comment — any comment, forever — so this drop cleared it before round 2."""
     _write(
         tmp_path,
-        """
-# Raised to what the probe carries — 19, zero slack — because 10 had drifted
-# nine checks under with no margin argued for the gap.
+        f"""
+#: {floor_sweep.margin_marker(1)}
+#: Raised to what the probe carries — 19, zero slack — because 10 had drifted
+#: nine checks under with no margin argued for the gap.
 MINIMUM_CASES = 1
 
 
@@ -809,7 +815,7 @@ def probe():
     checks = 0
     for _ in range(19):
         checks += 1
-    return {"cases_checked": checks}
+    return {{"cases_checked": checks}}
 
 
 def check():
@@ -828,9 +834,10 @@ def check():
 def test_a_genuine_zero_slack_claim_in_the_dynamic_branch_is_compliant(tmp_path: Path) -> None:
     _write(
         tmp_path,
-        """
-# Raised to what the probe carries — 19, zero slack — because 10 had drifted
-# nine checks under with no margin argued for the gap.
+        f"""
+#: {floor_sweep.margin_marker(19)}
+#: Raised to what the probe carries — 19, zero slack — because 10 had drifted
+#: nine checks under with no margin argued for the gap.
 MINIMUM_CASES = 19
 
 
@@ -838,7 +845,7 @@ def probe():
     checks = 0
     for _ in range(19):
         checks += 1
-    return {"cases_checked": checks}
+    return {{"cases_checked": checks}}
 
 
 def check():
@@ -858,8 +865,8 @@ def test_a_zero_slack_claim_wrapped_across_comment_lines_is_still_checked(tmp_pa
     sees an unmatched `#: ` between them and silently misses the claim."""
     _write(
         tmp_path,
-        """
-# Raised to what the probe carries — 19, zero
+        f"#: {floor_sweep.margin_marker(1)}\n"
+        """# Raised to what the probe carries — 19, zero
 # slack — because 10 had drifted nine checks under.
 MINIMUM_CASES = 1
 
@@ -888,8 +895,8 @@ def test_a_spelled_out_zero_slack_claim_is_checked(tmp_path: Path) -> None:
     exactly the way it missed one of the task's three named floors."""
     _write(
         tmp_path,
-        """
-# Ten today, matching the fixture exactly: zero slack, so deleting the first
+        f"#: {floor_sweep.margin_marker(1)}\n"
+        """# Ten today, matching the fixture exactly: zero slack, so deleting the first
 # row breaches this immediately.
 MINIMUM_FIELDS_CHECKED = 1
 
@@ -920,8 +927,8 @@ def test_a_zero_slack_claim_with_no_adjacent_number_is_not_accused(tmp_path: Pat
     check can falsify, so it is not one it accuses either."""
     _write(
         tmp_path,
-        """
-# The record carries some other count of keys and this is one of them,
+        f"#: {floor_sweep.margin_marker(1)}\n"
+        """# The record carries some other count of keys and this is one of them,
 # unrelated — no slack, but not stated as a specific figure.
 MINIMUM_TRAITS = 1
 
@@ -1217,9 +1224,10 @@ def test_dropping_a_zero_slack_dynamic_floor_to_zero_is_caught(tmp_path: Path) -
     reading `0`."""
     _write(
         tmp_path,
-        """
-# Raised to what the probe carries — 19, zero slack — because 10 had drifted
-# nine checks under with no margin argued for the gap.
+        f"""
+#: {floor_sweep.margin_marker(0)}
+#: Raised to what the probe carries — 19, zero slack — because 10 had drifted
+#: nine checks under with no margin argued for the gap.
 MINIMUM_CASES = 0
 
 
@@ -1227,7 +1235,7 @@ def probe():
     checks = 0
     for _ in range(19):
         checks += 1
-    return {"cases_checked": checks}
+    return {{"cases_checked": checks}}
 
 
 def check():
@@ -1271,9 +1279,10 @@ def test_a_digit_inside_a_backtick_identifier_is_not_read_as_the_claim(tmp_path:
     enter the claimed set — dropping the floor to `6` must still be caught."""
     _write(
         tmp_path,
-        """
-# Ten today, matching `_D6_FIXTURE` exactly: zero slack, so deleting the
-# first row breaches this immediately.
+        f"""
+#: {floor_sweep.margin_marker(6)}
+#: Ten today, matching `_D6_FIXTURE` exactly: zero slack, so deleting the
+#: first row breaches this immediately.
 MINIMUM_FIELDS_CHECKED = 6
 
 
@@ -1281,7 +1290,7 @@ def probe():
     checked = 0
     for _ in range(10):
         checked += 1
-    return {"fields_checked": checked}
+    return {{"fields_checked": checked}}
 
 
 def check():
@@ -1301,8 +1310,9 @@ def test_an_issue_reference_after_the_phrase_is_not_read_as_the_claim(tmp_path: 
     window must not extend past the matched phrase at all."""
     _write(
         tmp_path,
-        """
-# Raised — 36, zero slack (T159).
+        f"""
+#: {floor_sweep.margin_marker(159)}
+#: Raised — 36, zero slack (T159).
 MINIMUM_CHECKS = 159
 
 
@@ -1310,7 +1320,7 @@ def probe():
     checks = 0
     for _ in range(36):
         checks += 1
-    return {"checks_run": checks}
+    return {{"checks_run": checks}}
 
 
 def check():
@@ -1701,10 +1711,11 @@ def test_a_parameter_with_two_call_sites_is_not_pinned_through(
     _write_evidence(tmp_path, "status/evidence/T900.json", {"checks_run": 3})
     _write(
         tmp_path,
-        """
-# Argued so this stays a compliant, merely-unpinned floor rather than an
-# undocumented one — the property under test is the refusal to pin through
-# two callers, not the separate "no comment at all" check.
+        f"""
+#: {floor_sweep.margin_marker(1)}
+#: Argued so this stays a compliant, merely-unpinned floor rather than an
+#: undocumented one — the property under test is the refusal to pin through
+#: two callers, not the separate "no comment at all" check.
 MINIMUM_CHECKS = 1
 
 
@@ -1712,14 +1723,14 @@ def probe_a():
     checks = 0
     for _ in range(3):
         checks += 1
-    return {"checks_run": checks}
+    return {{"checks_run": checks}}
 
 
 def probe_b():
     checks = 0
     for _ in range(5):
         checks += 1
-    return {"checks_run": checks}
+    return {{"checks_run": checks}}
 
 
 def _report(measured):
@@ -1757,16 +1768,17 @@ def test_an_evidence_path_chosen_by_an_untraceable_condition_is_not_guessed_at(
     _write_evidence(tmp_path, "status/evidence/D900.json", {"checks_run": 9})
     _write(
         tmp_path,
-        """
+        f"""
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
 DEFAULT_D900_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D900.json"
 
-# Argued so this stays a compliant, merely-unpinned floor — the property
-# under test is the refusal to guess between two live evidence files, not
-# the separate "no comment at all" check.
+#: {floor_sweep.margin_marker(1)}
+#: Argued so this stays a compliant, merely-unpinned floor — the property
+#: under test is the refusal to guess between two live evidence files, not
+#: the separate "no comment at all" check.
 MINIMUM_CHECKS = 1
 
 
@@ -1774,7 +1786,7 @@ def probe():
     checks = 0
     for _ in range(5):
         checks += 1
-    return {"checks_run": checks}
+    return {{"checks_run": checks}}
 
 
 def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
@@ -1852,12 +1864,13 @@ def test_the_sweeps_own_floor_argued_in_writing_is_compliant(
     floor's argued margin is."""
     fixture = _write(
         tmp_path,
-        """
+        f"""
 PROBES = (1, 2, 3, 4, 5)
 MINIMUM_PROBES = 5
 
-# One point of slack: this tiny tree sweeps two floors, and one is enough to
-# leave a module edit unnoticed.
+#: {floor_sweep.margin_marker(1, 2)}
+#: One point of slack: this tiny tree sweeps two floors, and one is enough to
+#: leave a module edit unnoticed.
 MINIMUM_FLOORS_SWEPT = 1
 
 
@@ -2036,13 +2049,14 @@ def test_deleting_the_committed_evidence_drops_a_pinned_floor_to_dynamic(
     times), only `arithmetically_checked` does, which is the whole reason F1
     exists: `floors_swept` alone cannot tell these two cases apart."""
     monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
-    source = """
+    source = f"""
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
 
-# On a scripted probe's own running tally, chosen to match what it carries.
+#: {floor_sweep.margin_marker(19)}
+#: On a scripted probe's own running tally, chosen to match what it carries.
 MINIMUM_CHECKS = 19
 
 
@@ -2050,7 +2064,7 @@ def probe():
     checks = 0
     for _ in range(19):
         checks += 1
-    return {"checks_run": checks}
+    return {{"checks_run": checks}}
 
 
 def write_evidence(evidence=DEFAULT_EVIDENCE_PATH):
@@ -2121,20 +2135,21 @@ def check():
     assert not evidence_path.exists()
 
 
-def test_a_committed_at_claim_that_no_longer_matches_the_declaration_is_a_violation(
+def test_a_marker_value_that_no_longer_matches_the_declaration_is_a_violation(
     tmp_path: Path,
 ) -> None:
-    """F2: the self-floor's own idiom, "Committed at N", generalised. Round 3's
-    reader measured `MINIMUM_FLOORS_SWEPT`'s real comment ("Committed at 64,
-    three points of slack") clear unchanged when the floor was mutated to `1` —
-    the keyword match (`raised`, `slack`) never re-checked either number beside
-    it."""
+    """T163: the marker's own `value=` checked against the real declaration.
+    Round 3's reader measured `MINIMUM_FLOORS_SWEPT`'s real comment ("Committed
+    at 64, three points of slack") clear unchanged when the floor was mutated
+    to `1` — the retired keyword match (`raised`, `slack`) never re-checked
+    either number beside it, and the retired "Committed at N" idiom it grew
+    into only ever checked `value=` against *itself*."""
     fixture = _write(
         tmp_path,
-        """
+        f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-# Committed at 9, zero points of slack.
+#: {floor_sweep.margin_marker(9, 9)}
 MINIMUM_PROBES = 1
 
 
@@ -2146,17 +2161,18 @@ def measure(probes=PROBES):
     measured = floor_sweep.measure(tmp_path)
     finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
     assert finding["reason"] == "stale_margin_claim"
-    assert "committed at 9" in finding["detail"].lower()
+    assert "value=9" in finding["detail"]
     del fixture
 
 
-def test_a_correct_committed_at_claim_is_compliant(tmp_path: Path) -> None:
+def test_a_correct_marker_is_compliant(tmp_path: Path) -> None:
     fixture = _write(
         tmp_path,
-        """
+        f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-# Committed at 6, three points of slack.
+#: {floor_sweep.margin_marker(6, 9)}
+#: Deliberately kept below PROBES on purpose.
 MINIMUM_PROBES = 6
 
 
@@ -2170,18 +2186,23 @@ def measure(probes=PROBES):
     del fixture
 
 
-def test_a_points_of_slack_claim_that_no_longer_matches_the_real_margin_is_a_violation(
+def test_a_marker_population_that_no_longer_matches_the_real_population_is_a_violation(
     tmp_path: Path,
 ) -> None:
-    """F2's other idiom: "N point(s) of slack/margin" states the margin itself,
-    not the declaration — `robots.FIXTURES_AT_LEAST`'s and `salary_recovery.
-    MINIMUM_WORDING_CASES`'s own shape, generalised the same way."""
+    """T163: the marker's own `population=` checked against what this sweep
+    itself just measured — the half of the check the retired "N points of
+    slack" idiom (`robots.FIXTURES_AT_LEAST`'s and `salary_recovery.
+    MINIMUM_WORDING_CASES`'s own shape) never verified at all: it only ever
+    compared the claimed margin against the real one, never a claimed
+    population against a real one, so a marker whose `value=` is right and
+    whose `population=` is fabricated is exactly the gap this closes."""
     fixture = _write(
         tmp_path,
-        """
+        f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-# One point of slack, deliberately.
+#: {floor_sweep.margin_marker(1, 5)}
+#: Deliberately kept below PROBES on purpose.
 MINIMUM_PROBES = 1
 
 
@@ -2193,16 +2214,21 @@ def measure(probes=PROBES):
     measured = floor_sweep.measure(tmp_path)
     finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
     assert finding["reason"] == "stale_margin_claim"
+    assert "population=5" in finding["detail"]
     del fixture
 
 
-def test_a_correct_points_of_slack_claim_is_compliant(tmp_path: Path) -> None:
+def test_a_marker_with_no_explanation_beside_it_is_a_violation(tmp_path: Path) -> None:
+    """T159's rule is the margin *and why*; a marker alone states only the
+    first half. `_claimed_margin_size`'s retired docstring said plainly that
+    it dropped the "and why" half — `_margin_marker_has_explanation` is what
+    this task adds back."""
     fixture = _write(
         tmp_path,
-        """
+        f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-# Eight points of slack, deliberately.
+#: {floor_sweep.margin_marker(1, 9)}
 MINIMUM_PROBES = 1
 
 
@@ -2212,24 +2238,26 @@ def measure(probes=PROBES):
 """,
     )
     measured = floor_sweep.measure(tmp_path)
-    assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
+    assert finding["reason"] == "silent_margin"
+    assert "no explanation" in finding["detail"]
     del fixture
 
 
-def test_a_committed_at_claim_is_silent_not_accused_when_it_makes_no_such_claim(
+def test_free_form_prose_with_no_marker_no_longer_clears_the_arithmetic_branch(
     tmp_path: Path,
 ) -> None:
-    """A comment that argues a margin in free-form prose (`robots.
-    FIXTURES_AT_LEAST`'s own raise-history, before this task restated it) makes
-    no "Committed at N" or "N points of slack" claim at all — `_claimed_current_
-    value`/`_claimed_margin_size` must return `None`, deferring silently to the
-    keyword match, rather than inventing a claim to hold the floor to."""
+    """T163's own headline fix, pinned as a regression: a comment that argues a
+    margin in free-form prose alone — no marker, no falsifiable number at all
+    — used to clear via the retired bare-keyword fallback. It no longer does,
+    which is the entire point of this task (the report's own measured 73 of 73
+    swept floors clearing this exact way)."""
     fixture = _write(
         tmp_path,
         """
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-# Raised it from 4 to 9 when the review round landed five more probes.
+# The margin here is deliberate.
 MINIMUM_PROBES = 1
 
 
@@ -2239,16 +2267,9 @@ def measure(probes=PROBES):
 """,
     )
     measured = floor_sweep.measure(tmp_path)
-    # Not proven compliant by this check (the keyword-only path still nods this
-    # through, F2's documented residual) — but not misfired on by treating "4"
-    # or "9" as a claim about the *current*, mutated value either. Read
-    # directly: neither helper should manufacture a claim here.
-    from integral.floor_sweep import _claimed_current_value, _claimed_margin_size
-
-    comment = "# Raised it from 4 to 9 when the review round landed five more probes."
-    assert _claimed_current_value(comment) is None
-    assert _claimed_margin_size(comment) is None
-    del measured, fixture
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
+    assert finding["reason"] == "silent_margin"
+    del fixture
 
 
 def test_an_evidence_backed_population_read_through_an_attribute_access_is_now_pinned(
@@ -2625,12 +2646,13 @@ def test_a_starred_unpacked_tuple_population_with_a_comment_is_dynamic_and_compl
     rather than merely breaking compliance for the uncommented case."""
     fixture = _write(
         tmp_path,
-        """
-BASE_PROBES = tuple(f"p{i}" for i in range(20))
+        f"""
+BASE_PROBES = tuple(f"p{{i}}" for i in range(20))
 PROBES = (*BASE_PROBES, "extra")
 
-# This population is built with a starred unpack, so it cannot be counted
-# from source; kept small on purpose.
+#: {floor_sweep.margin_marker(2)}
+#: This population is built with a starred unpack, so it cannot be counted
+#: from source; kept small on purpose.
 MINIMUM_PROBES = 2
 
 
@@ -2806,23 +2828,22 @@ def measure(probes=PROBES):
     del fixture
 
 
-def test_a_keyword_argued_in_the_last_paragraph_is_still_accepted(tmp_path: Path) -> None:
-    """The control: the identical history paragraph, with the actual
-    argument moved into the final paragraph beside the declaration — still
-    compliant, proving the restriction is about *where* the argument sits,
-    not whether a free-form (non-numeric) argument is allowed at all
-    (`test_a_margin_argued_in_writing_is_not_flagged`,
-    `second_reader.STDLIB_DISAGREEMENTS_AT_LEAST` on the live tree)."""
+def test_a_marker_in_the_last_paragraph_is_still_accepted(tmp_path: Path) -> None:
+    """The control: the identical history paragraph, with the marker (and its
+    explanation) placed in the final paragraph beside the declaration — still
+    compliant, proving the scoping is about *where* the marker sits, not
+    whether one is required at all."""
     fixture = _write(
         tmp_path,
-        """
+        f"""
 PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
 # An earlier round discussed this module's own margin arithmetic at length,
 # and whether a margin was computed at all.
 #
-# Kept small on purpose: this floor is pinned to a third party's own
-# behaviour, not to this table's own size.
+#: {floor_sweep.margin_marker(2, 10)}
+#: Kept small on purpose: this floor is pinned to a third party's own
+#: behaviour, not to this table's own size.
 MINIMUM_PROBES = 2
 
 
@@ -2833,6 +2854,35 @@ def measure(probes=PROBES):
     )
     measured = floor_sweep.measure(tmp_path)
     assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
+    del fixture
+
+
+def test_a_marker_in_an_earlier_paragraph_is_not_accepted(tmp_path: Path) -> None:
+    """R4-5's scoping rule, re-applied to the marker that replaced the keyword
+    it protected: a marker several paragraphs back — accreted history from a
+    round that no longer describes this floor's current gap — must not count
+    as the argument for *this* declaration; only the last paragraph does."""
+    fixture = _write(
+        tmp_path,
+        f"""
+PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+#: {floor_sweep.margin_marker(2, 10)}
+#: An earlier round's own claim, now stale history rather than an argument
+#: for the declaration below.
+#
+# This paragraph states no marker and argues nothing about the floor below.
+MINIMUM_PROBES = 2
+
+
+def measure(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_PROBES")
+    assert finding["reason"] == "silent_margin"
     del fixture
 
 

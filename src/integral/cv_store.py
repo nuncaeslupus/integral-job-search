@@ -297,6 +297,7 @@ MINIMUM_FIELDS_MEASURED = 7
 # `MINIMUM_FIELDS_MEASURED` above is not (`_main` picks its evidence path
 # through `argparse`), so a fixture cannot pin this one; only re-running
 # `probe_intake` can.
+# arsenal-floor-margin: value=22
 MINIMUM_CHECKS = 22
 
 # The only `master.json` shape this module understands. A bare `int` field

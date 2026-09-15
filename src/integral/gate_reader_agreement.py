@@ -119,6 +119,7 @@ MINIMUM_GATES_COMPARED = 150
 #: pins it at its boundary — without which nothing tells this constant apart
 #: from one weakened by one, which is precisely the mutant that survived
 #: forty-seven cases.
+#: arsenal-floor-margin: value=13
 MINIMUM_ARRANGEMENTS_PROBED = 13
 
 _FRONT_MATTER = """---
