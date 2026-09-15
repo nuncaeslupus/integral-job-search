@@ -801,7 +801,9 @@ def test_the_scan_survives_a_probe_file_that_vanishes_between_listing_and_readin
     assert sentinel in found, "the scan stopped at the vanished probe instead of continuing"
 
 
-def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped() -> None:
+def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped(
+    tmp_path: Path,
+) -> None:
     """The `except` above is for one known writer of one known filename. A file
     that is listed and then gone for any other reason is a git operation racing
     the scan, or a defect — and a gate whose whole job is to refuse committed IP
@@ -819,33 +821,50 @@ def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped() -> No
     of them has to appear in the refusal. A directory added later is covered
     without anyone remembering to.
 
-    Deriving the axis was only half of it, and for one round the other half was
-    a proxy. `name in str(refusal.value)` reads the rendered list as a haystack,
-    so a point that is a suffix of another point is found inside its neighbour
-    and can never be observed to be missing: `arsenal/…` sits inside
-    `claude-arsenal/…`, and the `.` top's bare `vanished-mid-scan.md` sits inside
-    all fifteen others. Two of sixteen points were blind, exempting either
-    directory left the whole suite green, and the blind set is a function of
-    which directory names happen to end in which — so it grew silently as
-    directories were added. Recovering the list the refusal was actually built
-    from turns containment back into membership; a message that stops ending in
-    one raises here rather than passing."""
+    Deriving the axis was only half of it, and the other half was a proxy for
+    two rounds running. First `name in str(refusal.value)` read the rendered
+    list as a haystack, so a point that is a suffix of another was never
+    observable — `arsenal/…` sits inside `claude-arsenal/…`, and the `.` top's
+    bare `vanished-mid-scan.md` inside all fifteen others. Recovering that list
+    and comparing sets fixed the comparison and left the observable alone, and
+    the observable was the trouble: a message is not a decision. `unexpected` is
+    rendered by the f-string and tested by the assert's condition, two
+    independent expressions over one variable. Widen the condition alone and the
+    message still names all sixteen points — so a check reading the message
+    stays green — while the scan returns a hit and refuses nothing. Measured,
+    not argued. So each point is now its own scan and the observation is whether
+    `_quads_in` raised at all, which is the decision itself and has no rendering
+    to read.
+
+    The population is synthetic for cost: sixteen scans of the real tree are
+    19.8s, and 1001 empty files in a `tmp_path` are 0.3s — cheaper than the one
+    real scan this test used to do, while still clearing the floor inside
+    `_quads_in`."""
     repo = _LIBRARY.parent
-    listed = _listed_files(repo)
-    tops = {name.partition("/")[0] if "/" in name else "." for name in listed}
+    tops = {name.partition("/")[0] if "/" in name else "." for name in _listed_files(repo)}
     vanished = sorted(str(Path(top) / "vanished-mid-scan.md") for top in tops)
     # Its own denominator: an axis derived from an empty listing is no axis, and
     # the emptiness would otherwise read as every point passing.
     assert len(vanished) > 5, f"the axis collapsed to {vanished}"
 
-    with pytest.raises(AssertionError) as refusal:
-        _quads_in(repo, [*listed, *vanished])
+    population = [f"f{index}.md" for index in range(1001)]
+    for name in population:
+        (tmp_path / name).write_bytes(b"")
 
-    # The first line only: pytest rewrites the assert and appends its own
-    # `assert not [...]` explanation underneath the message.
-    reported = set(ast.literal_eval(str(refusal.value).partition(":")[2].splitlines()[0]))
-    exempted = sorted(set(vanished) - reported)
-    assert not exempted, f"vanished, and the predicate carved them out of the refusal: {exempted}"
+    # The control, and it is load-bearing rather than a courtesy: every refusal
+    # below is observed as "an AssertionError came out", and the floor assert is
+    # an AssertionError too. If the population failed to clear it, all sixteen
+    # points would "refuse" for the wrong reason and the loop would be vacuous.
+    _quads_in(tmp_path, population)
+
+    unrefused = []
+    for name in vanished:
+        try:
+            _quads_in(tmp_path, [*population, name])
+        except AssertionError:
+            continue
+        unrefused.append(name)
+    assert not unrefused, f"vanished, and the scan returned instead of refusing: {unrefused}"
 
 
 def test_the_floor_counts_the_files_read_and_not_the_files_listed() -> None:
