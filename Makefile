@@ -28,7 +28,25 @@ test:  ## run the test suite
 	# tools/collect_ads.py, which imports py3langid from the collect extra.
 	# Without it the module fails to import and pytest aborts on collection —
 	# which passed unnoticed for as long as the venv happened to still carry it.
-	uv run --extra dev --extra collect pytest
+	# `-n auto` here, not in pyproject.toml's addopts: this target always runs the
+	# whole suite, which is where parallelism pays — 3x to 5x on a twelve-core
+	# laptop. Independent sessions re-measuring this tree landed all over that
+	# band, and their absolute seconds disagreed as well, so the band is the
+	# honest unit and no single figure is committed here — a percentage nobody
+	# can re-derive is the same defect one decimal further out. A single-file
+	# invocation (`pytest tests/test_x.py`,
+	# what task gates and CONTRIBUTING.md use) bypasses this target and stays
+	# serial on purpose.
+	# Its companion `--dist loadfile` is NOT here — it is in addopts, where the
+	# comment says why. Short version: it is load-bearing rather than a
+	# preference, and nothing reads a recipe body, so written here it was a rule
+	# no gate could enforce.
+	# Parallel is not free of consequence either. Running the suite concurrently
+	# made one cross-process race reachable that a single process could not, and
+	# the fix rides with this change: tests/test_connector_contract.py's scan
+	# lists untracked files, and repo_gate's evidence-stability measurement
+	# writes eight of them into the live tree and deletes them again.
+	uv run --extra dev --extra collect pytest -n auto
 
 gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 	@mkdir -p status/evidence

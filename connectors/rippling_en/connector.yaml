@@ -43,4 +43,7 @@ detail:
     fields:
       title: props.pageProps.apiData.jobPost.name
       company: props.pageProps.apiData.jobPost.companyName
-      text: props.pageProps.apiData.jobPost.description.role
+      # Raw HTML, inline styles and all, inside `__NEXT_DATA__` (T169).
+      text:
+        path: props.pageProps.apiData.jobPost.description.role
+        take: html_text

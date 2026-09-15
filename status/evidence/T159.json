@@ -93,6 +93,16 @@
       "line": 944
     },
     {
+      "module": "markup_text",
+      "name": "MINIMUM_FIXTURE_OFFERS",
+      "line": 86
+    },
+    {
+      "module": "markup_text",
+      "name": "MINIMUM_MARKUP_VALUES_COMPARED",
+      "line": 87
+    },
+    {
       "module": "naming",
       "name": "MINIMUM_SCANNED",
       "line": 228
@@ -231,7 +241,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4032,
+      "line": 4507,
       "population": 15
     },
     {
@@ -267,14 +277,14 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2806,
-      "population": 41
+      "line": 2813,
+      "population": 42
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2739,
-      "population": 81
+      "line": 2746,
+      "population": 84
     },
     {
       "module": "freshness",
@@ -488,6 +498,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 81,
+  "floors_swept_at_least": 84,
   "floors_arithmetically_checked_at_least": 36
 }

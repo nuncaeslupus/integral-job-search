@@ -41,7 +41,10 @@ list:
       source_ref: guid
       title: title
       company: companyName
-      text: description
+      # Raw HTML (`<p><strong>…`) (T169).
+      text:
+        path: description
+        take: html_text
       salary_min: minSalary
       salary_max: maxSalary
       salary_currency: currency
