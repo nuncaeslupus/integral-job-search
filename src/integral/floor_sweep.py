@@ -2715,7 +2715,15 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: `gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES` joined the population
 #: beside it — the floor over observed traces the name-only floor's own
 #: review round found missing.
-MINIMUM_FLOORS_SWEPT = 77
+#: **78 since T171**, whose `query_capture.MINIMUM_STEERABLE_PACKAGES_CHECKED`
+#: joined it too — and this one is the collision above happening a second time,
+#: not a third floor added by one branch. T171 and T158 each wrote a number one
+#: higher than the base they branched from, for entirely different floors, and
+#: git saw no conflict in the *evidence* because both sides wrote the same
+#: digits. The merged tree holds both floors, so the true count is 78 and
+#: neither branch's number was ever right about it. Regenerated against the
+#: merge, never picked from a side. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 78
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
