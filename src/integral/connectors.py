@@ -102,7 +102,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from integral.dimensions import Language
-from integral.offers import Location, Offer, Salary, compute_offer_id
+from integral.offers import Location, Offer, Salary, SourceKind, compute_offer_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -191,6 +191,14 @@ PAGE_PLACEHOLDER = "{page}"
 # segment or a query string. Without this a board's query is whatever its
 # `url_pattern` was written with, so every candidate gets the same search.
 QUERY_PLACEHOLDER = "{query}"
+
+#: RFC 3986 §3.3's two dot-segments. `quote(value, safe="")` escapes every
+#: reserved character, so a substituted value lands as one opaque segment,
+#: except for these two: `.` is unreserved and survives whole. §5.2.4 then
+#: removes the segment and moves the URL around it. Both builders that
+#: substitute into a path refuse them: `_templated_url` for a record's value
+#: and `build_list_urls` for the candidate's query.
+DOT_SEGMENTS = frozenset({".", ".."})
 # ponytail: URL slot only. `list.body_json` still admits `{page}` alone, so a
 # POST board carrying its search in the body (only `usajobs_en` today) cannot
 # be steered yet — widen `_body_uses_only_the_page_placeholder` when a second
@@ -1022,7 +1030,7 @@ def _templated_url(document: Any, template: str) -> str | None:
         if value is None or not _present(value):
             return None
         encoded = quote(value, safe="")
-        if encoded in {".", ".."}:
+        if encoded in DOT_SEGMENTS:
             # The "one opaque segment" property above is false for exactly two
             # strings. `.` is unreserved, so `quote` leaves it alone and `..`
             # survives whole, steering the composed URL up a level —
@@ -1654,7 +1662,17 @@ def _placeholder_carrying_query_key_occurrences(pattern: str) -> int:
 #: is `client_target`, which is a DOM element id — validated to a shape with no
 #: colon, no whitespace and no newline, so it cannot become a header of its own
 #: even by concatenation. There is still nowhere to write a credential.
-Client = Literal["htmx"]
+#:
+#: T173 — `browser`. Some boards serve their listing only to a client that runs
+#: their JavaScript check. Measured 2026-09-10 on infojobs.net: every search and
+#: advert GET from this tool answers a 200 "No podemos identificar tu navegador"
+#: page from the CDN edge, whatever the headers, while a real browser on the
+#: same network passes the same check silently and renders the listing. No
+#: header set can express that, and replaying the browser's token from a plain
+#: client would be evading the check. So `browser` sends nothing from here:
+#: `integral.sourcing` never hands such a board to the plain fetch at all, and
+#: reads it only from a page the candidate's own browser rendered.
+Client = Literal["htmx", "browser"]
 
 #: The id `client_target` may hold: what an HTML `id` attribute looks like, and
 #: nothing that could terminate a header or start a second one.
@@ -1667,7 +1685,7 @@ def client_headers(client: Client | None, target: str | None) -> dict[str, str]:
     Every name here is a literal in this module. A caller cannot reach this
     with a name of its own, which is the whole property being preserved.
     """
-    if client is None:
+    if client is None or client == "browser":
         return {}
     if client == "htmx":
         headers = {"HX-Request": "true"}
@@ -1699,6 +1717,10 @@ class ListPage(Strict):
                     f"client_target {self.client_target!r} is not an element id: it must start "
                     "with a letter and hold only letters, digits, _ . : or -"
                 )
+        if self.client == "browser" and self.method != "GET":
+            # T173. A browser capture is one page per URL, and a POST search's
+            # pages share one URL — one capture would answer all of them.
+            raise ValueError("client: browser reads saved pages, one per URL — only a GET")
         return self
 
     url_pattern: str = Field(min_length=1)
@@ -2713,6 +2735,11 @@ class Connector(Strict):
     version: str = Field(pattern=VERSION.pattern)
     last_verified: date
     auth: AuthMode = "none"
+    #: T172. What this board is, relative to the employers whose adverts it
+    #: carries: `employer` for the employer's own board. Declared, never
+    #: inferred (T75). An `{employer}` slot alone does not say it, because a job
+    #: board's company page takes one too (#462 second reader, F1).
+    source_kind: SourceKind | None = None
     list: ListPage
     detail: DetailPage | None = None
 
@@ -2929,7 +2956,18 @@ def _list_targets(
                 "search terms were supplied — a board that asks what to search "
                 "for must not be searched for nothing"
             )
-        pattern = pattern.replace(QUERY_PLACEHOLDER, quote(query, safe=""))
+        encoded = quote(query, safe="")
+        # The same refusal, for the same outcome: in a path, §5.2.4 removes a
+        # dot-segment query, so `…/ofertas-trabajo/../barcelona` is fetched as
+        # `…/barcelona` and its unfiltered answer reads as a search. `urlsplit`
+        # decides the component. In the query string `..` is a literal search.
+        if encoded in DOT_SEGMENTS and QUERY_PLACEHOLDER in urlsplit(pattern).path:
+            raise ConnectorError(
+                f"{connector.site}: the query {query!r} is a dot-segment in "
+                f"url_pattern's path, which RFC 3986 removes, so the request would "
+                "carry no search terms"
+            )
+        pattern = pattern.replace(QUERY_PLACEHOLDER, encoded)
     if EMPLOYER_PLACEHOLDER in pattern:
         # Repeated from `ListPage` for the reason the clamp above is: a
         # `model_copy(update=...)` object never met the validator.
@@ -3283,6 +3321,16 @@ def _as_wage(value: str | None) -> float | None:
     return parsed
 
 
+def source_kind_of(connector: Connector) -> SourceKind | None:
+    """What this connector's results are, relative to their employer (T172).
+
+    Only what `connector.yaml` declares in `source_kind`. Nothing is inferred
+    from the URL or its `{employer}` slot, and an undeclared board is `None`,
+    never a guessed `"aggregator"`.
+    """
+    return connector.source_kind
+
+
 def build_offer(
     connector: Connector,
     *,
@@ -3333,6 +3381,7 @@ def build_offer(
         return Offer(
             id=compute_offer_id(text),
             source=connector.site,
+            source_kind=source_kind_of(connector),
             source_ref=source_ref or merged.get("source_ref"),
             url=url or merged.get("url"),
             title=merged.get("title"),

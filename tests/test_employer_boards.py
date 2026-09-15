@@ -5,22 +5,35 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
 from integral.candidate import Aim, CandidateConstraints, Location
 from integral.connectors import (
+    EMPLOYER_PLACEHOLDER,
     MAX_EMPLOYERS,
     ConnectorError,
     ListRequest,
     build_list_requests,
     build_list_urls,
+    load_connector,
     parse_connector,
 )
-from integral.employer_boards import MINIMUM_CONFORMING, measure, record
+from integral.employer_boards import (
+    ATTRIBUTION_BOARDS,
+    ATTRIBUTION_RESPONSES,
+    MINIMUM_CONFORMING,
+    attribution_expectations,
+    attribution_reads,
+    attribution_round,
+    attribution_verdict,
+    measure,
+    record,
+)
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import load_lifecycle_offer
+from integral.offers import SourceKind
 from integral.robots import Robots
 from integral.sourcing import FETCH_LOG, Response, source
 
@@ -304,6 +317,71 @@ def test_two_packages_on_one_host_count_once(tmp_path: Path) -> None:
     measured = measure(directory, ledger)
     assert measured["not_conforming"] == {}
     assert measured["ats_host_connectors_conforming"] == 1
+
+
+def test_a_slot_carrying_package_that_declares_nothing_does_not_count(tmp_path: Path) -> None:
+    """T176: the slot is not the declaration (T172's F1, in T144's own gate).
+
+    A job board's company page — `indeed.com/cmp/{employer}/jobs` — carries the
+    slot and is not an ATS host. Here the real Lever package keeps its slot,
+    its contract pack and its robots row, and loses only `source_kind`.
+    """
+    directory = _library(tmp_path, "lever_en")
+    package = directory / "lever_en"
+    yaml_text = (package / "connector.yaml").read_text(encoding="utf-8")
+    assert "source_kind: employer\n" in yaml_text
+    (package / "connector.yaml").write_text(
+        yaml_text.replace("source_kind: employer\n", ""), encoding="utf-8"
+    )
+    assert EMPLOYER_PLACEHOLDER in load_connector(package).list.url_pattern
+    measured = measure(directory, _LEDGER)
+    assert measured["ats_host_connectors_conforming"] == 0
+    assert measured["conforming_hosts"] == []
+
+
+def test_a_slot_carrying_package_declared_an_aggregator_does_not_count(
+    tmp_path: Path,
+) -> None:
+    """`employer` is the declaration that counts, not merely *a* declaration:
+    an aggregator with a slot is the company-page case wearing a label."""
+    directory = _library(tmp_path, "lever_en")
+    package = directory / "lever_en"
+    yaml_text = (package / "connector.yaml").read_text(encoding="utf-8")
+    (package / "connector.yaml").write_text(
+        yaml_text.replace("source_kind: employer\n", "source_kind: aggregator\n"),
+        encoding="utf-8",
+    )
+    assert load_connector(package).source_kind == "aggregator"
+    measured = measure(directory, _LEDGER)
+    assert measured["ats_host_connectors_conforming"] == 0
+
+
+def test_a_declared_package_with_no_slot_does_not_count(tmp_path: Path) -> None:
+    """The other half: one employer's own careers page is not an ATS host.
+
+    T144 counts hosts reaching thousands of employers through **one** URL
+    shape, which is what the slot buys. Lever here keeps its declaration, its
+    robots row and its host, and points at a single employer.
+    """
+    directory = _library(tmp_path, "lever_en")
+    package = directory / "lever_en"
+    lines = (package / "connector.yaml").read_text(encoding="utf-8").split("\n")
+    kept, dropping = [], False
+    for line in lines:
+        if line.startswith("  employers:"):
+            dropping = True
+            continue
+        if dropping:
+            if line.startswith("    "):
+                continue
+            dropping = False
+        kept.append(line.replace("{employer}", "lodgify") if "url_pattern:" in line else line)
+    (package / "connector.yaml").write_text("\n".join(kept), encoding="utf-8")
+    connector = load_connector(package)
+    assert EMPLOYER_PLACEHOLDER not in connector.list.url_pattern
+    assert connector.source_kind == "employer"
+    measured = measure(directory, _LEDGER)
+    assert measured["ats_host_connectors_conforming"] == 0
 
 
 def test_the_record_commits_the_floor_and_nothing_that_grows() -> None:
@@ -596,7 +674,10 @@ def test_a_paged_board_stopped_on_page_two_keeps_page_one(
 
 
 def _detail_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adverts_robots: str | None
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    adverts_robots: str | None,
+    advert_status: int = 200,
 ) -> tuple[Any, list[str], list[float]]:
     """Two employers, two rows each, every body on an advert host of its own."""
     import urllib.error
@@ -628,7 +709,9 @@ def _detail_run(
     def fetch(request: ListRequest) -> Response:
         if "adverts" in request.url:
             # One body per advert: identical bodies are one offer to dedup.
-            return Response(200, f"<div class='content'>the advert at {request.url}</div>")
+            return Response(
+                advert_status, f"<div class='content'>the advert at {request.url}</div>"
+            )
         slug = request.url.split("/")[-2]
         rows = [
             {"title": f"Python {slug} {n}", "url": f"https://adverts.ats.test/{slug}/{n}"}
@@ -681,6 +764,75 @@ def test_the_advert_host_crawl_delay_is_kept_and_a_budget_stop_is_named(
     assert "budget was spent" in run.summary()
 
 
+def test_a_refused_advert_host_is_asked_once_across_employers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T174 (#445 R3-3): Lever routes every row through jobs.lever.co. A 429
+    there on the first advert used to be followed by the rest of the budget,
+    each row reported as "no text". The list host is another origin, so the
+    second employer's list is still read; its adverts are not."""
+    run, _, _ = _detail_run(
+        tmp_path, monkeypatch, adverts_robots="User-agent: *\nAllow: /\n", advert_status=429
+    )
+    (outcome,) = run.outcomes
+    assert (outcome.items, outcome.detail_needed, outcome.detail_fetched) == (4, 4, 1), outcome
+    assert outcome.refused and "429" in outcome.refused, outcome
+    assert outcome.dropped == 0 and not outcome.reached_the_board, outcome
+
+
+def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> None:
+    """#466 N1. Most boards serve list and adverts from one host, so a refusal
+    on an advert also stops the next employer's list — and the board must keep
+    the reason it was actually given, not the carry-over wording written for a
+    board that asked for nothing."""
+    directory = _package(tmp_path)
+    (directory / "atshost_en" / "connector.yaml").write_text(
+        _yaml(
+            "https://api.ats.test/v1/boards/{employer}/jobs",
+            "  employers:\n    acme: Acme Corp\n    beta: Beta Inc\n",
+        ).replace(
+            "fields: {title: title, company: company, text: body}",
+            "fields: {title: title, detail_url: url}",
+        )
+        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n",
+        encoding="utf-8",
+    )
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        if "/advert/" in request.url:  # the advert lives on the list's own host
+            return Response(429, "Too Many Requests")
+        slug = request.url.split("/")[-2]
+        # "python engineer" (T167 filters an unsteered board's rows by
+        # phrase, and the title alone would otherwise never match one).
+        rows = [
+            {"title": f"{slug} python engineer", "url": f"https://api.ats.test/advert/{slug}"}
+        ]
+        return Response(200, json.dumps({"jobs": rows}))
+
+    run = source(
+        ProfileStore(tmp_path / "p", "test"),
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+        Aim(state="stated", terms=("python",)),
+        fetch=fetch,
+        at=AT,
+        directory=directory,
+        robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+    )
+    (outcome,) = run.outcomes
+    # acme's list, acme's advert (429) — and then beta's list is never asked.
+    assert len(asked) == 2, asked
+    # The carry-over wording quotes the reason it carries, so testing for the
+    # reason's text passes either way: what must be absent is the carry-over
+    # itself, which says this board asked for nothing.
+    assert outcome.refused and outcome.refused.startswith("the capture records HTTP 429")
+    assert "not asked again" not in outcome.refused, outcome.refused
+
+
 def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:
     failure = Response(None, "", error="timed out")
     run, _ = _three_employer_run(
@@ -701,3 +853,116 @@ def test_the_crawl_delay_is_kept_between_one_hosts_requests(
     answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
     _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\nCrawl-delay: 2\n")
     assert pauses == [2.0, 2.0]
+
+
+@pytest.fixture(scope="module")
+def attribution() -> tuple[list[tuple[str, Any]], str]:
+    """One constructed round, shared: the judging below is a pure function."""
+    return attribution_round()
+
+
+def test_a_result_says_it_came_from_the_employers_own_board(
+    attribution: tuple[list[tuple[str, Any]], str],
+) -> None:
+    """T172 (#445 F14): the stored offer and the round summary both say which
+    results the employer's own board produced, and a job board's say nothing."""
+    expected = sum(
+        attribution_reads(answers).count("offer") for _, answers in ATTRIBUTION_BOARDS.values()
+    )
+    measured = attribution_verdict(*attribution)
+    assert measured["source_kind_defect_list"] == []
+    assert measured["source_kind_boards_silent"] == []
+    assert (measured["source_kind_defects"], measured["source_kind_offers_checked"]) == (
+        0,
+        expected,
+    )
+
+
+def test_the_round_is_the_whole_product() -> None:
+    """Every kind, crossed with one request or two, crossed with every answer.
+
+    The answers are written out **here**, on the spec's side, and never read
+    from `ATTRIBUTION_RESPONSES`. Building the expectation from the module's
+    own tuple is a bound derived from the thing it bounds: deleting an answer
+    would satisfy it, and deleting `badrow` or `known` brings round 3's H1 and
+    H2 mutants back to life (#462 round 4, J1).
+    """
+    answers = ("offer", "known", "norows", "badrow", "timeout", "refused")
+    assert set(ATTRIBUTION_RESPONSES) == set(answers)
+    assert set(ATTRIBUTION_BOARDS.values()) == {
+        (kind, shape)
+        for kind in (*get_args(SourceKind), None)
+        for shape in (
+            *((one, two) for one in answers for two in answers),
+            *((one,) for one in answers),
+        )
+    }
+
+
+def test_the_attribution_metric_reads_a_board_marked_wrongly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control: the metric is not independent of what it measures."""
+    import integral.connectors as connectors
+
+    monkeypatch.setattr(connectors, "source_kind_of", lambda connector: "employer")
+    stored, summary = attribution_round()
+    wrong = sorted(source for source, _ in stored if ATTRIBUTION_BOARDS[source][0] != "employer")
+    assert (
+        sorted(
+            one.split(":")[0]
+            for one in attribution_verdict(stored, summary)["source_kind_defect_list"]
+        )
+        == wrong
+    )
+
+
+@pytest.mark.parametrize("silent", sorted(attribution_expectations()[1]))
+def test_any_board_that_should_store_going_quiet_is_not_a_clean_zero(
+    attribution: tuple[list[tuple[str, Any]], str], silent: str
+) -> None:
+    """#462 F2/G2/H3: whichever board goes quiet, its label is checked by
+    nobody, so the round is unmeasured rather than clean."""
+    stored, summary = attribution
+    kept = [(source, kind) for source, kind in stored if source != silent]
+    measured = attribution_verdict(kept, summary)
+    assert measured["source_kind_boards_silent"] == [silent]
+    assert measured["source_kind_defects"] == -1
+
+
+def test_an_offer_from_a_board_that_never_read_one_is_a_defect(
+    attribution: tuple[list[tuple[str, Any]], str],
+) -> None:
+    """The check for a store the round could not have made has no population of
+    its own — `sourcing` never reads past a refusal — so it is pinned here
+    rather than left as a branch nothing can reach."""
+    kinds, must_store, _ = attribution_expectations()
+    never = sorted(set(kinds) - must_store)[0]
+    stored, summary = attribution
+    measured = attribution_verdict([*stored, (never, kinds[never])], summary)
+    assert measured["source_kind_defect_list"] == [
+        f"{never}: stored an offer from a board that never read one"
+    ]
+
+
+def test_a_round_that_stores_nothing_is_not_a_clean_zero(
+    attribution: tuple[list[tuple[str, Any]], str],
+) -> None:
+    """#462 H3: the case an empty scan reads as perfect."""
+    measured = attribution_verdict([], attribution[1])
+    assert measured["source_kind_defects"] == -1
+    assert measured["source_kind_offers_checked"] == 0
+
+
+def test_the_committed_employer_boards_declare_it() -> None:
+    """#462 F1: the kind is declared, never read off the slot, so a package
+    losing its declaration would be stored as a job board's without a sound."""
+    from integral.connectors import load_connector
+
+    declared = {
+        package.name
+        for package in _CONNECTORS.iterdir()
+        if (package / "connector.yaml").is_file()
+        and load_connector(package).source_kind == "employer"
+    }
+    assert declared == {"ashby_en", "greenhouse_en", "lever_en", "rippling_en", "workable_en"}

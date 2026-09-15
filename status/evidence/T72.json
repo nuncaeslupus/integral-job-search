@@ -91,7 +91,7 @@
       "probe_items": 3,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30",
+      "probe_captured_at": "2026-09-14",
       "rate_limited": null
     },
     {
@@ -99,10 +99,10 @@
       "site": "jobfluent.com",
       "health": "healthy",
       "baseline_items": 3,
-      "probe_items": 3,
+      "probe_items": 25,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30",
+      "probe_captured_at": "2026-09-10",
       "rate_limited": null
     },
     {
@@ -223,7 +223,7 @@
       "probe_items": 40,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-28",
+      "probe_captured_at": "2026-09-10",
       "rate_limited": null
     },
     {

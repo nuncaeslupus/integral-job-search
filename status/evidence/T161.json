@@ -1,0 +1,13 @@
+{
+  "verdict_block_claims_about_ci_that_are_not_measured": 0,
+  "ci_claim_scenarios_checked": 3,
+  "ci_claim_scenarios_at_least": 3,
+  "gate_status": "measured",
+  "ci_claim_scenarios_checked_by_name": [
+    "ci_claims_on_a_passing_run",
+    "ci_claims_on_a_failing_run",
+    "ci_claims_on_a_pushed_commit"
+  ],
+  "ci_claims_found": [],
+  "ci_token_hits_found": []
+}

@@ -13,11 +13,13 @@ page identity is one more way to reach the third.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from integral import liveness
+from integral.connector_health import BLOCK_PAGE_MARKERS, RATE_LIMIT_SAMPLES
 from integral.offers import Offer
 
 _LISTINGS_PAGE = "<h1>Ofertas de empleo</h1><p>Explora nuestras vacantes en el sector servicios</p>"
@@ -212,3 +214,65 @@ def test_a_match_may_not_span_two_identity_fields() -> None:
     """`<title>` and `<h1>` are separate claims. Concatenating them would let a
     phrase neither contains be assembled across the join."""
     assert liveness.title_in_body("Acme CISO", "<title>Acme</title><h1>CISO</h1>") is False
+
+
+def test_with_no_title_a_marker_anywhere_withholds_and_a_title_restores() -> None:
+    """T173's accepted fail-closed cost (#455 rounds 1-3). With no title, a real
+    advert whose markup carries `h-captcha` is withheld as `unverified`;
+    given its title, the identity check decides and it is `live`."""
+    advert = (
+        "<html><head><title>Research Fellow - jobs.ac.uk</title></head><body>"
+        '<h1>Research Fellow</h1><div class="h-captcha" data-sitekey="x"></div>'
+        "<p>You will design our API rate limiting.</p></body></html>"
+    )
+    assert liveness.read_response("b", 200, advert).liveness == "unverified"
+    assert liveness.read_response("b", 200, advert, title="Research Fellow").liveness == "live"
+
+
+def _named_innocuously(body: str) -> str:
+    """A block page given a site-name `<title>` and no `<h1>` — what a restyle
+    of any challenge page can look like (#455 round 3, N3)."""
+    demoted = body.replace("<h1", "<h2").replace("</h1>", "</h2>")
+    if "<head>" in demoted:
+        return demoted.replace("<head>", "<head><title>Acme Empleo</title>", 1)
+    return demoted.replace("<html>", "<html><head><title>Acme Empleo</title></head>", 1)
+
+
+#: Inert page text, long enough that a scan cut short at any plausible length
+#: never reaches what follows it (#455 round 4, N5). No block marker in it.
+_PADDING = "<p>Ofertas de empleo en Barcelona, actualizadas cada día.</p>" * 400
+
+
+def _buried(body: str) -> str:
+    """The same refusal with its words after ~24 KB of an ordinary page."""
+    for anchor in ("<body>", "<html>"):
+        if anchor in body:
+            return body.replace(anchor, anchor + _PADDING, 1)
+    return _PADDING + body
+
+
+_SHAPES: dict[str, Callable[[str], str]] = {
+    "as recorded": lambda body: body,
+    "named innocuously": _named_innocuously,
+    "buried": _buried,
+}
+
+
+@pytest.mark.parametrize("shape", list(_SHAPES))
+@pytest.mark.parametrize(
+    ("case", "status", "body"),
+    RATE_LIMIT_SAMPLES,
+)
+def test_no_known_refusal_reads_as_a_live_advert(
+    case: str, status: int | None, body: str, shape: str
+) -> None:
+    """#455 rounds 2 and 3 (N1, N3). Every entry in `RATE_LIMIT_SAMPLES` *is* a
+    refusal, so served as recorded — a 200 where no status was recorded —,
+    restyled with an innocuous site-name title and its `<h1>` demoted, and
+    buried after a long ordinary page, none of them may be presented as an
+    open vacancy when no title is given.
+    Derived from the sample list, so a refusal added there later is covered."""
+    assert not any(m in _PADDING.casefold() for m in BLOCK_PAGE_MARKERS)
+    page = _SHAPES[shape](body)
+    check = liveness.read_response("r", status if status is not None else 200, page)
+    assert check.liveness != "live", (case, shape, check.reason)
