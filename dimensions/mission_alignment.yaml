@@ -40,37 +40,131 @@ elicitation:
           Explica'm una feina que t'enorgullia explicar en un sopar familiar — i alguna
           que no tornaries a acceptar.
 extraction:
+  # One cue per language, at the 0.7 rung (T176, second round). The sector-noun
+  # frame this replaced ("our mission … {0,80 chars} … health/education/…")
+  # was an attempt to let a sector count only where the mission statement
+  # names it — but "the words 'our mission' within 80 characters of a sector
+  # noun, in the same sentence" is not "the organisation's own mission
+  # statement names the sector": "Our mission and culture are clear: 25 days
+  # holiday, a pension and a private medical plan." still matched, because the
+  # frame never required the sector noun to sit inside the mission's own
+  # predicate. Closing that gap with a fourth attempt at the same frame is an
+  # enumeration of counterexamples with no last element (CLAUDE.md); the
+  # definition itself says a sector noun must never settle this on its own
+  # ("a named purpose, rather than a sector left to infer"), so an advert that
+  # only names a sector now goes unsettled and reaches the model, which is
+  # what an unsettled dimension is for. What remains is the unframed cue,
+  # widened to close the one asymmetry a second reader found: "Our mission is
+  # to …" and "Our purpose is to …" now agree.
+  #
+  # All three languages carry the same shape, because they have to: the first
+  # round of this fix tightened English alone, and "Nuestra misión y cultura
+  # son claras: 25 días de vacaciones…" went on settling 0.7 in the two
+  # languages nobody had looked at. A predicate is what the 0.7 rung's tell
+  # asks for ("a mission named and meant"), so each language requires its own
+  # form of one — "is to" plus an infinitive in English, "es"/"és" plus an
+  # infinitive in Spanish and Catalan — and each excludes the second person
+  # over the rest of the sentence.
   cues:
     en:
-      - pattern: "our\\s+mission\\s+is|mission-?driven|social\\s+impact"
-        value: 0.6
-        negatable: true
-      - pattern: "healthcare|education|climate|public\\s+sector|non-?profit"
+      # "is to" or "is that" — a predicate, not a bare "is": "Our purpose is clear, and we
+      # back it with private health insurance." would otherwise match on the
+      # phrase alone with nothing named after it — the rung's own tell asks
+      # for "a mission named and meant", and naming one needs a predicate.
+      # An infinitive is not the only way to write one — "La nostra missió és
+      # que l'educació sigui gratuïta per a tothom." names a purpose through a
+      # subordinate clause — so each language admits both forms: "is to" /
+      # "is that", "es"/"és" plus an infinitive or "que".
+      # Every committed mission/purpose statement, English or corpus, already
+      # takes this form ("is to increase…", "is to look after…"). And never
+      # addressed to "you" anywhere in the same sentence — not only in the gap
+      # up to a sector noun, which is where the sector-frame this replaced
+      # looked and how "Our mission is to look after the health of your
+      # family." (T176 round 2) got past it: "your" sat after the sector word,
+      # outside the window the old guard scanned. A benefit is what the
+      # employer does for you; a purpose is for somebody else.
+      #
+      # T178 round 2 (second reader on #473, head 3b131cb): the exclusion is
+      # the *full* English second-person pronoun paradigm — subject/object
+      # "you", possessive "your"/"yours", reflexive "yourself"/"yourselves" —
+      # not the two forms the previous round happened to write down. And
+      # "mission-driven" is deleted: it names no purpose at all ("Our
+      # mission-driven benefits package includes a gym." matched on the
+      # adjective alone), the exact shape the predicate requirement exists to
+      # refuse, and ES/CA never had an equivalent alternative — so the
+      # deletion closes a parity gap rather than opening one.
+      - pattern: "our\\s+(?:mission|purpose)\\s+is\\s+(?:to|that)\\b(?![^.;!?\\n]*\\b(?:you|your|yours|yourself|yourselves)\\b)|social\\s+impact"
         value: 0.7
-        negatable: false
+        negatable: true
     es:
-      - pattern: "nuestra\\s+misi[óo]n|impacto\\s+social"
-        value: 0.6
-        negatable: true
-      - pattern: "sanidad|educaci[óo]n|sector\\s+p[úu]blico|administraci[óo]n\\s+p[úu]blica"
+      # T178 round 2: two faults in the same regex, both found by re-deriving
+      # the ES/CA twins of every English case rather than trusting the
+      # English fix to generalise.
+      #
+      # 1. Gender agreement was wrong, and wrong in the fail-open direction
+      #    for one clause and the fail-closed direction for the other: "misión"
+      #    is feminine ("nuestra misión") but "propósito" is masculine
+      #    ("nuestro propósito"), and the pattern paired both nouns with the
+      #    feminine "nuestra" — so "Nuestro propósito es …" could never match
+      #    the base predicate at all, which let the two committed
+      #    "Nuestro propósito es cuidar de tu salud…" cases pass for the wrong
+      #    reason (the base phrase never matched, so the pronoun guard right
+      #    beside it was never exercised) and made a real mission statement
+      #    ("Nuestro propósito es mejorar la sanidad rural.") read as
+      #    unsettled when the tell requires 0.7.
+      # 2. The infinitive test was a bare suffix (`\w+(?:ar|er|ir)`), and
+      #    Spanish adjectives derived from Latin -aris ("similar", "singular",
+      #    "particular", "regular", "popular", "familiar", "peculiar") end in
+      #    exactly the same letters as a verb infinitive and carry the same
+      #    default word stress, so nothing in the written form tells them
+      #    apart — "Nuestra misión es similar a la de nuestros clientes." named
+      #    no purpose and still matched. Named ceiling: this blocks the
+      #    specific Latin -aris family, which is what turned up in review and
+      #    in the corpus; a novel adjective of the same shape that is not on
+      #    this list would still slip through, and closing that fully would
+      #    need a real lexicon rather than a regex.
+      #
+      # The pronoun exclusion is widened to the full paradigm this dimension
+      # needs — "tú"/"ti"/"contigo"/"te" (singular), "vosotros"/"vosotras"/
+      # "os"/"vuestro…" (plural informal), "usted(es)" (formal) — mirroring
+      # the EN and CA lists so the same sentence settles the same way in
+      # every language (T178's own finding: three enumerations that disagreed
+      # is what this closes).
+      - pattern: "(?:nuestra\\s+misi[óo]n|nuestro\\s+prop[óo]sito)\\s+es\\s+(?:que|(?!(?:similar|singular|particular|regular|popular|familiar|peculiar)(?:es)?\\b)\\w+(?:ar|er|ir))\\b(?![^.;!?\\n]*\\b(?:t[uú]|ti|contigo|te|tus?|vosotr[oa]s|os|vuestr\\w*|usted(?:es)?)\\b)|impacto\\s+social"
         value: 0.7
-        negatable: false
+        negatable: true
     ca:
-      - pattern: "la\\s+nostra\\s+missi[óo]|impacte\\s+social"
-        value: 0.6
-        negatable: true
-      - pattern: "salut\\s+mental|sanitari|hospital|SISCAT|educaci[óo]"
+      # T178 round 2, the CA twin of the ES fix above, plus a shape neither
+      # ES nor EN has: Catalan writes an enclitic pronoun attached to the verb
+      # with a hyphen ("ajudar-te", "oferir-te", "formar-te") rather than as a
+      # separate word, so a guard that only looks for whole-word "teu"/"teva"
+      # never reaches it — three committed cases matched 0.7 on exactly this
+      # shape. The hyphen is the safe anchor: Catalan orthography requires it
+      # before an enclitic on an infinitive, so `-te\b` cannot collide with an
+      # ordinary word (unlike Spanish, where the same pronoun glues on with no
+      # separator at all — "ayudarte" — and a suffix test broad enough to
+      # catch it would also catch "parte", "norte", "arte"; that gap is
+      # therefore a named ceiling rather than patched here). Also added: the
+      # bare subject pronoun "tu" (Catalan uses the same spelling as Spanish),
+      # the object clitic "et", and "us"/"vosaltres"/"vostè(s)" for the
+      # plural and formal forms — the same completeness pass as ES.
+      # The infinitive suffix now excludes the same Latin -aris adjective
+      # family as ES, plus Catalan's own "clar" ("clear") and "lliure"
+      # ("free"), which end in exactly the -ar/-re shape the suffix test
+      # accepts and named the finding ("El nostre propòsit és clar…",
+      # "La nostra missió és singular.").
+      - pattern: "(?:la\\s+nostra\\s+missi[óo]|el\\s+nostre\\s+prop[òo]sit)\\s+[ée]s\\s+(?:que|(?!(?:clar[aes]?|similars?|singulars?|particulars?|regulars?|populars?|familiars?|peculiars?|lliures?)\\b)\\w+(?:ar|er|ir|re))\\b(?![^.;!?\\n]*(?:\\b(?:teu|teus|teva|teves|vostr\\w*|vost[eè]s?|vosaltres|tu|us|et)\\b|-te\\b|t['’]))|impacte\\s+social"
         value: 0.7
-        negatable: false
+        negatable: true
   gold:
     - ad_id: wwr-stripe-backend-engineer-core-technology
       language: en
       span: "Our mission is to increase the GDP of the internet, and we have a staggering amount of work ahead. That means you have an unprecedented"
       value: 0.7
       derived_from: cue
-    - ad_id: feinaactiva-FA92320466
+    - ad_id: feinaactiva-FA92318673
       language: ca
-      span: "Fundació Orienta és una institució monogràfica en salut mental infantojuvenil. Està adscrita al con-veni SISCAT (III Conveni Col·lectiu de"
+      span: "cultura corporativa sòlida. La nostra missió és proporcionar servei, gaudi i lleure perquè milions de persones gaudeixin de les seves vacances."
       value: 0.7
       derived_from: cue
 methods_ref: METHODS.md#24-reaction-elicitation-on-real-ad-text

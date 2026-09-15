@@ -243,7 +243,7 @@ def _matched_cue_hits(
             (cue, match)
             for lang in languages
             for cue in dimension.extraction.cues.get(lang, ())
-            if (match := re.search(cue.pattern, answer, re.IGNORECASE)) is not None
+            if (match := cue.search(answer)) is not None
         ]
         if not fired:
             continue

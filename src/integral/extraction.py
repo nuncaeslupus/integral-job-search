@@ -328,7 +328,7 @@ def cue_findings(ad: NormalisedAd, dimension: Dimension) -> DimensionScore | Non
     negations: list[bool] = []
 
     for cue in cues:
-        for match in re.finditer(cue.pattern, ad.text, re.IGNORECASE):
+        for match in cue.finditer(ad.text):
             if match.end() <= match.start():  # pragma: no cover - zero-width cue
                 continue
             value = cue.value
@@ -651,7 +651,7 @@ def _cue_reaches_the_cited_span(ad: LabelledAd, label: Label, dimension: Dimensi
     for span in label.spans:
         segment = unicodedata.normalize("NFC", ad.text[span.start : span.end])
         for cue in dimension.extraction.cues.get(ad.language, []):
-            if re.search(cue.pattern, segment, re.IGNORECASE):
+            if cue.search(segment):
                 return True
     return False
 
@@ -688,7 +688,7 @@ def _mechanism_of(ad: NormalisedAd, dimension: Dimension, found: DimensionScore)
     scoped = False
     denied = False
     for cue in dimension.extraction.cues.get(ad.language, []):
-        for match in re.finditer(cue.pattern, ad.text, re.IGNORECASE):
+        for match in cue.finditer(ad.text):
             if (match.start(), match.end()) not in kept:
                 continue
             if cue.denies:
@@ -780,7 +780,7 @@ def negation_audit(
             for cue in dimension.extraction.cues.get(language, []):
                 if not cue.negatable:
                     continue
-                for match in re.finditer(cue.pattern, text, re.IGNORECASE):
+                for match in cue.finditer(text):
                     scope = _negation_scope(text, match.start())
                     window = text[max(0, match.start() - _NEGATION_WINDOW) : match.start()]
                     where = f"{ad.id}/{dimension.id}: {text[match.start() : match.end()]!r}"

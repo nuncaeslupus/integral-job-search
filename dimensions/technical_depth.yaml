@@ -44,30 +44,30 @@ elicitation:
 extraction:
   cues:
     en:
-      - pattern: "architect(ure|ing)?|system\\s+design"
+      - pattern: "architect\\w*|system\\s+design"
         value: 0.7
         negatable: false
-      - pattern: "scalab|performance\\s+optimi"
+      - pattern: "scalab\\w*|performance\\s+optimi\\w*"
         value: 0.6
         negatable: false
       - pattern: "(level\\s*2|l2)\\s+support|helpdesk|ticket"
         value: -0.6
         negatable: false
     es:
-      - pattern: "arquitectura|dise[ñn]o\\s+de\\s+sistemas"
+      - pattern: "arquitecturas?|dise[ñn]o\\s+de\\s+sistemas"
         value: 0.7
         negatable: false
-      - pattern: "escalab|optimizaci[óo]n\\s+de\\s+rendimiento"
+      - pattern: "escalab\\w*|optimizaci[óo]n\\s+de\\s+rendimiento"
         value: 0.6
         negatable: false
       - pattern: "soporte\\s+de\\s+nivel|helpdesk|tickets?"
         value: -0.6
         negatable: false
     ca:
-      - pattern: "arquitectura|disseny\\s+de\\s+sistemes"
+      - pattern: "arquitecturas?|disseny\\s+de\\s+sistemes"
         value: 0.7
         negatable: false
-      - pattern: "escalab|optimitzaci[óo]"
+      - pattern: "escalab\\w*|optimitzaci[óo]"
         value: 0.6
         negatable: false
       - pattern: "suport\\s+de\\s+nivell|tiquets?"

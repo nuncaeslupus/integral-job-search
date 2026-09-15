@@ -588,7 +588,7 @@ def test_a_negated_single_match_settles_a_bipolar_dimension() -> None:
     a second one sends an unambiguous statement to the model as "unsettled".
     """
     base = _dimension("process_formality")
-    dimension = _with_cues(base, [Cue(pattern="sprint", value=0.5, negatable=True)])
+    dimension = _with_cues(base, [Cue(pattern="sprints?", value=0.5, negatable=True)])
     found = cue_findings(normalise(_offer("Trabajamos sin sprints tradicionales.")), dimension)
 
     assert found is not None, "one denial is enough; one keyword is not"
@@ -628,7 +628,7 @@ def test_a_dropped_match_does_not_leave_its_negation_behind() -> None:
     dimension = _with_cues(
         base,
         [
-            Cue(pattern="sprint", value=0.5, negatable=True),
+            Cue(pattern="sprints?", value=0.5, negatable=True),
             Cue(pattern=r"sin\s+sprints\s+tradicionales", value=0.5, negatable=False),
         ],
     )

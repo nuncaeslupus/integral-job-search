@@ -88,7 +88,7 @@ extraction:
       - pattern: "end\\s+users?"
         value: 0.4
         negatable: false
-      - pattern: "join\\s+(one\\s+of\\s+)?our\\s+clients?|placed\\s+with\\s+(a|our)\\s+client|on\\s+behalf\\s+of\\s+our\\s+client"
+      - pattern: "join\\s+(one\\s+of\\s+)?our\\s+clients?|placed\\s+with\\s+(a|our)\\s+clients?|on\\s+behalf\\s+of\\s+our\\s+clients?"
         value: -0.5
         negatable: false
     es:
@@ -98,7 +98,7 @@ extraction:
       - pattern: "consultor(a|es|as|ía|ia)\\b|c[áa]rnica|cliente\\s+final|client\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+servicios"
         value: -0.7
         negatable: false
-      - pattern: "asignaci[óo]n\\s+a\\s+proyecto|assignaci[óo]\\s+a\\s+projecte|cesi[óo]n\\s+a\\s+cliente|incorporaci[óo]n\\s+a\\s+(un\\s+|nuestro\\s+)?client|en\\s+(las\\s+)?oficinas\\s+del?\\s+client|en\\s+casa\\s+del\\s+cliente|proyectos?\\s+de\\s+nuestros\\s+clientes|en\\s+(uno|una)\\s+de\\s+(sus|nuestros|los)\\s+(principales\\s+)?clientes|(profesionales|perfiles|candidatos?|talento)\\s+para\\s+(nuestros\\s+)?clientes|dependencias\\s+del?\\s+client|proyectos?\\s+(muy\\s+|estable\\s+)*dentro\\s+de\\s+(un[ao]?\\s+)?(importante\\s+)?cliente"
+      - pattern: "asignaci[óo]n\\s+a\\s+proyecto|assignaci[óo]\\s+a\\s+projecte|cesi[óo]n\\s+a\\s+cliente|incorporaci[óo]n\\s+a\\s+(un\\s+|nuestro\\s+)?client\\w*|en\\s+(las\\s+)?oficinas\\s+del?\\s+client\\w*|en\\s+casa\\s+del\\s+cliente|proyectos?\\s+de\\s+nuestros\\s+clientes|en\\s+(uno|una)\\s+de\\s+(sus|nuestros|los)\\s+(principales\\s+)?clientes|(profesionales|perfiles|candidatos?|talento)\\s+para\\s+(nuestros\\s+)?clientes|dependencias\\s+del?\\s+client\\w*|proyectos?\\s+(muy\\s+|estable\\s+)*dentro\\s+de\\s+(un[ao]?\\s+)?(importante\\s+)?cliente"
         value: -0.5
         negatable: false
     ca:
@@ -108,7 +108,7 @@ extraction:
       - pattern: "consultor(a|es|es|ia|ía)\\b|consultoria|client\\s+final|cliente\\s+final|\\bETT\\b|outsourcing|empresa\\s+de\\s+serveis"
         value: -0.7
         negatable: false
-      - pattern: "assignaci[óo]\\s+a\\s+projecte|asignaci[óo]n\\s+a\\s+proyecto|cessi[óo]\\s+a\\s+client|incorporaci[óo]\\s+a\\s+(un\\s+|el\\s+nostre\\s+)?client|a\\s+(les\\s+)?(oficines|instal·lacions)\\s+del?\\s+client|projectes?\\s+dels\\s+nostres\\s+clients|en\\s+(un|una)\\s+dels\\s+(seus\\s+|nostres\\s+|principals\\s+)?clients|(professionals|perfils|candidats?|talent)\\s+per\\s+a\\s+(els\\s+)?clients|depend[èe]ncies\\s+del?\\s+client|projectes?\\s+(molt\\s+|estable\\s+)*dins\\s+d[e']\\s*(un[a]?\\s+)?(important\\s+)?client"
+      - pattern: "assignaci[óo]\\s+a\\s+projecte|asignaci[óo]n\\s+a\\s+proyecto|cessi[óo]\\s+a\\s+client\\w*|incorporaci[óo]\\s+a\\s+(un\\s+|el\\s+nostre\\s+)?client\\w*|a\\s+(les\\s+)?(oficines|instal·lacions)\\s+del?\\s+client\\w*|projectes?\\s+dels\\s+nostres\\s+clients|en\\s+(un|una)\\s+dels\\s+(seus\\s+|nostres\\s+|principals\\s+)?clients|(professionals|perfils|candidats?|talent)\\s+per\\s+a\\s+(els\\s+)?clients|depend[èe]ncies\\s+del?\\s+client\\w*|projectes?\\s+(molt\\s+|estable\\s+)*dins\\s+d[e']\\s*(un[a]?\\s+)?(important\\s+)?client"
         value: -0.5
         negatable: false
   gold:
