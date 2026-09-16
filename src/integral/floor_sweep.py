@@ -879,6 +879,83 @@ def _normalize_comment_text(comment: str) -> str:
     return " ".join(words)
 
 
+def _normalize_comment_with_positions(
+    lines: list[str], start: int, end: int
+) -> tuple[str, list[tuple[int, int] | None]]:
+    """`_normalize_comment_text`, applied to the raw source `lines[start:end
+    + 1]` rather than to an already-extracted comment string, with every
+    character of the returned text paired with the `(line index into
+    `lines`, column)` it came from — `None` for the single space this
+    inserts between two source lines, which names no raw position.
+
+    Exists so `_rewrite_zero_slack_claims_to_zero` can locate a match found
+    in the normalized text (the same text `_zero_slack_claim_contradicts`
+    reads) and rewrite the exact raw span it names, rather than rewriting a
+    whole comment block the way `_replace_comment_block_with_prose` does."""
+    pieces: list[str] = []
+    positions: list[tuple[int, int] | None] = []
+    for idx in range(start, end + 1):
+        line = lines[idx]
+        left_strip_len = len(line) - len(line.lstrip())
+        after_left = line[left_strip_len:]
+        prefix_match = re.match(r"^\s*#:?\s*", after_left)
+        prefix_len = prefix_match.end() if prefix_match else 0
+        content = after_left[prefix_len:].rstrip()
+        if not content:
+            continue
+        if pieces:
+            pieces.append(" ")
+            positions.append(None)
+        content_start = left_strip_len + prefix_len
+        pieces.append(content)
+        positions.extend((idx, content_start + col) for col in range(len(content)))
+    return "".join(pieces), positions
+
+
+def _rewrite_zero_slack_claims_to_zero(lines: list[str], start: int, end: int) -> None:
+    """Companion to the marker rewrite in `_apply_marker_restatement_mutation`
+    (F1, round 5's second-reader BLOCK on #488): retype every "N, zero
+    slack"-style claim in the comment block `lines[start:end + 1]` to `0`, in
+    place.
+
+    The task's own spec for this mutation is "value and prose together,
+    because that is what a careless commit actually does" — round 4's
+    mutation rewrote only the marker's `value=` field, leaving a separate
+    stale "N, zero slack" sentence elsewhere in the same comment untouched,
+    so 8 of the real tree's 41 eligible unpinnable floors were incidentally
+    caught by `_zero_slack_claim_contradicts` rather than by the marker
+    mechanism this battery exists to test. This mirrors that check's own
+    reading exactly — same phrase regex, same 80-character look-behind
+    window, same backtick-span exclusion — so a number this leaves untouched
+    is, by construction, one that check would not have flagged either.
+    """
+    normalized, positions = _normalize_comment_with_positions(lines, start, end)
+    backtick_spans = [(m.start(), m.end()) for m in _BACKTICK_CODE_RE.finditer(normalized)]
+
+    def _in_backtick_span(pos: int) -> bool:
+        return any(span_start <= pos < span_end for span_start, span_end in backtick_spans)
+
+    for phrase in _ZERO_SLACK_CLAIM_RE.finditer(normalized):
+        window_start = max(0, phrase.start() - 80)
+        best: tuple[int, int] | None = None
+        for digits in _DIGITS_RE.finditer(normalized, window_start, phrase.start()):
+            if _in_backtick_span(digits.start()):
+                continue
+            if best is None or digits.end() > best[1]:
+                best = (digits.start(), digits.end())
+        if best is None:
+            continue
+        d_start, d_end = best
+        raw_start = positions[d_start]
+        raw_end = positions[d_end - 1]
+        if raw_start is None or raw_end is None or raw_start[0] != raw_end[0]:
+            continue
+        line_idx, col_start = raw_start
+        col_end = raw_end[1] + 1
+        line = lines[line_idx]
+        lines[line_idx] = line[:col_start] + "0" + line[col_end:]
+
+
 def _last_comment_paragraph(comment: str) -> str:
     """The final paragraph of `comment` — the run of non-blank `#`-lines after
     the last blank comment line (a bare `#`/`#:`), or the whole comment when
@@ -1365,6 +1442,18 @@ def _incremented_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: s
     return False
 
 
+#: Every no-argument builtin-collection call `_is_empty_builder` treats as an
+#: empty-builder shape — lifted out of that function's body (round 5, F3) so
+#: a test can generate one probe per member rather than hand-list a subset of
+#: them: a second reader against #488 deleted the `set()`/`dict()`/
+#: `frozenset()` half of the inline set literal this replaced and the full
+#: suite stayed green, because the depth-cutoff fixture that would have
+#: caught it only ever hand-listed those same three names — `list()` was in
+#: the enumeration and absent from every fixture, so deleting it too would
+#: have been just as invisible.
+_EMPTY_BUILDER_CALL_NAMES = frozenset({"set", "list", "dict", "frozenset"})
+
+
 def _is_empty_builder(rhs: ast.expr) -> bool:
     """True if `rhs` is, directly and without resolving anything, an empty
     collection literal or a no-argument builtin-collection call: `[]`, `{}`,
@@ -1384,7 +1473,7 @@ def _is_empty_builder(rhs: ast.expr) -> bool:
     return (
         isinstance(rhs, ast.Call)
         and isinstance(rhs.func, ast.Name)
-        and rhs.func.id in {"set", "list", "dict", "frozenset"}
+        and rhs.func.id in _EMPTY_BUILDER_CALL_NAMES
         and not rhs.args
     )
 
@@ -1523,6 +1612,23 @@ def _collection_kind(
         # never a silently-wrong `_LITERAL` count.
         if any(isinstance(elt, ast.Starred) for elt in expr.elts):
             return _DYNAMIC, None
+        # Round 5 (F4): "population == 0 is not a population" — R3-3's own
+        # closed rule, generalized past the one call site (a name last bound
+        # to an empty builder inside a function) round 4 applied it to. An
+        # empty `[]`/`{...}` literal — `ast.Tuple` excluded, since a tuple is
+        # immutable and an empty one can never later be filled — reached
+        # `_collection_kind` here whenever it is resolved through any *other*
+        # path this sweep walks: a module-level binding
+        # (`_module_level_literal_collection`), a dict value, a same-module
+        # function's `return`. Every one of those paths used to land on
+        # `_LITERAL, 0` uncorrected, because the round-4 fix only guarded the
+        # local-function-assignment path `_is_empty_builder` is checked
+        # against. A phantom zero from any of them clears `_margin_finding`'s
+        # `margin <= 0` branch exactly the way the AugAssign gap did. `list`/
+        # `set` are mutable and empty is never provably permanent from source
+        # alone, so this is `_DYNAMIC`, never a silently-wrong `_LITERAL, 0`.
+        if isinstance(expr, (ast.List, ast.Set)) and not expr.elts:
+            return _DYNAMIC, None
         return _LITERAL, len(expr.elts)
     if isinstance(expr, ast.Dict):
         # Round 5 (R4-2): the mirror case for `{**BASE, "x": 1}` — a `**`
@@ -1531,6 +1637,11 @@ def _collection_kind(
         # sweep-counted population `2` against a real `9`. Same rule, same
         # reason: undecidable from source ⇒ `_DYNAMIC`.
         if any(key is None for key in expr.keys):
+            return _DYNAMIC, None
+        # Round 5 (F4): same "population == 0 is not a population" rule as
+        # the List/Set case above — a dict is mutable, so an empty `{}` is
+        # never provably permanent from source alone.
+        if not expr.keys:
             return _DYNAMIC, None
         return _LITERAL, len(expr.keys)
     if isinstance(expr, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
@@ -1585,10 +1696,18 @@ def _collection_kind(
             return _DYNAMIC, None
         if (
             isinstance(expr.func, ast.Name)
-            and expr.func.id in {"set", "list", "dict", "frozenset"}
+            and expr.func.id in _EMPTY_BUILDER_CALL_NAMES
             and not expr.args
         ):
-            return _LITERAL, 0
+            # Round 5 (F4): `frozenset()` is immutable — once built it can
+            # never gain an item, so an empty one really is a permanent
+            # population of 0 and `_LITERAL` stays honest. `set()`/`list()`/
+            # `dict()` are the phantom-fillable case the List/Set/Dict-literal
+            # branches above now guard against, reached here instead when the
+            # empty builder is spelled as a call rather than a literal.
+            if expr.func.id == "frozenset":
+                return _LITERAL, 0
+            return _DYNAMIC, None
         if isinstance(expr.func, ast.Name):
             # A call to a same-module function — seen building the fixed control set a
             # delegated floor is checked against (`review_reader.CONTROLS =
@@ -3357,6 +3476,9 @@ def _apply_marker_restatement_mutation(
             )
             lines[idx] = new_line
             _replace_expr_with_zero(lines, value_expr)
+            block = _comment_block_range_above(lines, lineno)
+            if block is not None:
+                _rewrite_zero_slack_claims_to_zero(lines, block[0], block[1])
         module.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return mutated
 

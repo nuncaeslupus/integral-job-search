@@ -3124,7 +3124,19 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
     comment at the empty-builder branch -- so this test now walks every
     empty-builder binding in the tree, filled or not, matching what
     production actually decides: no such binding may resolve to a literal
-    population of zero, full stop."""
+    population of zero, full stop.
+
+    Round 5 (F4): widened past function bodies to also walk *module-level*
+    bindings (`ast.iter_child_nodes(module.tree)` rather than only names
+    inside a `FunctionDef`/`AsyncFunctionDef`). Round 4's `_is_empty_builder`
+    fast path lives inside `_collection_kind`'s function-local-reassignment
+    branch alone; a module-level `_ROWS: list[int] = []`, filled elsewhere
+    via `_ROWS.append(...)`, reached `_collection_kind` through
+    `_module_level_literal_collection`/`_module_level_value` and recursed
+    straight into a terminal branch that used to answer `_LITERAL, 0`
+    unconditionally -- the same phantom-zero shape F1 fixed for one call
+    path, still open for this one, until this round moved the fix into the
+    terminal branches themselves."""
     checked = 0
     for module in floor_sweep._module_infos(floor_sweep._SRC_DIR):
         for func in ast.walk(module.tree):
@@ -3153,6 +3165,38 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
                     f"{module.stem}.{func.name}: {target.id} is bound to an empty "
                     "builder, but resolved as a literal population of zero"
                 )
+        for node in ast.iter_child_nodes(module.tree):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                target, value = node.targets[0], node.value
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                target, value = node.target, node.value
+            else:
+                continue
+            if not isinstance(target, ast.Name):
+                continue
+            if not floor_sweep._is_empty_builder(value):
+                continue
+            if isinstance(value, ast.Call) and getattr(value.func, "id", None) == "frozenset":
+                # `frozenset()` is immutable -- an empty one can never later
+                # gain an item, so `(_LITERAL, 0)` is the correct, permanent
+                # answer here (see the terminal Call branch's own comment),
+                # not the phantom-zero shape this test exists to catch.
+                # `connector_shape.EXECUTED_ENTRIES` is exactly this: a
+                # module-level `frozenset()` never filled anywhere, correctly
+                # resolved as a real, literal population of zero.
+                continue
+            checked += 1
+            kind, count = floor_sweep._collection_kind(
+                ast.Name(id=target.id, ctx=ast.Load()),
+                module.tree,
+                None,
+                None,
+                0,
+            )
+            assert (kind, count) != (floor_sweep._LITERAL, 0), (
+                f"{module.stem}: module-level {target.id} is bound to an empty "
+                "builder, but resolved as a literal population of zero"
+            )
     assert checked > 0
 
 
@@ -3211,44 +3255,122 @@ def probe_listadd(keys):
     del fixture
 
 
-def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutoff(
+def test_a_module_level_empty_builder_is_not_a_literal_population_of_zero(
     tmp_path: Path,
 ) -> None:
-    """R3-4 (round 4): `_is_empty_builder`'s direct check for `set()`/
-    `dict()`/`frozenset()` costs zero recursion depth; the general
-    recursive fallback that would otherwise classify the exact same shape
-    costs one hop of `_collection_kind`'s own `depth > 5` budget just by
-    being *called*, whatever it is asked to classify. At depth 5 (still
-    inside the budget), the direct check answers `_DYNAMIC` for free; a
-    recursive call from there lands at depth 6, past `depth > 5`, and
-    answers `_UNKNOWN` regardless of shape. A second reader against #488
-    deleted the `set()`/`dict()`/`frozenset()` half of `_is_empty_builder`'s
-    enumeration and the full 115-test suite stayed green -- nothing
-    exercised the fast path at exactly the depth where losing it becomes
-    visible, because every other fixture calls `_collection_kind` starting
-    at depth 0. This calls it starting at depth 5 directly, once per
-    deleted name, rather than constructing five hops of real aliasing to
-    reach the same boundary."""
+    """F4 (round 5): round 4's `_is_empty_builder` fix lived only inside
+    `_collection_kind`'s function-local-reassignment branch. A name bound to
+    an empty builder at *module* level -- `_ROWS: list[int] = []`, filled
+    elsewhere via `_ROWS.append(...)`, or `_SEEN = set()` -- is resolved
+    through `_module_level_literal_collection`/`_module_level_value`
+    instead, which recurses straight into `_collection_kind`'s terminal List/
+    Set/Dict-literal and no-arg-builder-call branches. Those used to return
+    `_LITERAL, 0` unconditionally, regardless of which caller reached them --
+    the same phantom-zero shape F1 fixed for the local-assignment path,
+    still open here. Fixed by moving the DYNAMIC-instead-of-LITERAL-0
+    treatment into the terminal branches themselves, so every path that
+    reaches an empty-builder-shaped node gets it, not just this one more
+    call site."""
     fixture = _write(
         tmp_path,
         """
-def probe_dict():
-    built = dict()
-    built["k"] = 1
-    return len(built)
+_ROWS: list[int] = []
+
+
+def fill():
+    _ROWS.append(1)
+
+
+def probe_list():
+    return len(_ROWS)
+
+
+_SEEN = set()
+
+
+def fill_seen():
+    _SEEN.add("x")
+
 
 def probe_set():
-    built = set()
-    built.add("k")
-    return len(built)
+    return len(_SEEN)
 
-def probe_frozenset():
-    built = frozenset()
-    return len(built)
+
+_TALLY = dict()
+
+
+def fill_tally():
+    _TALLY["x"] = 1
+
+
+def probe_dict():
+    return len(_TALLY)
 """,
     )
     module = next(m for m in floor_sweep._module_infos(tmp_path) if m.stem == "mod")
-    for func_name in ("probe_dict", "probe_set", "probe_frozenset"):
+    for name in ("_ROWS", "_SEEN", "_TALLY"):
+        kind, count = floor_sweep._collection_kind(
+            ast.Name(id=name, ctx=ast.Load()), module.tree, None, None, 0
+        )
+        assert (kind, count) != (floor_sweep._LITERAL, 0), (
+            f"{name}: module-level empty builder, filled elsewhere, resolved as a "
+            "literal population of zero"
+        )
+    del fixture
+
+
+#: One fill-or-inspect idiom per name in `floor_sweep._EMPTY_BUILDER_CALL_NAMES`,
+#: used to generate `test_the_call_builder_shapes_match_the_recursive_fallback_
+#: at_the_depth_cutoff`'s probes below. Round 5 (F3): the previous version of
+#: that test hand-listed three of the enumeration's four names and missed
+#: `list()` entirely -- deleting `"list"` from the production enumeration left
+#: the full suite green. Keying this off the enumeration itself, with the
+#: assertion below that the two sets agree, means a name added to or removed
+#: from the production set is either given an idiom here or fails loudly,
+#: rather than silently going unprobed the way `list()` did.
+_EMPTY_BUILDER_FILL_IDIOM = {
+    "dict": 'built["k"] = 1',
+    "set": 'built.add("k")',
+    "frozenset": "pass  # immutable -- nothing to fill",
+    "list": 'built.append("k")',
+}
+
+
+def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutoff(
+    tmp_path: Path,
+) -> None:
+    """R3-4 (round 4), widened round 5 (F3): `_is_empty_builder`'s direct
+    check for each name in `floor_sweep._EMPTY_BUILDER_CALL_NAMES` costs zero
+    recursion depth; the general recursive fallback that would otherwise
+    classify the exact same shape costs one hop of `_collection_kind`'s own
+    `depth > 5` budget just by being *called*, whatever it is asked to
+    classify. At depth 5 (still inside the budget), the direct check answers
+    `_DYNAMIC` for free; a recursive call from there lands at depth 6, past
+    `depth > 5`, and answers `_UNKNOWN` regardless of shape.
+
+    Round 4's version of this test hand-listed `set()`/`dict()`/`frozenset()`
+    and left `list()` — a fourth member of the same enumeration — completely
+    unprobed; deleting `"list"` from `_is_empty_builder`'s enumeration left
+    the full 125-test suite green. This generates one probe per name in the
+    production enumeration instead, so a fifth builder added there later is
+    exercised here without anyone remembering to hand-add a case, or this
+    test fails loudly asking for its fill idiom."""
+    assert set(_EMPTY_BUILDER_FILL_IDIOM) == floor_sweep._EMPTY_BUILDER_CALL_NAMES, (
+        "a name was added to or removed from floor_sweep._EMPTY_BUILDER_CALL_NAMES "
+        "without updating _EMPTY_BUILDER_FILL_IDIOM to match"
+    )
+    names = sorted(_EMPTY_BUILDER_FILL_IDIOM)
+    source = "\n".join(
+        f"def probe_{name}():\n"
+        f"    built = {name}()\n"
+        f"    {_EMPTY_BUILDER_FILL_IDIOM[name]}\n"
+        f"    return len(built)\n"
+        for name in names
+    )
+    fixture = _write(tmp_path, source)
+    module = next(m for m in floor_sweep._module_infos(tmp_path) if m.stem == "mod")
+    for name in names:
+        func_name = f"probe_{name}"
         func = next(
             f
             for f in ast.walk(module.tree)
@@ -3499,28 +3621,27 @@ def test_the_live_unpinnable_floors_marker_restatement_residual_is_measured_hone
     This runs the actual mutation battery -- `measure_marker_restatement_
     clearance` -- against the real tree's real unpinnable floors, the same
     way `test_employer_boards_minimum_conforming_is_not_cleared_by_prose`
-    pins F1 against the real tree rather than a fixture. Two things are
-    asserted, both loosely (a moving population, per-module, over time is
-    expected and is not this test's subject):
+    pins F1 against the real tree rather than a fixture.
 
-    * every live unpinnable floor is actually exercised (nonzero
-      `marker_restatement_scenarios_checked`) -- the battery is not
-      vacuously measuring an empty set;
-    * the residual is reported, not silently absorbed into `floors_cleared_
-      by_prose_alone`, which stays exactly what T163's gate requires: 0.
-
-    `_zero_slack_claim_contradicts` (T159's own, unrelated to this task)
-    already catches some of these via their prose explanation restating a
-    specific number, which is why the residual is smaller than the full
-    unpinnable count -- itself evidence this is a real measurement, not an
-    always-100%-or-always-0% metric that could not disagree with its own
-    denominator."""
+    **Round 5 (F1):** the battery used to retype only the marker's `value=`
+    field, leaving a separate stale "N, zero slack" sentence untouched --
+    so `_zero_slack_claim_contradicts` (T159's own, unrelated to this task)
+    incidentally caught 8 of the real tree's 41 eligible floors through a
+    mechanism this battery was never testing, and the residual read as 33.
+    That gap was defended here as "itself evidence this is a real
+    measurement" -- backwards: an unpinnable floor has no independent
+    population by definition, so the *only* way a retyped marker could ever
+    be caught is a check unrelated to the marker itself, and a mutation that
+    properly implements "value and prose together" neutralizes that check
+    too. The assertion below is now the closed rule that follows from that
+    definition, not a loose bound: every eligible scenario clears, always,
+    because nothing left to catch it remains once the prose is rewritten
+    alongside the value."""
     measured = floor_sweep.measure_marker_restatement_clearance()
     assert measured["marker_restatement_scenarios_checked"] > 0
-    assert measured["unpinnable_floors_cleared_by_marker_restatement"] >= 0
     assert (
         measured["unpinnable_floors_cleared_by_marker_restatement"]
-        <= measured["marker_restatement_scenarios_checked"]
+        == measured["marker_restatement_scenarios_checked"]
     )
     # Honestly folded into T163's evidence file, but never into the fixed gate key.
     prose_measured = floor_sweep.write_prose_clearance_evidence(

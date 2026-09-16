@@ -3,7 +3,7 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 33,
+  "unpinnable_floors_cleared_by_marker_restatement": 41,
   "marker_restatement_cleared": [
     {
       "module": "approval",
@@ -51,6 +51,16 @@
       "lineno": 69
     },
     {
+      "module": "cv_store",
+      "name": "MINIMUM_CHECKS",
+      "lineno": 301
+    },
+    {
+      "module": "elicit_extract",
+      "name": "MINIMUM_CHECKS",
+      "lineno": 739
+    },
+    {
       "module": "employer_boards",
       "name": "MINIMUM_CONFORMING",
       "lineno": 71
@@ -86,6 +96,11 @@
       "lineno": 124
     },
     {
+      "module": "interview",
+      "name": "MINIMUM_CHECKS",
+      "lineno": 946
+    },
+    {
       "module": "naming",
       "name": "MINIMUM_SCANNED",
       "lineno": 229
@@ -106,9 +121,24 @@
       "lineno": 139
     },
     {
+      "module": "profile_capture",
+      "name": "MINIMUM_CHECKS",
+      "lineno": 1154
+    },
+    {
+      "module": "profile_capture",
+      "name": "MINIMUM_SUBJECT_CHECKS",
+      "lineno": 1145
+    },
+    {
       "module": "query_capture",
       "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
       "lineno": 117
+    },
+    {
+      "module": "question_bank",
+      "name": "MINIMUM_PROBES",
+      "lineno": 487
     },
     {
       "module": "reader_notes",
@@ -169,6 +199,16 @@
       "module": "spec_consistency",
       "name": "MINIMUM_DECLARATIONS_FOUND",
       "lineno": 109
+    },
+    {
+      "module": "step_gates",
+      "name": "MINIMUM_STEPS_CHECKED",
+      "lineno": 425
+    },
+    {
+      "module": "trait_sufficiency",
+      "name": "MINIMUM_CHECKS",
+      "lineno": 590
     }
   ],
   "marker_restatement_scenarios_checked": 41,
