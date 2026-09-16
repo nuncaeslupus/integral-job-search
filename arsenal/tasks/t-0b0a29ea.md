@@ -1,6 +1,6 @@
 ---
 id: t-0b0a29ea
-title: "step-07-sourcing: synonym-expand and parallel-search the web-search fallback before filtering"
+title: "T187: step-07-sourcing: synonym-expand and parallel-search the web-search fallback before filtering"
 priority: 5
 tags: [step-07-sourcing]
 ---

@@ -12,12 +12,7 @@
   "ungated_rows": [],
   "unticked_merged_rows": [],
   "wrongly_ticked_rows": [],
-  "violations": [
-    "t-0b0a29ea title does not start with a task label: 'step-07-sourcing: synonym-expand and parallel-search the web-search fallback before filtering'",
-    "t-0fa5aee0 title does not start with a task label: 'Triage the 51 test-mode notes captured across past sessions that were never seeded'",
-    "t-1b4f7d82 title does not start with a task label: 'Build a connector for remoteai.io (deferred — do not start without a go-ahead)'",
-    "t-5de3383c title does not start with a task label: 'test_mode paste guard misclassifies long non-paste turns as adverts'"
-  ],
+  "violations": [],
   "plan_rows_at_least": 100,
   "queue_tasks_at_least": 100,
   "merged_tasks_compared_at_least": 100
