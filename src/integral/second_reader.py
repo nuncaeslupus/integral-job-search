@@ -818,6 +818,7 @@ def allows(text: str, agent: str, target: str) -> bool:
 #: the shrunken-table hole this constant exists to close, held open by the
 #: constant itself. Raised to what `CASES` carries, and raised again whenever it
 #: grows — the same rule `robots.FIXTURES_AT_LEAST` follows.
+#: arsenal-floor-margin: FIXTURES_AT_LEAST value=67
 FIXTURES_AT_LEAST = 67
 
 #: Of those, how many must be cases a weak matcher would wrongly ALLOW. A table
@@ -827,6 +828,7 @@ FIXTURES_AT_LEAST = 67
 #: something it exists to refuse. Raised from 34 to what the table carries, for
 #: the reason given above: a floor 30 rows under its own population cannot catch
 #: the table losing them.
+#: arsenal-floor-margin: FAIL_OPEN_CASES_AT_LEAST value=64
 FAIL_OPEN_CASES_AT_LEAST = 64
 
 #: And how many paths this reader must refuse where `urllib.robotparser` does
@@ -843,6 +845,7 @@ FAIL_OPEN_CASES_AT_LEAST = 64
 #: four more of them would turn this gate red over a change in the direction
 #: this module wants. A floor pinned to another project's behaviour reports that
 #: project's version, not this table's health.
+#: arsenal-floor-margin: STDLIB_DISAGREEMENTS_AT_LEAST value=8
 STDLIB_DISAGREEMENTS_AT_LEAST = 8
 
 #: The floor on cases derived here rather than by the independent session. It is
@@ -856,6 +859,7 @@ STDLIB_DISAGREEMENTS_AT_LEAST = 8
 #: pin over a table that may silently shrink is the shape
 #: `test_the_nine_cases_t151_closed_are_still_refused_by_the_repo_matcher` was
 #: written to refuse.
+#: arsenal-floor-margin: REGRESSION_CASES_AT_LEAST value=18
 REGRESSION_CASES_AT_LEAST = 18
 
 

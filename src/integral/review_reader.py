@@ -302,12 +302,18 @@ UNRESOLVABLE = "unresolvable"
 #: same reason: four controls landed (51 states, 9 head-bound reports), three for
 #: F1's length bound and one recording F2's limitation, and each floor moves by
 #: exactly what was added so the margin over the observed count is unchanged.
+#: arsenal-floor-margin: MINIMUM_PRS_EVALUATED value=44
 MINIMUM_PRS_EVALUATED = 44
+# Same reason, for the report-count twin declared beside it — the comment
+# above argues PRS_EVALUATED's margin; this one's value is unrelated to it
+# and stated here instead.
+# arsenal-floor-margin: MINIMUM_REPORTS_FOUND value=8
 MINIMUM_REPORTS_FOUND = 8
 
 #: T155's floor, same style: the marker-scope states are the denominator of
 #: `unresolvable_marker_authors_with_an_unrecorded_effect`, and a control list
 #: that shrank to nothing would otherwise score a serene zero.
+#: arsenal-floor-margin: MINIMUM_SCOPE_STATES value=29
 MINIMUM_SCOPE_STATES = 29
 
 #: The second T155 floor, and the one #421's F4 required. Counting *states* says
@@ -326,6 +332,7 @@ MINIMUM_SCOPE_STATES = 29
 #: labelled is the defect it was added to close, so the discriminator has to be
 #: a state that is a twin under a *different* name — which is the one the
 #: fixtures now seed.
+#: arsenal-floor-margin: MINIMUM_DISTINCT_SCOPE_STATES value=29
 MINIMUM_DISTINCT_SCOPE_STATES = 29
 
 #: The two phrases a verdict carries when an unattributable marker sits beside a

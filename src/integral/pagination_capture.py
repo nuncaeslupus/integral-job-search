@@ -119,6 +119,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T113.json"
 #: false alarm while staying far above what an empty, unreadable or
 #: example-only `connectors/` would produce. Raise it when the library grows;
 #: it is a floor, not a target.
+#: arsenal-floor-margin: MINIMUM_REQUEST_KEYS value=12
 MINIMUM_REQUEST_KEYS = 12
 
 
@@ -1307,6 +1308,7 @@ MINIMUM_DUPLICATE_KEY_PROBES = 26
 #: below it, and staying far above what a library with no package this rule
 #: reaches would produce (0). Raise it when the library grows; it is a floor,
 #: not a target, mirroring `MINIMUM_REQUEST_KEYS`'s own stated margin.
+#: arsenal-floor-margin: MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED value=5
 MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED = 5
 
 

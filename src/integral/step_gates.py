@@ -421,6 +421,7 @@ def gate_ownership(
 #: OwnershipReading] = []` is an *annotated* initial assignment, and neither
 #: swept it until the sweep learned to read `AnnAssign` targets, not only
 #: `Assign` (T159 round 3).
+#: arsenal-floor-margin: MINIMUM_STEPS_CHECKED value=13
 MINIMUM_STEPS_CHECKED = 13
 
 

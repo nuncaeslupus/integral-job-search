@@ -161,6 +161,7 @@ MINIMUM_CORPUS_ADS = 208
 #: case scripted here is small and hand-written, so this floor stays far under
 #: the real count on purpose, exactly the shape a per-item scalar check has
 #: none of.
+#: arsenal-floor-margin: MINIMUM_WORDING_CASES value=120 population=153
 MINIMUM_WORDING_CASES = 120
 
 Route = Literal["advert_text", "duplicate", "detail_page", "estimate"]

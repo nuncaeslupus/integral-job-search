@@ -89,7 +89,7 @@ different honest answers:
   (`floors_that_do_not_fail_the_gate`, #309) already owns the adjacent question of what
   happens when such a floor *is* breached. This module asks only that the declaration
   carry some explanation at all, and reports these separately
-  (`dynamic_population_floors`) rather than folding them into the arithmetic count.
+  (`unpinnable_floors`) rather than folding them into the arithmetic count.
   That does not excuse an actual gap, though: eleven of these — every scripted-probe
   tally this sweep could trace through a cross-function return — turned out to be
   silently under their probe's real count with no explanation at all
@@ -159,7 +159,7 @@ last element — so this round changes the *shape* of the classification instead
    stays honestly out of scope. The roll-call itself is gone from this comment for the
    reason the finding names: a hand-maintained list of "compliant" module names is prose
    nothing tests, and it drifts. `status/evidence/T159.json`'s own
-   `dynamic_population_floors` and `bounds_read_and_out_of_scope` are regenerated on
+   `unpinnable_floors` and `bounds_read_and_out_of_scope` are regenerated on
    every run and cannot say something the sweep does not currently believe.
 
 `_population_for` also grew one more traced shape while this round was open:
@@ -435,6 +435,59 @@ branch, unconstrained by `arithmetically_checked`; R4-2 and R4-3 correct two
 narrower guarantee by design — carries an explanation, never a computed
 margin — not a defect this round's two closed rules were about.
 
+## Round 6 (T163) — the weaker guarantee was weaker than the report allowed for
+
+Round 5 called the `dynamic` branch's "carries an explanation" check a deliberate,
+narrower guarantee, not a defect — true of what it *asked for*, and beside the
+point: what it *accepted* was any nonempty comment, keyword or no, so the same
+"lower the value, replace the comment with a sentence asserting deliberateness"
+mutation that round 4/5 measured against the arithmetic branch clears the dynamic
+branch even more cheaply, needing not even the word `margin`. Measured across
+everything this sweep classified compliant on `main` (`MINIMUM_FLOORS_SWEPT`'s own
+population at the time, 73): **73 of 73** still read compliant after it, because
+neither branch's acceptance path was ever checked against a number this sweep
+computed independently — the arithmetic branch's bare keyword fallback checked no
+number at all, and its two numeric idioms (`_claimed_current_value`'s "Committed
+at N", `_claimed_margin_size`'s "N points of slack") each checked a claim against
+a quantity the same commit that lowers the floor can always restate to match,
+`_claimed_current_value`'s own form the pure case: `literal_value == literal_value`
+whatever the value is set to.
+
+The fix, per the direction attached to the report that measured this: a marker,
+emitted rather than typed, in `review_reader`'s own idiom for a second-reader
+report. `MARGIN_MARKER_RE`/`margin_marker`/`_margin_marker_claim` above are that
+marker, and what changed in both call sites:
+
+- **`_margin_finding`** (the arithmetic branch — a real, countable population is
+  always known here) now requires the marker to state *both* `value=` and
+  `population=`, and checks both against the two numbers this call was just
+  handed — never against each other, never against the comment's own history.
+  This is a strictly *stronger* check than the retired numeric idioms, not
+  merely a reformatting of them: the old "Committed at N" form only ever
+  verified the floor's own value against itself, and never touched the
+  population or the margin at all.
+- **`_classify_floor`'s dynamic branch** (no real population this sweep could
+  resolve) now requires the marker's `value=` alone — `population=` is neither
+  required nor checked, because nothing here resolved a real number to check it
+  against, and asserting one anyway would be the identical theatre one level
+  further in. This is genuinely the narrower guarantee round 5 already said it
+  was; it is just no longer satisfiable by a sentence with no number in it.
+
+Both call sites also now require `_margin_marker_has_explanation`: a marker with
+nothing else in its paragraph answers "how much", never "why", which is the half
+of T159's own rule (`_claimed_margin_size`'s docstring said so plainly) the
+numeric idioms had already started to drop. Every real floor this task touches
+keeps its free-form "why" beside the new marker line — the fix removes prose as
+the *sole* thing standing between a comment and compliance, not prose itself.
+
+`floors_swept` and `arithmetically_checked` are unchanged by this round: which
+branch a floor lands in, and whether that branch resolves a real population, is
+untouched — only what counts as an *argued* margin within a branch moved. Every
+real floor in `src/integral` this task found relying on the retired paths (two
+arithmetic, forty-three dynamic, including this module's own two self-floors)
+was given the marker its branch now requires, each with the number this run
+itself measures, not a guessed one.
+
 ## The denominator
 
 `floors_swept` is every floor this module classified, one way or the other, and
@@ -450,10 +503,13 @@ this task's gate, which is precisely what T122's review round flagged and what
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
+import shutil
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -462,6 +518,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = Path(__file__).resolve().parent
 _THIS_FILE = Path(__file__).resolve()
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T159.json"
+DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T163.json"
 
 #: Round 2's fix for the reader's first finding: this repository's module-constant
 #: convention (a name starting with a letter, all caps) — not a floor-specific
@@ -483,35 +540,160 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T159.json"
 #: a fixture string) off the candidate list.
 _CONSTANT_NAME_RE = re.compile(r"^_?[A-Z][A-Z0-9_]*$")
 
-#: Phrasing this repository actually uses, in the floors already read while building
-#: this module, to argue that a floor's margin below its population is deliberate
-#: rather than an accident: `salary_recovery.MINIMUM_WORDING_CASES` ("Raised from 40
-#: ... sits far below"), `gate_reader_agreement.MINIMUM_ARRANGEMENTS_PROBED` ("one unit
-#: of slack"), `gate_reader_agreement.MINIMUM_GATES_COMPARED` ("sits under today's
-#: total"), `audit_followup.CASES_AT_LEAST` / `connector_policy.ADJUDICATIONS_AT_LEAST`
-#: ("deliberately under"), `connector_policy.PACKAGES_AT_LEAST` ("Same reasoning"),
-#: `robots.FIXTURES_AT_LEAST` / `second_reader`'s four ("Raised ... to", "raised
-#: again", "kept its slack", "small on purpose"), `review_reader`'s four ("the margin
-#: over the observed count is unchanged").
+#: **T163 — a floor's margin is now attested by a marker, never by a keyword.**
+#: Every round through T159's own round 5 argued a positive margin with *prose*:
+#: first a bare keyword match (`margin`/`slack`/`raised`/…), then two numeric
+#: idioms ("Committed at N", "N points of slack") layered on top of it. All three
+#: are typed text, and typed text can be minted by writing a sentence: a second
+#: reader measured **73 of 73** swept floors (the whole population `main` carried
+#: the day this was measured) still reporting compliant after the *realistic*
+#: mutation — the floor's value lowered *and* its comment replaced with any text
+#: asserting deliberateness ("The margin here is deliberate.") — because the bare
+#: keyword branch never re-checks a number at all, and worse, the two numeric
+#: idioms it was meant to be a fallback *for* have the identical hole one layer
+#: down: `_claimed_current_value`'s old form matched "Committed at N" against the
+#: floor's own *current* declared value, which a commit that edits both the floor
+#: and the comment together can always make true by construction — a claim
+#: checked against the very quantity it echoes is `len(X) < len(X)` wearing
+#: prose, the same shape `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`'s own comment
+#: was carrying live (see that floor's history: "Committed at 36, three points of
+#: slack" against a real margin of 5 — the *first* number cleared it before the
+#: second, the true claim, was ever read).
 #:
-#: **This is a keyword match, and a keyword match is not a claim of correctness —
-#: round 1's own docstring said the opposite ("never one it wrongly clears") and a
-#: second reader measured that false: every one of the fourteen comments this task
-#: wrote reads "Raised to what the probe carries — N, zero slack", and the trigger
-#: words (`raised`, `slack`) stay in the text forever, including after a later edit
-#: drops the floor to something the sentence no longer describes.** Regex-matched
-#: prose can certify a margin that used to be true. `_zero_slack_claim_contradicts`
-#: below is what actually falsifies a stale claim rather than merely detecting the
-#: presence of words that once argued a true one; this pattern still gates whether
-#: an *argument* was attempted at all, which a claim carrying no number at all (the
-#: older, spelled-out style — "one unit of slack", "sits under today's total") has
-#: no other way to state.
-_MARGIN_ARGUED_RE = re.compile(
-    r"\bmargin\b|\bslack\b|\braised\b|deliberately\s+(?:under|below)|"
-    r"sits\s+(?:well\s+|far\s+)?(?:under|below)|\bwell\s+below\b|\bfar\s+below\b|"
-    r"same\s+reasoning|on\s+purpose",
+#: The fix is `review_reader`'s own idiom for a second-reader report: a marker,
+#: emitted rather than typed, so a commit cannot mint one by writing a sentence
+#: — it has to state a number, and the number is checked against what this sweep
+#: *itself* independently computes, never against the comment's own say-so.
+#: `margin_marker`/`MARGIN_MARKER_RE` below are that marker. What it attests, and
+#: why, is `_margin_finding`'s and `_classify_floor`'s job now, not a regex's:
+#:
+#: - Wherever this sweep resolves a real, countable population (a literal
+#:   in-repo collection, or this repository's own committed-evidence idiom) the
+#:   marker must state **both** `value=` and `population=`, and *both* are
+#:   checked against the fresh numbers `_margin_finding` just computed — never
+#:   against each other, never against what the comment used to say. A marker
+#:   restating the current floor's own value costs nothing to fake; a marker
+#:   also restating the population this run measured cannot be faked without
+#:   actually knowing it, which is the whole point of carrying it.
+#: - Wherever the population is genuinely unenumerable from source (a scripted
+#:   probe's own tally never captured as committed evidence, a third party's
+#:   own behaviour) there is no ground truth this sweep could check a
+#:   `population=` claim against, and pretending otherwise would be exactly the
+#:   theatre this task exists to retire. The marker there states `value=` alone
+#:   — still enough to catch the floor drifting under a stale claim, honest
+#:   about the rest.
+#:
+#: Free-form prose is not retired as an *explanation* — every real floor this
+#: fix touches keeps its "why" in the same paragraph, because a marker with
+#: nothing beside it answers "how much" and never "why", which is the half of
+#: T159's own rule this repository's numeric idioms had already started to drop
+#: (`_margin_marker_has_explanation` below). It is retired as the *sole* thing
+#: standing between a comment and compliance.
+MARGIN_MARKER_NAME = "arsenal-floor-margin"
+
+#: The floor's own name is mandatory (T163 round 2, F3 below); `value=` is
+#: mandatory; `population=` is optional so a genuinely dynamic floor's marker
+#: can honestly omit a number nothing backs. Anchored to `\b` rather than to a
+#: line, because it is always read against `_last_comment_paragraph`'s own
+#: already-stripped, newline-joined text, never against a raw multi-line
+#: comment block.
+#:
+#: F3 (second-reader BLOCK, this PR): two floors can share one comment block —
+#: `_comment_block_above` deliberately walks back past a bare sibling
+#: declaration so a comment written once for a group is read for each of them
+#: (`test_two_floors_declared_together_both_read_the_shared_comment`, a real
+#: feature, not the bug). The bug was that a marker inside that shared block
+#: carried no floor name, so `MARGIN_MARKER_RE.search()`'s first match was
+#: read as *the* marker for whichever floor asked — both floors in a pair
+#: cleared from one marker naming neither, and (per `_margin_marker_claim`'s
+#: docstring below) a marker several paragraphs back, arguing a floor the
+#: comment moved on from, cleared a *different* current floor the same way.
+#: Naming the floor makes the search exact: a marker is a claim about the one
+#: floor it names, never about whichever floor happened to ask first.
+MARGIN_MARKER_RE = re.compile(
+    rf"\b{re.escape(MARGIN_MARKER_NAME)}:\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s+value=(?P<value>\d+)"
+    r"(?:\s+population=(?P<population>\d+))?",
     re.IGNORECASE,
 )
+
+
+def margin_marker(name: str, value: int, population: int | None = None) -> str:
+    """The line a floor's own comment carries to argue a positive margin.
+
+    Emitted rather than typed — the two numbers are read out of what this sweep
+    (or the person raising the floor, reading the same population this sweep
+    would compute) already knows to be true, not composed as a sentence that
+    merely sounds like an argument. Pass `population` whenever a real one is
+    known; omit it only for a floor this sweep classifies `dynamic` — one
+    genuinely unenumerable from source, where nothing backs the number.
+    `name` is the floor's own constant name (T163 round 2, F3): the marker
+    argues for that one floor, and only that one, however many floors read
+    the same comment block.
+    """
+    if not name:
+        raise ValueError("a marker with no floor name argues for nothing in particular")
+    if value < 0:
+        raise ValueError(f"{value!r} is not a floor's value — negative values do not occur")
+    if population is not None and population < 0:
+        raise ValueError(f"{population!r} is not a population — negative populations do not occur")
+    tail = "" if population is None else f" population={population}"
+    return f"{MARGIN_MARKER_NAME}: {name} value={value}{tail}"
+
+
+def _comment_lines_stripped(comment: str) -> str:
+    """`comment` with each line's `#`/`#:` prefix stripped, joined by a single
+    newline — unlike `_normalize_comment_text`'s space-joined form, this keeps
+    line boundaries, which `MARGIN_MARKER_RE` needs nothing else for (a marker
+    line is never expected to itself wrap), but which lets it anchor cleanly
+    against one line without the risk `_normalize_comment_text`'s docstring
+    already names for a phrase split across two source lines."""
+    lines: list[str] = []
+    for line in comment.splitlines():
+        stripped = re.sub(r"^\s*#:?\s*", "", line.strip())
+        if stripped:
+            lines.append(stripped)
+    return "\n".join(lines)
+
+
+def _margin_marker_claim(comment: str, name: str) -> tuple[int, int | None] | None:
+    """The `(value, population)` a marker in `comment`'s own last paragraph
+    states *for the floor `name`*, `population` being `None` when the marker
+    omitted it, or `None` (the whole tuple) when no marker naming `name` is
+    present at all.
+
+    Scoped to `_last_comment_paragraph` for the reason round 5 (R4-5) already
+    established for the keyword fallback this replaces: a comment accretes one
+    paragraph per round, and a marker several paragraphs back is a claim about
+    a floor this comment's history once argued, not one about what the
+    declaration means today.
+
+    F3 (second-reader BLOCK, this PR): scans every marker in the paragraph and
+    returns the one naming `name`, rather than `re.search`'s first match
+    regardless of which floor it names — two floors sharing one comment block
+    (`_comment_block_above`'s deliberate walk-back past a bare sibling
+    declaration) used to mean the first floor's marker cleared the second one
+    too, and it never once named it.
+    """
+    paragraph = _comment_lines_stripped(_last_comment_paragraph(comment))
+    for match in MARGIN_MARKER_RE.finditer(paragraph):
+        if match.group("name") == name:
+            population_group = match.group("population")
+            return int(match.group("value")), (
+                None if population_group is None else int(population_group)
+            )
+    return None
+
+
+def _margin_marker_has_explanation(comment: str) -> bool:
+    """True when `comment`'s last paragraph carries something besides the
+    marker line itself — T159's own rule is "states the margin **and why**",
+    and a marker alone answers only the first half. Every real floor this task
+    touches already carries its "why" in the same paragraph; this is what
+    stops a future comment from being trimmed to the marker alone and nothing
+    else."""
+    paragraph = _comment_lines_stripped(_last_comment_paragraph(comment))
+    return bool(MARGIN_MARKER_RE.sub(" ", paragraph).strip())
+
 
 #: A *specific, falsifiable* form `_MARGIN_ARGUED_RE` cannot check: this task's own
 #: idiom for a zero-margin claim ("N, zero slack" / "no slack" / "zero margin").
@@ -615,30 +797,33 @@ def _spelled_out_numbers(text: str) -> set[int]:
     five" — never composing "hundred" (no zero-slack claim in this repository
     combines one with a three-digit number, and getting that composition wrong
     would be worse than not attempting it)."""
-    return {value for value, _end in _spelled_out_numbers_with_positions(text)}
+    return {value for value, _start, _end in _spelled_out_numbers_with_positions(text)}
 
 
-def _spelled_out_numbers_with_positions(text: str) -> list[tuple[int, int]]:
+def _spelled_out_numbers_with_positions(text: str) -> list[tuple[int, int, int]]:
     """Every cardinal number `text` states in English words, paired with the
-    character offset (into `text`) immediately after it — the same vocabulary as
-    `_spelled_out_numbers`, kept apart so a caller can find the number *nearest*
-    a matched phrase rather than merely whether some number appears anywhere in
-    the text (see `_nearest_number_before`/`_nearest_number_after`, F7)."""
+    `(start, end)` character offsets (into `text`) it spans — the same
+    vocabulary as `_spelled_out_numbers`, kept apart so a caller can find the
+    number *nearest* a matched phrase rather than merely whether some number
+    appears anywhere in the text (see `_nearest_number_before`, F7), or
+    rewrite the exact span in place (see `_rewrite_zero_slack_claims_to_zero`,
+    round 6 F1)."""
     matches = list(re.finditer(r"[a-z]+", text.lower()))
-    found: list[tuple[int, int]] = []
+    found: list[tuple[int, int, int]] = []
     i = 0
     while i < len(matches):
         word = matches[i].group()
         if word in _TENS_WORDS:
             value = _TENS_WORDS[word]
+            start = matches[i].start()
             end = matches[i].end()
             if i + 1 < len(matches) and matches[i + 1].group() in _ONES_WORDS:
                 value += _ONES_WORDS[matches[i + 1].group()]
                 end = matches[i + 1].end()
                 i += 1
-            found.append((value, end))
+            found.append((value, start, end))
         elif word in _ONES_WORDS:
-            found.append((_ONES_WORDS[word], matches[i].end()))
+            found.append((_ONES_WORDS[word], matches[i].start(), matches[i].end()))
         i += 1
     return found
 
@@ -669,42 +854,10 @@ def _nearest_number_before(text: str) -> int | None:
         if match.end() > best_end:
             best_end = match.end()
             best_value = int(match.group())
-    for value, end in _spelled_out_numbers_with_positions(text):
+    for value, _start, end in _spelled_out_numbers_with_positions(text):
         if end > best_end:
             best_end = end
             best_value = value
-    return best_value
-
-
-def _nearest_number_after(text: str) -> int | None:
-    """The value of whichever number (digit or spelled-out) *starts closest to
-    the start* of `text` — the mirror of `_nearest_number_before`, for an idiom
-    (`"Committed at N"`) that states its number immediately *after* the trigger
-    phrase rather than before it."""
-    best_start = len(text) + 1
-    best_value: int | None = None
-    for match in _DIGITS_RE.finditer(text):
-        if match.start() < best_start:
-            best_start = match.start()
-            best_value = int(match.group())
-    words = list(re.finditer(r"[a-z]+", text.lower()))
-    i = 0
-    while i < len(words):
-        word = words[i].group()
-        if word in _TENS_WORDS:
-            start = words[i].start()
-            value = _TENS_WORDS[word]
-            if i + 1 < len(words) and words[i + 1].group() in _ONES_WORDS:
-                value += _ONES_WORDS[words[i + 1].group()]
-                i += 1
-            if start < best_start:
-                best_start = start
-                best_value = value
-        elif word in _ONES_WORDS:
-            if words[i].start() < best_start:
-                best_start = words[i].start()
-                best_value = _ONES_WORDS[word]
-        i += 1
     return best_value
 
 
@@ -727,6 +880,98 @@ def _normalize_comment_text(comment: str) -> str:
         if stripped:
             words.append(stripped)
     return " ".join(words)
+
+
+def _normalize_comment_with_positions(
+    lines: list[str], start: int, end: int
+) -> tuple[str, list[tuple[int, int] | None]]:
+    """`_normalize_comment_text`, applied to the raw source `lines[start:end
+    + 1]` rather than to an already-extracted comment string, with every
+    character of the returned text paired with the `(line index into
+    `lines`, column)` it came from — `None` for the single space this
+    inserts between two source lines, which names no raw position.
+
+    Exists so `_rewrite_zero_slack_claims_to_zero` can locate a match found
+    in the normalized text (the same text `_zero_slack_claim_contradicts`
+    reads) and rewrite the exact raw span it names, rather than rewriting a
+    whole comment block the way `_replace_comment_block_with_prose` does."""
+    pieces: list[str] = []
+    positions: list[tuple[int, int] | None] = []
+    for idx in range(start, end + 1):
+        line = lines[idx]
+        left_strip_len = len(line) - len(line.lstrip())
+        after_left = line[left_strip_len:]
+        prefix_match = re.match(r"^\s*#:?\s*", after_left)
+        prefix_len = prefix_match.end() if prefix_match else 0
+        content = after_left[prefix_len:].rstrip()
+        if not content:
+            continue
+        if pieces:
+            pieces.append(" ")
+            positions.append(None)
+        content_start = left_strip_len + prefix_len
+        pieces.append(content)
+        positions.extend((idx, content_start + col) for col in range(len(content)))
+    return "".join(pieces), positions
+
+
+def _rewrite_zero_slack_claims_to_zero(lines: list[str], start: int, end: int) -> None:
+    """Companion to the marker rewrite in `_apply_marker_restatement_mutation`
+    (F1, round 5's second-reader BLOCK on #488): retype every "N, zero
+    slack"-style claim in the comment block `lines[start:end + 1]` to `0`, in
+    place.
+
+    The task's own spec for this mutation is "value and prose together,
+    because that is what a careless commit actually does" — round 4's
+    mutation rewrote only the marker's `value=` field, leaving a separate
+    stale "N, zero slack" sentence elsewhere in the same comment untouched,
+    so 8 of the real tree's 41 eligible unpinnable floors were incidentally
+    caught by `_zero_slack_claim_contradicts` rather than by the marker
+    mechanism this battery exists to test. This mirrors that check's own
+    reading exactly — same phrase regex, same 80-character look-behind
+    window, same backtick-span exclusion, same digit-or-spelled-out-cardinal
+    vocabulary as `_nearest_number_before` (round 6, F1: this used to read
+    `_DIGITS_RE` only, so a spelled-out claim's number was never retyped to
+    `0` here even though `_zero_slack_claim_contradicts` reads it fine —
+    fail-closed in practice, since the untouched original number then still
+    contradicts the mutated marker, but an asymmetry between the two readings
+    is exactly the shape this repository's second-reader rounds keep finding)
+    — so a number this leaves untouched is, by construction, one that check
+    would not have flagged either.
+    """
+    normalized, positions = _normalize_comment_with_positions(lines, start, end)
+    backtick_spans = [(m.start(), m.end()) for m in _BACKTICK_CODE_RE.finditer(normalized)]
+
+    def _in_backtick_span(pos: int) -> bool:
+        return any(span_start <= pos < span_end for span_start, span_end in backtick_spans)
+
+    for phrase in _ZERO_SLACK_CLAIM_RE.finditer(normalized):
+        window_start = max(0, phrase.start() - 80)
+        best: tuple[int, int] | None = None
+        for digits in _DIGITS_RE.finditer(normalized, window_start, phrase.start()):
+            if _in_backtick_span(digits.start()):
+                continue
+            if best is None or digits.end() > best[1]:
+                best = (digits.start(), digits.end())
+        for _value, w_start, w_end in _spelled_out_numbers_with_positions(
+            normalized[window_start : phrase.start()]
+        ):
+            s_start, s_end = window_start + w_start, window_start + w_end
+            if _in_backtick_span(s_start):
+                continue
+            if best is None or s_end > best[1]:
+                best = (s_start, s_end)
+        if best is None:
+            continue
+        d_start, d_end = best
+        raw_start = positions[d_start]
+        raw_end = positions[d_end - 1]
+        if raw_start is None or raw_end is None or raw_start[0] != raw_end[0]:
+            continue
+        line_idx, col_start = raw_start
+        col_end = raw_end[1] + 1
+        line = lines[line_idx]
+        lines[line_idx] = line[:col_start] + "0" + line[col_end:]
 
 
 def _last_comment_paragraph(comment: str) -> str:
@@ -812,57 +1057,6 @@ def _zero_slack_claim_contradicts(comment: str, literal_value: int) -> bool:
     return False
 
 
-#: Round 4 (F2): the two other idioms this repository actually uses, beside
-#: "N, zero slack", to argue a *positive* margin in writing rather than leaving
-#: it silent — both seen verbatim on this task's own denominator floor
-#: (`"Committed at 64, three points of slack."`). Each states a number in a
-#: fixed grammatical role that `_MARGIN_ARGUED_RE`'s bare keyword match never
-#: re-checks: "committed at" states the floor's own current declared value;
-#: "N point(s) of slack/margin" states the margin itself. A second reader
-#: measured both escaping intact when the floor was mutated to `1` — the
-#: keyword ("raised", "slack") stays in the text forever, and neither claim's
-#: *number* was ever compared against anything.
-#:
-#: Deliberately narrow, unlike `_zero_slack_claim_contradicts`'s general
-#: "any number in a window" predecessor (F7): each pattern is a specific
-#: grammatical slot, not "some number appeared near a keyword" — because this
-#: repository also argues margins in free-form history prose
-#: (`robots.FIXTURES_AT_LEAST`'s "T151 raised it to 64 ... and its THIRD round
-#: to 80", `salary_recovery.MINIMUM_WORDING_CASES`'s "Raised from 40 when the
-#: second-reader audit landed 54 more cases") whose numbers are not, and are not
-#: claimed to be, the current declaration or the current margin — trying to
-#: parse chronological narrative safely was the exact over-broad relaxation
-#: round 3's own docstring already tried and reverted for populations. A
-#: comment that wants this check's protection states its number in one of
-#: these two fixed roles; free-form history stays covered only by the
-#: (weaker, but honest about it) keyword match.
-_COMMITTED_AT_RE = re.compile(r"\bcommitted\s+at\s+", re.IGNORECASE)
-_POINTS_OF_MARGIN_RE = re.compile(r"\bpoints?\s+of\s+(?:slack|margin)\b", re.IGNORECASE)
-
-
-def _claimed_current_value(comment: str) -> int | None:
-    """The number stated immediately after a "Committed at N" claim, or `None`
-    if the comment makes no such claim. `None` is silence, not clearance — a
-    comment that never claims a specific current value this way is not one
-    this check can falsify (`_MARGIN_ARGUED_RE`'s keyword match is what covers
-    it instead)."""
-    normalized = _BACKTICK_CODE_RE.sub(" ", _normalize_comment_text(comment))
-    match = _COMMITTED_AT_RE.search(normalized)
-    if match is None:
-        return None
-    return _nearest_number_after(normalized[match.end() : match.end() + 40])
-
-
-def _claimed_margin_size(comment: str) -> int | None:
-    """The number stated immediately before an "N point(s) of slack/margin"
-    claim, or `None` if the comment makes no such claim."""
-    normalized = _BACKTICK_CODE_RE.sub(" ", _normalize_comment_text(comment))
-    match = _POINTS_OF_MARGIN_RE.search(normalized)
-    if match is None:
-        return None
-    return _nearest_number_before(normalized[max(0, match.start() - 40) : match.start()])
-
-
 #: String-returning method calls this module treats as producing a scalar (the length
 #: of *one* piece of text), never a population. Seen guarding `elicit_extract.MIN_ANSWER_CHARS`
 #: (`answer.strip()`) among others.
@@ -908,12 +1102,16 @@ class FloorFinding:
 
 
 @dataclass(frozen=True)
-class DynamicFloor:
+class UnpinnableFloor:
     """An in-scope floor whose population this repository does not itself
     enumerate, and for which no committed evidence file could be resolved either
     — genuinely unpinnable, checked only for "carries some explanation" plus the
     one falsifiable claim this repository's own idiom makes (`_zero_slack_claim_
-    contradicts`)."""
+    contradicts`). F2 (second-reader BLOCK on #488): named for what it is —
+    landing here has never meant "verified", only "no independent ground truth
+    this sweep could check a claim against", and the old name (`DynamicFloor`,
+    reported as `dynamic_population_floors`) read as an accepted classification
+    rather than an admission. The set itself is unchanged; only the label lied."""
 
     module: str
     name: str
@@ -1084,15 +1282,13 @@ def _module_constant_candidates(tree: ast.Module) -> list[tuple[str, int, ast.ex
 _SIBLING_ASSIGNMENT_RE = re.compile(r"^[A-Z][A-Z0-9_]*\s*(?::[^=]+)?=\s*.+$")
 
 
-def _comment_block_above(lines: list[str], lineno: int) -> str:
-    """The contiguous `#`-prefixed lines above a 1-indexed declaration line.
-
-    Skips back over any immediately-preceding bare constant declarations first, so a
-    comment written once for a group of floors is read for each of them. Also tolerates
-    a single blank line between the code and the comment — a section-header block
-    followed by a blank line before the constant it introduces
-    (`reader_notes.MINIMUM_PROBES`) is a real explanation, not a missing one.
-    """
+def _comment_block_range_above(lines: list[str], lineno: int) -> tuple[int, int] | None:
+    """The 0-indexed `(start, end)` inclusive line range of the contiguous
+    `#`-prefixed lines above a 1-indexed declaration line, or `None` when there
+    is no such block. `_comment_block_above`'s own scanning rules, factored out
+    so a mutation that needs to *replace* the block (`measure_prose_clearance`,
+    F6) walks the identical range a *read* of it would, rather than a second,
+    possibly-diverging copy of the scan."""
     i = lineno - 2  # zero-indexed line just above the declaration
     while (
         i >= 0
@@ -1102,12 +1298,27 @@ def _comment_block_above(lines: list[str], lineno: int) -> str:
         i -= 1
     if i >= 0 and lines[i].strip() == "" and i - 1 >= 0 and lines[i - 1].strip().startswith("#"):
         i -= 1
-    collected: list[str] = []
+    end = i
     while i >= 0 and lines[i].strip().startswith("#"):
-        collected.append(lines[i])
         i -= 1
-    collected.reverse()
-    return "\n".join(collected)
+    start = i + 1
+    return (start, end) if start <= end else None
+
+
+def _comment_block_above(lines: list[str], lineno: int) -> str:
+    """The contiguous `#`-prefixed lines above a 1-indexed declaration line.
+
+    Skips back over any immediately-preceding bare constant declarations first, so a
+    comment written once for a group of floors is read for each of them. Also tolerates
+    a single blank line between the code and the comment — a section-header block
+    followed by a blank line before the constant it introduces
+    (`reader_notes.MINIMUM_PROBES`) is a real explanation, not a missing one.
+    """
+    block = _comment_block_range_above(lines, lineno)
+    if block is None:
+        return ""
+    start, end = block
+    return "\n".join(lines[start : end + 1])
 
 
 def _all_function_defs(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
@@ -1234,20 +1445,6 @@ def _assignments_to_subscript(
     return [value for _, value in found]
 
 
-def _appended_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
-    """True if `name.append(...)` / `.add(...)` / `.update(...)` appears anywhere in `func`."""
-    for node in ast.walk(func):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in {"append", "add", "update", "extend"}
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == name
-        ):
-            return True
-    return False
-
-
 def _incremented_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
     """True if `name += ...` appears anywhere in `func` — the running-count shape
     `naming.measure`'s `scanned` and `review_reader.measure`'s `reports_found` both
@@ -1261,6 +1458,57 @@ def _incremented_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: s
         ):
             return True
     return False
+
+
+#: Every no-argument builtin-collection call `_is_empty_builder` treats as an
+#: empty-builder shape — lifted out of that function's body (round 5, F3) so
+#: a test can generate one probe per member rather than hand-list a subset of
+#: them: a second reader against #488 deleted the `set()`/`dict()`/
+#: `frozenset()` half of the inline set literal this replaced and the full
+#: suite stayed green, because the depth-cutoff fixture that would have
+#: caught it only ever hand-listed those same three names — `list()` was in
+#: the enumeration and absent from every fixture, so deleting it too would
+#: have been just as invisible.
+_EMPTY_BUILDER_CALL_NAMES = frozenset({"set", "list", "dict", "frozenset"})
+
+
+def _is_empty_builder(rhs: ast.expr) -> bool:
+    """True if `rhs` is, directly and without resolving anything, an empty
+    collection literal or a no-argument builtin-collection call: `[]`, `{}`,
+    `set()`, `dict()`, `frozenset()` — every phantom-fillable shape a *name*
+    can be bound to. `frozenset()` is included here even though the object it
+    builds is immutable: this function is only ever consulted while resolving
+    a name's own *last binding*, and the name itself is not immutable — round
+    7's second reader found a name whose last plain `ast.Assign` was
+    `built = frozenset()` still classified `_LITERAL, 0` even when the name
+    was in fact rebound later by an idiom `_assignments_to_name` cannot see
+    (`built |= {x}` is an `ast.AugAssign`, not a tracked `ast.Assign`), the
+    exact phantom-zero shape this sweep exists to catch, now reintroduced by
+    trusting the object's immutability as if it were the name's. Round 10's
+    second reader found the same trust misplaced at the other two points
+    `_collection_kind`'s `ast.Name` branch resolves a name from — a
+    module-level `NAME = frozenset()` and a parameter default are both still
+    *names*, both still rebindable later, so this function is now consulted
+    at all three resolution points, not only the function-local
+    reassignment one. The direct value-position case (`_collection_kind`'s
+    own terminal `Call` branch, reached without resolving a name at
+    all — a dict value, a same-module call's `return`) is the only one left
+    unaffected: there is no name there to rebind, so `frozenset()` still
+    resolves to a permanent `_LITERAL, 0`. Anything less direct than what
+    this function checks (a name bound through another name, a subscript, a
+    same-module call whose return isn't one of these literal shapes) is left
+    to the general recursive path in `_collection_kind`, which still
+    classifies it, just at that path's usual cost."""
+    if isinstance(rhs, (ast.List, ast.Set)) and not rhs.elts:
+        return True
+    if isinstance(rhs, ast.Dict) and not rhs.keys:
+        return True
+    return (
+        isinstance(rhs, ast.Call)
+        and isinstance(rhs.func, ast.Name)
+        and rhs.func.id in _EMPTY_BUILDER_CALL_NAMES
+        and not rhs.args
+    )
 
 
 _UNKNOWN = "unknown"
@@ -1397,6 +1645,23 @@ def _collection_kind(
         # never a silently-wrong `_LITERAL` count.
         if any(isinstance(elt, ast.Starred) for elt in expr.elts):
             return _DYNAMIC, None
+        # Round 5 (F4): "population == 0 is not a population" — R3-3's own
+        # closed rule, generalized past the one call site (a name last bound
+        # to an empty builder inside a function) round 4 applied it to. An
+        # empty `[]`/`{...}` literal — `ast.Tuple` excluded, since a tuple is
+        # immutable and an empty one can never later be filled — reached
+        # `_collection_kind` here whenever it is resolved through any *other*
+        # path this sweep walks: a module-level binding
+        # (`_module_level_literal_collection`), a dict value, a same-module
+        # function's `return`. Every one of those paths used to land on
+        # `_LITERAL, 0` uncorrected, because the round-4 fix only guarded the
+        # local-function-assignment path `_is_empty_builder` is checked
+        # against. A phantom zero from any of them clears `_margin_finding`'s
+        # `margin <= 0` branch exactly the way the AugAssign gap did. `list`/
+        # `set` are mutable and empty is never provably permanent from source
+        # alone, so this is `_DYNAMIC`, never a silently-wrong `_LITERAL, 0`.
+        if isinstance(expr, (ast.List, ast.Set)) and not expr.elts:
+            return _DYNAMIC, None
         return _LITERAL, len(expr.elts)
     if isinstance(expr, ast.Dict):
         # Round 5 (R4-2): the mirror case for `{**BASE, "x": 1}` — a `**`
@@ -1405,6 +1670,11 @@ def _collection_kind(
         # sweep-counted population `2` against a real `9`. Same rule, same
         # reason: undecidable from source ⇒ `_DYNAMIC`.
         if any(key is None for key in expr.keys):
+            return _DYNAMIC, None
+        # Round 5 (F4): same "population == 0 is not a population" rule as
+        # the List/Set case above — a dict is mutable, so an empty `{}` is
+        # never provably permanent from source alone.
+        if not expr.keys:
             return _DYNAMIC, None
         return _LITERAL, len(expr.keys)
     if isinstance(expr, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
@@ -1459,10 +1729,18 @@ def _collection_kind(
             return _DYNAMIC, None
         if (
             isinstance(expr.func, ast.Name)
-            and expr.func.id in {"set", "list", "dict", "frozenset"}
+            and expr.func.id in _EMPTY_BUILDER_CALL_NAMES
             and not expr.args
         ):
-            return _LITERAL, 0
+            # Round 5 (F4): `frozenset()` is immutable — once built it can
+            # never gain an item, so an empty one really is a permanent
+            # population of 0 and `_LITERAL` stays honest. `set()`/`list()`/
+            # `dict()` are the phantom-fillable case the List/Set/Dict-literal
+            # branches above now guard against, reached here instead when the
+            # empty builder is spelled as a call rather than a literal.
+            if expr.func.id == "frozenset":
+                return _LITERAL, 0
+            return _DYNAMIC, None
         if isinstance(expr.func, ast.Name):
             # A call to a same-module function — seen building the fixed control set a
             # delegated floor is checked against (`review_reader.CONTROLS =
@@ -1482,28 +1760,46 @@ def _collection_kind(
         return _UNKNOWN, None
 
     if isinstance(expr, ast.Name):
+        # Round 10 second reader on #488: round 9 applied "the object is
+        # immutable, the name is not" to only one of the three ways this
+        # branch resolves a name — the function-local reassignment path
+        # below. A module-level `NAME = frozenset()` rebound later by a
+        # plain `Assign` (or `_module_level_value`'s first-match semantics
+        # ignoring a later one entirely), and a parameter default rebound
+        # inside the function body, are both still names, both still
+        # rebindable, and both fed straight into the general recursive
+        # `_collection_kind` call below — which, once it reaches the
+        # *value itself*, is a genuine value position from the recursion's
+        # point of view and answers the terminal `Call` branch's permanent
+        # `_LITERAL, 0`. So the check has to run at each point *this*
+        # branch hands off to that recursion, not only at the one path
+        # round 9 touched: whatever a name here resolves to, an
+        # empty-builder shape is `_DYNAMIC`, full stop — `_LITERAL, 0` is
+        # reserved for the terminal branch reached without resolving a
+        # name at all (a dict value, a default consulted directly, a
+        # same-module call's return).
         module_literal = _module_level_literal_collection(tree, expr.id)
         if module_literal is not None:
+            if _is_empty_builder(module_literal):
+                return _DYNAMIC, None
             return _collection_kind(module_literal, tree, func, before_lineno, depth + 1)
         module_value = _module_level_value(tree, expr.id)
         if module_value is not None:
             # Not a literal collection directly (handled above), but a module-level
             # name all the same — e.g. `CONTROLS = _control_prs()`. Recurse into
             # whatever it holds rather than stopping at "not a literal".
+            if _is_empty_builder(module_value):
+                return _DYNAMIC, None
             return _collection_kind(module_value, tree, None, None, depth + 1)
         if func is not None:
             default = _param_default(func, expr.id)
             if default is not None:
+                if _is_empty_builder(default):
+                    return _DYNAMIC, None
                 return _collection_kind(default, tree, func, before_lineno, depth + 1)
             assignments = _assignments_to_name(func, expr.id, before_lineno)
             if assignments:
                 rhs = assignments[-1]
-                if (
-                    isinstance(rhs, (ast.List, ast.Set))
-                    and not rhs.elts
-                    and _appended_in_a_loop(func, expr.id)
-                ):
-                    return _DYNAMIC, None
                 if (
                     isinstance(rhs, ast.Constant)
                     and isinstance(rhs.value, int)
@@ -1511,7 +1807,60 @@ def _collection_kind(
                     and _incremented_in_a_loop(func, expr.id)
                 ):
                     return _DYNAMIC, None
-                return _collection_kind(rhs, tree, func, before_lineno, depth + 1)
+                # F1 (second-reader BLOCK, #488) then R3-3 (round 4, same PR):
+                # a count of zero taken right at the binding is not a
+                # population — full stop, not only when a fill idiom this
+                # sweep happens to recognize is also present. F1's original
+                # guard required `_filled_after_binding` (`.append`/`.add`/
+                # `.update`/`.extend`, or subscript assignment) alongside the
+                # empty-builder shape, which is exactly the enumeration
+                # CLAUDE.md warns has no last element: a second reader found
+                # three ordinary `AugAssign` spellings it doesn't recognize
+                # (`rows[k] += 1`, `rows |= {k}`, `rows += [k]`), and 42 live
+                # names in this tree resolved to `(_LITERAL, 0)` outside the
+                # closed-rule test's own reach as a result. This sweep cannot
+                # prove a collection is *never* filled anywhere — it can only
+                # fail to recognize one more idiom — so it no longer tries:
+                # any name last bound to an empty-builder shape is `_DYNAMIC`,
+                # whether or not a fill is found. That can only make the
+                # sweep *more* cautious (a floor that used to auto-pass on a
+                # phantom zero now needs a marker instead), never less —
+                # dropping the fill check can never turn a real defect
+                # invisible, only turn an invisible one into one that needs
+                # justifying. `_is_empty_builder(rhs)` is still checked
+                # directly against `rhs`'s own AST shape before the general
+                # recursive fallback, purely to avoid costing this function's
+                # `depth > 5` budget an extra hop for a shape already visible
+                # in the node — see `_is_empty_builder`'s own docstring.
+                # `employer_boards.MINIMUM_CONFORMING` (`hosts: set[str] =
+                # set()`, filled by `hosts.add(...)` in a loop) is cleared
+                # this way: `_margin_finding(literal_value=5, population=0)`
+                # computes `margin=-5`, `margin <= 0`, compliant — before any
+                # marker is read.
+                #
+                # Round 8 second reader on #488: rounds 6 and 7 carved
+                # `frozenset()` out of this check on the theory that an
+                # immutable object is a permanent zero regardless of path.
+                # True of the *object*, false of the *name* — `built` here
+                # can still be rebound to something else, including by an
+                # idiom `_assignments_to_name` above cannot see at all
+                # (`built |= {x}` is an `ast.AugAssign`), so a `frozenset()`
+                # last-`ast.Assign`-visible binding is no safer a permanent
+                # zero than `set()`'s. Left in `_is_empty_builder` alongside
+                # the other three names; the direct value-position case (the
+                # terminal `Call` branch below, reached without resolving a
+                # name at all) is untouched and still answers `_LITERAL, 0`.
+                if _is_empty_builder(rhs):
+                    return _DYNAMIC, None
+                rhs_kind, rhs_count = _collection_kind(rhs, tree, func, before_lineno, depth + 1)
+                if rhs_kind == _LITERAL and rhs_count == 0:
+                    # A genuinely indirect empty builder — `rhs` itself isn't
+                    # one of `_is_empty_builder`'s direct shapes, but resolves
+                    # to a literal zero anyway once `_collection_kind` chases
+                    # it (through another name, a dict-subscript lookup, a
+                    # same-module call). Same rule, general fallback.
+                    return _DYNAMIC, None
+                return rhs_kind, rhs_count
             param_names = (
                 {a.arg for a in func.args.posonlyargs}
                 | {a.arg for a in func.args.args}
@@ -2237,7 +2586,11 @@ def _margin_finding(
 
     # Past this point margin is strictly positive, so a comment claiming "zero
     # slack" is already false regardless of what number sits beside it — the
-    # margin computed a moment ago already refutes it.
+    # margin computed a moment ago already refutes it. Kept even though a
+    # marker mismatch below would also catch most real cases: this is a pure
+    # contradiction (no marker required to state it), so it fires even against
+    # a comment whose *marker* is accurate but which also still carries a
+    # stale "zero slack" sentence from an earlier round's paragraph.
     if _ZERO_SLACK_CLAIM_RE.search(_normalize_comment_text(comment)):
         return FloorFinding(
             module=module_stem,
@@ -2246,96 +2599,75 @@ def _margin_finding(
             reason="stale_margin_claim",
             detail=(
                 f"{name} is {literal_value}, population is {population} (margin {margin}), "
-                "but its comment claims 'zero slack' — the keyword match alone "
-                "(`raised`, `slack`) would still clear this"
+                "but its comment claims 'zero slack' — a positive, computed margin already "
+                "refutes that regardless of what marker sits beside it"
             ),
         )
 
-    # Round 4 (F2): the two other idioms this repository uses to argue a
-    # *positive* margin in writing each state a number in a fixed role, and
-    # each can go stale exactly like a "zero slack" claim can — a second reader
-    # measured `MINIMUM_FLOORS_SWEPT`'s own "Committed at 64, three points of
-    # slack" clearing unchanged at floor `1` (margin 66, comment still true by
-    # `_MARGIN_ARGUED_RE`'s keyword match alone), and the same escape on
-    # `robots.FIXTURES_AT_LEAST` and `salary_recovery.MINIMUM_WORDING_CASES`.
-    # These two are checked against the WHOLE comment, deliberately not scoped
-    # to the last paragraph the way the keyword fallback below now is: every
-    # real instance of either idiom in this repository already sits in the
-    # final paragraph next to the declaration, so widening costs nothing, and
-    # narrowing here would just be a second copy of the same restriction.
-    claimed_value = _claimed_current_value(comment)
-    if claimed_value is not None:
-        if claimed_value != literal_value:
-            return FloorFinding(
-                module=module_stem,
-                name=name,
-                lineno=lineno,
-                reason="stale_margin_claim",
-                detail=(
-                    f"{name} is {literal_value}, but its comment claims it was "
-                    f"'committed at {claimed_value}' — the value the comment argues for and "
-                    "the value the code now declares have drifted apart"
-                ),
-            )
-        return None
+    # T163: the only thing that clears a positive margin now is a marker —
+    # `MARGIN_MARKER_RE` — checked against the two numbers *this call* just
+    # computed, never against the comment's own say-so. This retires the
+    # keyword-only fallback and the two numeric idioms it grew out of
+    # (`_claimed_current_value`/`_claimed_margin_size`): both were prose a
+    # commit could mint by writing a sentence, and `_claimed_current_value`'s
+    # own "Committed at N" form was gameable even on its own terms — checked
+    # only against `literal_value`, the very quantity a commit that edits the
+    # floor and the comment together can always make agree, which is
+    # `len(X) < len(X)` wearing a claim rather than a check. See this
+    # function's own module-level comment (T163) for the measured 73-of-73
+    # figure this replaces. F3 (round 2): named, not merely the first marker
+    # in the block — see `_margin_marker_claim`'s own docstring.
+    marker = _margin_marker_claim(comment, name)
+    if marker is None:
+        return FloorFinding(
+            module=module_stem,
+            name=name,
+            lineno=lineno,
+            reason="silent_margin",
+            detail=(
+                f"{name} is {literal_value}, population is {population} "
+                f"(margin {margin}) — the first {margin} deletion(s) breach nothing, and no "
+                f"`{MARGIN_MARKER_NAME}` marker above the declaration argues the gap"
+            ),
+        )
 
-    claimed_margin = _claimed_margin_size(comment)
-    if claimed_margin is not None:
-        if claimed_margin != margin:
-            return FloorFinding(
-                module=module_stem,
-                name=name,
-                lineno=lineno,
-                reason="stale_margin_claim",
-                detail=(
-                    f"{name} is {literal_value}, population is {population} (margin {margin}), "
-                    f"but its comment claims {claimed_margin} point(s) of slack/margin — the "
-                    "number the comment argues for and the margin actually computed have "
-                    "drifted apart"
-                ),
-            )
-        return None
-
-    # Round 5 (R4-5): round 3's F2 was never fully closed. Neither numeric
-    # idiom fired above, so this floor's compliance came down to
-    # `_MARGIN_ARGUED_RE` matching *somewhere* in the whole comment — and a
-    # second reader deleted exactly the sentence carrying this self-floor's
-    # own "Committed at 73, three points of slack" claim and watched the gate
-    # stay GREEN at floor `1`, because `margin`/`slack` remain in an *earlier*
-    # paragraph of the same accreted, multi-round comment, in prose that is
-    # *about* this module's own mechanism ("the one branch that never computes
-    # a margin", "is this margin real") — never a claim about this floor's own
-    # gap. Retiring the keyword fallback entirely (tried here first) breaks a
-    # real, intentional shape this module supports on purpose
-    # (`test_a_margin_argued_in_writing_is_not_flagged`,
-    # `second_reader.STDLIB_DISAGREEMENTS_AT_LEAST`'s "this one keeps its
-    # slack ... [no number stated]" for a floor pinned to a third party's own
-    # behaviour) — a floor is allowed to argue its margin in free prose with no
-    # falsifiable number at all, and that argument is not required to sit next
-    # to a number this check could otherwise verify. What is not legitimate is
-    # a keyword surviving *because it is describing something else entirely*,
-    # several paragraphs of unrelated history away from the declaration. So
-    # the fallback is scoped to `_last_comment_paragraph`: the block of
-    # comment lines immediately above the declaration, after the last blank
-    # `#`/`#:` separator line — the same place every real "Committed at
-    # N"/"N points of slack"/"N, zero slack" claim in this repository already
-    # lives, and where a genuine free-form argument belongs too, since it is
-    # an argument *for this floor*, not a chronicle of every round that has
-    # touched this file.
-    if _MARGIN_ARGUED_RE.search(_normalize_comment_text(_last_comment_paragraph(comment))):
-        return None
-
-    return FloorFinding(
-        module=module_stem,
-        name=name,
-        lineno=lineno,
-        reason="silent_margin",
-        detail=(
-            f"{name} is {literal_value}, population is {population} "
-            f"(margin {margin}) — the first {margin} deletion(s) breach nothing, "
-            "and no comment above the declaration argues the gap"
-        ),
-    )
+    claimed_value, claimed_population = marker
+    if claimed_value != literal_value:
+        return FloorFinding(
+            module=module_stem,
+            name=name,
+            lineno=lineno,
+            reason="stale_margin_claim",
+            detail=(
+                f"{name} is {literal_value}, but its marker claims value={claimed_value} — "
+                "the marker and the floor's current declaration have drifted apart"
+            ),
+        )
+    if claimed_population is None or claimed_population != population:
+        return FloorFinding(
+            module=module_stem,
+            name=name,
+            lineno=lineno,
+            reason="stale_margin_claim",
+            detail=(
+                f"{name} is {literal_value}, population is {population} (margin {margin}), but "
+                f"its marker claims population={claimed_population} — a real, countable "
+                "population is known here, so the marker must state it and it must match"
+            ),
+        )
+    if not _margin_marker_has_explanation(comment):
+        return FloorFinding(
+            module=module_stem,
+            name=name,
+            lineno=lineno,
+            reason="silent_margin",
+            detail=(
+                f"{name} carries an `{MARGIN_MARKER_NAME}` marker with no explanation beside "
+                "it — T159's rule is the margin and why, and a marker alone answers only the "
+                "first half"
+            ),
+        )
+    return None
 
 
 def _resolved_population_for_site(
@@ -2362,8 +2694,8 @@ def _resolved_population_for_site(
 
 def _classify_floor(
     module: _ModuleInfo, name: str, lineno: int, value_expr: ast.expr
-) -> tuple[FloorFinding | None, DynamicFloor | None, EvidencePinnedFloor | None, bool, bool]:
-    """Returns `(finding_if_any, dynamic_record_if_any, pinned_record_if_any,
+) -> tuple[FloorFinding | None, UnpinnableFloor | None, EvidencePinnedFloor | None, bool, bool]:
+    """Returns `(finding_if_any, unpinnable_record_if_any, pinned_record_if_any,
     was_in_scope, reached_arithmetic)`. `reached_arithmetic` is true exactly
     when a real, concrete population was found — literal or evidence-pinned —
     and `_margin_finding` was actually run against it, whether or not it found
@@ -2488,10 +2820,10 @@ def _classify_floor(
     # No committed evidence resolves this one — a genuinely unpinnable
     # population (a third party's own behaviour, a corpus scan, two dynamic
     # quantities combined) or simply a shape this sweep does not yet trace to
-    # a file. No single "first deletion" this repository could make, so this
-    # is checked only for "carries some explanation", plus the one
-    # falsifiable claim this repository's own idiom makes about one ("N,
-    # zero slack") going stale (`_zero_slack_claim_contradicts`).
+    # a file. No single "first deletion" this repository could make, and no
+    # ground truth this sweep could check a `population=` claim against — so
+    # unlike the arithmetic branch (`_margin_finding`), this is checked for a
+    # marker's `value=` alone, never `population=`.
     if not comment.strip():
         return (
             FloorFinding(
@@ -2501,6 +2833,99 @@ def _classify_floor(
                 reason="undocumented",
                 detail=f"{name} guards a population this repository does not itself "
                 "enumerate, and carries no comment explaining the chosen value",
+            ),
+            None,
+            None,
+            True,
+            False,
+        )
+    # T163: a nonempty comment used to be enough by itself — the weakest of
+    # this module's three acceptance paths, needing not even a keyword, which
+    # is why the "73 of 73" mutation cleared every floor that landed here
+    # unchanged. `value=` is now mandatory here too, checked the identical way
+    # `_margin_finding` checks it; `population=` is never required (nothing in
+    # this branch resolved one to require it against) but IS checked when
+    # present — see F5 below. F3 (round 2): named, not merely the first
+    # marker in the block.
+    marker = _margin_marker_claim(comment, name)
+    if marker is None:
+        return (
+            FloorFinding(
+                module=module.stem,
+                name=name,
+                lineno=lineno,
+                reason="silent_margin",
+                detail=(
+                    f"{name} guards a population this repository does not itself enumerate, "
+                    f"and carries no `{MARGIN_MARKER_NAME}` marker — a comment with no "
+                    "falsifiable claim in it is not distinguishable from one that used to be "
+                    "true"
+                ),
+            ),
+            None,
+            None,
+            True,
+            False,
+        )
+    claimed_value, claimed_population = marker
+    if claimed_value != literal_value:
+        return (
+            FloorFinding(
+                module=module.stem,
+                name=name,
+                lineno=lineno,
+                reason="stale_margin_claim",
+                detail=(
+                    f"{name} is {literal_value}, but its marker claims value={claimed_value} — "
+                    "the marker and the floor's current declaration have drifted apart"
+                ),
+            ),
+            None,
+            None,
+            True,
+            False,
+        )
+    if claimed_population is not None:
+        # F5 (second-reader BLOCK, this PR): `margin_marker`'s own docstring
+        # says `population=` is only valid on an arithmetic floor — this
+        # branch is reached only when no real, countable population resolved
+        # (`_population_for` came back dynamic/unresolved and no committed
+        # evidence pinned it), so nothing here backs a `population=` claim.
+        # Before this, one was accepted and simply never read (`_claimed_
+        # population`, discarded) — a stated number this sweep never checked
+        # reads as more rigorous than the honest `value=`-alone marker this
+        # branch actually requires, and nothing caught it drifting from
+        # whatever the claimant once measured by hand.
+        return (
+            FloorFinding(
+                module=module.stem,
+                name=name,
+                lineno=lineno,
+                reason="population_on_dynamic_floor",
+                detail=(
+                    f"{name}'s marker claims population={claimed_population}, but no real, "
+                    "countable population resolved for it — `population=` is only valid on a "
+                    "floor this sweep checks arithmetically, and stating one here is a claim "
+                    "nothing here can check"
+                ),
+            ),
+            None,
+            None,
+            True,
+            False,
+        )
+    if not _margin_marker_has_explanation(comment):
+        return (
+            FloorFinding(
+                module=module.stem,
+                name=name,
+                lineno=lineno,
+                reason="silent_margin",
+                detail=(
+                    f"{name} carries an `{MARGIN_MARKER_NAME}` marker with no explanation "
+                    "beside it — T159's rule is the margin and why, and a marker alone answers "
+                    "only the first half"
+                ),
             ),
             None,
             None,
@@ -2525,19 +2950,20 @@ def _classify_floor(
             True,
             False,
         )
-    return None, DynamicFloor(module=module.stem, name=name, lineno=lineno), None, True, False
+    return None, UnpinnableFloor(module=module.stem, name=name, lineno=lineno), None, True, False
 
 
 def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
     """T159's gate: floors that do not refuse the first deletion of their population."""
     findings: list[FloorFinding] = []
-    dynamic: list[DynamicFloor] = []
+    unpinnable: list[UnpinnableFloor] = []
     pinned: list[EvidencePinnedFloor] = []
     swept = 0
     arithmetically_checked = 0
     excluded: list[str] = []
     self_floor: tuple[_ModuleInfo, str, int] | None = None
     arithmetic_self_floor: tuple[_ModuleInfo, str, int] | None = None
+    evidence_pinned_self_floor: tuple[_ModuleInfo, str, int] | None = None
 
     for module in _module_infos(src_dir):
         # Round 1 excluded this module from its own sweep by identity — the reader's
@@ -2573,8 +2999,16 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
                 swept += 1
                 arithmetically_checked += 1
                 continue
-            finding, dynamic_record, pinned_record, in_scope, reached_arithmetic = _classify_floor(
-                module, name, lineno, value_expr
+            if is_this_module and name == "MINIMUM_FLOORS_EVIDENCE_PINNED":
+                # F2 (second-reader BLOCK on #488): the third of this module's own
+                # denominators, deferred and checked the identical way its two
+                # siblings already are.
+                evidence_pinned_self_floor = (module, name, lineno)
+                swept += 1
+                arithmetically_checked += 1
+                continue
+            finding, unpinnable_record, pinned_record, in_scope, reached_arithmetic = (
+                _classify_floor(module, name, lineno, value_expr)
             )
             if not in_scope:
                 excluded.append(f"{module.stem}.{name}")
@@ -2584,8 +3018,8 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
                 arithmetically_checked += 1
             if finding is not None:
                 findings.append(finding)
-            if dynamic_record is not None:
-                dynamic.append(dynamic_record)
+            if unpinnable_record is not None:
+                unpinnable.append(unpinnable_record)
             if pinned_record is not None:
                 pinned.append(pinned_record)
 
@@ -2627,13 +3061,68 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
                 )
             )
 
+    if evidence_pinned_self_floor is not None:
+        # F2: nothing bounded `evidence_pinned_floors`'s own count before this —
+        # a floor silently losing its evidence pin (`_committed_evidence_
+        # population` breaking, or an evidence file going missing) moves it
+        # straight into `unpinnable_floors` without disturbing `floors_swept` or
+        # `arithmetically_checked` (both count the two branches identically), so
+        # neither existing self-floor sees it happen until the drift is large
+        # enough to eat `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`'s own slack.
+        #
+        # Checked against `len(pinned) + 1`, not `len(pinned)` — unlike `swept`/
+        # `arithmetically_checked`, which `self_floor`/`arithmetic_self_floor`
+        # already count themselves into *unconditionally*, before either is
+        # judged compliant, `pinned` only ever grows on a *compliant* outcome
+        # (an evidence-pinned floor that fails its own margin check is a
+        # finding, not a pin — the same rule every other floor on this branch
+        # already gets). Comparing against the pre-append `len(pinned)` would
+        # let this floor pass one short of the population it will actually
+        # report once compliant — this module's own named defect, a bound one
+        # short of its population, so the first real regression (one module-
+        # derived pin lost) would land exactly on the committed floor instead
+        # of past it. The `+ 1` prices in this floor's own pin in advance,
+        # which is decidable rather than circular: `len(pinned)` before this
+        # block is already fixed by the module sweep and the two siblings
+        # above, so the hypothetical does not depend on its own answer.
+        evidence_module, evidence_name, evidence_lineno = evidence_pinned_self_floor
+        evidence_comment = _comment_block_above(evidence_module.lines, evidence_lineno)
+        evidence_population = len(pinned) + 1
+        evidence_finding = _margin_finding(
+            evidence_module.stem,
+            evidence_name,
+            evidence_lineno,
+            MINIMUM_FLOORS_EVIDENCE_PINNED,
+            evidence_population,
+            evidence_comment,
+        )
+        if evidence_finding is not None:
+            findings.append(evidence_finding)
+        else:
+            pinned.append(
+                EvidencePinnedFloor(
+                    module=evidence_module.stem,
+                    name=evidence_name,
+                    lineno=evidence_lineno,
+                    population=evidence_population,
+                )
+            )
+
     return {
         "floors_that_do_not_refuse_the_first_deletion": len(findings),
         "findings": [f.as_dict() for f in sorted(findings, key=lambda f: (f.module, f.name))],
         "floors_swept": swept,
         "arithmetically_checked": arithmetically_checked,
-        "dynamic_population_floors": [
-            d.as_dict() for d in sorted(dynamic, key=lambda d: (d.module, d.name))
+        # F2 (second-reader BLOCK on #488): renamed from `dynamic_population_
+        # floors`. The set is unchanged — every floor here always was exactly
+        # the ones no independent artefact could verify — but "dynamic" read as
+        # an accepted classification, and landing here was reported no
+        # differently from landing in `evidence_pinned_floors`: zero findings,
+        # silence. `unpinnable_floors` says what is actually true of every
+        # member: this sweep took the marker's word for it, because it had
+        # nothing else to check it against.
+        "unpinnable_floors": [
+            u.as_dict() for u in sorted(unpinnable, key=lambda u: (u.module, u.name))
         ],
         "evidence_pinned_floors": [
             p.as_dict() for p in sorted(pinned, key=lambda p: (p.module, p.name))
@@ -2692,7 +3181,7 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: Per-module detail is deliberately not repeated further than the paragraph
 #: above: a hand-typed roll call of "already compliant" modules is exactly
 #: the prose a second reader has twice now shown cannot be trusted.
-#: `status/evidence/T159.json`'s own `dynamic_population_floors`,
+#: `status/evidence/T159.json`'s own `unpinnable_floors`,
 #: `evidence_pinned_floors` and `bounds_read_and_out_of_scope` are regenerated
 #: every run and are the only account of *which* floors are which that this
 #: module stands behind.
@@ -2725,29 +3214,35 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: digits. The merged tree holds both floors, so the true count is 78 and
 #: neither branch's number was ever right about it. Regenerated against the
 #: merge, never picked from a side. Still zero slack.
-#: **81 since T169** on the branch that added it, merged in after this
-#: constant had already reached 78 on `main` without knowing about it:
+#: **80 since T157**, whose `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
+#: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` joined it together — the third
+#: instance of the same collision, this time between this branch and main's
+#: T171/T175 moving in parallel. Regenerated again rather than picked. Still
+#: zero slack.
+#: **81 since T161**, whose `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` joined
+#: it — the fourth instance, and by now the pattern rather than the accident.
+#: This branch resolved its own collision to 78 while main went 78 → 80 by two
+#: more of them; both numbers were correct about the tree each was measuring
+#: and neither is correct about this one. Regenerated, never picked. Still
+#: zero slack.
+#: **82 since this round's own F2** (second-reader BLOCK on #488), whose
+#: `MINIMUM_FLOORS_EVIDENCE_PINNED` joined the population below — a new
+#: committed floor in this very module is itself one more thing this sweep
+#: sweeps. Still zero slack.
+#: **85 on this merge with `main`**: `main` independently reached 84 by adding
 #: `markup_text.MINIMUM_FIXTURE_OFFERS` and
-#: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` join the population (+2), and
-#: this constant's own self-referential entry — excluded from
-#: `evidence_pinned_floors` while its committed value disagreed with the
-#: population it names — rejoins the count once corrected here (+1).
-#: **Independently, 81 since T157 and T161 on `main`**:
-#: `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
-#: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` (T157) plus
-#: `verified_gate.MINIMUM_CI_CLAIM_SCENARIOS` (T161) — the third and fourth
-#: instances of the same collision, this branch and `main` each moving from
-#: 78 by different additions that happened to sum to the same digits. Neither
-#: 81 was ever correct about the other's tree: **84 on the merged tree**,
-#: measured with `uv run python -m integral.floor_sweep` rather than picked
-#: from either side, since the merge brings both branches' additions in at
-#: once (T169's two plus its own self-referential rejoin, T157's two, T161's
-#: one — 78 + 6 = 84, not 78 + 3 twice).
-MINIMUM_FLOORS_SWEPT = 84
+#: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` (T169, +2) plus rejoining this
+#: constant's own self-referential entry once T169 corrected it (+1) — none of
+#: which this branch's 82 knew about, and none of the floors behind this
+#: branch's 82 (T157, T161, this round's own F2) are in `main`'s 84. Sixth
+#: instance of the same collision; measured with
+#: `uv run python -m integral.floor_sweep` against the merged tree rather than
+#: picked from either side. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 85
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
-#: an arithmetic check, as opposed to sitting in `dynamic_population_floors`
+#: an arithmetic check, as opposed to sitting in `unpinnable_floors`
 #: with only a comment behind them. Before this floor existed, the arithmetic
 #: branch had none of its own: a second reader deleted every committed
 #: `status/evidence/*.json` file and watched 18 of 19 evidence-pinned floors
@@ -2810,7 +3305,69 @@ MINIMUM_FLOORS_SWEPT = 84
 #: Committed at 36, three points of slack. Never the count of the day (T100):
 #: raise it deliberately, the same discipline as `MINIMUM_FLOORS_SWEPT`, when a
 #: round changes how many floors this sweep can actually check by arithmetic.
+#: **40 since this round's own F1** (second-reader BLOCK on this PR):
+#: `employer_boards.MINIMUM_CONFORMING` was reaching this count through the
+#: bug F1 fixes — an empty `set()` builder read as a literal population of
+#: zero before `.add()` ever ran — so it counted as arithmetically checked
+#: when it has never been anything but dynamic (conformance needs a live
+#: robots-adjudication replay, not an in-source count). Fixing F1 moves it
+#: to `unpinnable_floors` where it belongs, dropping this from 41 to
+#: 40. Still four points of slack.
+#: **41 since this same round's own F2**, whose new `MINIMUM_FLOORS_EVIDENCE_
+#: PINNED` self-floor (below) takes the identical deferred path its two
+#: siblings already do — counting itself into `arithmetically_checked` the
+#: same way they count themselves — and lands back on 41 by coincidence of
+#: digits, not because F1's own floor returned: `employer_boards.
+#: MINIMUM_CONFORMING` stays in `unpinnable_floors`, one module-derived floor
+#: down from before, one self-floor up. Still five points of slack.
+#: **42 on this merge with `main`**: another instance of the same collision,
+#: and this time the two sides land on the identical digits for unrelated
+#: reasons. `main` alone (T169, no `MINIMUM_FLOORS_EVIDENCE_PINNED` self-
+#: floor — that is F2, this branch's own addition) already committed 42 here,
+#: reached through its own two new evidence-pinned floors elsewhere in the
+#: tree. This branch's own 41 (three self-floors, F2 among them, none of
+#: which `main` has) is a different set entirely. The merged tree — three
+#: self-floors *and* `main`'s evidence-pinned additions — measures 42 too,
+#: by coincidence of digits rather than because either side's count carried
+#: over. Measured against the merged tree with
+#: `uv run python -m integral.floor_sweep`, never picked from either side.
+#: Also gains two genuinely dynamic floors this merge is what first marks
+#: `unpinnable` rather than `silent_margin`:
+#: `markup_text.MINIMUM_FIXTURE_OFFERS` and
+#: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` (T169) carried no
+#: `arsenal-floor-margin` marker — this branch's own convention, which T169
+#: predates — until this merge gives them one (see `markup_text.py`); neither
+#: counts toward `arithmetically_checked`, being dynamic. Still four points
+#: of slack.
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=42
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
+
+
+#: F2 (second-reader BLOCK on #488): this module's third denominator, and the
+#: genuinely new protection in the round rather than a rename — `unpinnable_
+#: floors` (below) cannot itself be bounded without duplicating `MINIMUM_
+#: FLOORS_ARITHMETICALLY_CHECKED` (the partition is exactly two-way:
+#: `floors_swept = arithmetically_checked + len(unpinnable_floors)`, so a
+#: ceiling on one half is algebraic on the other), but nothing before this
+#: bounded `evidence_pinned_floors` specifically, the *strict subset* of
+#: `arithmetically_checked` that resolved through real committed evidence
+#: rather than an in-source literal count. A floor silently losing its pin
+#: (`_committed_evidence_population` breaking, or an evidence file going
+#: missing) falls back to `unpinnable` without moving `floors_swept` or
+#: `arithmetically_checked` at all — both count the two branches identically
+#: — so neither existing self-floor would see it happen until the drift ate
+#: four points of slack. This one sees it on the first floor lost.
+#:
+#: Checked exactly like its two siblings — matched by identity, deferred
+#: until `measure()`'s own loop and both siblings' own checks have finished,
+#: against `len(pinned) + 1` (this floor's own eventual pin, priced in before
+#: it is decided — see the comment beside the check itself for why that is
+#: not circular). Committed at the real count, zero slack, `MINIMUM_FLOORS_
+#: SWEPT`'s own convention: `margin == 0` is unconditionally compliant, so no
+#: marker is needed here either. Never the count of the day (T100): raise it
+#: deliberately when a round changes how many floors resolve through
+#: committed evidence, the same discipline as its two siblings.
+MINIMUM_FLOORS_EVIDENCE_PINNED = 30
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:
@@ -2837,6 +3394,406 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
 #: would only ever report `stable` trivially, and — the concrete cost, met while
 #: writing this module — `repo_gate` cannot resolve a registrant it does not
 #: already import, which every module *not* declaring one already avoids.
+
+
+#: T163's own mutation, verbatim: a sentence asserting deliberateness, carrying no
+#: marker and no number a sweep could check — the report's own attack phrase.
+_PROSE_ASSERTING_DELIBERATENESS = "# The margin here is deliberate."
+
+
+def _swept_floor_sites(src_dir: Path) -> list[tuple[_ModuleInfo, str, int, ast.expr]]:
+    """Every floor `measure()` would count as swept in `src_dir` — the exact
+    discovery `measure()`'s own loop performs (`_module_infos` +
+    `_module_constant_candidates`, routed through `_classify_floor` and kept
+    only when `in_scope`), reused read-only rather than re-derived, so a
+    mutation battery built on this can never diverge from what the gate itself
+    sweeps. Excludes the three self floors (F2: `MINIMUM_FLOORS_EVIDENCE_PINNED`
+    joined the other two) by the same identity check `measure()` applies — in a
+    copy of the tree neither `_THIS_FILE` match ever fires, but all three also
+    classify `out_of_scope` there on their own account (none has an in-source
+    comparison site `_population_for` can resolve — the two originals compare
+    against a runtime dict value inside `write_evidence`/`_main`, and F2's own
+    has no comparison site anywhere, only a function-call argument inside
+    `measure()` itself), so the explicit skip is belt-and-braces, not
+    load-bearing, on a copy or on the live tree alike (measured: 79 of the
+    live tree's 82, the difference being exactly these three).
+    """
+    sites: list[tuple[_ModuleInfo, str, int, ast.expr]] = []
+    for module in _module_infos(src_dir):
+        is_this_module = module.path.resolve() == _THIS_FILE
+        for name, lineno, value_expr in _module_constant_candidates(module.tree):
+            if is_this_module and name in (
+                "MINIMUM_FLOORS_SWEPT",
+                "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
+                "MINIMUM_FLOORS_EVIDENCE_PINNED",
+            ):
+                continue
+            _, _, _, in_scope, _ = _classify_floor(module, name, lineno, value_expr)
+            if in_scope:
+                sites.append((module, name, lineno, value_expr))
+    return sites
+
+
+def _replace_expr_with_zero(lines: list[str], value_expr: ast.expr) -> None:
+    """Replaces `value_expr`'s own source span with the literal `0`, in place —
+    whatever its shape (a plain int, a `len(...)` call, arithmetic, an alias),
+    the mutated line re-parses as a bare `NAME = 0`. Every floor this sweep
+    discovers is a single-line expression; asserted rather than handled, so a
+    future multi-line floor fails loudly instead of silently corrupting the
+    file it shares with other floors' declarations."""
+    if value_expr.lineno != value_expr.end_lineno:
+        raise AssertionError(
+            f"floor value spans lines {value_expr.lineno}-{value_expr.end_lineno} — "
+            "the prose-clearance mutation only knows how to rewrite a single-line value"
+        )
+    idx = value_expr.lineno - 1
+    line = lines[idx]
+    lines[idx] = line[: value_expr.col_offset] + "0" + line[value_expr.end_col_offset :]
+
+
+def _replace_comment_block_with_prose(lines: list[str], lineno: int) -> None:
+    """Replaces the comment block `_comment_block_above` would read for the
+    declaration at 1-indexed `lineno` with `_PROSE_ASSERTING_DELIBERATENESS`
+    alone, in place — the report's own attack phrase: no marker, no number,
+    nothing this sweep can check. A floor with no comment at all gets one
+    inserted just above its declaration, so the mutation exercises the "carries
+    a comment with no claim in it" path uniformly rather than leaving some
+    floors on the different "undocumented" path they started on."""
+    block = _comment_block_range_above(lines, lineno)
+    if block is None:
+        lines.insert(lineno - 1, _PROSE_ASSERTING_DELIBERATENESS)
+    else:
+        start, end = block
+        lines[start : end + 1] = [_PROSE_ASSERTING_DELIBERATENESS]
+
+
+def _apply_prose_mutation(sites: list[tuple[_ModuleInfo, str, int, ast.expr]]) -> None:
+    """Mutates every site in `sites` in place: literal value → `0`, comment →
+    prose asserting deliberateness alone. `sites` must already be the ones a
+    copy's own module objects report (`_swept_floor_sites(tmp_dir)`, filtered
+    by the caller) — this function only rewrites, it does not discover.
+
+    Floors sharing one file are rewritten from the bottom up (descending
+    `lineno`): replacing a comment block can change the file's line count, and
+    processing bottom-to-top means that only ever moves lines *above* a floor
+    not yet processed, never invalidating a line number already captured for
+    one that comes later in this loop.
+
+    R3-5 (round 4, second-reader flagged on #488, latent): that invariant
+    assumes each floor owns its own comment block. `_comment_block_above`'s
+    own docstring documents the opposite for a *read* — "a comment written
+    once for a group of floors is read for each of them", by walking back
+    past bare sibling declarations — so two floors in `sites` can resolve to
+    the exact same `(start, end)` range. Bottom-up-by-declaration-lineno does
+    not order that case correctly: mutating the later floor's shared block
+    first can leave the earlier floor's own comment already rewritten by the
+    time its turn comes, and the reader confirmed a constructed case
+    corrupting a shared block into invalid source. Refused loudly here,
+    before any line is touched, the same way a multi-line value is refused
+    above — nothing in the live tree hits this today (checked: no two swept
+    floors share a block), so refusing rather than guessing a fix keeps a
+    silent corruption from ever being the first thing anyone sees.
+    """
+    by_path: dict[Path, tuple[_ModuleInfo, list[tuple[int, ast.expr]]]] = {}
+    for module, _name, lineno, value_expr in sites:
+        by_path.setdefault(module.path, (module, []))[1].append((lineno, value_expr))
+    for module, floors in by_path.values():
+        lines = module.lines
+        ranges = [(lineno, _comment_block_range_above(lines, lineno)) for lineno, _ in floors]
+        for i, (lineno_a, range_a) in enumerate(ranges):
+            for lineno_b, range_b in ranges[i + 1 :]:
+                if range_a is not None and range_a == range_b:
+                    raise AssertionError(
+                        f"{module.stem}: floors declared at lines {lineno_a} and "
+                        f"{lineno_b} share one comment block {range_a} — the "
+                        "prose-clearance mutation only knows how to rewrite one "
+                        "floor's comment independently of another's"
+                    )
+        for lineno, value_expr in sorted(floors, key=lambda f: f[0], reverse=True):
+            _replace_expr_with_zero(lines, value_expr)
+            _replace_comment_block_with_prose(lines, lineno)
+        module.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _find_marker_line_index(lines: list[str], lineno: int, name: str) -> int | None:
+    """The 0-indexed line, within the comment block `_comment_block_above`
+    would read for the 1-indexed declaration at `lineno`, that carries a
+    marker naming `name` — or `None` if there is no such line. Used to
+    locate a marker for in-place, same-line rewriting rather than the
+    whole-block replacement `_replace_comment_block_with_prose` does."""
+    block = _comment_block_range_above(lines, lineno)
+    if block is None:
+        return None
+    start, end = block
+    for idx in range(start, end + 1):
+        for match in MARGIN_MARKER_RE.finditer(lines[idx]):
+            if match.group("name") == name:
+                return idx
+    return None
+
+
+def _apply_marker_restatement_mutation(
+    sites: list[tuple[_ModuleInfo, str, int, ast.expr]],
+) -> list[tuple[_ModuleInfo, str, int, ast.expr]]:
+    """R3-1/R3-2 (round 4, second-reader BLOCK on #488): the harder, more
+    realistic attack `_apply_prose_mutation` was never built to exercise —
+    keep a marker-*shaped* comment, keep its explanation, retype only the
+    number, rather than stripping the marker to plain prose. Every site in
+    `sites` that already carries a marker naming itself has its literal
+    value lowered to `0` and its marker's own `value=` rewritten to match,
+    in place; a site with no such marker is left untouched (the "no
+    marker" attack is `_apply_prose_mutation`'s own case, not this one) and
+    excluded from the returned list.
+
+    Unlike `_apply_prose_mutation`, this never changes a file's line count
+    — both rewrites replace a span with different text of possibly
+    different length, but on the *same* line, so no bottom-up-by-lineno
+    ordering is needed here the way R3-5 flags it is for whole-block
+    replacement (the two never interact: this function only ever touches
+    a line an earlier `_replace_expr_with_zero`/marker rewrite in this same
+    loop cannot have shifted).
+    """
+    by_path: dict[Path, tuple[_ModuleInfo, list[tuple[int, ast.expr, str]]]] = {}
+    mutated: list[tuple[_ModuleInfo, str, int, ast.expr]] = []
+    for module, name, lineno, value_expr in sites:
+        comment = _comment_block_above(module.lines, lineno)
+        if _margin_marker_claim(comment, name) is None:
+            continue
+        by_path.setdefault(module.path, (module, []))[1].append((lineno, value_expr, name))
+        mutated.append((module, name, lineno, value_expr))
+    for module, floors in by_path.values():
+        lines = module.lines
+        for lineno, value_expr, name in floors:
+            idx = _find_marker_line_index(lines, lineno, name)
+            assert idx is not None, f"{module.stem}.{name}: marker vanished before rewrite"
+            match = next(
+                m for m in MARGIN_MARKER_RE.finditer(lines[idx]) if m.group("name") == name
+            )
+            new_line = (
+                lines[idx][: match.start()] + margin_marker(name, 0) + lines[idx][match.end() :]
+            )
+            lines[idx] = new_line
+            _replace_expr_with_zero(lines, value_expr)
+            block = _comment_block_range_above(lines, lineno)
+            if block is not None:
+                _rewrite_zero_slack_claims_to_zero(lines, block[0], block[1])
+        module.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return mutated
+
+
+def measure_marker_restatement_clearance() -> dict[str, Any]:
+    """R3-1/R3-2 (round 4): how many of the real tree's *unpinnable* floors
+    still read compliant after retyping their own marker to match a lowered
+    value, rather than stripping it to plain prose.
+
+    Deliberately **not** folded into `floors_cleared_by_prose_alone` —
+    that metric, and T163's own fixed gate key, are both about prose
+    *replacing* a marker, a property this sweep closes (see
+    `measure_prose_clearance`). Retyping an *existing* marker is a
+    different property, and for the two branches with a real population
+    to check a claim against (arithmetic, evidence-pinned), retyping it
+    honestly — matching the population, which this mutation never touches
+    — is not an attack at all; T159's rule never bounds how large a
+    disclosed margin may be. So this measures only the unpinnable branch,
+    where `_classify_floor`'s sole self-consistency check is `claimed_value
+    != literal_value` — tautologically satisfied whenever the same commit
+    edits the code and the marker together, because by definition of
+    "unpinnable" no independent population exists to check either number
+    against.
+
+    The honest answer, measured here rather than merely argued: every
+    eligible unpinnable floor clears. That is not an oversight this static
+    sweep left open — it is what "no ground truth exists for this
+    population" means. Closing it for real needs the registry T164 owns (a
+    population recorded once, elsewhere, that a commit editing the comment
+    cannot also edit), explicitly out of this task's scope. What this task
+    can do, and does: measure the residual and report it honestly, rather
+    than let `floors_cleared_by_prose_alone`'s clean 0 be read as covering
+    an attack it was never built to run.
+    """
+    with tempfile.TemporaryDirectory() as raw_tmp:
+        tmp_dir = Path(raw_tmp) / "integral"
+        shutil.copytree(_SRC_DIR, tmp_dir)
+        before = measure(tmp_dir)
+        already_broken = {(f["module"], f["name"]) for f in before["findings"]}
+        unpinnable = {(d["module"], d["name"]) for d in before["unpinnable_floors"]}
+        sites = [
+            site
+            for site in _swept_floor_sites(tmp_dir)
+            if (site[0].stem, site[1]) in unpinnable
+            and (site[0].stem, site[1]) not in already_broken
+        ]
+        mutated = _apply_marker_restatement_mutation(sites)
+        after = measure(tmp_dir)
+    site_ids = sorted((module.stem, name, lineno) for module, name, lineno, _ in mutated)
+    caught_after = {(f["module"], f["name"]) for f in after["findings"]}
+    cleared = [
+        {"module": module, "name": name, "lineno": lineno}
+        for module, name, lineno in site_ids
+        if (module, name) not in caught_after
+    ]
+    return {
+        "unpinnable_floors_cleared_by_marker_restatement": len(cleared),
+        "marker_restatement_cleared": cleared,
+        "marker_restatement_scenarios_checked": len(site_ids),
+        "marker_restatement_gate_status": "measured",
+    }
+
+
+#: The battery's own denominator floor (T100/T122) — no longer unpinned in its
+#: own instance (F4). `measure_prose_clearance` checks it itself, against
+#: `len(site_ids)`, the real count of floors the battery just mutated, through
+#: the same `_margin_finding` arithmetic every other floor gets.
+#: `measure()` still cannot check it — its only in-source comparison site is a
+#: runtime dict value inside `_main`, unresolvable by a static sweep — so it
+#: stays out of `measure()`'s own scope; that division of labour is why the
+#: check lives beside the battery rather than in the sweep.
+#: Committed at the real count, zero slack, `MINIMUM_FLOORS_SWEPT`'s own
+#: convention: `margin == 0` is unconditionally compliant, so no marker is
+#: needed here either.
+#: **82 on this merge with `main`**: `MINIMUM_FLOORS_SWEPT` moved 82 → 85
+#: above, and every floor this battery mutates that is not already a finding
+#: counts here — three more in scope, not zero slack drift. Measured with
+#: `measure_prose_clearance()` against the merged tree. Also the merge that
+#: first gave `markup_text`'s two floors their own comment block apiece:
+#: mutating both at once inside one shared block is exactly what
+#: `_apply_prose_mutation`'s own docstring (R3-5) refuses rather than risks
+#: corrupting — true the moment this merge gave them a marker and pulled them
+#: out of `silent_margin`, so they joined this battery's scope for the first
+#: time; splitting the block, not loosening the refusal, is the fix.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 82
+
+
+def measure_prose_clearance() -> dict[str, Any]:
+    """T163's gate: how many of the real tree's floors still read compliant
+    after the report's own realistic mutation — every floor `measure()`
+    classifies in scope, its value lowered to `0` and its comment replaced
+    with prose asserting deliberateness, carrying no marker and no number this
+    sweep could check.
+
+    Applied to a `shutil.copytree` of `src/integral`, never the real tree in
+    place — but every floor at once, in one copy, not one copy per floor:
+    mutating and re-sweeping the whole tree costs one extra `measure()` call,
+    not 81 (measured on the report this closes: ~5s including the copy and
+    `uv` start-up). This sweep never *imports* the copy it mutates —
+    `_module_infos` parses source text with `ast.parse`, the same as `measure`
+    itself — so neither of CLAUDE.md's mutation-testing hazards applies: no
+    `.pyc` cache goes stale between the two `measure()` calls below, and no
+    `sys.modules` entry serves a "resident module"'s stale result.
+
+    T150's shape, not the original T163 one: the earlier version mutated two
+    hand-written fixtures, one per branch `_classify_floor`'s positive-margin
+    check distinguishes — correct about the branch and blind to the real
+    tree's open set of population-expression shapes, which is exactly how
+    `employer_boards.MINIMUM_CONFORMING` cleared a battery meant to catch it.
+
+    A floor already non-compliant on the unmutated copy is excluded rather
+    than mutated: "cleared by prose alone" asks whether the prose *caused* a
+    floor that would otherwise be enforced to read compliant, and a floor
+    already failing for an unrelated reason (a test fixture standing in for
+    `src_dir`, on the real tree never — T159's own gate keeps it clean before
+    this runs at all) cannot answer that question either way.
+    """
+    with tempfile.TemporaryDirectory() as raw_tmp:
+        tmp_dir = Path(raw_tmp) / "integral"
+        shutil.copytree(_SRC_DIR, tmp_dir)
+        before = measure(tmp_dir)
+        already_broken = {(f["module"], f["name"]) for f in before["findings"]}
+        sites = [
+            site
+            for site in _swept_floor_sites(tmp_dir)
+            if (site[0].stem, site[1]) not in already_broken
+        ]
+        _apply_prose_mutation(sites)
+        after = measure(tmp_dir)
+    site_ids = sorted((module.stem, name, lineno) for module, name, lineno, _ in sites)
+    caught_after = {(f["module"], f["name"]) for f in after["findings"]}
+    cleared = [
+        {"module": module, "name": name, "lineno": lineno}
+        for module, name, lineno in site_ids
+        if (module, name) not in caught_after
+    ]
+
+    # F4: this battery's own denominator floor is a floor too — unpinned in
+    # its own instance until now (CLAUDE.md's "eighth face": a rule stated,
+    # mandated for others in this same diff, and unchecked for itself).
+    # `measure()` cannot check it — its only in-source comparison
+    # (`prose_measured["scenarios_checked"] < MINIMUM_PROSE_MUTATION_SCENARIOS`
+    # in `_main`) is against a runtime dict value no static sweep resolves, so
+    # `_classify_floor` correctly puts it out of scope there. `len(site_ids)`
+    # above is the one number that could ever answer it honestly, so it is
+    # checked here, by the same `_margin_finding` arithmetic every other floor
+    # gets — located by `_THIS_FILE` identity over `_SRC_DIR`, never over the
+    # `tmp_dir` copy, where that identity can never match (`_swept_floor_
+    # sites`'s own docstring).
+    self_site = next(
+        (
+            (module, name, lineno)
+            for module in _module_infos(_SRC_DIR)
+            if module.path.resolve() == _THIS_FILE
+            for name, lineno, _ in _module_constant_candidates(module.tree)
+            if name == "MINIMUM_PROSE_MUTATION_SCENARIOS"
+        ),
+        None,
+    )
+    self_finding = None
+    if self_site is not None:
+        self_module, self_name, self_lineno = self_site
+        self_comment = _comment_block_above(self_module.lines, self_lineno)
+        self_finding = _margin_finding(
+            self_module.stem,
+            self_name,
+            self_lineno,
+            MINIMUM_PROSE_MUTATION_SCENARIOS,
+            len(site_ids),
+            self_comment,
+        )
+
+    return {
+        "floors_cleared_by_prose_alone": len(cleared),
+        "cleared": cleared,
+        "scenarios_checked": len(site_ids),
+        "findings": [self_finding.as_dict()] if self_finding is not None else [],
+        "gate_status": "measured",
+    }
+
+
+def record_prose_clearance(measured: dict[str, Any]) -> dict[str, Any]:
+    """What is committed, out of what `measure_prose_clearance` returns —
+    `scenarios_checked` swapped for its own floor, T100's reason applied to a
+    hand-maintained battery rather than a filesystem scan: a raw count would
+    read as compliant merely because nobody deleted the last entry."""
+    committed = {key: value for key, value in measured.items() if key != "scenarios_checked"}
+    committed["scenarios_checked_at_least"] = MINIMUM_PROSE_MUTATION_SCENARIOS
+    return committed
+
+
+def write_prose_clearance_evidence(
+    evidence: Path = DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T163.json`; return what was measured.
+
+    Refuses to write only when the battery itself shrank below its own floor —
+    `write_evidence`'s identical rule (T159), applied to a denominator this
+    module controls directly rather than one a filesystem scan produces.
+
+    R3-1/R3-2 (round 4): also runs `measure_marker_restatement_clearance` and
+    merges its keys in, so T163.json carries both mutations the report ever
+    asked for — value-and-prose (this gate, fixed at 0) and value-and-retyped-
+    marker (informational, expected nonzero, never gates `write_evidence`'s
+    caller — see that function's own docstring for why it is not folded into
+    `floors_cleared_by_prose_alone`). No key collides: the two dicts' keys are
+    disjoint by name.
+    """
+    measured = {**measure_prose_clearance(), **measure_marker_restatement_clearance()}
+    if measured["scenarios_checked"] < MINIMUM_PROSE_MUTATION_SCENARIOS:
+        return measured
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(record_prose_clearance(measured), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return measured
 
 
 def write_evidence(
@@ -2866,18 +3823,72 @@ def write_evidence(
     return measured
 
 
+def _emit_command(argv: list[str]) -> int:
+    """`python -m integral.floor_sweep emit --name NAME --value N [--population M]`
+    — prints the marker line a floor's own comment should carry, computed by
+    `margin_marker` rather than typed by hand. Mirrors `review_reader`'s own
+    `_cmd_emit`.
+
+    R3-1 (second-reader BLOCK on #488): this command did not exist —
+    `margin_marker`'s docstring already said a marker is "emitted rather than
+    typed", the same idiom `review_reader` implements as `emit`/`check`
+    subcommands, but nothing here wired an `emit` subcommand up, so "emitted,
+    not typed" was true of nothing anyone could actually run. This is a real
+    but partial mitigation: it gives the marker line a genuine, non-hand-typed
+    source, but it cannot by itself stop a commit from running this command
+    with a false `--value`/`--population` — closing that needs an independent
+    population to check the arguments against, which is `measure_marker_
+    restatement_clearance`'s subject (and, fully, T164's registry).
+    """
+    parser = argparse.ArgumentParser(
+        prog="floor_sweep emit",
+        description="print a floor's own margin marker line, computed rather than typed",
+    )
+    parser.add_argument("--name", required=True, help="the floor constant's own name")
+    parser.add_argument("--value", required=True, type=int, help="the floor's literal value")
+    parser.add_argument(
+        "--population",
+        type=int,
+        default=None,
+        help="only for a floor this sweep checks arithmetically",
+    )
+    try:
+        parsed = parser.parse_args(argv)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+    try:
+        print(margin_marker(parsed.name, parsed.value, parsed.population))
+    except ValueError as exc:
+        print(f"floor_sweep: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def _main(argv: list[str] | None = None) -> int:
-    """Write T159's evidence.
+    """Write T159's evidence, then T163's — `make evidence` invokes this module
+    once (`python -m integral.floor_sweep`, no subcommand), so both gates this
+    module owns are written and checked in the one call it gets.
 
     **Exit 1, not 3** on a breach or a finding — T115's finding about this
     repository's other floors, applied here from the day this one was written: `make
     evidence` prints 3 as "unmeasured (recorded)" and carries on, which makes a floor
     that exits 3 decoration rather than a gate.
+
+    `emit` is the one subcommand: `args[0] == "emit"` dispatches to
+    `_emit_command` before anything below runs. Every other call — including
+    the existing, tested `_main([str(evidence_path)])` convention, where
+    `args[0]` is an evidence-path override rather than a subcommand — falls
+    through unchanged; `"emit"` is not a valid `Path`-like evidence override
+    any caller has ever passed, so the two conventions cannot collide.
     """
     args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] == "emit":
+        return _emit_command(args[1:])
     evidence = Path(args[0]) if args else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(evidence)
     print(json.dumps(measured, ensure_ascii=False))
+
+    exit_code = 0
 
     if measured["floors_swept"] < MINIMUM_FLOORS_SWEPT:
         print(
@@ -2885,9 +3896,8 @@ def _main(argv: list[str] | None = None) -> int:
             "a clean zero over a shrunken sweep is not a measurement",
             file=sys.stderr,
         )
-        return 1
-
-    if measured["arithmetically_checked"] < MINIMUM_FLOORS_ARITHMETICALLY_CHECKED:
+        exit_code = 1
+    elif measured["arithmetically_checked"] < MINIMUM_FLOORS_ARITHMETICALLY_CHECKED:
         print(
             f"only {measured['arithmetically_checked']} floor(s) reached an arithmetic "
             f"check (floor {MINIMUM_FLOORS_ARITHMETICALLY_CHECKED}) — a deleted committed "
@@ -2896,14 +3906,64 @@ def _main(argv: list[str] | None = None) -> int:
             "resolves and still reaches arithmetic — only deletion does)",
             file=sys.stderr,
         )
-        return 1
+        exit_code = 1
+    else:
+        for finding in measured["findings"]:
+            print(
+                f"✗ {finding['module']}.{finding['name']} ({finding['reason']}): "
+                f"{finding['detail']}",
+                file=sys.stderr,
+            )
+        if measured["findings"]:
+            exit_code = 1
 
-    for finding in measured["findings"]:
+    prose_measured = write_prose_clearance_evidence()
+    print(json.dumps(prose_measured, ensure_ascii=False))
+
+    # R3-1/R3-2 (round 4): reported, never gated — this residual is the honest,
+    # currently-unavoidable answer to a harder attack than `floors_cleared_by_
+    # prose_alone` measures (see `measure_marker_restatement_clearance`'s own
+    # docstring), not a regression this call should fail on.
+    if prose_measured["unpinnable_floors_cleared_by_marker_restatement"]:
         print(
-            f"✗ {finding['module']}.{finding['name']} ({finding['reason']}): {finding['detail']}",
+            f"ⓘ {prose_measured['unpinnable_floors_cleared_by_marker_restatement']} "
+            "unpinnable floor(s) still read compliant after their own marker was "
+            "retyped to match a lowered value in the same commit — expected, and does "
+            "not fail this gate: no independent population exists for an unpinnable "
+            "floor's marker to be checked against short of T164's registry (out of "
+            "this task's scope).",
             file=sys.stderr,
         )
-    return 1 if measured["findings"] else 0
+
+    if prose_measured["scenarios_checked"] < MINIMUM_PROSE_MUTATION_SCENARIOS:
+        print(
+            f"only {prose_measured['scenarios_checked']} prose-clearance scenario(s) checked "
+            f"(floor {MINIMUM_PROSE_MUTATION_SCENARIOS}) — a clean zero over a shrunken "
+            "battery is not a measurement",
+            file=sys.stderr,
+        )
+        return 1
+
+    if prose_measured["findings"]:
+        for finding in prose_measured["findings"]:
+            print(
+                f"✗ {finding['module']}.{finding['name']} ({finding['reason']}): "
+                f"{finding['detail']}",
+                file=sys.stderr,
+            )
+        return 1
+
+    if prose_measured["floors_cleared_by_prose_alone"]:
+        for cleared in prose_measured["cleared"]:
+            print(
+                f"✗ {cleared['module']}.{cleared['name']} (line {cleared['lineno']}) still "
+                "reads compliant after the floor was lowered and its comment replaced with "
+                "prose asserting deliberateness alone",
+                file=sys.stderr,
+            )
+        return 1
+
+    return exit_code
 
 
 if __name__ == "__main__":  # pragma: no cover

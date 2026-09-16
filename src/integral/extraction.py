@@ -151,6 +151,7 @@ _CLAUSE_BOUNDARY = re.compile(r"[.!?;\n]")
 #
 # Found by measurement, not by argument: `prefilter_suppression` caught the
 # team_autonomy case above settling +1 against a human -1.
+# arsenal-floor-margin: _CONFIRMING_MATCHES_FOR_BIPOLAR value=2
 _CONFIRMING_MATCHES_FOR_BIPOLAR = 2
 
 Provenance = Literal["rules", "model"]

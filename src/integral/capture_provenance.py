@@ -170,6 +170,7 @@ DECLARABLE = frozenset({LIVE, TRANSCRIBED, UNRECORDED})
 #: fifteen leaves room for several to be retired without a false alarm while
 #: staying far above what an empty, unreadable or example-only `connectors/`
 #: would produce. Raise it when the library grows — it is a floor, not a target.
+#: arsenal-floor-margin: MINIMUM_CAPTURES_SCANNED value=15
 MINIMUM_CAPTURES_SCANNED = 15
 
 #: `YYYY-MM-DD`, the spelling `connector_health.probe_captured_at` already

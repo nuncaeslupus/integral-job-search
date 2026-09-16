@@ -78,12 +78,22 @@ EXEMPT_SITES = {
     "getmanfred": "Markdown body with inline <u>; flattening it would lose 24 line breaks"
 }
 
-#: Floors, literal. 75 offers over 26 packages on 2026-09-15; 13 markup-carrying
-#: values across the six connectors that declare a markup take. Set below
-#: today's counts by a stated margin so an ordinary connector PR does not have
-#: to move them, and far enough above zero that a scan reaching one package
-#: fails rather than passes.
+#: Floors, literal. 75 offers over 26 packages on 2026-09-15. Set below
+#: today's count by a stated margin so an ordinary connector PR does not have
+#: to move it, and far enough above zero that a scan reaching one package
+#: fails rather than passes. Genuinely dynamic — the population is discovered
+#: from `connectors/` at scan time, not enumerated here — so the marker
+#: states `value=` alone, per `floor_sweep.margin_marker`'s own docstring. Own
+#: comment block, not shared with the floor below: `floor_sweep`'s own
+#: prose-clearance mutation refuses two swept floors that resolve to the same
+#: comment range.
+#: arsenal-floor-margin: MINIMUM_FIXTURE_OFFERS value=50
 MINIMUM_FIXTURE_OFFERS = 50
+
+#: 13 markup-carrying values across the six connectors that declare a markup
+#: take, same day. Same reasoning as `MINIMUM_FIXTURE_OFFERS` above — dynamic
+#: population, margin-only marker, own comment block for the same reason.
+#: arsenal-floor-margin: MINIMUM_MARKUP_VALUES_COMPARED value=6
 MINIMUM_MARKUP_VALUES_COMPARED = 6
 
 #: The contract table's own floor. A census over the shipped fixtures proves

@@ -105,6 +105,7 @@ DIFFERENTIATOR_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T61.json"
 # nothing to search for, and report zero contradictions having checked
 # nothing. That is a silently vacuous pass, the exact failure this module
 # exists to prevent one level up. The floor makes it a hard failure instead.
+# arsenal-floor-margin: MINIMUM_DECLARATIONS_FOUND value=1
 MINIMUM_DECLARATIONS_FOUND = 1
 
 _DECLARATION_RE = re.compile(

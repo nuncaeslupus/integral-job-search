@@ -471,6 +471,7 @@ PERSONAL_FIELDS: tuple[str, ...] = (
 # How many consecutive normalised words make a match. Long enough that no two
 # unrelated sentences share one by accident; short enough to survive the edits
 # that defeated a plain substring test.
+# arsenal-floor-margin: _SHINGLE value=8
 _SHINGLE = 8
 
 
@@ -3494,8 +3495,13 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
 # applied directly to the raw, on-disk document text — the same primitive
 # every sweep in this module is already built on and already pinned
 # elsewhere, not a re-derivation of `measure_prepared`'s own bookkeeping.
+# arsenal-floor-margin: MINIMUM_CARRIED_DISCLOSURE_STATES value=9
 
 MINIMUM_CARRIED_DISCLOSURE_STATES = 9
+# Same reason, for the check-count twin declared beside it — the comment
+# above argues the first floor's margin; this one's value is unrelated to
+# it and stated here instead.
+# arsenal-floor-margin: MINIMUM_CARRIED_DISCLOSURE_CHECKS value=24
 MINIMUM_CARRIED_DISCLOSURE_CHECKS = 24
 
 

@@ -586,6 +586,7 @@ def probe_trait_sufficiency(root: Path) -> dict[str, Any]:
 #: scenario run *is* the fixture. Raised to what the probe carries — 17, zero slack
 #: — because 15 had drifted two checks under with no margin argued for the gap
 #: (T159).
+#: arsenal-floor-margin: MINIMUM_CHECKS value=17
 MINIMUM_CHECKS = 17
 
 

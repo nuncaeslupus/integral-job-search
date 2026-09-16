@@ -482,6 +482,7 @@ DEFAULT_SECOND_READER = second_reader.NAME
 ADJUDICATIONS_AT_LEAST = 25
 
 #: Shipped packages the coverage check must have found. Same reasoning.
+#: arsenal-floor-margin: PACKAGES_AT_LEAST value=15
 PACKAGES_AT_LEAST = 15
 
 
