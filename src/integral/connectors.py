@@ -93,16 +93,18 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date
 from functools import lru_cache
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Final, Literal
-from urllib.parse import parse_qsl, quote, unquote, urlsplit
+from urllib.parse import SplitResult, parse_qsl, quote, unquote, urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from integral.dimensions import Language
 from integral.offers import Location, Offer, Salary, SourceKind, compute_offer_id
+from integral.salary_period import normalize_period
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -219,6 +221,22 @@ _KNOWN_PLACEHOLDER = re.compile(r"\{(?:page|query|employer)\}")
 MAX_EMPLOYERS = 200
 
 
+def safe_urlsplit(url: str) -> SplitResult | None:
+    """`urlsplit(url)`, or `None` when `url` is not a parseable URL.
+
+    `urlsplit` raises `ValueError` on a handful of malformed inputs — an
+    unmatched IPv6 bracket (`https://[::1`) is the one every caller here has
+    hit — rather than treating them as an ordinary parse failure. A bare call
+    at the point of use ends the whole run instead of naming the one board,
+    pattern or capture that sent it (#445 second reader, N6). One place reads
+    the exception so no caller re-spells the try/except.
+    """
+    try:
+        return urlsplit(url)
+    except ValueError:
+        return None
+
+
 def _employer_slot_problem(pattern: str, method: str) -> str | None:
     """Why `{employer}` may not sit in `pattern`, or `None` when it may.
 
@@ -234,14 +252,12 @@ def _employer_slot_problem(pattern: str, method: str) -> str | None:
         # `build_list_requests` numbers a POST's pages by request position,
         # which several employers would shift.
         return f"{EMPLOYER_PLACEHOLDER} is supported on a GET listing only"
-    try:
-        filled = urlsplit(pattern.replace(EMPLOYER_PLACEHOLDER, "a0"))
-        path = urlsplit(pattern).path
-        hostname = filled.hostname
-    except ValueError as exc:
-        # `https://[h/...` — a bare ValueError at the point of use would end
-        # the whole run, not this one board (#445 round 2, N6).
-        return f"list.url_pattern is not a URL: {exc}"
+    filled = safe_urlsplit(pattern.replace(EMPLOYER_PLACEHOLDER, "a0"))
+    parsed = safe_urlsplit(pattern)
+    if filled is None or parsed is None:
+        return "list.url_pattern is not a URL"
+    path = parsed.path
+    hostname = filled.hostname
     if filled.scheme not in ("http", "https") or not hostname or EMPLOYER_PLACEHOLDER not in path:
         return (
             f"{EMPLOYER_PLACEHOLDER} must sit in the path of an http(s) URL with a fixed "
@@ -525,6 +541,18 @@ _VOID_TAGS = frozenset(
 )
 
 
+#: Elements whose content is code, not prose. `text_content` reads an advert
+#: body, and a `<script>` body is neither something a reader sees nor something
+#: `dedup` should tokenise — and, because CPython resolves no character
+#: reference inside script data, its text is the one place a raw `&lt;` can
+#: reach `Offer.text` through the very members T169 adds to remove markup.
+#:
+#: Skipped in `text_content` only. `raw_text` must keep them: it is what reads
+#: an embedded JSON document out of `script[type="application/ld+json"]` and
+#: `script#__NEXT_DATA__`, which is rippling's and justjoin's whole route.
+_NON_PROSE = frozenset({"script", "style"})
+
+
 @dataclass
 class Node:
     """One element in a parsed page. `<script>`/`<style>` content lands here
@@ -558,7 +586,7 @@ class Node:
                 yield from child.iter_descendants()
 
     def text_content(self) -> str:
-        pieces = [piece for piece in self._iter_text() if piece.strip()]
+        pieces = [piece for piece in self._iter_text(skip=_NON_PROSE) if piece.strip()]
         return " ".join(" ".join(piece.split()) for piece in pieces).strip()
 
     def raw_text(self) -> str:
@@ -580,12 +608,12 @@ class Node:
         """
         return "".join(self._iter_text())
 
-    def _iter_text(self) -> Iterator[str]:
+    def _iter_text(self, skip: frozenset[str] = frozenset()) -> Iterator[str]:
         for child in self.children:
             if isinstance(child, str):
                 yield child
-            else:
-                yield from child._iter_text()
+            elif child.tag not in skip:
+                yield from child._iter_text(skip)
 
 
 class _TreeBuilder(HTMLParser):
@@ -602,6 +630,28 @@ class _TreeBuilder(HTMLParser):
 
     def _attrs_dict(self, attrs: list[tuple[str, str | None]]) -> dict[str, str]:
         return {name: (value if value is not None else "") for name, value in attrs}
+
+    def parse_marked_section(self, i: int, report: bool = True) -> int:
+        """A marked section whose keyword is not one `_markupbase` knows.
+
+        The base implementation ends in `assert 0, "unknown status keyword"`,
+        so a board serving `<![data[…]]>` raises **out of `parse_html`** and
+        takes the whole sourcing run with it. WHATWG calls an unknown marked
+        section a bogus comment (`PE:cdata-in-html-content`), which yields no
+        text — so that is what it becomes here: consumed, and nothing emitted.
+
+        Found by the second reader on T169, which widened the surface: before
+        it, `parse_html` only ever saw a page a connector had fetched; now it
+        also sees the value of a JSON field, which is a remote string with no
+        markup contract at all.
+        """
+        try:
+            return super().parse_marked_section(i, report)
+        except AssertionError:
+            # WHATWG's bogus comment state ends at the next literal '>',
+            # wherever it falls - not at the marked section's own ']]>'.
+            end = self.rawdata.find(">", i)
+            return len(self.rawdata) if end < 0 else end + 1
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         node = Node(tag=tag, attrs=self._attrs_dict(attrs))
@@ -623,12 +673,385 @@ class _TreeBuilder(HTMLParser):
             self._stack[-1].children.append(data)
 
 
+#: WHATWG's script data state (§13.2.5.15, `script`) and RAWTEXT state
+#: (§13.2.5.3, `style` among others). In both, `<!--`, a stray `<`, or
+#: anything else that looks like a tag or a comment is not tokenised as one:
+#: only the element's own case-insensitive end tag leaves the state. So a scan
+#: that does not know this set will mis-tokenise their content as ordinary
+#: markup — which is exactly F2: a `<!--` inside `<script>` with no later
+#: `-->` was read as an unterminated *comment* and dropped the rest of the
+#: document with it, because nothing here knew `<script>` even opened.
+#:
+#: **Limited to these two, not the full RAWTEXT/RCDATA family** (second-reader
+#: round 4, R4): `xmp`, `iframe`, `noembed`, `noframes` (RAWTEXT) and `title`,
+#: `textarea` (RCDATA) were in this set through round 3 and every one of them
+#: was wrong. None is exercised by a fixture or a test, so the mutant that
+#: deletes all six survives the entire suite; and behaviourally each is
+#: three-way divergent across the interpreters this repo runs on, because
+#: `html.parser` itself only special-cases `script`/`style` consistently —
+#: measured directly, `HTMLParser.CDATA_CONTENT_ELEMENTS` is `('script',
+#: 'style')` on 3.12.3 and 3.12.11 but adds all four RAWTEXT elements above on
+#: 3.11.15 and 3.13.12, and `title`/`textarea` are not members of that
+#: attribute on any build. So this function declining to touch a `<!--`
+#: inside e.g. `<xmp>` and handing the tag on to `html.parser` (which some
+#: builds treat as RAWTEXT and some do not) is itself the "same text
+#: regardless of interpreter" property broken, not honoured — pinning the set
+#: to fixtures that only some builds pass would be exactly the "check pinned
+#: to a proxy" this module exists to remove. Reduced to the two members whose
+#: `html.parser` treatment is identical everywhere this repo runs, until each
+#: of the other six has committed rows pinning its spec-required behaviour on
+#: every interpreter (or its own resolution that does not depend on
+#: `html.parser`'s RAWTEXT handling at all).
+#:
+#: Deliberately not read from `html.parser.HTMLParser.CDATA_CONTENT_ELEMENTS`
+#: even for these two: that attribute is itself cross-patch unstable, per the
+#: measurement above, so reading it at import time would reintroduce the same
+#: hazard for a set that happens to agree today.
+_OPAQUE_TEXT_ELEMENTS = frozenset({"script", "style"})
+
+
+def _opening_tag_name(markup: str, lt: int, gt: int) -> str | None:
+    """The lower-cased tag name if `markup[lt:gt+1]` opens an element, else
+    `None` — an end tag (`</p>`) or anything that isn't a start tag opens
+    nothing."""
+    match = re.match(r"<(/?)([A-Za-z][A-Za-z0-9:_-]*)", markup[lt : gt + 1])
+    if match is None or match.group(1):
+        return None
+    return match.group(2).lower()
+
+
+def _skip_opaque_element(markup: str, tag_name: str, after_open_tag: int) -> int | None:
+    """Index just past `</tag_name...>`, searching from `after_open_tag`, or
+    `None` if no such end tag exists before EOF.
+
+    A `None` here does not mean "unterminated" in the sense the rest of this
+    function cares about: once an opaque element opens, *everything* after it
+    is that element's content until either its own end tag or the end of the
+    document — there is no comment, tag or declaration left inside for a
+    truncation to mistake for something else, so the caller is safe to stop
+    scanning altogether rather than searching for one.
+    """
+    end_open = re.compile(rf"</{re.escape(tag_name)}(?=[\t\n\f\r />]|$)", re.IGNORECASE)
+    match = end_open.search(markup, after_open_tag)
+    if match is None:
+        return None
+    close = markup.find(">", match.start())
+    return len(markup) if close == -1 else close + 1
+
+
+#: A tag really opens (or closes) only on an ASCII letter right after `<`, or
+#: right after `</` — WHATWG's tag open state (§13.2.5.6) and end tag open
+#: state (§13.2.5.7): anything else is "anything else", which never consumes
+#: past the `<` itself. Used to tell a genuine `<tag` or `</tag` apart from a
+#: bare `<` that merely has some *later*, unrelated `>` somewhere in the
+#: document (R2/R3, second-reader round 4) — the two must not be treated the
+#: same just because `str.find(">", lt)` cannot tell them apart on its own.
+_TAG_OPEN_RE = re.compile(r"</?[A-Za-z]")
+
+
+def _comment_close_end(markup: str, content_start: int) -> int | None:
+    """Index just past a comment's closing token, walking WHATWG's comment
+    states (§13.2.5.44 comment start, onward) from `content_start` — the
+    first character after the comment's own `<!--` — or `None` if the
+    comment is never closed before EOF.
+
+    Every legal close (`-->`, `--!>` comment-end-bang §13.2.5.52, and the
+    abrupt-closing-of-empty-comment forms `<!-->`/`<!--->` in comment-start
+    and comment-start-dash states, §13.2.5.44-45) is one rule here instead of
+    a fixed set of literal strings matched from a fixed offset — that fixed
+    list is what missed `<!--->` (second-reader round 4, R5): searching for
+    `-->` or `--!>` starting at `content_start` finds neither in `->tail`, so
+    the previous code read the comment as unterminated and dropped the rest
+    of the document, though the comment closes right there per spec.
+    """
+    n = len(markup)
+    i = content_start
+    state = "start"
+    while i < n:
+        ch = markup[i]
+        if state == "start":
+            if ch == "-":
+                state = "start-dash"
+                i += 1
+            elif ch == ">":
+                return i + 1
+            else:
+                state = "content"
+        elif state == "start-dash":
+            if ch == "-":
+                state = "end"
+                i += 1
+            elif ch == ">":
+                return i + 1
+            else:
+                state = "content"
+        elif state == "content":
+            if ch == "-":
+                state = "end-dash"
+            i += 1
+        elif state == "end-dash":
+            if ch == "-":
+                state = "end"
+                i += 1
+            else:
+                state = "content"
+        elif state == "end":
+            if ch == ">":
+                return i + 1
+            if ch == "!":
+                state = "end-bang"
+                i += 1
+            elif ch == "-":
+                i += 1
+            else:
+                state = "content"
+        elif state == "end-bang":
+            if ch == ">":
+                return i + 1
+            if ch == "-":
+                state = "end-dash"
+                i += 1
+            else:
+                state = "content"
+    return None
+
+
+#: A canonical, empty comment. `html.parser`'s own comment-close pattern is
+#: not a fixed literal, and not even stable within one minor version —
+#: measured directly against every interpreter installed in this
+#: environment: 3.12.11 (what `uv python install 3.12` draws here, and what
+#: `make host-gate`/CI run on) closes a comment on `--\s*>`
+#: (whitespace-tolerant), while 3.12.13, 3.12.14 and 3.14.4 all close on
+#: `--!?>` (bang-tolerant, not whitespace-tolerant) instead — so no fixed
+#: pattern this function could search for agrees with every build it has to
+#: run on, and the literal substring `-->` that a naive reading of
+#: `html.parser` suggests is not what *any* of them actually search for.
+#: Rewriting the whole matched span to this literal — which every measured
+#: build parses identically — resolves the ambiguity before `html.parser`
+#: ever sees it, rather than leaving the interpreter to guess (R1, R5, R6,
+#: second-reader round 5, S2).
+_CANONICAL_EMPTY_COMMENT = "<!---->"
+
+
+def _neutralise_unterminated_tail(markup: str) -> str:
+    """Make an EOF-truncated tag or comment survive as text, deterministically.
+
+    A construct that opens with `<` and never finds its closing token before
+    EOF can never become a real tag, comment, declaration or PI — there is
+    nothing left in the document to close it with. *What* a tokeniser does
+    with that unparseable remainder is not settled across CPython patches:
+    measured directly, an EOF-truncated start tag is silently discarded by
+    3.12.3/3.13.12 and resurfaces as literal data on 3.12.11 (the build
+    `uv python install 3.12` — CI's own resolution, unpinned to a patch —
+    draws in this environment), and an EOF-truncated comment reaches
+    `handle_comment` on one and `handle_data` on another. Pinning
+    `MARKUP_CONTRACTS` to whichever behaviour a given CI run happens to draw
+    is exactly a check pinned to a proxy for the property (CLAUDE.md's
+    second-reader section) rather than to the property itself — the
+    candidate should see the same text regardless of which patch of 3.12 CI
+    happens to install — so this is resolved before the value ever reaches
+    `html.parser`, closed rather than enumerated. The property is: **a
+    truncated construct is resolved as the construct it is, and nothing else
+    in the document is altered.**
+
+    * Inside `_OPAQUE_TEXT_ELEMENTS` (`<script>`, `<style>`, …), nothing is a
+      tag, a comment or a declaration — only the element's own end tag ends
+      the state — so no scanning happens there at all; see that constant.
+    * A comment (`<!--`) that finds its close (`-->`, `--!>`, or one of the
+      abrupt empty-comment forms, `<!-->`/`<!--->`) is rewritten to the
+      canonical empty form `<!---->` unconditionally — a terminated comment
+      contributes no text either way, and `html.parser`'s own close pattern
+      is not stable even within one minor version (`_CANONICAL_EMPTY_COMMENT`'s
+      docstring has the measurement), so no spelling of the original is safe
+      to leave for the real parser to re-read (R1, R5, R6, second-reader
+      round 5, S2: `_comment_close_end` walks the actual comment states
+      rather than matching a fixed set of literal closing strings). One that
+      never closes is dropped, content and all — a comment contributes no
+      text whether or not it manages to close, the same rule an ordinary,
+      *well-formed* comment already follows a few lines up in
+      `MARKUP_CONTRACTS`. A `>` inside it is literal comment content, not a
+      close, exactly as WHATWG's comment states require.
+    * `<!` not followed by `--` (bogus comment, §13.2.5.42's "anything else",
+      or a DOCTYPE, §13.2.5.53) and `<?` (also a bogus comment, tag open
+      state's "anything else") are both tokens that contribute no text
+      whether or not they close either — the *same* rule as a comment, so a
+      truncated one is dropped the same way. A terminated one is left for the
+      real parser, which already handles it — `<![CDATA[…]]>` (exact,
+      case-sensitive literal only) on its own, literal `]]>`-searching path
+      inside `html.parser`'s own `parse_html_declaration`, not through
+      `_markupbase.ParserBase.parse_marked_section`, which empirically is
+      never reached from `HTMLParser.feed()`/`goahead()` on this
+      interpreter; every other `<![…` spelling — lower-cased, or an
+      unrecognised keyword — is a bogus comment ending at the next literal
+      `>`, the same as this branch's own fallback (second-reader round 5,
+      S3).
+    * `</` immediately followed by anything other than an ASCII letter, a
+      `>`, or EOF is WHATWG's end tag open state "anything else"
+      (§13.2.5.7): a bogus comment, ending at the next `>` and contributing
+      no text — the same rule and the same shape as the `<!`/`<?` branch
+      just above, not the bare-`<` neutralisation below, which would
+      otherwise leave the comment's own content as surviving prose. `</>`
+      (the `>` comes immediately) is the same bogus-comment search, landing
+      on that very next `>` with nothing consumed in between. `</` at EOF is
+      deliberately left to the bare-`<` rule below instead: WHATWG emits `<`
+      and `/` as literal characters there, which that rule already produces
+      without a dedicated branch (second-reader round 5, S1).
+    * Anything else that opens with `<` but is not itself the start of a tag,
+      and was not already handled by the `</` rule just above — WHATWG's tag
+      open state only treats `<` as opening one on an ASCII letter, or `</`
+      on one (`_TAG_OPEN_RE`) — is neutralised to a character reference at
+      **that `<` alone**, and scanning resumes right after it,
+      regardless of whether some later, unrelated `>` exists anywhere else in
+      the document. This is F1 (round 2) *and* R2/R3 (round 4, the same rule
+      applied generally rather than only to the `gt == -1` sub-case): the
+      round-2 fix neutralised a bare `<` this way only when no `>` followed it
+      anywhere in the document, so `5 < 10 <!-- salary` was fixed but `5 < 10
+      <!-- salary <p>x</p>` was not — `gt = markup.find(">", lt)` is the *next*
+      `>` in the whole document, not this bare `<`'s own, so the scan jumped
+      to `gt + 1` and stepped over an unclassified `<!--`, `<!`, `<?` or start
+      tag beginning in between, welding it into surviving prose (R2) or, when
+      the skipped region was a `<script>` open tag, hiding the opaque element
+      from the branch below entirely and reading its own internal `<!--` as a
+      real, unterminated comment — deleting the rest of the document (R3). The
+      scan must never step over a region it has not classified; only a
+      confirmed tag or end tag may be skipped as one.
+
+    Walked left to right rather than anchored on the document's last `>`:
+    an outer, never-closed comment can itself contain `<tag>`-looking text
+    whose own `>` would otherwise be mistaken for the point everything is
+    "closed up to" — `<!-- <p>looks closed</p> but is not -->`'s outer
+    comment has no real close (this constructed one does, on purpose, so it
+    stays a no-op; a copy with the trailing `-->` deleted is what the tests
+    exercise). Every ordinary `<...>` this scan passes over is treated as
+    settled without asking whether it is *individually* well-formed — this
+    function's only job is spotting a remainder with no closing token left
+    anywhere in the document, not re-validating markup that already has one.
+
+    **Known, accepted limit (F4, second-reader round 2): a `>` inside a
+    quoted attribute value is not ordinary data to this scan** — `gt =
+    markup.find(">", lt)` finds it and treats the tag as settled there, one
+    interpreter patch (3.12.11, in this environment) then reads the rest of
+    the malformed tag as literal data. Genuinely settled rather than fixed
+    here: closing it needs attribute-value-aware scanning (tracking whether
+    `lt..gt` is inside a `"`/`'` pair), which is exactly the "re-validating
+    markup that already has one" this function declines to do, above. Rarer
+    than F1/F2 in practice. **Not a claim about how many cases remain
+    interpreter-dependent overall** — round 2's docstring stated a count here
+    ("the one case left, of 28 checked") that round 3's own changes made
+    false without anyone re-measuring it (second-reader round 4, R6: nothing
+    tests prose), so this paragraph now says only what it can still stand
+    behind: F4 itself is unresolved, on purpose, for the reason above.
+    """
+    i = 0
+    while True:
+        lt = markup.find("<", i)
+        if lt == -1:
+            return markup
+        if markup.startswith("<!--", lt):
+            content_start = lt + 4
+            close_end = _comment_close_end(markup, content_start)
+            if close_end is None:
+                return markup[:lt]
+            # Every terminated comment contributes no text either way, so
+            # it is rewritten to the canonical empty form unconditionally
+            # instead of being left verbatim for html.parser to close
+            # itself - no build this repo runs on actually closes a
+            # comment at the literal substring "-->" (see
+            # _CANONICAL_EMPTY_COMMENT), so leaving any spelling for the
+            # real parser to re-read was never safe (R1, R5, R6,
+            # second-reader round 5, S2).
+            markup = markup[:lt] + _CANONICAL_EMPTY_COMMENT + markup[close_end:]
+            i = lt + len(_CANONICAL_EMPTY_COMMENT)
+            continue
+        if markup[lt : lt + 2] in ("<!", "<?"):
+            if markup.startswith("<![CDATA[", lt):
+                # html.parser's own dispatch (parse_html_declaration)
+                # recognises only this exact, case-sensitive 9-character
+                # literal as CDATA, and closes it on a plain,
+                # non-whitespace-tolerant substring search for ']]>' -
+                # never the next '>' - confirmed by reading that method's
+                # source directly. Every other '<![' spelling, including a
+                # lower-cased '<![cdata[' or an unrecognised marked-section
+                # keyword, gets no such treatment and falls through to the
+                # same "next literal '>'" handling as DOCTYPE and a bogus
+                # comment below (measured directly against the real
+                # parser), so only this one exact prefix needs its own
+                # branch (second-reader round 5, S3).
+                close = markup.find("]]>", lt + 9)
+                if close == -1:
+                    # EOF-truncated CDATA: once close() is called with no
+                    # ']]>' found, html.parser's own EOF fallback consumes
+                    # everything from just past '<![' to EOF as one
+                    # declaration - the same "contributes no text" outcome
+                    # as any other unterminated token here.
+                    return markup[:lt]
+                i = close + 3
+                continue
+            gt = markup.find(">", lt)
+            if gt == -1:
+                # Bogus comment or DOCTYPE, EOF-truncated: still a token that
+                # contributes no text, exactly like an unterminated comment.
+                return markup[:lt]
+            i = gt + 1
+            continue
+        if (
+            markup[lt : lt + 2] == "</"
+            and lt + 2 < len(markup)
+            and not _TAG_OPEN_RE.match(markup, lt)
+        ):
+            # WHATWG end tag open state (§13.2.5.7): '</' followed by
+            # anything but a letter is "invalid-first-character-of-
+            # tag-name" -> bogus comment (§13.2.5.41), which consumes to
+            # the next '>' and contributes no text - a comment token, not
+            # a character token - the same shape as the '<!'/'<?' branch
+            # above, not the bare-'<' rule below it. '</' at EOF is
+            # excluded on purpose: WHATWG's own EOF case there emits '<'
+            # and '/' as literal characters, which the bare-'<'
+            # neutralisation below already produces without help
+            # (second-reader round 5, S1).
+            gt = markup.find(">", lt)
+            if gt == -1:
+                return markup[:lt]
+            i = gt + 1
+            continue
+        if not _TAG_OPEN_RE.match(markup, lt):
+            # R2/R3 (round 4), generalising F1 (round 2): this '<' cannot
+            # open a real tag no matter what '>' the rest of the document
+            # holds - WHATWG's tag open state only starts one on an ASCII
+            # letter (or '</' + one). Neutralise only this '<' and keep
+            # scanning; a later, independent construct (another '<!--',
+            # another '<', a real tag) must never be stepped over just
+            # because this bare '<' happens to precede some unrelated '>'.
+            markup = markup[:lt] + "&lt;" + markup[lt + 1 :]
+            i = lt + 4
+            continue
+        gt = markup.find(">", lt)
+        if gt == -1:
+            # A genuine tag open with no '>' anywhere after it: EOF-truncated
+            # start/end tag, F1's original bare-'<' rule applies the same way
+            # here — neutralise the '<' alone and keep scanning.
+            markup = markup[:lt] + "&lt;" + markup[lt + 1 :]
+            i = lt + 4
+            continue
+        tag_name = _opening_tag_name(markup, lt, gt)
+        if tag_name in _OPAQUE_TEXT_ELEMENTS:
+            skip_to = _skip_opaque_element(markup, tag_name, gt + 1)
+            if skip_to is None:
+                # No end tag before EOF: everything left is this element's
+                # opaque content anyway: there's nothing here left to mistake
+                # for a tag or a comment.
+                return markup
+            i = skip_to
+            continue
+        i = gt + 1
+
+
 def parse_html(html: str) -> Node:
     """Turn a page of markup into a `Node` tree. `HTMLParser` tokenises;
     nothing it produces is ever executed — every tag becomes a `Node`, every
     run of text becomes a string, full stop."""
     builder = _TreeBuilder()
-    builder.feed(html)
+    builder.feed(_neutralise_unterminated_tail(html))
     builder.close()
     return builder.root
 
@@ -673,7 +1096,30 @@ AuthMode = Literal["none", "candidate_session"]
 #: asks for, and the direction that matters: a missing salary is a gap a
 #: candidate can see, while `50.000 - 65.000` landing in `salary_min` is a
 #: number that is simply wrong and looks fine.
-Take = Literal["range_low", "range_high", "currency", "last_text_node"]
+#: The two markup members (T169) are a different kind of partial extraction
+#: from the three above: they do not pick a *part* of a value, they read the
+#: value in the encoding the board published it in. `html_text` says the value
+#: IS markup — greenhouse, workable, rippling, himalayas, workingnomads and
+#: weworkremotely all publish an advert body as HTML inside a field — and
+#: yields its text through the same `parse_html`/`text_content` an HTML
+#: connector already reads an element with, so a JSON field and a CSS field
+#: over the same markup produce the same string. `escaped_html_text` says the
+#: value is HTML-*escaped* HTML (`&lt;p&gt;…&amp;nbsp;`), which is what
+#: boards-api.greenhouse.io serves, and unescapes exactly once first.
+#:
+#: They are two members rather than one "unescape, then strip" member because
+#: unescaping markup that was never escaped is lossy in a way no caller can
+#: see: an advert saying `experience with &lt;canvas&gt;` is raw HTML carrying
+#: an escaped literal, and unescaping it first turns that literal into a tag
+#: and deletes the word.
+Take = Literal[
+    "range_low",
+    "range_high",
+    "currency",
+    "last_text_node",
+    "html_text",
+    "escaped_html_text",
+]
 
 #: Currency tokens recognised by `take: currency`, symbol or ISO code. A closed
 #: table for the same reason the vocabulary is closed, and deliberately small:
@@ -745,6 +1191,21 @@ def _take(take: Take, value: str) -> str | None:
             return None
         low, high = min(numbers), max(numbers)
         return _number_text(low if take == "range_low" else high)
+    if take in ("html_text", "escaped_html_text"):
+        # `unescape` exactly once, and only for the escaped member. Twice would
+        # decode an advert's own escaped literal (`&amp;lt;canvas&amp;gt;`
+        # arrives here meaning the text `&lt;canvas&gt;`), which is the same
+        # deletion the single-member design was rejected for.
+        markup = unescape(value) if take == "escaped_html_text" else value
+        # The module's own reader, not a second HTML implementation: whatever
+        # `text_content` does about whitespace, void tags and entities, a
+        # markup-carrying JSON field now does identically to a CSS field over
+        # the same markup. That identity is what the dedup margin rests on.
+        text = parse_html(markup).text_content()
+        # Fail-closed like every other member: markup that yields no text is
+        # not a body, and `build_offer` drops an offer with no `text` rather
+        # than showing the candidate a row of tags.
+        return text or None
     if take == "currency":
         seen = {code for token, code in _CURRENCIES.items() if token in value.upper()}
         # One currency, or none. A text naming two is a conversion or a
@@ -1055,6 +1516,43 @@ def _templated_url(document: Any, template: str) -> str | None:
     return "".join(parts)
 
 
+class JsonField(Strict):
+    """One JSON field's rule: which path, and what to do with what it finds.
+
+    The long form of a `fields` value. A plain string stays legal and means
+    this with no `take` — every connector written before T169 is unchanged,
+    and a file only grows a mapping where it has something more to say.
+    """
+
+    path: str = Field(min_length=1)
+    #: The same closed vocabulary `FieldSelector.take` names, minus the one
+    #: member that is about markup structure rather than about a value.
+    take: Take | None = None
+
+    @field_validator("path")
+    @classmethod
+    def _path_compiles(cls, path: str) -> str:
+        try:
+            compile_path(path)
+        except ConnectorError as exc:
+            raise ValueError(str(exc)) from exc
+        return path
+
+    @model_validator(mode="after")
+    def _take_is_one_a_json_value_can_answer(self) -> JsonField:
+        if self.take == "last_text_node":
+            # It reads the *final text piece of an element*, and a JSON scalar
+            # has no elements. Refused at load rather than silently returning
+            # the whole string at parse time, which would look exactly like a
+            # `take` nobody asked for.
+            raise ValueError(
+                "take: last_text_node reads a markup element's last text piece, and a "
+                "JSON value has no elements — use html_text or escaped_html_text if the "
+                "value carries markup"
+            )
+        return self
+
+
 class JsonSource(Strict):
     """Fields read out of a JSON document instead of out of markup.
 
@@ -1078,7 +1576,19 @@ class JsonSource(Strict):
     #: `detail_url` in `fields` from a path the response already carries,
     #: which is the simpler case and the one to prefer when it exists.
     detail_url_template: str | None = None
-    fields: dict[str, str] = Field(min_length=1)
+    #: name → path, or name → `{path, take}`. `_as_json_fields` widens the
+    #: short form before anything else sees it, so there is one shape below.
+    fields: dict[str, JsonField] = Field(min_length=1)
+
+    @field_validator("fields", mode="before")
+    @classmethod
+    def _as_json_fields(cls, fields: Any) -> Any:
+        if not isinstance(fields, dict):
+            return fields
+        return {
+            name: {"path": value} if isinstance(value, str) else value
+            for name, value in fields.items()
+        }
 
     @field_validator("embedded_in")
     @classmethod
@@ -1109,16 +1619,6 @@ class JsonSource(Strict):
             except ConnectorError as exc:
                 raise ValueError(str(exc)) from exc
         return template
-
-    @field_validator("fields")
-    @classmethod
-    def _field_paths_compile(cls, fields: dict[str, str]) -> dict[str, str]:
-        for name, path in fields.items():
-            try:
-                compile_path(path)
-            except ConnectorError as exc:
-                raise ValueError(f"{name}: {exc}") from exc
-        return fields
 
 
 def _json_documents(text: str, source: JsonSource) -> list[Any]:
@@ -1152,8 +1652,12 @@ def _json_documents(text: str, source: JsonSource) -> list[Any]:
 
 def _json_record(document: Any, source: JsonSource) -> dict[str, str]:
     record: dict[str, str] = {}
-    for name, path in source.fields.items():
-        value = dig(document, compile_path(path))
+    for name, field_ in source.fields.items():
+        value = dig(document, compile_path(field_.path))
+        if value is not None and field_.take is not None:
+            # After `dig` and before `_present`: a `take` that answers nothing
+            # leaves the field absent, the same as a path that found nothing.
+            value = _take(field_.take, value)
         if value is not None and _present(value):
             record[name] = value
     if source.detail_url_template is not None:
@@ -3366,17 +3870,30 @@ def build_offer(
     # produced `Salary(stated=True)` carrying no numbers at all. That is worse
     # than no salary: `stated` is what the ranking reads to mean "the employer
     # said", and it would be saying it about nothing.
+    #
+    # T170: `raw_period` is normalised to `offers.SalaryPeriod` here, once, for
+    # every connector. A period the board *stated* but this vocabulary cannot
+    # represent (Lever's `one-time`, or any label `salary_period.normalize_period`
+    # does not recognise) is not "no period" — it is a wage this system refuses
+    # to guess the unit of, so the whole salary is dropped rather than kept with
+    # a blanked-out period. An *absent* `salary_period` field is unaffected:
+    # `period` stays `None`, exactly as it did before this table existed.
     salary = None
-    minimum = _as_wage(merged.get("salary_min"))
-    maximum = _as_wage(merged.get("salary_max"))
-    if minimum is not None or maximum is not None:
-        salary = Salary(
-            min=minimum,
-            max=maximum,
-            currency=merged.get("salary_currency"),
-            period=merged.get("salary_period"),
-            stated=True,
-        )
+    raw_period = merged.get("salary_period")
+    period = normalize_period(raw_period)
+    if _present(raw_period) and period is None:
+        pass  # a stated, unrepresentable period — no salary at all (see above)
+    else:
+        minimum = _as_wage(merged.get("salary_min"))
+        maximum = _as_wage(merged.get("salary_max"))
+        if minimum is not None or maximum is not None:
+            salary = Salary(
+                min=minimum,
+                max=maximum,
+                currency=merged.get("salary_currency"),
+                period=period,
+                stated=True,
+            )
     try:
         return Offer(
             id=compute_offer_id(text),

@@ -239,6 +239,14 @@ class BoardOutcome:
     unopened: int = 0
     #: Matching rows left uncollected because the run reached `OFFER_CEILING`.
     over_ceiling: int = 0
+    #: T174 (#466 review, round 1 F6). Rows whose advert host had already
+    #: refused — this row's own fetch drew the refusal, or an earlier row's
+    #: did — so the row was never read. Not `dropped`: nothing about the row
+    #: was wrong, the host stopped answering (`_one_board`'s own `continue`
+    #: beside "the host refused, not the row" is what this counts). Left out
+    #: of every `_unrealized_rows` bucket, a board whose every row landed
+    #: here still satisfied `items > _unrealized_rows(o)` with `added == 0`.
+    refused_rows: int = 0
     #: T144. On an ATS host each request is a different employer's board, so
     #: one employer's failure is that employer's, never the host's: the others
     #: are still read, and the failures are named here rather than ending the
@@ -993,6 +1001,7 @@ def _one_board(
     off_aim = 0
     unopened = 0
     over_ceiling = 0
+    refused_rows = 0
     drop_reason: str | None = None
     stale = False
     refused: str | None = None
@@ -1026,6 +1035,7 @@ def _one_board(
             off_aim=off_aim,
             unopened=unopened,
             over_ceiling=over_ceiling,
+            refused_rows=refused_rows,
             employers_failed=tuple(failed),
             source_kind=source_kind_of(connector),
             skipped=skipped,
@@ -1147,6 +1157,11 @@ def _one_board(
                 if origin in refused_origins:
                     # T174: the host refused, not the row — so it is unread,
                     # never "dropped" as a connector that produced no text.
+                    # Counted in `refused_rows` (#466 review, round 1 F6):
+                    # left uncounted, it inflated `items` past every
+                    # `_unrealized_rows` bucket, and a board whose every row
+                    # landed here still read as having built an offer.
+                    refused_rows += 1
                     refused = refused or refused_origins[origin]
                     continue
             if offer is None:

@@ -32,7 +32,12 @@ list:
       title: title
       company: company_name
       location_raw: location.name
-      text: content
+      # `content` is HTML-ESCAPED HTML — `&lt;p&gt;&lt;strong&gt;Summary…&amp;nbsp;`
+      # — so the raw value would reach the candidate as tags, and reach
+      # `dedup.normalise_for_comparison` as `lt p gt` tokens (T169).
+      text:
+        path: content
+        take: escaped_html_text
   # Slug → the name the board itself answers with in `company_name`.
   employers:
     airtable: Airtable

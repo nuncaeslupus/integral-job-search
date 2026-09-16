@@ -5,17 +5,17 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3397
+      "line": 3505
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3392
+      "line": 3500
     },
     {
       "module": "approval",
       "name": "_SHINGLE",
-      "line": 429
+      "line": 475
     },
     {
       "module": "arsenal_source",
@@ -98,6 +98,16 @@
       "line": 946
     },
     {
+      "module": "markup_text",
+      "name": "MINIMUM_FIXTURE_OFFERS",
+      "line": 91
+    },
+    {
+      "module": "markup_text",
+      "name": "MINIMUM_MARKUP_VALUES_COMPARED",
+      "line": 97
+    },
+    {
       "module": "naming",
       "name": "MINIMUM_SCANNED",
       "line": 229
@@ -105,12 +115,12 @@
     {
       "module": "pagination_capture",
       "name": "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
-      "line": 1305
+      "line": 1312
     },
     {
       "module": "pagination_capture",
       "name": "MINIMUM_REQUEST_KEYS",
-      "line": 122
+      "line": 123
     },
     {
       "module": "plan_v2",
@@ -130,7 +140,7 @@
     {
       "module": "query_capture",
       "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
-      "line": 117
+      "line": 118
     },
     {
       "module": "question_bank",
@@ -236,7 +246,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4018,
+      "line": 4535,
       "population": 15
     },
     {
@@ -272,20 +282,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3245,
-      "population": 41
+      "line": 3316,
+      "population": 42
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3272,
+      "line": 3343,
       "population": 30
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3162,
-      "population": 82
+      "line": 3214,
+      "population": 85
     },
     {
       "module": "freshness",
@@ -308,7 +318,7 @@
     {
       "module": "offers",
       "name": "MINIMUM_CHECKS",
-      "line": 410,
+      "line": 431,
       "population": 10
     },
     {
@@ -394,6 +404,8 @@
     "annotation.EGRESS_SAMPLE",
     "annotation.MIN_IDENTIFYING_LENGTH",
     "approval.MINIMUM_DISCLOSURE_PROBES",
+    "approval.MINIMUM_INTACT_SEAM_CHECKS",
+    "approval.MINIMUM_INTACT_SEAM_STATES",
     "approval.MINIMUM_MANIFEST_DISCLOSURES_COMPARED",
     "approval.MINIMUM_PARAPHRASE_CHECKS",
     "approval.MINIMUM_PARAPHRASE_STATES",
@@ -470,6 +482,7 @@
     "repo_gate.MINIMUM_FILES_FORMATTED",
     "repo_gate.MINIMUM_PYTHON_FILES_FORMATTED",
     "review_reader.MAXIMUM_LOGIN_LENGTH",
+    "salary_period.MINIMUM_PERIOD_CONTRACTS",
     "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
     "salary_recovery.MINIMUM_CORPUS_ADS",
     "scoring.BATCH_THRESHOLD",
@@ -499,6 +512,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 82,
+  "floors_swept_at_least": 85,
   "floors_arithmetically_checked_at_least": 36
 }

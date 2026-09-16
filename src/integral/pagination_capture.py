@@ -91,7 +91,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl
 
 import yaml
 
@@ -107,6 +107,7 @@ from integral.connectors import (
     load_connector,
     parse_connector,
     query_pair_names,
+    safe_urlsplit,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -515,11 +516,17 @@ def query_keys(url: str | None) -> frozenset[str]:
     """The query-string keys of `url`. Empty for anything unparseable.
 
     `keep_blank_values` is on: `?page=` carries the key, and a board asked with
-    an empty page is still a board that was asked with that key.
+    an empty page is still a board that was asked with that key. A `captured.json`
+    that names a URL `urlsplit` cannot parse (an unmatched IPv6 bracket) reads as
+    "no keys", the same as a missing capture — never a crash out of `measure()`
+    that ends the whole run instead of naming this one package.
     """
     if not url:
         return frozenset()
-    return frozenset(name for name, _ in parse_qsl(urlsplit(url).query, keep_blank_values=True))
+    split = safe_urlsplit(url)
+    if split is None:
+        return frozenset()
+    return frozenset(name for name, _ in parse_qsl(split.query, keep_blank_values=True))
 
 
 def declared_request_keys(url_pattern: str, body_json: Any) -> frozenset[str]:

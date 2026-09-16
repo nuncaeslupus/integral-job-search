@@ -1333,7 +1333,12 @@ def test_one_broken_json_block_does_not_lose_the_others() -> None:
 def test_a_json_salary_reaches_the_offer_as_real_numbers() -> None:
     """The point of the route: `minValue` is a number, so nothing has to be
     split out of a string, and `Salary` carries figures rather than a `stated`
-    flag with nothing behind it."""
+    flag with nothing behind it.
+
+    `unitText` arrives as schema.org's `"MONTH"` and is normalised to `"month"`
+    (T170) — `build_offer` maps every board's own period word onto
+    `offers.SalaryPeriod` before a `Salary` is ever built, which is also what
+    lets a candidate's `year`/`month` pay floor compare against it at all."""
     connector = parse_connector(JSON_DETAIL_CONNECTOR)
     offer = build_offer(
         connector,
@@ -1342,7 +1347,7 @@ def test_a_json_salary_reaches_the_offer_as_real_numbers() -> None:
     )
     assert offer.salary is not None
     assert (offer.salary.min, offer.salary.max) == (15000.0, 21500.0)
-    assert (offer.salary.currency, offer.salary.period) == ("PLN", "MONTH")
+    assert (offer.salary.currency, offer.salary.period) == ("PLN", "month")
     assert offer.salary.stated is True
 
 
@@ -2899,6 +2904,13 @@ def test_no_path_slot_dot_segment_query_is_sent_by_any_package() -> None:
     The constructed connector joins the population so the zero can never rest
     on a library that happens to ship no path slot at all, and the scan's own
     denominator is floored so it cannot rest on a scan that read nothing.
+
+    Second reader on #469 (F2): those two floors bound how many packages were
+    *read*, never how many the `.path` test actually evaluated to true — a
+    mutant swapping it for `.fragment` empties ``steerable`` of every real
+    package and leaves ``sent == {}`` trivially, unnoticed. `infojobs_es` has
+    carried a path `{query}` slot since #455, so its presence in ``steerable``
+    is a floor the predicate must clear, not merely a package it must read.
     """
     packages = connectors.connector_packages(connectors.DEFAULT_CONNECTORS_DIR)
     assert len(packages) >= MINIMUM_PACKAGES_SCANNED_FOR_PATH_SLOTS
@@ -2908,6 +2920,12 @@ def test_no_path_slot_dot_segment_query_is_sent_by_any_package() -> None:
         connector = load_connector(package)
         if QUERY_PLACEHOLDER in urlsplit(connector.list.url_pattern).path:
             steerable[package.name] = connector
+
+    assert "infojobs_es" in steerable, (
+        "infojobs_es has carried a path {query} slot since #455 (T173); a "
+        "predicate that finds none has stopped reading the real library, not "
+        "merely lost the one package this floor was written for"
+    )
 
     sent = {}
     for name, connector in steerable.items():

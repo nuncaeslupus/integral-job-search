@@ -242,8 +242,10 @@ detail:
       css: "meta[itemprop=\"currency\"]"
       attr: content
     # `<meta itemprop="unitText" content="YEAR">` — schema.org's own period
-    # vocabulary, passed through as the site states it. `Salary.period` is free
-    # text, so no mapping to some other spelling is invented here.
+    # vocabulary, passed through as the site states it. `Salary.period` is a
+    # closed vocabulary (`offers.SalaryPeriod`); `salary_period.normalize_period`
+    # maps this site's raw value onto it (`build_offer`'s one call site,
+    # T170) — no per-connector mapping is written here.
     salary_period:
       css: "meta[itemprop=\"unitText\"]"
       attr: content

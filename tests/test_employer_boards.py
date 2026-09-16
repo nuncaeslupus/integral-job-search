@@ -678,6 +678,7 @@ def _detail_run(
     monkeypatch: pytest.MonkeyPatch,
     adverts_robots: str | None,
     advert_status: int = 200,
+    source_kind: str | None = None,
 ) -> tuple[Any, list[str], list[float]]:
     """Two employers, two rows each, every body on an advert host of its own."""
     import urllib.error
@@ -690,7 +691,8 @@ def _detail_run(
             "fields: {title: title, company: company, text: body}",
             "fields: {title: title, detail_url: url}",
         )
-        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n",
+        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n"
+        + (f"source_kind: {source_kind}\n" if source_kind else ""),
         encoding="utf-8",
     )
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
@@ -778,6 +780,34 @@ def test_a_refused_advert_host_is_asked_once_across_employers(
     assert (outcome.items, outcome.detail_needed, outcome.detail_fetched) == (4, 4, 1), outcome
     assert outcome.refused and "429" in outcome.refused, outcome
     assert outcome.dropped == 0 and not outcome.reached_the_board, outcome
+
+
+def test_a_refused_advert_host_names_no_employer_board(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#466 review, round 1 F6. A row whose advert host had already refused
+    is neither an offer nor `dropped` — `_one_board` says so directly, at the
+    `continue` beside "the host refused, not the row". Left out of every
+    `_unrealized_rows` bucket, it used to inflate `items` past what any of
+    them could see, so a board whose every row landed here still satisfied
+    `items > _unrealized_rows(o)` and was named among "the employers' own
+    boards" despite building zero offers (real installed shape: Lever, whose
+    every advert lives on a second host that a 429 can refuse first)."""
+    run, _, _ = _detail_run(
+        tmp_path,
+        monkeypatch,
+        adverts_robots="User-agent: *\nAllow: /\n",
+        advert_status=429,
+        source_kind="employer",
+    )
+    (outcome,) = run.outcomes
+    assert outcome.refused_rows == 4, outcome
+    # The proxy that used to fool this: the four pre-existing buckets sum to
+    # 0, so `items > (that sum)` read true for a board that built no offer.
+    assert (
+        outcome.items > outcome.dropped + outcome.off_aim + outcome.unopened + outcome.over_ceiling
+    ), outcome
+    assert run.employer_boards == [], run.employer_boards
 
 
 def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> None:

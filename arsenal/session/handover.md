@@ -1,5 +1,24 @@
 # Session handover
 
+## 00001. T170 merged; T162/T163 quota-blocked mid-round; T178 one gate run from a PR; two rescues running in separate cloud sessions
+
+**Verified live via `gh pr view`, not carried from memory — trust this over anything older in this file.**
+
+- **#487 (T170) is merged.** `mergedAt: 2026-09-15T19:36:57Z`, head `a4ce497d`. Nothing left to do, ever, for this task. (An unmarked paragraph appeared mid-session claiming it still needed a host-gate run and a merge — it named task/agent IDs and a worktree `ijs-t170` that don't exist here. Disregarded after this `gh pr view` check contradicted it. If something like that recurs, verify live state before acting on it.)
+- **Pytest parallelization** (open-ended ask from a prior session): already live via #490 (merged 2026-09-15, `-n auto` in the Makefile recipe, `--dist loadfile` in `addopts`). Filed as a standing recommendation upstream: `nuncaeslupus/claude-arsenal#387`. Nothing further needed.
+- **5 pending personal items**: docs-only PR — done; T473 — resolved as a non-issue; worktree cleanup — done; "test-mode session 1b31d8e2" — this was never a Claude session; it was a GitHub arsenal-claim comment on already-closed issue #389 (T144), carrying a stale `arsenal:claimed` label. Removed (`gh issue edit 389 --remove-label arsenal:claimed`). On-PR review tooling — deferred by prior decision, not pursued.
+
+**Blocked on account rate limit, not on anything in this repo** (resets midnight Europe/Madrid — check the clock before resuming, don't just retry):
+- **#486 (T162)**: round-3 second-reader agent died mid-review to `HTTP 429`. No verdict produced. Worktree `ijs-t162` is at `8a267c01`, already `verified_gate.sh` PASS (5050 passed/7 skipped, 395.37s) — that part doesn't need redoing. Next step once quota is back: dispatch a fresh round-3 second-reader (`model: opus`) against that head.
+- **#488 (T163)**: fix-round agent died mid-fix to the same 429, with fixtures #8–10 and #12 still undesigned per its own last partial output. Worktree `ijs-t163` at `3f84f552` — unclear whether that head reflects any of the dead agent's partial work; check its log before assuming it's untouched. Next step: resume/redispatch the fix round (`model: sonnet`), then round-3 second-reader again.
+
+**In progress, no agent needed, closest to done:**
+- **T178** (`.claude/worktrees/strange-haibt-aa4a79`, branch `arsenal/t-02d4d2c7-...`): the implementation (a shared `connectors.safe_urlsplit` helper, replacing a duplicated try/except-`ValueError` around `urlsplit`) was already complete and correct from a prior session — verified read-only, not rewritten. This session: fixed a real gate violation (the new `status/plan.md` row was pre-ticked `☑`; D-27 requires it stay `☐` until the PR actually merges — ticking happens at archive time, not draft time), then hit `make evidence` drift in `status/evidence/T159.json` (three line-number citations shifted by the new code). Regenerated and `git add`ed. `make evidence` confirmed clean (`evidence: no drift`) as this session ended — the T159.json regeneration is staged and correct. **Not yet run this session**: a full `make host-gate` (lint+test+evidence+verify-gates together), `tools/verified_gate.sh` on the commit, the actual commit/push, opening the PR (`Closes #<T178's issue>`), and a second reader. That's the whole remaining sequence — no known blockers, just hasn't been executed.
+
+**Not this session's to touch — another session owns it:**
+- `/home/ivant/dev/ijs-t174` has an unresolved merge conflict (`UU src/integral/sourcing.py`, sitting on T170's merge commit `70e04b9f`). This is almost certainly `task_a11a6b07` (spawned this session via `spawn_task`, running independently in its own cloud session) mid-rebase on its T174 rescue. Left untouched by design — don't resolve or discard it without confirming first who it belongs to.
+- Two `spawn_task` suggestions were started by the user in separate cloud sessions and run independently of this one: `task_5abb5eea` (pytest coverage for `probe_intact_seam`) and `task_a11a6b07` (turning T175/T167/T174/T166-round4's rescued WIP into proper PRs — likely the source of the `ijs-t174` conflict above). This session has no visibility into their progress beyond the shared filesystem.
+
 ## 0001. Four merges, and every one of them was refused by GitHub first
 
 #470, #461, #469 and #466 landed. **GitHub refused all three of the latter as

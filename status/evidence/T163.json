@@ -3,22 +3,22 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 41,
+  "unpinnable_floors_cleared_by_marker_restatement": 43,
   "marker_restatement_cleared": [
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "lineno": 3397
+      "lineno": 3505
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "lineno": 3392
+      "lineno": 3500
     },
     {
       "module": "approval",
       "name": "_SHINGLE",
-      "lineno": 429
+      "lineno": 475
     },
     {
       "module": "arsenal_source",
@@ -101,6 +101,16 @@
       "lineno": 946
     },
     {
+      "module": "markup_text",
+      "name": "MINIMUM_FIXTURE_OFFERS",
+      "lineno": 91
+    },
+    {
+      "module": "markup_text",
+      "name": "MINIMUM_MARKUP_VALUES_COMPARED",
+      "lineno": 97
+    },
+    {
       "module": "naming",
       "name": "MINIMUM_SCANNED",
       "lineno": 229
@@ -108,12 +118,12 @@
     {
       "module": "pagination_capture",
       "name": "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
-      "lineno": 1305
+      "lineno": 1312
     },
     {
       "module": "pagination_capture",
       "name": "MINIMUM_REQUEST_KEYS",
-      "lineno": 122
+      "lineno": 123
     },
     {
       "module": "plan_v2",
@@ -133,7 +143,7 @@
     {
       "module": "query_capture",
       "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
-      "lineno": 117
+      "lineno": 118
     },
     {
       "module": "question_bank",
@@ -211,7 +221,7 @@
       "lineno": 590
     }
   ],
-  "marker_restatement_scenarios_checked": 41,
+  "marker_restatement_scenarios_checked": 43,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 79
+  "scenarios_checked_at_least": 82
 }

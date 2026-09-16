@@ -3186,7 +3186,7 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: git saw no conflict in the *evidence* because both sides wrote the same
 #: digits. The merged tree holds both floors, so the true count is 78 and
 #: neither branch's number was ever right about it. Regenerated against the
-#: merge, never picked from a side.
+#: merge, never picked from a side. Still zero slack.
 #: **80 since T157**, whose `approval.MINIMUM_CARRIED_DISCLOSURE_STATES` and
 #: `approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS` joined it together — the third
 #: instance of the same collision, this time between this branch and main's
@@ -3202,7 +3202,16 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: `MINIMUM_FLOORS_EVIDENCE_PINNED` joined the population below — a new
 #: committed floor in this very module is itself one more thing this sweep
 #: sweeps. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 82
+#: **85 on this merge with `main`**: `main` independently reached 84 by adding
+#: `markup_text.MINIMUM_FIXTURE_OFFERS` and
+#: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` (T169, +2) plus rejoining this
+#: constant's own self-referential entry once T169 corrected it (+1) — none of
+#: which this branch's 82 knew about, and none of the floors behind this
+#: branch's 82 (T157, T161, this round's own F2) are in `main`'s 84. Sixth
+#: instance of the same collision; measured with
+#: `uv run python -m integral.floor_sweep` against the merged tree rather than
+#: picked from either side. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 85
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3284,7 +3293,26 @@ MINIMUM_FLOORS_SWEPT = 82
 #: digits, not because F1's own floor returned: `employer_boards.
 #: MINIMUM_CONFORMING` stays in `unpinnable_floors`, one module-derived floor
 #: down from before, one self-floor up. Still five points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=41
+#: **42 on this merge with `main`**: another instance of the same collision,
+#: and this time the two sides land on the identical digits for unrelated
+#: reasons. `main` alone (T169, no `MINIMUM_FLOORS_EVIDENCE_PINNED` self-
+#: floor — that is F2, this branch's own addition) already committed 42 here,
+#: reached through its own two new evidence-pinned floors elsewhere in the
+#: tree. This branch's own 41 (three self-floors, F2 among them, none of
+#: which `main` has) is a different set entirely. The merged tree — three
+#: self-floors *and* `main`'s evidence-pinned additions — measures 42 too,
+#: by coincidence of digits rather than because either side's count carried
+#: over. Measured against the merged tree with
+#: `uv run python -m integral.floor_sweep`, never picked from either side.
+#: Also gains two genuinely dynamic floors this merge is what first marks
+#: `unpinnable` rather than `silent_margin`:
+#: `markup_text.MINIMUM_FIXTURE_OFFERS` and
+#: `markup_text.MINIMUM_MARKUP_VALUES_COMPARED` (T169) carried no
+#: `arsenal-floor-margin` marker — this branch's own convention, which T169
+#: predates — until this merge gives them one (see `markup_text.py`); neither
+#: counts toward `arithmetically_checked`, being dynamic. Still four points
+#: of slack.
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=42
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -3596,7 +3624,17 @@ def measure_marker_restatement_clearance() -> dict[str, Any]:
 #: Committed at the real count, zero slack, `MINIMUM_FLOORS_SWEPT`'s own
 #: convention: `margin == 0` is unconditionally compliant, so no marker is
 #: needed here either.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 79
+#: **82 on this merge with `main`**: `MINIMUM_FLOORS_SWEPT` moved 82 → 85
+#: above, and every floor this battery mutates that is not already a finding
+#: counts here — three more in scope, not zero slack drift. Measured with
+#: `measure_prose_clearance()` against the merged tree. Also the merge that
+#: first gave `markup_text`'s two floors their own comment block apiece:
+#: mutating both at once inside one shared block is exactly what
+#: `_apply_prose_mutation`'s own docstring (R3-5) refuses rather than risks
+#: corrupting — true the moment this merge gave them a marker and pulled them
+#: out of `silent_margin`, so they joined this battery's scope for the first
+#: time; splitting the block, not loosening the refusal, is the fix.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 82
 
 
 def measure_prose_clearance() -> dict[str, Any]:

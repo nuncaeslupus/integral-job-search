@@ -131,7 +131,7 @@ from typing import Any, Literal
 from integral.connectors import _as_float
 from integral.corpus import load_ads
 from integral.dedup import find_duplicates
-from integral.offers import Offer, Salary, compute_offer_id
+from integral.offers import Offer, Salary, SalaryPeriod, compute_offer_id
 from integral.presentation import ESTIMATED_MARKER, _salary
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -325,7 +325,7 @@ _EXCLUSION = re.compile(
 #: A lone figure preceded by one of these is a ceiling, not a floor.
 _UPPER = re.compile(r"\b(?:hasta|fins\s+a|up\s+to|m[aá]xim[oa]?|maximum)\b\s*$", re.IGNORECASE)
 
-_PERIODS: tuple[tuple[str, re.Pattern[str]], ...] = (
+_PERIODS: tuple[tuple[SalaryPeriod, re.Pattern[str]], ...] = (
     (
         "year",
         re.compile(
@@ -418,7 +418,7 @@ _MENTIONS_MONEY = re.compile(r"[€$£]|\bEUR\b|\bUSD\b|\bGBP\b|\beuros?\b", re.
 #: What a real wage looks like, per period. A figure outside its range is a
 #: misparse whatever produced it — and this is also what stops an inferred
 #: annual period from turning a €500 allowance into a salary.
-_BOUNDS: dict[str, tuple[float, float]] = {
+_BOUNDS: dict[SalaryPeriod, tuple[float, float]] = {
     "year": (5_000.0, 1_000_000.0),
     "month": (300.0, 100_000.0),
     "day": (30.0, 5_000.0),
@@ -447,7 +447,7 @@ def _value_of(match: re.Match[str]) -> float | None:
     return value * 1000 if match.group("k") else value
 
 
-def _periods_in(segment: str) -> tuple[str, ...]:
+def _periods_in(segment: str) -> tuple[SalaryPeriod, ...]:
     """Every period this segment names — none, one, or a contradiction.
 
     The three answers must stay distinguishable at the call site. Collapsing a
@@ -907,7 +907,7 @@ def _band(
     low: float | None,
     high: float | None,
     currency: str,
-    period: str,
+    period: SalaryPeriod,
 ) -> Salary:
     return Salary(min=low, max=high, currency=currency, period=period, stated=True)
 

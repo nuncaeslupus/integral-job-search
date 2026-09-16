@@ -3400,7 +3400,9 @@ def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutof
         kind, count = floor_sweep._collection_kind(
             ast.Name(id="built", ctx=ast.Load()), module.tree, func, None, 5
         )
-        expected = (floor_sweep._LITERAL, 0) if name == "frozenset" else (floor_sweep._DYNAMIC, None)
+        expected = (
+            (floor_sweep._LITERAL, 0) if name == "frozenset" else (floor_sweep._DYNAMIC, None)
+        )
         assert (kind, count) == expected, (
             f"{func_name}: at depth 5, the direct empty-builder check must answer "
             f"{expected} without recursing; got {(kind, count)}"
