@@ -168,6 +168,27 @@ def test_a_query_param_page_key_present_in_the_captured_url_passes(
     assert pc.measure(library)["findings"] == []
 
 
+def test_an_unparseable_captured_url_is_a_finding_not_a_crash(
+    library: Path, low_floor: None
+) -> None:
+    """An unmatched IPv6 bracket makes `urlsplit` raise `ValueError` (round-4
+    second reader on PR #461, T171, observation O-B). `query_keys` must read
+    that as "no keys", the same as a missing capture, so `measure()` names the
+    package instead of ending the whole run with a traceback."""
+    _real_board(library)
+    _write_capture(
+        library, captured_at="2026-09-08", url=f"https://[::1/{_REAL_SITE}/jobs", status=200
+    )
+
+    measured = pc.measure(library)
+
+    assert measured["paginated_request_keys_no_capture_measured"] == 1
+    (finding,) = measured["findings"]
+    assert finding["package"] == _REFERENCE.name
+    assert finding["param"] == "page"
+    assert finding["direction"] == "fail-open"
+
+
 def test_a_body_field_page_key_is_read_from_the_captured_body(
     library: Path, low_floor: None
 ) -> None:

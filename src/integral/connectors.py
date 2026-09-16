@@ -96,7 +96,7 @@ from functools import lru_cache
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Final, Literal
-from urllib.parse import parse_qsl, quote, unquote, urlsplit
+from urllib.parse import SplitResult, parse_qsl, quote, unquote, urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -211,6 +211,22 @@ _KNOWN_PLACEHOLDER = re.compile(r"\{(?:page|query|employer)\}")
 MAX_EMPLOYERS = 200
 
 
+def safe_urlsplit(url: str) -> SplitResult | None:
+    """`urlsplit(url)`, or `None` when `url` is not a parseable URL.
+
+    `urlsplit` raises `ValueError` on a handful of malformed inputs — an
+    unmatched IPv6 bracket (`https://[::1`) is the one every caller here has
+    hit — rather than treating them as an ordinary parse failure. A bare call
+    at the point of use ends the whole run instead of naming the one board,
+    pattern or capture that sent it (#445 second reader, N6). One place reads
+    the exception so no caller re-spells the try/except.
+    """
+    try:
+        return urlsplit(url)
+    except ValueError:
+        return None
+
+
 def _employer_slot_problem(pattern: str, method: str) -> str | None:
     """Why `{employer}` may not sit in `pattern`, or `None` when it may.
 
@@ -226,14 +242,12 @@ def _employer_slot_problem(pattern: str, method: str) -> str | None:
         # `build_list_requests` numbers a POST's pages by request position,
         # which several employers would shift.
         return f"{EMPLOYER_PLACEHOLDER} is supported on a GET listing only"
-    try:
-        filled = urlsplit(pattern.replace(EMPLOYER_PLACEHOLDER, "a0"))
-        path = urlsplit(pattern).path
-        hostname = filled.hostname
-    except ValueError as exc:
-        # `https://[h/...` — a bare ValueError at the point of use would end
-        # the whole run, not this one board (#445 round 2, N6).
-        return f"list.url_pattern is not a URL: {exc}"
+    filled = safe_urlsplit(pattern.replace(EMPLOYER_PLACEHOLDER, "a0"))
+    parsed = safe_urlsplit(pattern)
+    if filled is None or parsed is None:
+        return "list.url_pattern is not a URL"
+    path = parsed.path
+    hostname = filled.hostname
     if filled.scheme not in ("http", "https") or not hostname or EMPLOYER_PLACEHOLDER not in path:
         return (
             f"{EMPLOYER_PLACEHOLDER} must sit in the path of an http(s) URL with a fixed "
