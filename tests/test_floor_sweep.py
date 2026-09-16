@@ -3178,9 +3178,21 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
     subject to the `ast.AugAssign` blind spot the function-local path has.
     `connector_shape.EXECUTED_ENTRIES: frozenset[str] = frozenset()`, the
     live tree's only module-level frozenset binding, is never reassigned
-    anywhere in that module -- a genuine permanent population of zero, and
-    `_LITERAL, 0` is the correct answer for it, not a bug this test should
-    flag."""
+    anywhere in that module -- a genuine permanent population of zero, but
+    round 10 (F-round-9-1, second reader on #488) found the "not subject to
+    the `ast.AugAssign` blind spot" half of that claim false: a
+    module-level name is still a name, `_module_level_value` returns the
+    *first* top-level binding, so even a later plain `ast.Assign` rebind
+    (not just an `AugAssign`) is invisible to it -- the module-level path is
+    not immune to rebinding, it is blind to *more* of it. Production now
+    answers `_DYNAMIC` for all four spellings at every name-resolution point
+    (module-level, function-local reassignment, parameter default), so this
+    test's module-level loop drops the `frozenset()` exclusion and checks
+    the same four spellings the function-local loop does; `EXECUTED_ENTRIES`
+    itself is still exercised, now expected `_DYNAMIC` like every other
+    name. Round 10 also adds a third loop below for parameter defaults --
+    `_param_default` is a third, previously unchecked, name-resolution point
+    with the identical rebindable-name shape."""
     checked = 0
     for module in floor_sweep._module_infos(floor_sweep._SRC_DIR):
         for func in ast.walk(module.tree):
@@ -3218,9 +3230,7 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
                 continue
             if not isinstance(target, ast.Name):
                 continue
-            if not _is_empty_collection_spelling(
-                value, _EMPTY_BUILDER_CALL_SPELLINGS - {"frozenset"}
-            ):
+            if not _is_empty_collection_spelling(value, _EMPTY_BUILDER_CALL_SPELLINGS):
                 continue
             checked += 1
             kind, count = floor_sweep._collection_kind(
@@ -3234,6 +3244,32 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
                 f"{module.stem}: module-level {target.id} is bound to an empty "
                 "builder, but resolved as a literal population of zero"
             )
+        for func in ast.walk(module.tree):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            param_names = (
+                {a.arg for a in func.args.posonlyargs}
+                | {a.arg for a in func.args.args}
+                | {a.arg for a in func.args.kwonlyargs}
+            )
+            for param_name in param_names:
+                default = floor_sweep._param_default(func, param_name)
+                if default is None or not _is_empty_collection_spelling(
+                    default, _EMPTY_BUILDER_CALL_SPELLINGS
+                ):
+                    continue
+                checked += 1
+                kind, count = floor_sweep._collection_kind(
+                    ast.Name(id=param_name, ctx=ast.Load()),
+                    module.tree,
+                    func,
+                    None,
+                    0,
+                )
+                assert (kind, count) != (floor_sweep._LITERAL, 0), (
+                    f"{module.stem}.{func.name}: parameter {param_name} defaults to "
+                    "an empty builder, but resolved as a literal population of zero"
+                )
     assert checked > 0
 
 

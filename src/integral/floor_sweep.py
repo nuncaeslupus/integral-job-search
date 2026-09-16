@@ -1484,16 +1484,21 @@ def _is_empty_builder(rhs: ast.expr) -> bool:
     was in fact rebound later by an idiom `_assignments_to_name` cannot see
     (`built |= {x}` is an `ast.AugAssign`, not a tracked `ast.Assign`), the
     exact phantom-zero shape this sweep exists to catch, now reintroduced by
-    trusting the object's immutability as if it were the name's. The direct
-    value-position case (`_collection_kind`'s own terminal `Call` branch,
-    reached without going through a name at all — a default parameter, a
-    dict value, a module-level constant) is unaffected: there is no name
-    there to rebind, so `frozenset()` still resolves to a permanent
-    `_LITERAL, 0`. Anything less direct than what this function checks (a
-    name bound through another name, a subscript, a same-module call whose
-    return isn't one of these literal shapes) is left to the general
-    recursive path in `_collection_kind`, which still classifies it, just at
-    that path's usual cost."""
+    trusting the object's immutability as if it were the name's. Round 10's
+    second reader found the same trust misplaced at the other two points
+    `_collection_kind`'s `ast.Name` branch resolves a name from — a
+    module-level `NAME = frozenset()` and a parameter default are both still
+    *names*, both still rebindable later, so this function is now consulted
+    at all three resolution points, not only the function-local
+    reassignment one. The direct value-position case (`_collection_kind`'s
+    own terminal `Call` branch, reached without resolving a name at
+    all — a dict value, a same-module call's `return`) is the only one left
+    unaffected: there is no name there to rebind, so `frozenset()` still
+    resolves to a permanent `_LITERAL, 0`. Anything less direct than what
+    this function checks (a name bound through another name, a subscript, a
+    same-module call whose return isn't one of these literal shapes) is left
+    to the general recursive path in `_collection_kind`, which still
+    classifies it, just at that path's usual cost."""
     if isinstance(rhs, (ast.List, ast.Set)) and not rhs.elts:
         return True
     if isinstance(rhs, ast.Dict) and not rhs.keys:
@@ -1755,18 +1760,42 @@ def _collection_kind(
         return _UNKNOWN, None
 
     if isinstance(expr, ast.Name):
+        # Round 10 second reader on #488: round 9 applied "the object is
+        # immutable, the name is not" to only one of the three ways this
+        # branch resolves a name — the function-local reassignment path
+        # below. A module-level `NAME = frozenset()` rebound later by a
+        # plain `Assign` (or `_module_level_value`'s first-match semantics
+        # ignoring a later one entirely), and a parameter default rebound
+        # inside the function body, are both still names, both still
+        # rebindable, and both fed straight into the general recursive
+        # `_collection_kind` call below — which, once it reaches the
+        # *value itself*, is a genuine value position from the recursion's
+        # point of view and answers the terminal `Call` branch's permanent
+        # `_LITERAL, 0`. So the check has to run at each point *this*
+        # branch hands off to that recursion, not only at the one path
+        # round 9 touched: whatever a name here resolves to, an
+        # empty-builder shape is `_DYNAMIC`, full stop — `_LITERAL, 0` is
+        # reserved for the terminal branch reached without resolving a
+        # name at all (a dict value, a default consulted directly, a
+        # same-module call's return).
         module_literal = _module_level_literal_collection(tree, expr.id)
         if module_literal is not None:
+            if _is_empty_builder(module_literal):
+                return _DYNAMIC, None
             return _collection_kind(module_literal, tree, func, before_lineno, depth + 1)
         module_value = _module_level_value(tree, expr.id)
         if module_value is not None:
             # Not a literal collection directly (handled above), but a module-level
             # name all the same — e.g. `CONTROLS = _control_prs()`. Recurse into
             # whatever it holds rather than stopping at "not a literal".
+            if _is_empty_builder(module_value):
+                return _DYNAMIC, None
             return _collection_kind(module_value, tree, None, None, depth + 1)
         if func is not None:
             default = _param_default(func, expr.id)
             if default is not None:
+                if _is_empty_builder(default):
+                    return _DYNAMIC, None
                 return _collection_kind(default, tree, func, before_lineno, depth + 1)
             assignments = _assignments_to_name(func, expr.id, before_lineno)
             if assignments:
