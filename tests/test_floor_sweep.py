@@ -3175,15 +3175,12 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
             if not isinstance(target, ast.Name):
                 continue
             if not floor_sweep._is_empty_builder(value):
-                continue
-            if isinstance(value, ast.Call) and getattr(value.func, "id", None) == "frozenset":
-                # `frozenset()` is immutable -- an empty one can never later
-                # gain an item, so `(_LITERAL, 0)` is the correct, permanent
-                # answer here (see the terminal Call branch's own comment),
-                # not the phantom-zero shape this test exists to catch.
-                # `connector_shape.EXECUTED_ENTRIES` is exactly this: a
-                # module-level `frozenset()` never filled anywhere, correctly
-                # resolved as a real, literal population of zero.
+                # Round 6 (F3): `_is_empty_builder` itself now excludes
+                # `frozenset()` -- immutable, so an empty one can never later
+                # gain an item and `(_LITERAL, 0)` is the correct, permanent
+                # answer (see the terminal `Call` branch's own comment). A
+                # module-level `frozenset()` binding is skipped here for that
+                # reason, not carved out by hand as it was before round 6.
                 continue
             checked += 1
             kind, count = floor_sweep._collection_kind(
@@ -3305,10 +3302,28 @@ def fill_tally():
 
 def probe_dict():
     return len(_TALLY)
+
+
+_D: dict[str, int] = {}
+
+
+def fill_d():
+    _D["x"] = 1
+
+
+def probe_dict_literal():
+    return len(_D)
 """,
     )
     module = next(m for m in floor_sweep._module_infos(tmp_path) if m.stem == "mod")
-    for name in ("_ROWS", "_SEEN", "_TALLY"):
+    # Round 6 (F4 residual): `_TALLY = dict()` above exercises the no-arg
+    # builder *Call* branch only. `_D = {}` is a distinct AST shape -- an
+    # empty `ast.Dict` literal, the mutation-testing gap a round-6 second
+    # reader found: deleting the empty-Dict-literal guard at
+    # `_collection_kind`'s `ast.Dict` branch left the full suite green,
+    # because nothing here exercised a literal `{}` rather than a `dict()`
+    # call.
+    for name in ("_ROWS", "_SEEN", "_TALLY", "_D"):
         kind, count = floor_sweep._collection_kind(
             ast.Name(id=name, ctx=ast.Load()), module.tree, None, None, 0
         )
@@ -3354,7 +3369,13 @@ def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutof
     the full 125-test suite green. This generates one probe per name in the
     production enumeration instead, so a fifth builder added there later is
     exercised here without anyone remembering to hand-add a case, or this
-    test fails loudly asking for its fill idiom."""
+    test fails loudly asking for its fill idiom.
+
+    Round 6 (F3): `frozenset()` is the one name in the enumeration this test
+    does NOT expect `_DYNAMIC` for. It is immutable, so the direct check now
+    answers `_LITERAL, 0` for it at the same zero-recursion cost as every
+    other name's `_DYNAMIC` — still without falling into the depth-6 cutoff
+    this test exists to guard against."""
     assert set(_EMPTY_BUILDER_FILL_IDIOM) == floor_sweep._EMPTY_BUILDER_CALL_NAMES, (
         "a name was added to or removed from floor_sweep._EMPTY_BUILDER_CALL_NAMES "
         "without updating _EMPTY_BUILDER_FILL_IDIOM to match"
@@ -3379,9 +3400,10 @@ def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutof
         kind, count = floor_sweep._collection_kind(
             ast.Name(id="built", ctx=ast.Load()), module.tree, func, None, 5
         )
-        assert (kind, count) == (floor_sweep._DYNAMIC, None), (
+        expected = (floor_sweep._LITERAL, 0) if name == "frozenset" else (floor_sweep._DYNAMIC, None)
+        assert (kind, count) == expected, (
             f"{func_name}: at depth 5, the direct empty-builder check must answer "
-            f"_DYNAMIC without recursing; got {(kind, count)}"
+            f"{expected} without recursing; got {(kind, count)}"
         )
     del fixture
 
@@ -3506,6 +3528,58 @@ def check():
     assert after["findings"] == []
     assert fixture.read_text(encoding="utf-8").count("value=0") == 1
     assert "MINIMUM_TURNS = 0" in fixture.read_text(encoding="utf-8")
+
+
+def test_a_spelled_out_zero_slack_claim_is_also_retyped_by_the_restatement_mutation(
+    tmp_path: Path,
+) -> None:
+    """Round 6 (F1): `_rewrite_zero_slack_claims_to_zero` used to scan only
+    `_DIGITS_RE`, so a "zero slack" claim spelled out in words — the same
+    style `profile.MINIMUM_FIELDS_CHECKED` uses on the live tree, see
+    `test_a_spelled_out_zero_slack_claim_is_checked` — was never retyped to
+    `0` here, even though `_zero_slack_claim_contradicts` (via
+    `_nearest_number_before`) reads spelled-out numbers just fine. Fail-closed
+    in practice (the untouched "five" still contradicted the mutated `0`
+    marker), but an asymmetry between what the checker reads and what the
+    mutation retypes is exactly the shape this repository's second-reader
+    rounds keep finding. This pins that the mutation now retypes both
+    spellings alike: the marker's `value=`, the digit-style claim elsewhere
+    would have been (covered by the sibling test above), and this
+    spelled-out one."""
+    fixture = _write(
+        tmp_path,
+        f"""
+#: {floor_sweep.margin_marker("MINIMUM_TURNS", 5)}
+#: The probe carries five, zero slack.
+MINIMUM_TURNS = 5
+
+
+def probe():
+    turns = 0
+    for _ in range(5):
+        turns += 1
+    return {{"turns_evaluated": turns}}
+
+
+def check():
+    measured = probe()
+    if measured["turns_evaluated"] < MINIMUM_TURNS:
+        raise SystemExit(1)
+""",
+    )
+    before = floor_sweep.measure(tmp_path)
+    assert {d["name"] for d in before["unpinnable_floors"]} == {"MINIMUM_TURNS"}
+    sites = floor_sweep._swept_floor_sites(tmp_path)
+    mutated = floor_sweep._apply_marker_restatement_mutation(sites)
+    assert {name for _, name, _, _ in mutated} == {"MINIMUM_TURNS"}
+    text = fixture.read_text(encoding="utf-8")
+    assert "five" not in text, "the spelled-out claim must be retyped, not left stale"
+    assert "The probe carries 0, zero slack." in text
+    after = floor_sweep.measure(tmp_path)
+    assert after["findings"] == [], (
+        "a spelled-out claim retyped to agree with the mutated marker must clear "
+        "the same way a digit-style claim does"
+    )
 
 
 def test_a_site_with_no_marker_is_not_touched_by_the_restatement_mutation(
