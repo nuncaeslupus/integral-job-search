@@ -1,6 +1,7 @@
 {
   "floors_cleared_by_prose_alone": 0,
   "cleared": [],
+  "findings": [],
   "gate_status": "measured",
-  "scenarios_checked_at_least": 2
+  "scenarios_checked_at_least": 79
 }

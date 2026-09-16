@@ -483,7 +483,7 @@ def probe_answer_filter() -> dict[str, Any]:
 #: scripted scenario run *is* the fixture. Raised to what the probe carries — 5,
 #: zero slack — because 4 tolerated the first deleted check silently, with no
 #: margin argued (T159).
-#: arsenal-floor-margin: value=5
+#: arsenal-floor-margin: MINIMUM_PROBES value=5
 MINIMUM_PROBES = 5
 
 

@@ -113,7 +113,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T171.json"
 #: day is deliberately not committed, and is not named here either: the second
 #: reader on #461 observed that a roll call of package names goes stale at the
 #: next merge, which is prose drifting where a number would have been caught.
-#: arsenal-floor-margin: value=4
+#: arsenal-floor-margin: MINIMUM_STEERABLE_PACKAGES_CHECKED value=4
 MINIMUM_STEERABLE_PACKAGES_CHECKED = 4
 
 #: What a slot's raw text may run to before the canonical check reads it: up to

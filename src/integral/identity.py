@@ -893,7 +893,7 @@ def probe_leaks(root: Path) -> ProbeReport:
 # symlinks genuinely runs two probes fewer, and a floor sitting at the full
 # count would fail there for a reason that has nothing to do with a deleted
 # probe.
-# arsenal-floor-margin: value=12 population=14
+# arsenal-floor-margin: MINIMUM_PROBES value=12 population=14
 MINIMUM_PROBES = 12
 
 

@@ -65,7 +65,7 @@ CLIENTS: dict[str, dict[str, str]] = {
 }
 
 #: Floor. A zero over one file says nothing about telling two files apart.
-#: arsenal-floor-margin: value=2
+#: arsenal-floor-margin: MINIMUM_CASES value=2
 MINIMUM_CASES = 2
 
 

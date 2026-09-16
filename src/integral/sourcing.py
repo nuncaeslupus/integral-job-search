@@ -103,7 +103,7 @@ MINIMUM_BOARDS = 1
 
 #: A run that collected no offers says nothing about how offers get recorded.
 #: The committed captures yielded well above this when T126 landed.
-#: arsenal-floor-margin: value=3
+#: arsenal-floor-margin: MINIMUM_OFFERS_COLLECTED value=3
 MINIMUM_OFFERS_COLLECTED = 3
 
 #: Detail pages fetched per board per run. A listing row that cannot complete an
@@ -112,7 +112,7 @@ MINIMUM_OFFERS_COLLECTED = 3
 #: connector cannot spend the whole run, and what it stopped is reported rather
 #: than dropped silently — `BoardOutcome.detail_fetched` against
 #: `detail_needed`.
-#: arsenal-floor-margin: value=40
+#: arsenal-floor-margin: DETAIL_FETCH_CEILING value=40
 DETAIL_FETCH_CEILING = 40
 
 #: How many of the candidate's phrases one run may search for. Each phrase is

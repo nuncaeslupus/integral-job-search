@@ -735,7 +735,7 @@ def probe_linkage_guarantee_is_load_bearing(root: Path) -> dict[str, Any]:
 #: slack — because 22 had drifted three checks under with no margin argued for the
 #: gap: `checks_run` had grown to 25 while this stayed put, so up to three of the
 #: probe's own assertions could be deleted before this noticed (T159).
-#: arsenal-floor-margin: value=25
+#: arsenal-floor-margin: MINIMUM_CHECKS value=25
 MINIMUM_CHECKS = 25
 
 

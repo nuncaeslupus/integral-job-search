@@ -518,7 +518,7 @@ def all_readings(
 # ---------------------------------------------------------------------------
 # Adversarial probes — exercised in-memory, no git or filesystem involved, so
 # they run identically offline and in CI regardless of what history exists.
-# arsenal-floor-margin: value=5
+# arsenal-floor-margin: MINIMUM_PROBES value=5
 
 MINIMUM_PROBES = 5
 

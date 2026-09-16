@@ -120,7 +120,7 @@ MINIMUM_TRAIT_OCCASIONS = 2
 # an unbounded chase would turn "asks, does not refuse" into a different kind
 # of insistence, and a single call issuing several in a row would let one
 # sitting satisfy the two-occasion half of the floor on its own.
-# arsenal-floor-margin: value=3
+# arsenal-floor-margin: MAX_EXTRA_EPISODE_ATTEMPTS value=3
 MAX_EXTRA_EPISODE_ATTEMPTS = 3
 
 TurnKind = Literal["retrospective", "trait", "lesson_followup", "extra_episode"]
@@ -942,7 +942,7 @@ def probe_interview(root: Path) -> dict[str, Any]:
 #: T159 round 1's narrower sweep, until round 2's broadened tracing found it and
 #: this task's own fixture rule ("dynamic never means unchecked") demanded a
 #: comment (T159 round 2).
-#: arsenal-floor-margin: value=13
+#: arsenal-floor-margin: MINIMUM_CHECKS value=13
 MINIMUM_CHECKS = 13
 
 

@@ -62,7 +62,12 @@ from integral.robots import Robots, RobotsError
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T144.json"
 
-#: The gate's floor, `ats_host_connectors_conforming >= 5`.
+#: The gate's floor, `ats_host_connectors_conforming >= 5` — one per ATS host
+#: this file's own docstring names: Greenhouse, Lever, Ashby, Workable, Rippling.
+#: Genuinely dynamic: conformance takes a live robots-adjudication replay
+#: (`integral.robots`), never an in-source count, so `floor_sweep` cannot resolve
+#: it from this module's AST.
+#: arsenal-floor-margin: MINIMUM_CONFORMING value=5
 MINIMUM_CONFORMING = 5
 
 

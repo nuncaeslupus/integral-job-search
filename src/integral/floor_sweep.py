@@ -89,7 +89,7 @@ different honest answers:
   (`floors_that_do_not_fail_the_gate`, #309) already owns the adjacent question of what
   happens when such a floor *is* breached. This module asks only that the declaration
   carry some explanation at all, and reports these separately
-  (`dynamic_population_floors`) rather than folding them into the arithmetic count.
+  (`unpinnable_floors`) rather than folding them into the arithmetic count.
   That does not excuse an actual gap, though: eleven of these — every scripted-probe
   tally this sweep could trace through a cross-function return — turned out to be
   silently under their probe's real count with no explanation at all
@@ -159,7 +159,7 @@ last element — so this round changes the *shape* of the classification instead
    stays honestly out of scope. The roll-call itself is gone from this comment for the
    reason the finding names: a hand-maintained list of "compliant" module names is prose
    nothing tests, and it drifts. `status/evidence/T159.json`'s own
-   `dynamic_population_floors` and `bounds_read_and_out_of_scope` are regenerated on
+   `unpinnable_floors` and `bounds_read_and_out_of_scope` are regenerated on
    every run and cannot say something the sweep does not currently believe.
 
 `_population_for` also grew one more traced shape while this round was open:
@@ -506,6 +506,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import shutil
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -589,19 +590,33 @@ _CONSTANT_NAME_RE = re.compile(r"^_?[A-Z][A-Z0-9_]*$")
 #: standing between a comment and compliance.
 MARGIN_MARKER_NAME = "arsenal-floor-margin"
 
-#: `value=` is mandatory; `population=` is optional so a genuinely dynamic
-#: floor's marker can honestly omit a number nothing backs. Anchored to `\b`
-#: rather than to a line, because it is always read against
-#: `_last_comment_paragraph`'s own already-stripped, newline-joined text, never
-#: against a raw multi-line comment block.
+#: The floor's own name is mandatory (T163 round 2, F3 below); `value=` is
+#: mandatory; `population=` is optional so a genuinely dynamic floor's marker
+#: can honestly omit a number nothing backs. Anchored to `\b` rather than to a
+#: line, because it is always read against `_last_comment_paragraph`'s own
+#: already-stripped, newline-joined text, never against a raw multi-line
+#: comment block.
+#:
+#: F3 (second-reader BLOCK, this PR): two floors can share one comment block —
+#: `_comment_block_above` deliberately walks back past a bare sibling
+#: declaration so a comment written once for a group is read for each of them
+#: (`test_two_floors_declared_together_both_read_the_shared_comment`, a real
+#: feature, not the bug). The bug was that a marker inside that shared block
+#: carried no floor name, so `MARGIN_MARKER_RE.search()`'s first match was
+#: read as *the* marker for whichever floor asked — both floors in a pair
+#: cleared from one marker naming neither, and (per `_margin_marker_claim`'s
+#: docstring below) a marker several paragraphs back, arguing a floor the
+#: comment moved on from, cleared a *different* current floor the same way.
+#: Naming the floor makes the search exact: a marker is a claim about the one
+#: floor it names, never about whichever floor happened to ask first.
 MARGIN_MARKER_RE = re.compile(
-    rf"\b{re.escape(MARGIN_MARKER_NAME)}:\s+value=(?P<value>\d+)"
+    rf"\b{re.escape(MARGIN_MARKER_NAME)}:\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s+value=(?P<value>\d+)"
     r"(?:\s+population=(?P<population>\d+))?",
     re.IGNORECASE,
 )
 
 
-def margin_marker(value: int, population: int | None = None) -> str:
+def margin_marker(name: str, value: int, population: int | None = None) -> str:
     """The line a floor's own comment carries to argue a positive margin.
 
     Emitted rather than typed — the two numbers are read out of what this sweep
@@ -610,13 +625,18 @@ def margin_marker(value: int, population: int | None = None) -> str:
     merely sounds like an argument. Pass `population` whenever a real one is
     known; omit it only for a floor this sweep classifies `dynamic` — one
     genuinely unenumerable from source, where nothing backs the number.
+    `name` is the floor's own constant name (T163 round 2, F3): the marker
+    argues for that one floor, and only that one, however many floors read
+    the same comment block.
     """
+    if not name:
+        raise ValueError("a marker with no floor name argues for nothing in particular")
     if value < 0:
         raise ValueError(f"{value!r} is not a floor's value — negative values do not occur")
     if population is not None and population < 0:
         raise ValueError(f"{population!r} is not a population — negative populations do not occur")
     tail = "" if population is None else f" population={population}"
-    return f"{MARGIN_MARKER_NAME}: value={value}{tail}"
+    return f"{MARGIN_MARKER_NAME}: {name} value={value}{tail}"
 
 
 def _comment_lines_stripped(comment: str) -> str:
@@ -634,23 +654,33 @@ def _comment_lines_stripped(comment: str) -> str:
     return "\n".join(lines)
 
 
-def _margin_marker_claim(comment: str) -> tuple[int, int | None] | None:
+def _margin_marker_claim(comment: str, name: str) -> tuple[int, int | None] | None:
     """The `(value, population)` a marker in `comment`'s own last paragraph
-    states, `population` being `None` when the marker omitted it, or `None`
-    (the whole tuple) when no marker is present at all.
+    states *for the floor `name`*, `population` being `None` when the marker
+    omitted it, or `None` (the whole tuple) when no marker naming `name` is
+    present at all.
 
     Scoped to `_last_comment_paragraph` for the reason round 5 (R4-5) already
     established for the keyword fallback this replaces: a comment accretes one
     paragraph per round, and a marker several paragraphs back is a claim about
     a floor this comment's history once argued, not one about what the
     declaration means today.
+
+    F3 (second-reader BLOCK, this PR): scans every marker in the paragraph and
+    returns the one naming `name`, rather than `re.search`'s first match
+    regardless of which floor it names — two floors sharing one comment block
+    (`_comment_block_above`'s deliberate walk-back past a bare sibling
+    declaration) used to mean the first floor's marker cleared the second one
+    too, and it never once named it.
     """
     paragraph = _comment_lines_stripped(_last_comment_paragraph(comment))
-    match = MARGIN_MARKER_RE.search(paragraph)
-    if match is None:
-        return None
-    population_group = match.group("population")
-    return int(match.group("value")), (None if population_group is None else int(population_group))
+    for match in MARGIN_MARKER_RE.finditer(paragraph):
+        if match.group("name") == name:
+            population_group = match.group("population")
+            return int(match.group("value")), (
+                None if population_group is None else int(population_group)
+            )
+    return None
 
 
 def _margin_marker_has_explanation(comment: str) -> bool:
@@ -976,12 +1006,16 @@ class FloorFinding:
 
 
 @dataclass(frozen=True)
-class DynamicFloor:
+class UnpinnableFloor:
     """An in-scope floor whose population this repository does not itself
     enumerate, and for which no committed evidence file could be resolved either
     — genuinely unpinnable, checked only for "carries some explanation" plus the
     one falsifiable claim this repository's own idiom makes (`_zero_slack_claim_
-    contradicts`)."""
+    contradicts`). F2 (second-reader BLOCK on #488): named for what it is —
+    landing here has never meant "verified", only "no independent ground truth
+    this sweep could check a claim against", and the old name (`DynamicFloor`,
+    reported as `dynamic_population_floors`) read as an accepted classification
+    rather than an admission. The set itself is unchanged; only the label lied."""
 
     module: str
     name: str
@@ -1152,15 +1186,13 @@ def _module_constant_candidates(tree: ast.Module) -> list[tuple[str, int, ast.ex
 _SIBLING_ASSIGNMENT_RE = re.compile(r"^[A-Z][A-Z0-9_]*\s*(?::[^=]+)?=\s*.+$")
 
 
-def _comment_block_above(lines: list[str], lineno: int) -> str:
-    """The contiguous `#`-prefixed lines above a 1-indexed declaration line.
-
-    Skips back over any immediately-preceding bare constant declarations first, so a
-    comment written once for a group of floors is read for each of them. Also tolerates
-    a single blank line between the code and the comment — a section-header block
-    followed by a blank line before the constant it introduces
-    (`reader_notes.MINIMUM_PROBES`) is a real explanation, not a missing one.
-    """
+def _comment_block_range_above(lines: list[str], lineno: int) -> tuple[int, int] | None:
+    """The 0-indexed `(start, end)` inclusive line range of the contiguous
+    `#`-prefixed lines above a 1-indexed declaration line, or `None` when there
+    is no such block. `_comment_block_above`'s own scanning rules, factored out
+    so a mutation that needs to *replace* the block (`measure_prose_clearance`,
+    F6) walks the identical range a *read* of it would, rather than a second,
+    possibly-diverging copy of the scan."""
     i = lineno - 2  # zero-indexed line just above the declaration
     while (
         i >= 0
@@ -1170,12 +1202,27 @@ def _comment_block_above(lines: list[str], lineno: int) -> str:
         i -= 1
     if i >= 0 and lines[i].strip() == "" and i - 1 >= 0 and lines[i - 1].strip().startswith("#"):
         i -= 1
-    collected: list[str] = []
+    end = i
     while i >= 0 and lines[i].strip().startswith("#"):
-        collected.append(lines[i])
         i -= 1
-    collected.reverse()
-    return "\n".join(collected)
+    start = i + 1
+    return (start, end) if start <= end else None
+
+
+def _comment_block_above(lines: list[str], lineno: int) -> str:
+    """The contiguous `#`-prefixed lines above a 1-indexed declaration line.
+
+    Skips back over any immediately-preceding bare constant declarations first, so a
+    comment written once for a group of floors is read for each of them. Also tolerates
+    a single blank line between the code and the comment — a section-header block
+    followed by a blank line before the constant it introduces
+    (`reader_notes.MINIMUM_PROBES`) is a real explanation, not a missing one.
+    """
+    block = _comment_block_range_above(lines, lineno)
+    if block is None:
+        return ""
+    start, end = block
+    return "\n".join(lines[start : end + 1])
 
 
 def _all_function_defs(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
@@ -1329,6 +1376,59 @@ def _incremented_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: s
         ):
             return True
     return False
+
+
+def _subscripted_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
+    """True if `name[...] = ...` appears anywhere in `func` — the subscript-fill shape
+    an empty `{}`/`dict()` builder uses instead of `.update()`."""
+    for node in ast.walk(func):
+        if isinstance(node, ast.Assign):
+            targets: list[ast.expr] = list(node.targets)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        else:
+            continue
+        for target in targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == name
+            ):
+                return True
+    return False
+
+
+def _filled_after_binding(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
+    """True if `name` is mutated anywhere in `func` — by `.append`/`.add`/`.update`/
+    `.extend` (`_appended_in_a_loop`) or by subscript assignment
+    (`_subscripted_in_a_loop`). One check for both an empty-literal-plus-`.add` builder
+    and an empty-builder-call-plus-subscript one (`set()`, `dict()`, `frozenset()`,
+    `{}`, `[]` all resolve to the same `_LITERAL, 0` before this is asked)."""
+    return _appended_in_a_loop(func, name) or _subscripted_in_a_loop(func, name)
+
+
+def _is_empty_builder(rhs: ast.expr) -> bool:
+    """True if `rhs` is, directly and without resolving anything, an empty
+    collection literal or a no-argument builtin-collection call: `[]`, `{}`,
+    `set()`, `dict()`, `frozenset()`. Purely syntactic — costs no recursion
+    depth — because `_collection_kind` would resolve every one of these
+    shapes to `_LITERAL, 0` anyway; this exists only to reach that same
+    answer without paying for the recursive call when the answer is already
+    visible in the AST node itself. Anything less direct (a name bound
+    through another name, a subscript, a same-module call whose return isn't
+    one of these literal shapes) is left to the general recursive path in
+    `_collection_kind`, which still classifies it, just at that path's usual
+    cost."""
+    if isinstance(rhs, (ast.List, ast.Set)) and not rhs.elts:
+        return True
+    if isinstance(rhs, ast.Dict) and not rhs.keys:
+        return True
+    return (
+        isinstance(rhs, ast.Call)
+        and isinstance(rhs.func, ast.Name)
+        and rhs.func.id in {"set", "list", "dict", "frozenset"}
+        and not rhs.args
+    )
 
 
 _UNKNOWN = "unknown"
@@ -1567,19 +1667,54 @@ def _collection_kind(
             if assignments:
                 rhs = assignments[-1]
                 if (
-                    isinstance(rhs, (ast.List, ast.Set))
-                    and not rhs.elts
-                    and _appended_in_a_loop(func, expr.id)
-                ):
-                    return _DYNAMIC, None
-                if (
                     isinstance(rhs, ast.Constant)
                     and isinstance(rhs.value, int)
                     and not isinstance(rhs.value, bool)
                     and _incremented_in_a_loop(func, expr.id)
                 ):
                     return _DYNAMIC, None
-                return _collection_kind(rhs, tree, func, before_lineno, depth + 1)
+                # F1 (second-reader BLOCK, this PR): a count of zero taken
+                # right at the binding is not a population when the same
+                # name is filled afterward. The guard this replaced only
+                # matched an empty `[]`/`{}` *literal* combined with
+                # `.append`/`.add`/`.update`/`.extend` — never a call to
+                # `set()`/`dict()`/`frozenset()` (an `ast.Call`, not an
+                # `ast.List`/`ast.Set`), and never a `{}` filled by
+                # subscript assignment rather than `.update()`. Both are
+                # `_is_empty_builder(rhs)`, checked directly against `rhs`'s
+                # own AST shape rather than through a recursive call — the
+                # first version of this fix instead always recursed into
+                # `_collection_kind(rhs, ...)` before checking, which costs
+                # one more hop of that function's `depth > 5` budget than
+                # this direct check for the exact shape the old guard
+                # already matched with none. A resolution chain already
+                # near that budget (`spec_consistency.MINIMUM_DECLARATIONS_
+                # FOUND`'s `found = []` inside `find_declarations`, five
+                # hops deep from its compare site) tipped over the cutoff
+                # under that version and silently dropped out of scope —
+                # the exact "second-order side effect of a fix" this direct
+                # check avoids by costing nothing beyond a plain isinstance
+                # check when the shape is already visible in the AST node.
+                # `employer_boards.MINIMUM_CONFORMING` (`hosts: set[str] =
+                # set()`, filled by `hosts.add(...)` in a loop) was cleared
+                # this way: `_margin_finding(literal_value=5, population=0)`
+                # computes `margin=-5`, `margin <= 0`, compliant — before any
+                # marker is read.
+                if _is_empty_builder(rhs) and _filled_after_binding(func, expr.id):
+                    return _DYNAMIC, None
+                rhs_kind, rhs_count = _collection_kind(rhs, tree, func, before_lineno, depth + 1)
+                if rhs_kind == _LITERAL and rhs_count == 0 and _filled_after_binding(func, expr.id):
+                    # A genuinely indirect empty builder — `rhs` itself isn't
+                    # one of `_is_empty_builder`'s direct shapes, but resolves
+                    # to a literal zero anyway once `_collection_kind` chases
+                    # it (through another name, a dict-subscript lookup, a
+                    # same-module call). Same rule, general fallback: whether
+                    # `rhs` denotes an empty collection, not which syntax
+                    # spelled it, and a collection genuinely, permanently
+                    # empty (nothing ever fills it) still resolves as a real,
+                    # literal zero.
+                    return _DYNAMIC, None
+                return rhs_kind, rhs_count
             param_names = (
                 {a.arg for a in func.args.posonlyargs}
                 | {a.arg for a in func.args.args}
@@ -2334,8 +2469,9 @@ def _margin_finding(
     # floor and the comment together can always make agree, which is
     # `len(X) < len(X)` wearing a claim rather than a check. See this
     # function's own module-level comment (T163) for the measured 73-of-73
-    # figure this replaces.
-    marker = _margin_marker_claim(comment)
+    # figure this replaces. F3 (round 2): named, not merely the first marker
+    # in the block — see `_margin_marker_claim`'s own docstring.
+    marker = _margin_marker_claim(comment, name)
     if marker is None:
         return FloorFinding(
             module=module_stem,
@@ -2412,8 +2548,8 @@ def _resolved_population_for_site(
 
 def _classify_floor(
     module: _ModuleInfo, name: str, lineno: int, value_expr: ast.expr
-) -> tuple[FloorFinding | None, DynamicFloor | None, EvidencePinnedFloor | None, bool, bool]:
-    """Returns `(finding_if_any, dynamic_record_if_any, pinned_record_if_any,
+) -> tuple[FloorFinding | None, UnpinnableFloor | None, EvidencePinnedFloor | None, bool, bool]:
+    """Returns `(finding_if_any, unpinnable_record_if_any, pinned_record_if_any,
     was_in_scope, reached_arithmetic)`. `reached_arithmetic` is true exactly
     when a real, concrete population was found — literal or evidence-pinned —
     and `_margin_finding` was actually run against it, whether or not it found
@@ -2561,11 +2697,11 @@ def _classify_floor(
     # this module's three acceptance paths, needing not even a keyword, which
     # is why the "73 of 73" mutation cleared every floor that landed here
     # unchanged. `value=` is now mandatory here too, checked the identical way
-    # `_margin_finding` checks it; `population=` is never required (and never
-    # checked when present) because nothing in this branch resolved one to
-    # check it against — requiring a number nothing backs would be exactly
-    # the theatre this task exists to retire, one level further in.
-    marker = _margin_marker_claim(comment)
+    # `_margin_finding` checks it; `population=` is never required (nothing in
+    # this branch resolved one to require it against) but IS checked when
+    # present — see F5 below. F3 (round 2): named, not merely the first
+    # marker in the block.
+    marker = _margin_marker_claim(comment, name)
     if marker is None:
         return (
             FloorFinding(
@@ -2585,7 +2721,7 @@ def _classify_floor(
             True,
             False,
         )
-    claimed_value, _claimed_population = marker
+    claimed_value, claimed_population = marker
     if claimed_value != literal_value:
         return (
             FloorFinding(
@@ -2596,6 +2732,35 @@ def _classify_floor(
                 detail=(
                     f"{name} is {literal_value}, but its marker claims value={claimed_value} — "
                     "the marker and the floor's current declaration have drifted apart"
+                ),
+            ),
+            None,
+            None,
+            True,
+            False,
+        )
+    if claimed_population is not None:
+        # F5 (second-reader BLOCK, this PR): `margin_marker`'s own docstring
+        # says `population=` is only valid on an arithmetic floor — this
+        # branch is reached only when no real, countable population resolved
+        # (`_population_for` came back dynamic/unresolved and no committed
+        # evidence pinned it), so nothing here backs a `population=` claim.
+        # Before this, one was accepted and simply never read (`_claimed_
+        # population`, discarded) — a stated number this sweep never checked
+        # reads as more rigorous than the honest `value=`-alone marker this
+        # branch actually requires, and nothing caught it drifting from
+        # whatever the claimant once measured by hand.
+        return (
+            FloorFinding(
+                module=module.stem,
+                name=name,
+                lineno=lineno,
+                reason="population_on_dynamic_floor",
+                detail=(
+                    f"{name}'s marker claims population={claimed_population}, but no real, "
+                    "countable population resolved for it — `population=` is only valid on a "
+                    "floor this sweep checks arithmetically, and stating one here is a claim "
+                    "nothing here can check"
                 ),
             ),
             None,
@@ -2639,19 +2804,20 @@ def _classify_floor(
             True,
             False,
         )
-    return None, DynamicFloor(module=module.stem, name=name, lineno=lineno), None, True, False
+    return None, UnpinnableFloor(module=module.stem, name=name, lineno=lineno), None, True, False
 
 
 def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
     """T159's gate: floors that do not refuse the first deletion of their population."""
     findings: list[FloorFinding] = []
-    dynamic: list[DynamicFloor] = []
+    unpinnable: list[UnpinnableFloor] = []
     pinned: list[EvidencePinnedFloor] = []
     swept = 0
     arithmetically_checked = 0
     excluded: list[str] = []
     self_floor: tuple[_ModuleInfo, str, int] | None = None
     arithmetic_self_floor: tuple[_ModuleInfo, str, int] | None = None
+    evidence_pinned_self_floor: tuple[_ModuleInfo, str, int] | None = None
 
     for module in _module_infos(src_dir):
         # Round 1 excluded this module from its own sweep by identity — the reader's
@@ -2687,8 +2853,16 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
                 swept += 1
                 arithmetically_checked += 1
                 continue
-            finding, dynamic_record, pinned_record, in_scope, reached_arithmetic = _classify_floor(
-                module, name, lineno, value_expr
+            if is_this_module and name == "MINIMUM_FLOORS_EVIDENCE_PINNED":
+                # F2 (second-reader BLOCK on #488): the third of this module's own
+                # denominators, deferred and checked the identical way its two
+                # siblings already are.
+                evidence_pinned_self_floor = (module, name, lineno)
+                swept += 1
+                arithmetically_checked += 1
+                continue
+            finding, unpinnable_record, pinned_record, in_scope, reached_arithmetic = (
+                _classify_floor(module, name, lineno, value_expr)
             )
             if not in_scope:
                 excluded.append(f"{module.stem}.{name}")
@@ -2698,8 +2872,8 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
                 arithmetically_checked += 1
             if finding is not None:
                 findings.append(finding)
-            if dynamic_record is not None:
-                dynamic.append(dynamic_record)
+            if unpinnable_record is not None:
+                unpinnable.append(unpinnable_record)
             if pinned_record is not None:
                 pinned.append(pinned_record)
 
@@ -2741,13 +2915,68 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
                 )
             )
 
+    if evidence_pinned_self_floor is not None:
+        # F2: nothing bounded `evidence_pinned_floors`'s own count before this —
+        # a floor silently losing its evidence pin (`_committed_evidence_
+        # population` breaking, or an evidence file going missing) moves it
+        # straight into `unpinnable_floors` without disturbing `floors_swept` or
+        # `arithmetically_checked` (both count the two branches identically), so
+        # neither existing self-floor sees it happen until the drift is large
+        # enough to eat `MINIMUM_FLOORS_ARITHMETICALLY_CHECKED`'s own slack.
+        #
+        # Checked against `len(pinned) + 1`, not `len(pinned)` — unlike `swept`/
+        # `arithmetically_checked`, which `self_floor`/`arithmetic_self_floor`
+        # already count themselves into *unconditionally*, before either is
+        # judged compliant, `pinned` only ever grows on a *compliant* outcome
+        # (an evidence-pinned floor that fails its own margin check is a
+        # finding, not a pin — the same rule every other floor on this branch
+        # already gets). Comparing against the pre-append `len(pinned)` would
+        # let this floor pass one short of the population it will actually
+        # report once compliant — this module's own named defect, a bound one
+        # short of its population, so the first real regression (one module-
+        # derived pin lost) would land exactly on the committed floor instead
+        # of past it. The `+ 1` prices in this floor's own pin in advance,
+        # which is decidable rather than circular: `len(pinned)` before this
+        # block is already fixed by the module sweep and the two siblings
+        # above, so the hypothetical does not depend on its own answer.
+        evidence_module, evidence_name, evidence_lineno = evidence_pinned_self_floor
+        evidence_comment = _comment_block_above(evidence_module.lines, evidence_lineno)
+        evidence_population = len(pinned) + 1
+        evidence_finding = _margin_finding(
+            evidence_module.stem,
+            evidence_name,
+            evidence_lineno,
+            MINIMUM_FLOORS_EVIDENCE_PINNED,
+            evidence_population,
+            evidence_comment,
+        )
+        if evidence_finding is not None:
+            findings.append(evidence_finding)
+        else:
+            pinned.append(
+                EvidencePinnedFloor(
+                    module=evidence_module.stem,
+                    name=evidence_name,
+                    lineno=evidence_lineno,
+                    population=evidence_population,
+                )
+            )
+
     return {
         "floors_that_do_not_refuse_the_first_deletion": len(findings),
         "findings": [f.as_dict() for f in sorted(findings, key=lambda f: (f.module, f.name))],
         "floors_swept": swept,
         "arithmetically_checked": arithmetically_checked,
-        "dynamic_population_floors": [
-            d.as_dict() for d in sorted(dynamic, key=lambda d: (d.module, d.name))
+        # F2 (second-reader BLOCK on #488): renamed from `dynamic_population_
+        # floors`. The set is unchanged — every floor here always was exactly
+        # the ones no independent artefact could verify — but "dynamic" read as
+        # an accepted classification, and landing here was reported no
+        # differently from landing in `evidence_pinned_floors`: zero findings,
+        # silence. `unpinnable_floors` says what is actually true of every
+        # member: this sweep took the marker's word for it, because it had
+        # nothing else to check it against.
+        "unpinnable_floors": [
+            u.as_dict() for u in sorted(unpinnable, key=lambda u: (u.module, u.name))
         ],
         "evidence_pinned_floors": [
             p.as_dict() for p in sorted(pinned, key=lambda p: (p.module, p.name))
@@ -2806,7 +3035,7 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: Per-module detail is deliberately not repeated further than the paragraph
 #: above: a hand-typed roll call of "already compliant" modules is exactly
 #: the prose a second reader has twice now shown cannot be trusted.
-#: `status/evidence/T159.json`'s own `dynamic_population_floors`,
+#: `status/evidence/T159.json`'s own `unpinnable_floors`,
 #: `evidence_pinned_floors` and `bounds_read_and_out_of_scope` are regenerated
 #: every run and are the only account of *which* floors are which that this
 #: module stands behind.
@@ -2850,11 +3079,15 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: more of them; both numbers were correct about the tree each was measuring
 #: and neither is correct about this one. Regenerated, never picked. Still
 #: zero slack.
-MINIMUM_FLOORS_SWEPT = 81
+#: **82 since this round's own F2** (second-reader BLOCK on #488), whose
+#: `MINIMUM_FLOORS_EVIDENCE_PINNED` joined the population below — a new
+#: committed floor in this very module is itself one more thing this sweep
+#: sweeps. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 82
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
-#: an arithmetic check, as opposed to sitting in `dynamic_population_floors`
+#: an arithmetic check, as opposed to sitting in `unpinnable_floors`
 #: with only a comment behind them. Before this floor existed, the arithmetic
 #: branch had none of its own: a second reader deleted every committed
 #: `status/evidence/*.json` file and watched 18 of 19 evidence-pinned floors
@@ -2917,8 +3150,50 @@ MINIMUM_FLOORS_SWEPT = 81
 #: Committed at 36, three points of slack. Never the count of the day (T100):
 #: raise it deliberately, the same discipline as `MINIMUM_FLOORS_SWEPT`, when a
 #: round changes how many floors this sweep can actually check by arithmetic.
-#: arsenal-floor-margin: value=36 population=41
+#: **40 since this round's own F1** (second-reader BLOCK on this PR):
+#: `employer_boards.MINIMUM_CONFORMING` was reaching this count through the
+#: bug F1 fixes — an empty `set()` builder read as a literal population of
+#: zero before `.add()` ever ran — so it counted as arithmetically checked
+#: when it has never been anything but dynamic (conformance needs a live
+#: robots-adjudication replay, not an in-source count). Fixing F1 moves it
+#: to `unpinnable_floors` where it belongs, dropping this from 41 to
+#: 40. Still four points of slack.
+#: **41 since this same round's own F2**, whose new `MINIMUM_FLOORS_EVIDENCE_
+#: PINNED` self-floor (below) takes the identical deferred path its two
+#: siblings already do — counting itself into `arithmetically_checked` the
+#: same way they count themselves — and lands back on 41 by coincidence of
+#: digits, not because F1's own floor returned: `employer_boards.
+#: MINIMUM_CONFORMING` stays in `unpinnable_floors`, one module-derived floor
+#: down from before, one self-floor up. Still five points of slack.
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=41
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
+
+
+#: F2 (second-reader BLOCK on #488): this module's third denominator, and the
+#: genuinely new protection in the round rather than a rename — `unpinnable_
+#: floors` (below) cannot itself be bounded without duplicating `MINIMUM_
+#: FLOORS_ARITHMETICALLY_CHECKED` (the partition is exactly two-way:
+#: `floors_swept = arithmetically_checked + len(unpinnable_floors)`, so a
+#: ceiling on one half is algebraic on the other), but nothing before this
+#: bounded `evidence_pinned_floors` specifically, the *strict subset* of
+#: `arithmetically_checked` that resolved through real committed evidence
+#: rather than an in-source literal count. A floor silently losing its pin
+#: (`_committed_evidence_population` breaking, or an evidence file going
+#: missing) falls back to `unpinnable` without moving `floors_swept` or
+#: `arithmetically_checked` at all — both count the two branches identically
+#: — so neither existing self-floor would see it happen until the drift ate
+#: four points of slack. This one sees it on the first floor lost.
+#:
+#: Checked exactly like its two siblings — matched by identity, deferred
+#: until `measure()`'s own loop and both siblings' own checks have finished,
+#: against `len(pinned) + 1` (this floor's own eventual pin, priced in before
+#: it is decided — see the comment beside the check itself for why that is
+#: not circular). Committed at the real count, zero slack, `MINIMUM_FLOORS_
+#: SWEPT`'s own convention: `margin == 0` is unconditionally compliant, so no
+#: marker is needed here either. Never the count of the day (T100): raise it
+#: deliberately when a round changes how many floors resolve through
+#: committed evidence, the same discipline as its two siblings.
+MINIMUM_FLOORS_EVIDENCE_PINNED = 30
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:
@@ -2952,158 +3227,199 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
 _PROSE_ASSERTING_DELIBERATENESS = "# The margin here is deliberate."
 
 
-def _prose_clearance_scenarios() -> tuple[tuple[str, str, str, str], ...]:
-    """`(case, floor_name, compliant_source, mutated_source)`, one entry per
-    branch this sweep's positive-margin check actually distinguishes — the
-    module docstring's own "two different questions are being asked", never one
-    entry per way a sentence could assert deliberateness. CLAUDE.md's own rule
-    against enumeration ("what does not work is enumeration ... an enumeration
-    has no last element") is why there are exactly two here rather than one per
-    phrasing a future second reader might try next: the axis this battery
-    varies is which population-resolution branch `_classify_floor` takes, a
-    small, closed set fixed by this module's own control flow, not the open set
-    of ways prose can sound deliberate.
-
-    `compliant_source` is a genuinely positive margin, correctly marked —
-    `measure_prose_clearance` asserts this reads compliant *before* running the
-    mutation, so a broken fixture is caught rather than silently read as "the
-    mutation worked". `mutated_source` is the one realistic mutation the report
-    measured: the floor's value lowered, and its comment replaced with
-    `_PROSE_ASSERTING_DELIBERATENESS` — no marker, no number, nothing this sweep
-    can check.
-
-    Shapes deliberately mirror `tests/test_floor_sweep.py`'s own established
-    fixtures rather than inventing new ones only this gate would understand:
-    the literal case is `test_a_margin_argued_in_writing_is_not_flagged`'s;
-    the dynamic case is `test_a_dynamic_population_with_a_comment_is_compliant`'s.
+def _swept_floor_sites(src_dir: Path) -> list[tuple[_ModuleInfo, str, int, ast.expr]]:
+    """Every floor `measure()` would count as swept in `src_dir` — the exact
+    discovery `measure()`'s own loop performs (`_module_infos` +
+    `_module_constant_candidates`, routed through `_classify_floor` and kept
+    only when `in_scope`), reused read-only rather than re-derived, so a
+    mutation battery built on this can never diverge from what the gate itself
+    sweeps. Excludes the three self floors (F2: `MINIMUM_FLOORS_EVIDENCE_PINNED`
+    joined the other two) by the same identity check `measure()` applies — in a
+    copy of the tree neither `_THIS_FILE` match ever fires, but all three also
+    classify `out_of_scope` there on their own account (none has an in-source
+    comparison site `_population_for` can resolve — the two originals compare
+    against a runtime dict value inside `write_evidence`/`_main`, and F2's own
+    has no comparison site anywhere, only a function-call argument inside
+    `measure()` itself), so the explicit skip is belt-and-braces, not
+    load-bearing, on a copy or on the live tree alike (measured: 79 of the
+    live tree's 82, the difference being exactly these three).
     """
-    return (
-        (
-            "literal_population",
-            "MINIMUM_CASES",
-            f"""
-CASES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-
-#: {margin_marker(12, 20)}
-#: Deliberately kept below the table this floor guards, pinned to a third
-#: party's own behaviour rather than to this table's own size.
-MINIMUM_CASES = 12
-
-
-def probe(cases=CASES):
-    if len(cases) < MINIMUM_CASES:
-        raise SystemExit(1)
-""",
-            f"""
-CASES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
-
-{_PROSE_ASSERTING_DELIBERATENESS}
-MINIMUM_CASES = 1
+    sites: list[tuple[_ModuleInfo, str, int, ast.expr]] = []
+    for module in _module_infos(src_dir):
+        is_this_module = module.path.resolve() == _THIS_FILE
+        for name, lineno, value_expr in _module_constant_candidates(module.tree):
+            if is_this_module and name in (
+                "MINIMUM_FLOORS_SWEPT",
+                "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
+                "MINIMUM_FLOORS_EVIDENCE_PINNED",
+            ):
+                continue
+            _, _, _, in_scope, _ = _classify_floor(module, name, lineno, value_expr)
+            if in_scope:
+                sites.append((module, name, lineno, value_expr))
+    return sites
 
 
-def probe(cases=CASES):
-    if len(cases) < MINIMUM_CASES:
-        raise SystemExit(1)
-""",
-        ),
-        (
-            "dynamic_population",
-            "MINIMUM_TURNS",
-            f"""
-#: {margin_marker(3)}
-#: On a scripted probe's own running tally, never a collection this module lists.
-MINIMUM_TURNS = 3
+def _replace_expr_with_zero(lines: list[str], value_expr: ast.expr) -> None:
+    """Replaces `value_expr`'s own source span with the literal `0`, in place —
+    whatever its shape (a plain int, a `len(...)` call, arithmetic, an alias),
+    the mutated line re-parses as a bare `NAME = 0`. Every floor this sweep
+    discovers is a single-line expression; asserted rather than handled, so a
+    future multi-line floor fails loudly instead of silently corrupting the
+    file it shares with other floors' declarations."""
+    if value_expr.lineno != value_expr.end_lineno:
+        raise AssertionError(
+            f"floor value spans lines {value_expr.lineno}-{value_expr.end_lineno} — "
+            "the prose-clearance mutation only knows how to rewrite a single-line value"
+        )
+    idx = value_expr.lineno - 1
+    line = lines[idx]
+    lines[idx] = line[: value_expr.col_offset] + "0" + line[value_expr.end_col_offset :]
 
 
-def probe():
-    turns = 0
-    for _ in range(5):
-        turns += 1
-    return {{"turns_evaluated": turns}}
+def _replace_comment_block_with_prose(lines: list[str], lineno: int) -> None:
+    """Replaces the comment block `_comment_block_above` would read for the
+    declaration at 1-indexed `lineno` with `_PROSE_ASSERTING_DELIBERATENESS`
+    alone, in place — the report's own attack phrase: no marker, no number,
+    nothing this sweep can check. A floor with no comment at all gets one
+    inserted just above its declaration, so the mutation exercises the "carries
+    a comment with no claim in it" path uniformly rather than leaving some
+    floors on the different "undocumented" path they started on."""
+    block = _comment_block_range_above(lines, lineno)
+    if block is None:
+        lines.insert(lineno - 1, _PROSE_ASSERTING_DELIBERATENESS)
+    else:
+        start, end = block
+        lines[start : end + 1] = [_PROSE_ASSERTING_DELIBERATENESS]
 
 
-def check():
-    measured = probe()
-    if measured["turns_evaluated"] < MINIMUM_TURNS:
-        raise SystemExit(1)
-""",
-            f"""
-{_PROSE_ASSERTING_DELIBERATENESS}
-MINIMUM_TURNS = 1
+def _apply_prose_mutation(sites: list[tuple[_ModuleInfo, str, int, ast.expr]]) -> None:
+    """Mutates every site in `sites` in place: literal value → `0`, comment →
+    prose asserting deliberateness alone. `sites` must already be the ones a
+    copy's own module objects report (`_swept_floor_sites(tmp_dir)`, filtered
+    by the caller) — this function only rewrites, it does not discover.
+
+    Floors sharing one file are rewritten from the bottom up (descending
+    `lineno`): replacing a comment block can change the file's line count, and
+    processing bottom-to-top means that only ever moves lines *above* a floor
+    not yet processed, never invalidating a line number already captured for
+    one that comes later in this loop.
+    """
+    by_path: dict[Path, tuple[_ModuleInfo, list[tuple[int, ast.expr]]]] = {}
+    for module, _name, lineno, value_expr in sites:
+        by_path.setdefault(module.path, (module, []))[1].append((lineno, value_expr))
+    for module, floors in by_path.values():
+        lines = module.lines
+        for lineno, value_expr in sorted(floors, key=lambda f: f[0], reverse=True):
+            _replace_expr_with_zero(lines, value_expr)
+            _replace_comment_block_with_prose(lines, lineno)
+        module.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def probe():
-    turns = 0
-    for _ in range(5):
-        turns += 1
-    return {{"turns_evaluated": turns}}
-
-
-def check():
-    measured = probe()
-    if measured["turns_evaluated"] < MINIMUM_TURNS:
-        raise SystemExit(1)
-""",
-        ),
-    )
-
-
-#: The battery's own denominator floor (T100/T122): a literal, never
-#: `len(_prose_clearance_scenarios())` — derived from the very collection it
-#: bounds, it would shrink with whatever this sweep stops constructing,
-#: `profile.MINIMUM_FIELDS_CHECKED`'s shape one level up. Committed at exactly
-#: today's count, zero slack: the set is closed by design (one per branch, not
-#: one per phrasing), not a population meant to grow the way a fixture table
-#: does, so there is no deliberate margin to argue here either.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 2
+#: The battery's own denominator floor (T100/T122) — no longer unpinned in its
+#: own instance (F4). `measure_prose_clearance` checks it itself, against
+#: `len(site_ids)`, the real count of floors the battery just mutated, through
+#: the same `_margin_finding` arithmetic every other floor gets.
+#: `measure()` still cannot check it — its only in-source comparison site is a
+#: runtime dict value inside `_main`, unresolvable by a static sweep — so it
+#: stays out of `measure()`'s own scope; that division of labour is why the
+#: check lives beside the battery rather than in the sweep.
+#: Committed at the real count, zero slack, `MINIMUM_FLOORS_SWEPT`'s own
+#: convention: `margin == 0` is unconditionally compliant, so no marker is
+#: needed here either.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 79
 
 
 def measure_prose_clearance() -> dict[str, Any]:
-    """T163's gate: how many of `_prose_clearance_scenarios`' constructed floors
-    still read compliant after the report's own realistic mutation — the
-    floor's value lowered *and* its comment replaced with prose asserting
-    deliberateness, carrying no marker and no number this sweep could check.
+    """T163's gate: how many of the real tree's floors still read compliant
+    after the report's own realistic mutation — every floor `measure()`
+    classifies in scope, its value lowered to `0` and its comment replaced
+    with prose asserting deliberateness, carrying no marker and no number this
+    sweep could check.
 
-    Run against constructed fixtures, never against the live `src_dir` tree
-    directly: mutating and re-sweeping all 81 real floors on every
-    `make evidence` run would be exactly the "full suite per mutation" cost
-    CLAUDE.md already names as the single largest avoidable one, and the live
-    tree's own compliance is already `measure`'s job (T159's own gate). This
-    sweep never *imports* the fixtures it reads — `_module_infos` parses
-    source text with `ast.parse`, the same as every call above — so neither of
-    CLAUDE.md's mutation-testing hazards applies here: there is no `.pyc`
-    cache to go stale between the two `measure()` calls below, and no
-    `sys.modules` entry for a "resident module" to serve stale results from.
+    Applied to a `shutil.copytree` of `src/integral`, never the real tree in
+    place — but every floor at once, in one copy, not one copy per floor:
+    mutating and re-sweeping the whole tree costs one extra `measure()` call,
+    not 81 (measured on the report this closes: ~5s including the copy and
+    `uv` start-up). This sweep never *imports* the copy it mutates —
+    `_module_infos` parses source text with `ast.parse`, the same as `measure`
+    itself — so neither of CLAUDE.md's mutation-testing hazards applies: no
+    `.pyc` cache goes stale between the two `measure()` calls below, and no
+    `sys.modules` entry serves a "resident module"'s stale result.
+
+    T150's shape, not the original T163 one: the earlier version mutated two
+    hand-written fixtures, one per branch `_classify_floor`'s positive-margin
+    check distinguishes — correct about the branch and blind to the real
+    tree's open set of population-expression shapes, which is exactly how
+    `employer_boards.MINIMUM_CONFORMING` cleared a battery meant to catch it.
+
+    A floor already non-compliant on the unmutated copy is excluded rather
+    than mutated: "cleared by prose alone" asks whether the prose *caused* a
+    floor that would otherwise be enforced to read compliant, and a floor
+    already failing for an unrelated reason (a test fixture standing in for
+    `src_dir`, on the real tree never — T159's own gate keeps it clean before
+    this runs at all) cannot answer that question either way.
     """
-    scenarios = _prose_clearance_scenarios()
-    cleared: list[dict[str, str]] = []
-    for case, floor_name, compliant_source, mutated_source in scenarios:
-        with tempfile.TemporaryDirectory() as raw_tmp:
-            tmp_dir = Path(raw_tmp)
-            fixture = tmp_dir / "mod.py"
-            fixture.write_text(compliant_source, encoding="utf-8")
-            before = measure(tmp_dir)
-            before_finding = next((f for f in before["findings"] if f["name"] == floor_name), None)
-            if before_finding is not None:
-                # The "compliant" fixture itself failed to read compliant — a
-                # broken fixture would make every reading below meaningless
-                # ("the mutation worked" indistinguishable from "the baseline
-                # was already broken"), so this is raised rather than folded
-                # silently into the count.
-                raise AssertionError(
-                    f"{case}: the constructed compliant fixture for {floor_name} is "
-                    f"itself reported non-compliant ({before_finding['reason']}) — "
-                    "the fixture, not the mutation, is broken"
-                )
-            fixture.write_text(mutated_source, encoding="utf-8")
-            after = measure(tmp_dir)
-        still_clear = not any(f["name"] == floor_name for f in after["findings"])
-        if still_clear:
-            cleared.append({"case": case, "floor": floor_name})
+    with tempfile.TemporaryDirectory() as raw_tmp:
+        tmp_dir = Path(raw_tmp) / "integral"
+        shutil.copytree(_SRC_DIR, tmp_dir)
+        before = measure(tmp_dir)
+        already_broken = {(f["module"], f["name"]) for f in before["findings"]}
+        sites = [
+            site
+            for site in _swept_floor_sites(tmp_dir)
+            if (site[0].stem, site[1]) not in already_broken
+        ]
+        _apply_prose_mutation(sites)
+        after = measure(tmp_dir)
+    site_ids = sorted((module.stem, name, lineno) for module, name, lineno, _ in sites)
+    caught_after = {(f["module"], f["name"]) for f in after["findings"]}
+    cleared = [
+        {"module": module, "name": name, "lineno": lineno}
+        for module, name, lineno in site_ids
+        if (module, name) not in caught_after
+    ]
+
+    # F4: this battery's own denominator floor is a floor too — unpinned in
+    # its own instance until now (CLAUDE.md's "eighth face": a rule stated,
+    # mandated for others in this same diff, and unchecked for itself).
+    # `measure()` cannot check it — its only in-source comparison
+    # (`prose_measured["scenarios_checked"] < MINIMUM_PROSE_MUTATION_SCENARIOS`
+    # in `_main`) is against a runtime dict value no static sweep resolves, so
+    # `_classify_floor` correctly puts it out of scope there. `len(site_ids)`
+    # above is the one number that could ever answer it honestly, so it is
+    # checked here, by the same `_margin_finding` arithmetic every other floor
+    # gets — located by `_THIS_FILE` identity over `_SRC_DIR`, never over the
+    # `tmp_dir` copy, where that identity can never match (`_swept_floor_
+    # sites`'s own docstring).
+    self_site = next(
+        (
+            (module, name, lineno)
+            for module in _module_infos(_SRC_DIR)
+            if module.path.resolve() == _THIS_FILE
+            for name, lineno, _ in _module_constant_candidates(module.tree)
+            if name == "MINIMUM_PROSE_MUTATION_SCENARIOS"
+        ),
+        None,
+    )
+    self_finding = None
+    if self_site is not None:
+        self_module, self_name, self_lineno = self_site
+        self_comment = _comment_block_above(self_module.lines, self_lineno)
+        self_finding = _margin_finding(
+            self_module.stem,
+            self_name,
+            self_lineno,
+            MINIMUM_PROSE_MUTATION_SCENARIOS,
+            len(site_ids),
+            self_comment,
+        )
+
     return {
         "floors_cleared_by_prose_alone": len(cleared),
         "cleared": cleared,
-        "scenarios_checked": len(scenarios),
+        "scenarios_checked": len(site_ids),
+        "findings": [self_finding.as_dict()] if self_finding is not None else [],
         "gate_status": "measured",
     }
 
@@ -3221,12 +3537,21 @@ def _main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    if prose_measured["findings"]:
+        for finding in prose_measured["findings"]:
+            print(
+                f"✗ {finding['module']}.{finding['name']} ({finding['reason']}): "
+                f"{finding['detail']}",
+                file=sys.stderr,
+            )
+        return 1
+
     if prose_measured["floors_cleared_by_prose_alone"]:
         for cleared in prose_measured["cleared"]:
             print(
-                f"✗ {cleared['case']} ({cleared['floor']}) still reads compliant after "
-                "the floor was lowered and its comment replaced with prose asserting "
-                "deliberateness alone",
+                f"✗ {cleared['module']}.{cleared['name']} (line {cleared['lineno']}) still "
+                "reads compliant after the floor was lowered and its comment replaced with "
+                "prose asserting deliberateness alone",
                 file=sys.stderr,
             )
         return 1

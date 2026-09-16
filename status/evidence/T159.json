@@ -1,7 +1,7 @@
 {
   "floors_that_do_not_refuse_the_first_deletion": 0,
   "findings": [],
-  "dynamic_population_floors": [
+  "unpinnable_floors": [
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
@@ -56,6 +56,11 @@
       "module": "elicit_extract",
       "name": "MINIMUM_CHECKS",
       "line": 739
+    },
+    {
+      "module": "employer_boards",
+      "name": "MINIMUM_CONFORMING",
+      "line": 71
     },
     {
       "module": "extraction",
@@ -267,14 +272,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 2921,
+      "line": 3169,
       "population": 41
     },
     {
       "module": "floor_sweep",
+      "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
+      "line": 3196,
+      "population": 30
+    },
+    {
+      "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 2853,
-      "population": 81
+      "line": 3086,
+      "population": 82
     },
     {
       "module": "freshness",
@@ -488,6 +499,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 81,
+  "floors_swept_at_least": 82,
   "floors_arithmetically_checked_at_least": 36
 }

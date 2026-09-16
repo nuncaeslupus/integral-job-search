@@ -12,6 +12,7 @@ is the separate, complementary check that today's actual tree is clean.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -131,7 +132,7 @@ def test_a_margin_argued_in_writing_is_not_flagged(tmp_path: Path) -> None:
         f"""
 CASES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
 
-#: {floor_sweep.margin_marker(12, 20)}
+#: {floor_sweep.margin_marker("MINIMUM_CASES", 12, 20)}
 #: Raised from 5 when the audit landed more cases; deliberately kept some slack
 #: below the table because this floor is pinned to a third party's behaviour,
 #: not to this table's own size.
@@ -357,7 +358,7 @@ def test_a_dynamic_population_with_a_comment_is_compliant(tmp_path: Path) -> Non
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(3)}
+#: {floor_sweep.margin_marker("MINIMUM_TURNS", 3)}
 #: Deliberately small: the scripted scenario is expected to grow over time and
 #: this floor is raised alongside it, never derived from it.
 MINIMUM_TURNS = 3
@@ -378,7 +379,7 @@ def check():
     )
     measured = floor_sweep.measure(tmp_path)
     assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
-    assert len(measured["dynamic_population_floors"]) == 1
+    assert len(measured["unpinnable_floors"]) == 1
 
 
 def test_a_delegated_dynamic_population_is_recognised(tmp_path: Path) -> None:
@@ -431,11 +432,15 @@ MINIMUM_NEVER_USED = 3
 
 def test_two_floors_declared_together_both_read_the_shared_comment(tmp_path: Path) -> None:
     """`interview.MINIMUM_TRAIT_EPISODES` / `MINIMUM_TRAIT_OCCASIONS`'s shape: one
-    comment above the first of a pair, nothing directly above the second."""
+    comment block above the first of a pair, nothing directly above the second —
+    `_comment_block_above`'s walk-back still reads it for both (T163 round 2, F3:
+    each floor now finds its own named marker within that one shared block, rather
+    than the first floor's marker borrowed wholesale by the second)."""
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(2)}
+#: {floor_sweep.margin_marker("MINIMUM_A", 2)}
+#: {floor_sweep.margin_marker("MINIMUM_B", 2)}
 #: Deliberately small design minimum, not derived from either collection below —
 #: raised together and explained once for both.
 MINIMUM_A = 2
@@ -462,7 +467,7 @@ def check():
     )
     measured = floor_sweep.measure(tmp_path)
     assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
-    assert len(measured["dynamic_population_floors"]) == 2
+    assert len(measured["unpinnable_floors"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -805,7 +810,7 @@ def test_a_stale_zero_slack_claim_in_the_dynamic_branch_is_a_violation(tmp_path:
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(1)}
+#: {floor_sweep.margin_marker("MINIMUM_CASES", 1)}
 #: Raised to what the probe carries — 19, zero slack — because 10 had drifted
 #: nine checks under with no margin argued for the gap.
 MINIMUM_CASES = 1
@@ -835,7 +840,7 @@ def test_a_genuine_zero_slack_claim_in_the_dynamic_branch_is_compliant(tmp_path:
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(19)}
+#: {floor_sweep.margin_marker("MINIMUM_CASES", 19)}
 #: Raised to what the probe carries — 19, zero slack — because 10 had drifted
 #: nine checks under with no margin argued for the gap.
 MINIMUM_CASES = 19
@@ -856,7 +861,7 @@ def check():
     )
     measured = floor_sweep.measure(tmp_path)
     assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
-    assert len(measured["dynamic_population_floors"]) == 1
+    assert len(measured["unpinnable_floors"]) == 1
 
 
 def test_a_zero_slack_claim_wrapped_across_comment_lines_is_still_checked(tmp_path: Path) -> None:
@@ -865,7 +870,7 @@ def test_a_zero_slack_claim_wrapped_across_comment_lines_is_still_checked(tmp_pa
     sees an unmatched `#: ` between them and silently misses the claim."""
     _write(
         tmp_path,
-        f"#: {floor_sweep.margin_marker(1)}\n"
+        f"#: {floor_sweep.margin_marker('MINIMUM_CASES', 1)}\n"
         """# Raised to what the probe carries — 19, zero
 # slack — because 10 had drifted nine checks under.
 MINIMUM_CASES = 1
@@ -895,7 +900,7 @@ def test_a_spelled_out_zero_slack_claim_is_checked(tmp_path: Path) -> None:
     exactly the way it missed one of the task's three named floors."""
     _write(
         tmp_path,
-        f"#: {floor_sweep.margin_marker(1)}\n"
+        f"#: {floor_sweep.margin_marker('MINIMUM_FIELDS_CHECKED', 1)}\n"
         """# Ten today, matching the fixture exactly: zero slack, so deleting the first
 # row breaches this immediately.
 MINIMUM_FIELDS_CHECKED = 1
@@ -927,7 +932,7 @@ def test_a_zero_slack_claim_with_no_adjacent_number_is_not_accused(tmp_path: Pat
     check can falsify, so it is not one it accuses either."""
     _write(
         tmp_path,
-        f"#: {floor_sweep.margin_marker(1)}\n"
+        f"#: {floor_sweep.margin_marker('MINIMUM_TRAITS', 1)}\n"
         """# The record carries some other count of keys and this is one of them,
 # unrelated — no slack, but not stated as a specific figure.
 MINIMUM_TRAITS = 1
@@ -947,7 +952,7 @@ def check():
 """,
     )
     measured = floor_sweep.measure(tmp_path)
-    assert len(measured["dynamic_population_floors"]) == 1
+    assert len(measured["unpinnable_floors"]) == 1
     assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
 
 
@@ -1125,7 +1130,7 @@ def test_the_denominator_is_swapped_for_a_committed_floor() -> None:
         "floors_that_do_not_refuse_the_first_deletion": 0,
         "findings": [],
         "floors_swept": 999,
-        "dynamic_population_floors": [],
+        "unpinnable_floors": [],
         "bounds_read_and_out_of_scope": [],
         "gate_status": "measured",
     }
@@ -1225,7 +1230,7 @@ def test_dropping_a_zero_slack_dynamic_floor_to_zero_is_caught(tmp_path: Path) -
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(0)}
+#: {floor_sweep.margin_marker("MINIMUM_CASES", 0)}
 #: Raised to what the probe carries — 19, zero slack — because 10 had drifted
 #: nine checks under with no margin argued for the gap.
 MINIMUM_CASES = 0
@@ -1280,7 +1285,7 @@ def test_a_digit_inside_a_backtick_identifier_is_not_read_as_the_claim(tmp_path:
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(6)}
+#: {floor_sweep.margin_marker("MINIMUM_FIELDS_CHECKED", 6)}
 #: Ten today, matching `_D6_FIXTURE` exactly: zero slack, so deleting the
 #: first row breaches this immediately.
 MINIMUM_FIELDS_CHECKED = 6
@@ -1311,7 +1316,7 @@ def test_an_issue_reference_after_the_phrase_is_not_read_as_the_claim(tmp_path: 
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(159)}
+#: {floor_sweep.margin_marker("MINIMUM_CHECKS", 159)}
 #: Raised — 36, zero slack (T159).
 MINIMUM_CHECKS = 159
 
@@ -1651,7 +1656,7 @@ def _main():
     pinned = [p for p in measured["evidence_pinned_floors"] if p["name"] == "MINIMUM_CHECKS"]
     assert len(pinned) == 1
     assert pinned[0]["population"] == 19
-    assert measured["dynamic_population_floors"] == []
+    assert measured["unpinnable_floors"] == []
 
 
 def test_a_pinnable_population_read_through_a_dispatchers_own_parameter_is_pinned(
@@ -1712,7 +1717,7 @@ def test_a_parameter_with_two_call_sites_is_not_pinned_through(
     _write(
         tmp_path,
         f"""
-#: {floor_sweep.margin_marker(1)}
+#: {floor_sweep.margin_marker("MINIMUM_CHECKS", 1)}
 #: Argued so this stays a compliant, merely-unpinned floor rather than an
 #: undocumented one — the property under test is the refusal to pin through
 #: two callers, not the separate "no comment at all" check.
@@ -1749,7 +1754,7 @@ def _main_b():
 """,
     )
     measured = floor_sweep.measure(tmp_path)
-    names = {d["name"] for d in measured["dynamic_population_floors"]}
+    names = {d["name"] for d in measured["unpinnable_floors"]}
     pinned_names = {p["name"] for p in measured["evidence_pinned_floors"]}
     assert "MINIMUM_CHECKS" in names
     assert "MINIMUM_CHECKS" not in pinned_names
@@ -1775,7 +1780,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
 DEFAULT_D900_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D900.json"
 
-#: {floor_sweep.margin_marker(1)}
+#: {floor_sweep.margin_marker("MINIMUM_CHECKS", 1)}
 #: Argued so this stays a compliant, merely-unpinned floor — the property
 #: under test is the refusal to guess between two live evidence files, not
 #: the separate "no comment at all" check.
@@ -1801,7 +1806,7 @@ def _main(subject_gate):
 """,
     )
     measured = floor_sweep.measure(tmp_path)
-    names = {d["name"] for d in measured["dynamic_population_floors"]}
+    names = {d["name"] for d in measured["unpinnable_floors"]}
     pinned_names = {p["name"] for p in measured["evidence_pinned_floors"]}
     assert "MINIMUM_CHECKS" in names
     assert "MINIMUM_CHECKS" not in pinned_names
@@ -1868,7 +1873,7 @@ def test_the_sweeps_own_floor_argued_in_writing_is_compliant(
 PROBES = (1, 2, 3, 4, 5)
 MINIMUM_PROBES = 5
 
-#: {floor_sweep.margin_marker(1, 2)}
+#: {floor_sweep.margin_marker("MINIMUM_FLOORS_SWEPT", 1, 2)}
 #: One point of slack: this tiny tree sweeps two floors, and one is enough to
 #: leave a module edit unnoticed.
 MINIMUM_FLOORS_SWEPT = 1
@@ -1890,6 +1895,62 @@ def probe_one(probes=PROBES):
         if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_SWEPT"
     )
     assert pinned["population"] == 2
+
+
+def test_the_prose_battery_floor_is_swept_like_every_other_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F4: `MINIMUM_PROSE_MUTATION_SCENARIOS` sits in `measure`'s own
+    `bounds_read_and_out_of_scope` — correctly, since its one in-source
+    comparison (a runtime dict subscript inside `_main`) is not something a
+    static sweep can resolve — and until now nothing else ever checked it: a
+    rule this module enforces on every other floor, unpinned in its own
+    instance (CLAUDE.md's "eighth face"). `measure_prose_clearance` now
+    checks it itself, against the real `len(site_ids)` it just counted,
+    through the same `_margin_finding` arithmetic every other floor gets.
+    Matched by `_THIS_FILE` identity over `_SRC_DIR`, the same convention
+    `MINIMUM_FLOORS_SWEPT`'s own tests above already use, so a real silent
+    margin here is a real, computed breach, not a name-shaped exemption."""
+    fixture = _write(
+        tmp_path,
+        """
+PROBES = (1,)
+MINIMUM_PROBES = 1
+
+
+def probe_one(probes=PROBES):
+    if len(probes) < MINIMUM_PROBES:
+        raise SystemExit(1)
+
+
+MINIMUM_PROSE_MUTATION_SCENARIOS = 0
+
+
+def _main():
+    prose_measured = {"scenarios_checked": 3}
+    if prose_measured["scenarios_checked"] < MINIMUM_PROSE_MUTATION_SCENARIOS:
+        raise SystemExit(1)
+""",
+        name="floor_sweep",
+    )
+    monkeypatch.setattr(floor_sweep, "_SRC_DIR", tmp_path)
+    monkeypatch.setattr(floor_sweep, "_THIS_FILE", fixture.resolve())
+    # As in the sibling `MINIMUM_FLOORS_SWEPT` tests above: the fixture's own
+    # declared value and the live module attribute the arithmetic actually
+    # reads are kept in sync, deliberately at 0, so the one compliant
+    # `MINIMUM_PROBES` floor (population 1) is enough to force a real,
+    # positive margin rather than asserting against production's own 79.
+    monkeypatch.setattr(floor_sweep, "MINIMUM_PROSE_MUTATION_SCENARIOS", 0)
+    measured = floor_sweep.measure_prose_clearance()
+    assert (
+        measured["scenarios_checked"] == 1
+    )  # MINIMUM_PROBES alone; the self-floor stays out of scope
+    finding = next(
+        f
+        for f in measured["findings"]
+        if f["module"] == "floor_sweep" and f["name"] == "MINIMUM_PROSE_MUTATION_SCENARIOS"
+    )
+    assert finding["reason"] == "silent_margin"
 
 
 def _raw_committed_at_claim(comment: str) -> int | None:
@@ -1949,7 +2010,7 @@ def test_the_sweeps_own_floor_is_pinned_compliant_on_the_live_tree() -> None:
     assert pinned["population"] == measured["floors_swept"]
     assert not any(
         d["module"] == "floor_sweep" and d["name"] == "MINIMUM_FLOORS_SWEPT"
-        for d in measured["dynamic_population_floors"]
+        for d in measured["unpinnable_floors"]
     )
 
     module_info = next(
@@ -2028,6 +2089,55 @@ def test_the_arithmetically_checked_self_floor_is_pinned_compliant_on_the_live_t
         )
 
 
+def test_the_evidence_pinned_self_floor_is_pinned_compliant_on_the_live_tree() -> None:
+    """The same genuinely-independent recomputation as above (R4-6, round 5),
+    for this round's own denominator (`MINIMUM_FLOORS_EVIDENCE_PINNED`, F2).
+    Its own pin is appended after the count it is checked against, so the
+    population this floor's pin records is the *final* list length, not the
+    count taken just before its own entry was appended."""
+    measured = floor_sweep.measure()
+    pinned = next(
+        (
+            p
+            for p in measured["evidence_pinned_floors"]
+            if p["module"] == "floor_sweep" and p["name"] == "MINIMUM_FLOORS_EVIDENCE_PINNED"
+        ),
+        None,
+    )
+    assert pinned is not None, (
+        "MINIMUM_FLOORS_EVIDENCE_PINNED is not pinned compliant on the live tree "
+        f"— it produced a finding instead: {measured['findings']}"
+    )
+    assert pinned["population"] == len(measured["evidence_pinned_floors"])
+
+    module_info = next(
+        m
+        for m in floor_sweep._module_infos(floor_sweep._SRC_DIR)
+        if m.path.resolve() == floor_sweep._THIS_FILE
+    )
+    lineno = next(
+        lineno
+        for name, lineno, _ in floor_sweep._module_constant_candidates(module_info.tree)
+        if name == "MINIMUM_FLOORS_EVIDENCE_PINNED"
+    )
+    comment = floor_sweep._comment_block_above(module_info.lines, lineno)
+
+    committed_at = _raw_committed_at_claim(comment)
+    if committed_at is not None:
+        assert committed_at == floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED, (
+            f"comment claims 'Committed at {committed_at}', but the real declaration is "
+            f"{floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED}"
+        )
+    points_of_slack = _raw_points_of_slack_claim(comment)
+    if points_of_slack is not None:
+        real_margin = pinned["population"] - floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED
+        assert points_of_slack == real_margin, (
+            f"comment claims {points_of_slack} points of slack, but the real margin is "
+            f"{real_margin} ({pinned['population']} measured minus "
+            f"{floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED} declared)"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Round 4 — PR #436 round 3's second reader's seven findings, reproduced as
 # fixtures. F1 (the arithmetic branch has no floor of its own), F2 (a
@@ -2055,7 +2165,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T900.json"
 
-#: {floor_sweep.margin_marker(19)}
+#: {floor_sweep.margin_marker("MINIMUM_CHECKS", 19)}
 #: On a scripted probe's own running tally, chosen to match what it carries.
 MINIMUM_CHECKS = 19
 
@@ -2088,7 +2198,7 @@ def _main():
     without_evidence = floor_sweep.measure(tmp_path)
     assert without_evidence["floors_swept"] == with_evidence["floors_swept"]
     assert without_evidence["arithmetically_checked"] == 0
-    dynamic_names = {d["name"] for d in without_evidence["dynamic_population_floors"]}
+    dynamic_names = {d["name"] for d in without_evidence["unpinnable_floors"]}
     assert "MINIMUM_CHECKS" in dynamic_names
     assert without_evidence["floors_that_do_not_refuse_the_first_deletion"] == 0
 
@@ -2149,7 +2259,7 @@ def test_a_marker_value_that_no_longer_matches_the_declaration_is_a_violation(
         f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-#: {floor_sweep.margin_marker(9, 9)}
+#: {floor_sweep.margin_marker("MINIMUM_PROBES", 9, 9)}
 MINIMUM_PROBES = 1
 
 
@@ -2171,7 +2281,7 @@ def test_a_correct_marker_is_compliant(tmp_path: Path) -> None:
         f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-#: {floor_sweep.margin_marker(6, 9)}
+#: {floor_sweep.margin_marker("MINIMUM_PROBES", 6, 9)}
 #: Deliberately kept below PROBES on purpose.
 MINIMUM_PROBES = 6
 
@@ -2201,7 +2311,7 @@ def test_a_marker_population_that_no_longer_matches_the_real_population_is_a_vio
         f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-#: {floor_sweep.margin_marker(1, 5)}
+#: {floor_sweep.margin_marker("MINIMUM_PROBES", 1, 5)}
 #: Deliberately kept below PROBES on purpose.
 MINIMUM_PROBES = 1
 
@@ -2228,7 +2338,7 @@ def test_a_marker_with_no_explanation_beside_it_is_a_violation(tmp_path: Path) -
         f"""
 PROBES = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-#: {floor_sweep.margin_marker(1, 9)}
+#: {floor_sweep.margin_marker("MINIMUM_PROBES", 1, 9)}
 MINIMUM_PROBES = 1
 
 
@@ -2650,7 +2760,7 @@ def test_a_starred_unpacked_tuple_population_with_a_comment_is_dynamic_and_compl
 BASE_PROBES = tuple(f"p{{i}}" for i in range(20))
 PROBES = (*BASE_PROBES, "extra")
 
-#: {floor_sweep.margin_marker(2)}
+#: {floor_sweep.margin_marker("MINIMUM_PROBES", 2)}
 #: This population is built with a starred unpack, so it cannot be counted
 #: from source; kept small on purpose.
 MINIMUM_PROBES = 2
@@ -2665,7 +2775,7 @@ def measure():
     assert measured["floors_that_do_not_refuse_the_first_deletion"] == 0
     assert any(
         d["module"] == "mod" and d["name"] == "MINIMUM_PROBES"
-        for d in measured["dynamic_population_floors"]
+        for d in measured["unpinnable_floors"]
     )
     del fixture
 
@@ -2727,7 +2837,7 @@ def measure(probes=PROBES):
     measured = floor_sweep.measure(tmp_path)
     assert "mod.MINIMUM_PROBES" in measured["bounds_read_and_out_of_scope"]
     assert not any(f["module"] == "mod" for f in measured["findings"])
-    assert not any(d["module"] == "mod" for d in measured["dynamic_population_floors"])
+    assert not any(d["module"] == "mod" for d in measured["unpinnable_floors"])
     del fixture
 
 
@@ -2841,7 +2951,7 @@ PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 # An earlier round discussed this module's own margin arithmetic at length,
 # and whether a margin was computed at all.
 #
-#: {floor_sweep.margin_marker(2, 10)}
+#: {floor_sweep.margin_marker("MINIMUM_PROBES", 2, 10)}
 #: Kept small on purpose: this floor is pinned to a third party's own
 #: behaviour, not to this table's own size.
 MINIMUM_PROBES = 2
@@ -2867,7 +2977,7 @@ def test_a_marker_in_an_earlier_paragraph_is_not_accepted(tmp_path: Path) -> Non
         f"""
 PROBES = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
-#: {floor_sweep.margin_marker(2, 10)}
+#: {floor_sweep.margin_marker("MINIMUM_PROBES", 2, 10)}
 #: An earlier round's own claim, now stale history rather than an argument
 #: for the declaration below.
 #
@@ -2902,3 +3012,361 @@ def test_last_comment_paragraph_drops_earlier_paragraphs() -> None:
     result = floor_sweep._last_comment_paragraph(comment)
     assert "margin" not in result
     assert "Second paragraph" in result
+
+
+# ---------------------------------------------------------------------------
+# T163 round 3 (second-reader BLOCK on #488): the 12 cases that round's
+# report accepted, committed as fixtures.
+# ---------------------------------------------------------------------------
+
+
+def test_an_empty_builder_call_is_not_a_population_of_zero(tmp_path: Path) -> None:
+    """C1: `hosts: set[str] = set()`, filled by `hosts.add(...)` in a loop and
+    read in a different function via a dict key -- `employer_boards.
+    MINIMUM_CONFORMING`'s exact shape. Before F1, the empty `set()` call
+    resolved as a literal population of 0, so even `MINIMUM_HOSTS = 0`
+    (margin `0 - 0 = 0`) cleared with zero scrutiny -- no comment, no marker,
+    nothing checked. A finding at any value proves the fix: this is now the
+    dynamic branch, which always requires a marker."""
+    _write(
+        tmp_path,
+        """
+MINIMUM_HOSTS = 0
+
+
+def probe():
+    hosts = set()
+    for candidate in ("a", "b", "c"):
+        hosts.add(candidate)
+    return {"hosts_count": len(hosts)}
+
+
+def check():
+    measured = probe()
+    if measured["hosts_count"] < MINIMUM_HOSTS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_HOSTS")
+    assert finding["reason"] == "undocumented"
+
+
+def test_an_empty_dict_builder_is_not_a_population_of_zero(tmp_path: Path) -> None:
+    """C13: `cache = {}`, filled by subscript assignment (`cache[key] = ...`)
+    in a loop -- the other empty-builder shape the old guard never matched
+    (it only matched `.append`/`.add`/`.update`/`.extend`, never a bare `{}`
+    filled by subscript). Same fix, same proof: a finding at any value."""
+    _write(
+        tmp_path,
+        """
+MINIMUM_ENTRIES = 0
+
+
+def probe():
+    cache = {}
+    for key in ("a", "b", "c"):
+        cache[key] = True
+    return {"entries_count": len(cache)}
+
+
+def check():
+    measured = probe()
+    if measured["entries_count"] < MINIMUM_ENTRIES:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_ENTRIES")
+    assert finding["reason"] == "undocumented"
+
+
+def test_a_list_builder_stays_dynamic(tmp_path: Path) -> None:
+    """C12: the passing control -- `[]` filled by `.append()` in a loop was
+    already `_DYNAMIC` before F1 (the old guard's one matched shape). Keeps
+    1 and 2 honest: this fix must not have broken the case that already
+    worked."""
+    _write(
+        tmp_path,
+        """
+MINIMUM_SEEN = 0
+
+
+def probe():
+    seen = []
+    for candidate in ("a", "b", "c"):
+        seen.append(candidate)
+    return {"seen_count": len(seen)}
+
+
+def check():
+    measured = probe()
+    if measured["seen_count"] < MINIMUM_SEEN:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_SEEN")
+    assert finding["reason"] == "undocumented"
+
+
+def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None:
+    """F1's closed rule, generated from the real tree rather than trusting
+    the three hand-constructed spellings above (`set()`+`.add`, `{}`+
+    subscript, `[]`+`.append`): every function in this repository that binds
+    an empty-builder collection and fills it afterward must resolve that
+    name as `_DYNAMIC`, never a literal population of zero -- the exact
+    shape `employer_boards.MINIMUM_CONFORMING` was cleared through before
+    F1. Walking the real tree rather than only the three constructed cases
+    means a fourth shape this task did not think to construct is still
+    caught."""
+    checked = 0
+    for module in floor_sweep._module_infos(floor_sweep._SRC_DIR):
+        for func in ast.walk(module.tree):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for node in ast.walk(func):
+                if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                    target, value = node.targets[0], node.value
+                elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                    target, value = node.target, node.value
+                else:
+                    continue
+                if not isinstance(target, ast.Name):
+                    continue
+                if not floor_sweep._is_empty_builder(value):
+                    continue
+                if not floor_sweep._filled_after_binding(func, target.id):
+                    continue
+                checked += 1
+                kind, count = floor_sweep._collection_kind(
+                    ast.Name(id=target.id, ctx=ast.Load()),
+                    module.tree,
+                    func,
+                    None,
+                    0,
+                )
+                assert (kind, count) != (floor_sweep._LITERAL, 0), (
+                    f"{module.stem}.{func.name}: {target.id} is bound empty and filled "
+                    "later, but resolved as a literal population of zero"
+                )
+    assert checked > 0
+
+
+def test_employer_boards_minimum_conforming_is_not_cleared_by_prose() -> None:
+    """F1's live regression: `employer_boards.MINIMUM_CONFORMING` is checked
+    against `hosts: set[str] = set()`, filled by `hosts.add(...)` in a loop
+    -- before F1 this resolved as a literal population of zero, clearing the
+    floor through the arithmetic branch (`margin = 0 - 5 = -5 <= 0`) with no
+    comment or marker ever read. Pins that on the live tree this floor is
+    now classified dynamic (`unpinnable_floors`, marker-checked), never
+    silently compliant via a phantom zero population."""
+    measured = floor_sweep.measure()
+    names = {d["name"] for d in measured["unpinnable_floors"] if d["module"] == "employer_boards"}
+    assert "MINIMUM_CONFORMING" in names
+    assert not any(
+        f["module"] == "employer_boards" and f["name"] == "MINIMUM_CONFORMING"
+        for f in measured["findings"]
+    )
+
+
+def test_a_dynamic_marker_restated_at_the_lowered_value_is_not_an_argument(
+    tmp_path: Path,
+) -> None:
+    """F2: a dynamic (unpinnable) floor's marker is checked only against the
+    literal value beside it -- the exact circular comparison a single commit
+    can always satisfy by lowering the value and restating the same number
+    in the marker. Nothing in this branch has an independent number to check
+    a `value=` claim against (unlike the arithmetic/evidence-pinned
+    branches, whose `population=` claim is checked against a resolved or
+    committed population): a genuinely dynamic population -- a third
+    party's own behaviour, a live replay -- has no ground truth this static
+    sweep could consult, and extending evidence-pinning to guess one is
+    T164's registry, out of this task's scope.
+
+    So a restated marker is never treated as *proof*: this pins that such a
+    floor still lands only in `unpinnable_floors`, never `evidence_pinned_
+    floors` or `arithmetically_checked` -- the marker buys silence (no
+    finding), not verification, and the sweep's own renamed vocabulary
+    (`UnpinnableFloor`, not `EvidencePinnedFloor`) says so. A residual gap
+    this does not close: nothing here can tell a genuine, freshly-emitted
+    marker from one hand-forged in the same commit that lowered the value --
+    see F2's closing discussion in the round-3 review for the fuller remedy
+    (emission tooling, or an explicit committed floor on the unpinnable
+    count) this task deliberately leaves for a follow-up rather than
+    widening into T164's registry."""
+    fixture = _write(
+        tmp_path,
+        f"""
+#: {floor_sweep.margin_marker("MINIMUM_TURNS", 1)}
+#: The margin here is deliberate.
+MINIMUM_TURNS = 1
+
+
+def probe():
+    turns = 0
+    for _ in range(5):
+        turns += 1
+    return {{"turns_evaluated": turns}}
+
+
+def check():
+    measured = probe()
+    if measured["turns_evaluated"] < MINIMUM_TURNS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    assert measured["findings"] == []
+    names = {d["name"] for d in measured["unpinnable_floors"]}
+    assert "MINIMUM_TURNS" in names
+    assert not any(d["name"] == "MINIMUM_TURNS" for d in measured["evidence_pinned_floors"])
+    assert measured["arithmetically_checked"] == 0
+    del fixture
+
+
+def test_every_dynamic_floor_is_mutated_by_the_prose_battery(tmp_path: Path) -> None:
+    """F6's closed rule: `_swept_floor_sites` -- what the prose battery
+    mutates -- does not distinguish branches. An arithmetic floor and a
+    dynamic (unpinnable) floor in the same tree are both discovered and both
+    mutated by the identical call, so a dynamic floor can never sit outside
+    the battery the way the original version (two hand-picked fixtures, one
+    per branch) silently could."""
+    _write(
+        tmp_path,
+        f"""
+#: {floor_sweep.margin_marker("MINIMUM_TURNS", 3)}
+#: Deliberately small: grows with the scripted scenario, never derived from it.
+MINIMUM_TURNS = 3
+
+MINIMUM_ITEMS = 3
+
+
+def probe():
+    turns = 0
+    for _ in range(5):
+        turns += 1
+    items = [1, 2, 3]
+    return {{"turns_evaluated": turns, "items_seen": len(items)}}
+
+
+def check():
+    measured = probe()
+    if measured["turns_evaluated"] < MINIMUM_TURNS:
+        raise SystemExit(1)
+    if measured["items_seen"] < MINIMUM_ITEMS:
+        raise SystemExit(1)
+""",
+    )
+    before = floor_sweep.measure(tmp_path)
+    assert before["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert {d["name"] for d in before["unpinnable_floors"]} == {"MINIMUM_TURNS"}
+    sites = floor_sweep._swept_floor_sites(tmp_path)
+    assert {name for _, name, _, _ in sites} == {"MINIMUM_TURNS", "MINIMUM_ITEMS"}
+    floor_sweep._apply_prose_mutation(sites)
+    after = floor_sweep.measure(tmp_path)
+    caught = {f["name"] for f in after["findings"] if f["module"] == "mod"}
+    assert {"MINIMUM_TURNS", "MINIMUM_ITEMS"} <= caught
+
+
+def test_a_second_floor_does_not_borrow_its_neighbours_marker(tmp_path: Path) -> None:
+    """C7: two dynamic floors share one comment block; only the first is
+    named in a marker. The second must not read as argued too -- distinct
+    from `test_two_floors_declared_together_both_read_the_shared_comment`,
+    where both floors are separately named; here only one is, and F3's fix
+    must still catch the borrow."""
+    _write(
+        tmp_path,
+        f"""
+#: {floor_sweep.margin_marker("MINIMUM_A", 2)}
+#: Deliberately small design minimum, not derived from either collection below.
+MINIMUM_A = 2
+MINIMUM_B = 2
+
+
+def probe():
+    a = []
+    for _ in range(5):
+        a.append(1)
+    b = []
+    for _ in range(5):
+        b.append(1)
+    return {{"a_count": len(a), "b_count": len(b)}}
+
+
+def check():
+    measured = probe()
+    if measured["a_count"] < MINIMUM_A:
+        raise SystemExit(1)
+    if measured["b_count"] < MINIMUM_B:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_B")
+    assert finding["reason"] == "silent_margin"
+    assert not any(f["name"] == "MINIMUM_A" for f in measured["findings"])
+
+
+def test_a_second_arithmetic_floor_does_not_borrow_its_neighbours_marker(
+    tmp_path: Path,
+) -> None:
+    """C9: the arithmetic-branch control for C7 -- two floors, both with a
+    positive margin (so both require a marker), sharing one comment block
+    with only the first named. The passing control that keeps 7 and 8
+    honest: the borrow must be caught on this branch exactly as it is on the
+    dynamic one."""
+    _write(
+        tmp_path,
+        f"""
+#: {floor_sweep.margin_marker("MINIMUM_A", 2, 3)}
+#: Deliberately small design minimum, not derived from either collection below.
+MINIMUM_A = 2
+MINIMUM_B = 2
+
+
+def check():
+    a = [1, 2, 3]
+    b = [1, 2, 3]
+    if len(a) < MINIMUM_A:
+        raise SystemExit(1)
+    if len(b) < MINIMUM_B:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_B")
+    assert finding["reason"] == "silent_margin"
+    assert not any(f["name"] == "MINIMUM_A" for f in measured["findings"])
+
+
+def test_a_dynamic_marker_may_not_state_a_population(tmp_path: Path) -> None:
+    """C10/F5: a marker on the dynamic branch that also claims `population=`
+    used to be accepted and simply never checked -- a stated number this
+    sweep cannot verify, reading as more rigorous than the honest
+    `value=`-alone marker this branch actually requires. Now a finding of
+    its own."""
+    _write(
+        tmp_path,
+        f"""
+#: {floor_sweep.margin_marker("MINIMUM_TURNS", 3, 10)}
+#: Deliberately small: the scripted scenario is expected to grow over time.
+MINIMUM_TURNS = 3
+
+
+def probe():
+    turns = 0
+    for _ in range(5):
+        turns += 1
+    return {{"turns_evaluated": turns}}
+
+
+def check():
+    measured = probe()
+    if measured["turns_evaluated"] < MINIMUM_TURNS:
+        raise SystemExit(1)
+""",
+    )
+    measured = floor_sweep.measure(tmp_path)
+    finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_TURNS")
+    assert finding["reason"] == "population_on_dynamic_floor"
