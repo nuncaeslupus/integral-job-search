@@ -3110,6 +3110,31 @@ def check():
     assert finding["reason"] == "undocumented"
 
 
+_EMPTY_BUILDER_CALL_SPELLINGS = frozenset({"set", "list", "dict", "frozenset"})
+
+
+def _is_empty_collection_spelling(rhs: ast.expr, call_names: frozenset[str]) -> bool:
+    """An empty collection literal or a no-arg call to one of `call_names`,
+    computed independently of `floor_sweep._is_empty_builder` -- the very
+    predicate this guard test used to borrow. Round 8 second reader on #488:
+    when round 7 narrowed that production predicate to exclude `frozenset()`,
+    this test's own candidate selection narrowed with it and silently stopped
+    checking frozenset bindings at all, the exact "fixture whose execution
+    path never arrives" shape. Reimplementing the shape here means a future
+    change to the production predicate can no longer shrink what this guard
+    checks without also editing this function."""
+    if isinstance(rhs, (ast.List, ast.Set)) and not rhs.elts:
+        return True
+    if isinstance(rhs, ast.Dict) and not rhs.keys:
+        return True
+    return (
+        isinstance(rhs, ast.Call)
+        and isinstance(rhs.func, ast.Name)
+        and rhs.func.id in call_names
+        and not rhs.args
+    )
+
+
 def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None:
     """F1's closed rule, generated from the real tree -- and, as of round 4
     (R3-3), no longer filtered by `_filled_after_binding`, the very
@@ -3136,7 +3161,26 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
     straight into a terminal branch that used to answer `_LITERAL, 0`
     unconditionally -- the same phantom-zero shape F1 fixed for one call
     path, still open for this one, until this round moved the fix into the
-    terminal branches themselves."""
+    terminal branches themselves.
+
+    Round 8 (F-round-8): candidate selection for both loops below no longer
+    calls `floor_sweep._is_empty_builder` -- see `_is_empty_collection_
+    spelling` above. The function-local loop uses all four names: a name's
+    *last visible binding* being empty-builder-shaped is never a safe literal
+    zero, whichever of the four spellings it is, because
+    `_assignments_to_name` cannot see an `ast.AugAssign` rebind
+    (`built |= {x}`) that might follow it. The module-level loop still
+    excludes `frozenset()` -- but now by an explicit local decision, not by
+    inheriting whatever the production predicate happens to exclude: module-
+    level resolution (`_module_level_value`/`_module_level_literal_collection`)
+    reaches the terminal `Call` branch directly, resolving the name's first
+    top-level binding rather than walking a reassignment list, so it is not
+    subject to the `ast.AugAssign` blind spot the function-local path has.
+    `connector_shape.EXECUTED_ENTRIES: frozenset[str] = frozenset()`, the
+    live tree's only module-level frozenset binding, is never reassigned
+    anywhere in that module -- a genuine permanent population of zero, and
+    `_LITERAL, 0` is the correct answer for it, not a bug this test should
+    flag."""
     checked = 0
     for module in floor_sweep._module_infos(floor_sweep._SRC_DIR):
         for func in ast.walk(module.tree):
@@ -3151,7 +3195,7 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
                     continue
                 if not isinstance(target, ast.Name):
                     continue
-                if not floor_sweep._is_empty_builder(value):
+                if not _is_empty_collection_spelling(value, _EMPTY_BUILDER_CALL_SPELLINGS):
                     continue
                 checked += 1
                 kind, count = floor_sweep._collection_kind(
@@ -3174,13 +3218,9 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
                 continue
             if not isinstance(target, ast.Name):
                 continue
-            if not floor_sweep._is_empty_builder(value):
-                # Round 6 (F3): `_is_empty_builder` itself now excludes
-                # `frozenset()` -- immutable, so an empty one can never later
-                # gain an item and `(_LITERAL, 0)` is the correct, permanent
-                # answer (see the terminal `Call` branch's own comment). A
-                # module-level `frozenset()` binding is skipped here for that
-                # reason, not carved out by hand as it was before round 6.
+            if not _is_empty_collection_spelling(
+                value, _EMPTY_BUILDER_CALL_SPELLINGS - {"frozenset"}
+            ):
                 continue
             checked += 1
             kind, count = floor_sweep._collection_kind(
@@ -3346,7 +3386,7 @@ def probe_dict_literal():
 _EMPTY_BUILDER_FILL_IDIOM = {
     "dict": 'built["k"] = 1',
     "set": 'built.add("k")',
-    "frozenset": "pass  # immutable -- nothing to fill",
+    "frozenset": "built |= {'k'}  # rebinds the name; _assignments_to_name can't see it",
     "list": 'built.append("k")',
 }
 
@@ -3371,11 +3411,14 @@ def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutof
     exercised here without anyone remembering to hand-add a case, or this
     test fails loudly asking for its fill idiom.
 
-    Round 6 (F3): `frozenset()` is the one name in the enumeration this test
-    does NOT expect `_DYNAMIC` for. It is immutable, so the direct check now
-    answers `_LITERAL, 0` for it at the same zero-recursion cost as every
-    other name's `_DYNAMIC` — still without falling into the depth-6 cutoff
-    this test exists to guard against."""
+    Round 6 (F3) briefly special-cased `frozenset()` here as the one name not
+    expecting `_DYNAMIC`, reasoning from the *object*'s immutability. Round 8
+    second reader on #488: the object is immutable, but the *name* is not —
+    `built |= {...}` rebinds it via an `ast.AugAssign` that `_assignments_to_
+    name` never sees, so a `frozenset()`-shaped last-visible-`Assign` is no
+    safer a permanent zero than `set()`'s. All four names now expect
+    `_DYNAMIC` at the same zero-recursion cost, still without falling into
+    the depth-6 cutoff this test exists to guard against."""
     assert set(_EMPTY_BUILDER_FILL_IDIOM) == floor_sweep._EMPTY_BUILDER_CALL_NAMES, (
         "a name was added to or removed from floor_sweep._EMPTY_BUILDER_CALL_NAMES "
         "without updating _EMPTY_BUILDER_FILL_IDIOM to match"
@@ -3400,9 +3443,7 @@ def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutof
         kind, count = floor_sweep._collection_kind(
             ast.Name(id="built", ctx=ast.Load()), module.tree, func, None, 5
         )
-        expected = (
-            (floor_sweep._LITERAL, 0) if name == "frozenset" else (floor_sweep._DYNAMIC, None)
-        )
+        expected = (floor_sweep._DYNAMIC, None)
         assert (kind, count) == expected, (
             f"{func_name}: at depth 5, the direct empty-builder check must answer "
             f"{expected} without recursing; got {(kind, count)}"

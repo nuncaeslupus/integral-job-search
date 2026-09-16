@@ -1474,20 +1474,26 @@ _EMPTY_BUILDER_CALL_NAMES = frozenset({"set", "list", "dict", "frozenset"})
 
 def _is_empty_builder(rhs: ast.expr) -> bool:
     """True if `rhs` is, directly and without resolving anything, an empty
-    *mutable* collection literal or a no-argument mutable-builder call: `[]`,
-    `{}`, `set()`, `dict()` — the phantom-fillable shapes a name can be
-    reassigned to and later filled elsewhere, which the caller forces to
-    `_DYNAMIC` rather than trusting as a permanent zero. `frozenset()` is
-    deliberately excluded even though it is in `_EMPTY_BUILDER_CALL_NAMES`:
-    it is immutable, so `_collection_kind`'s own `Call` branch (round 5, F4)
-    resolves it to `_LITERAL, 0` — this function returning `True` for it too
-    would force that same immutable, permanently-empty shape to `_DYNAMIC`
-    whenever it is reached through this name-reassignment path instead,
-    contradicting the direct path for no reason (round 6, F3). Anything less
-    direct (a name bound through another name, a subscript, a same-module
-    call whose return isn't one of these literal shapes) is left to the
-    general recursive path in `_collection_kind`, which still classifies it,
-    just at that path's usual cost."""
+    collection literal or a no-argument builtin-collection call: `[]`, `{}`,
+    `set()`, `dict()`, `frozenset()` — every phantom-fillable shape a *name*
+    can be bound to. `frozenset()` is included here even though the object it
+    builds is immutable: this function is only ever consulted while resolving
+    a name's own *last binding*, and the name itself is not immutable — round
+    7's second reader found a name whose last plain `ast.Assign` was
+    `built = frozenset()` still classified `_LITERAL, 0` even when the name
+    was in fact rebound later by an idiom `_assignments_to_name` cannot see
+    (`built |= {x}` is an `ast.AugAssign`, not a tracked `ast.Assign`), the
+    exact phantom-zero shape this sweep exists to catch, now reintroduced by
+    trusting the object's immutability as if it were the name's. The direct
+    value-position case (`_collection_kind`'s own terminal `Call` branch,
+    reached without going through a name at all — a default parameter, a
+    dict value, a module-level constant) is unaffected: there is no name
+    there to rebind, so `frozenset()` still resolves to a permanent
+    `_LITERAL, 0`. Anything less direct than what this function checks (a
+    name bound through another name, a subscript, a same-module call whose
+    return isn't one of these literal shapes) is left to the general
+    recursive path in `_collection_kind`, which still classifies it, just at
+    that path's usual cost."""
     if isinstance(rhs, (ast.List, ast.Set)) and not rhs.elts:
         return True
     if isinstance(rhs, ast.Dict) and not rhs.keys:
@@ -1496,7 +1502,6 @@ def _is_empty_builder(rhs: ast.expr) -> bool:
         isinstance(rhs, ast.Call)
         and isinstance(rhs.func, ast.Name)
         and rhs.func.id in _EMPTY_BUILDER_CALL_NAMES
-        and rhs.func.id != "frozenset"
         and not rhs.args
     )
 
@@ -1804,25 +1809,18 @@ def _collection_kind(
                 # computes `margin=-5`, `margin <= 0`, compliant — before any
                 # marker is read.
                 #
-                # Round 6 (F3): `frozenset()` is checked ahead of
-                # `_is_empty_builder`, at the same zero-depth-recursion cost,
-                # rather than folded into it — `_is_empty_builder` forcing
-                # `_DYNAMIC` for `frozenset()` made this path disagree with
-                # the terminal `Call` branch's own `_LITERAL, 0` for the same
-                # immutable shape, reached only when `built = frozenset()`
-                # happens to resolve through *this* name-reassignment path
-                # instead. Letting `_is_empty_builder` fall through to the
-                # general recursive fallback for `frozenset()` instead would
-                # fix the disagreement but reintroduce the depth-cutoff bug
-                # this comment already describes (one wasted hop of the
-                # `depth > 5` budget for a shape already visible here).
-                if (
-                    isinstance(rhs, ast.Call)
-                    and isinstance(rhs.func, ast.Name)
-                    and rhs.func.id == "frozenset"
-                    and not rhs.args
-                ):
-                    return _LITERAL, 0
+                # Round 8 second reader on #488: rounds 6 and 7 carved
+                # `frozenset()` out of this check on the theory that an
+                # immutable object is a permanent zero regardless of path.
+                # True of the *object*, false of the *name* — `built` here
+                # can still be rebound to something else, including by an
+                # idiom `_assignments_to_name` above cannot see at all
+                # (`built |= {x}` is an `ast.AugAssign`), so a `frozenset()`
+                # last-`ast.Assign`-visible binding is no safer a permanent
+                # zero than `set()`'s. Left in `_is_empty_builder` alongside
+                # the other three names; the direct value-position case (the
+                # terminal `Call` branch below, reached without resolving a
+                # name at all) is untouched and still answers `_LITERAL, 0`.
                 if _is_empty_builder(rhs):
                     return _DYNAMIC, None
                 rhs_kind, rhs_count = _collection_kind(rhs, tree, func, before_lineno, depth + 1)
