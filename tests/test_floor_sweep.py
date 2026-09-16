@@ -3111,15 +3111,20 @@ def check():
 
 
 def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None:
-    """F1's closed rule, generated from the real tree rather than trusting
-    the three hand-constructed spellings above (`set()`+`.add`, `{}`+
-    subscript, `[]`+`.append`): every function in this repository that binds
-    an empty-builder collection and fills it afterward must resolve that
-    name as `_DYNAMIC`, never a literal population of zero -- the exact
-    shape `employer_boards.MINIMUM_CONFORMING` was cleared through before
-    F1. Walking the real tree rather than only the three constructed cases
-    means a fourth shape this task did not think to construct is still
-    caught."""
+    """F1's closed rule, generated from the real tree -- and, as of round 4
+    (R3-3), no longer filtered by `_filled_after_binding`, the very
+    predicate F1 shipped and this test used to trust to pick its own
+    population. That predicate was an open-ended enumeration of fill idioms
+    (`.append`/`.add`/`.update`/`.extend`, subscript-assign) with no last
+    element: a second reader found three ordinary `AugAssign` spellings it
+    missed (`rows[k] += 1`, `rows |= {k}`, `rows += [k]`), pre-filtered out
+    of this test's own `checked` count, so a regression in exactly that
+    shape could never turn this test red. Production code (`_collection_
+    kind`) dropped the fill check entirely for the same reason -- see its
+    comment at the empty-builder branch -- so this test now walks every
+    empty-builder binding in the tree, filled or not, matching what
+    production actually decides: no such binding may resolve to a literal
+    population of zero, full stop."""
     checked = 0
     for module in floor_sweep._module_infos(floor_sweep._SRC_DIR):
         for func in ast.walk(module.tree):
@@ -3136,8 +3141,6 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
                     continue
                 if not floor_sweep._is_empty_builder(value):
                     continue
-                if not floor_sweep._filled_after_binding(func, target.id):
-                    continue
                 checked += 1
                 kind, count = floor_sweep._collection_kind(
                     ast.Name(id=target.id, ctx=ast.Load()),
@@ -3147,10 +3150,118 @@ def test_the_live_tree_has_no_floor_with_a_resolved_population_of_zero() -> None
                     0,
                 )
                 assert (kind, count) != (floor_sweep._LITERAL, 0), (
-                    f"{module.stem}.{func.name}: {target.id} is bound empty and filled "
-                    "later, but resolved as a literal population of zero"
+                    f"{module.stem}.{func.name}: {target.id} is bound to an empty "
+                    "builder, but resolved as a literal population of zero"
                 )
     assert checked > 0
+
+
+def test_an_augassign_fill_is_not_a_literal_population_of_zero(tmp_path: Path) -> None:
+    """R3-3's exact reproduction: three `AugAssign` fill idioms
+    `_filled_after_binding` never recognized (subscript increment, `|=` on a
+    set, `+=` list concatenation), each starting from an `_is_empty_builder`
+    binding. Before round 4's fix, all three fell through to
+    `_collection_kind`'s empty-builder branch with no `_filled_after_binding`
+    match, resolving as a phantom `(_LITERAL, 0)` -- clearing a floor
+    compared against them with no marker ever read, exactly like
+    `employer_boards.MINIMUM_CONFORMING` before F1. Checked directly against
+    `_collection_kind`, the same way `test_the_live_tree_has_no_floor_with_a_
+    resolved_population_of_zero` checks the real tree, rather than through
+    the full marker/comment machinery `measure()` also has to satisfy."""
+    fixture = _write(
+        tmp_path,
+        """
+def probe_subscript(keys):
+    rows = {}
+    for k in keys:
+        rows[k] += 1
+    return len(rows)
+
+def probe_bitor(keys):
+    seen = set()
+    for k in keys:
+        seen |= {k}
+    return len(seen)
+
+def probe_listadd(keys):
+    items = []
+    for k in keys:
+        items += [k]
+    return len(items)
+""",
+    )
+    module = next(m for m in floor_sweep._module_infos(tmp_path) if m.stem == "mod")
+    for func_name, bound_name in (
+        ("probe_subscript", "rows"),
+        ("probe_bitor", "seen"),
+        ("probe_listadd", "items"),
+    ):
+        func = next(
+            f
+            for f in ast.walk(module.tree)
+            if isinstance(f, ast.FunctionDef) and f.name == func_name
+        )
+        kind, count = floor_sweep._collection_kind(
+            ast.Name(id=bound_name, ctx=ast.Load()), module.tree, func, None, 0
+        )
+        assert (kind, count) != (floor_sweep._LITERAL, 0), (
+            f"{func_name}: {bound_name} is bound empty and filled by AugAssign, "
+            "but resolved as a literal population of zero"
+        )
+    del fixture
+
+
+def test_the_call_builder_shapes_match_the_recursive_fallback_at_the_depth_cutoff(
+    tmp_path: Path,
+) -> None:
+    """R3-4 (round 4): `_is_empty_builder`'s direct check for `set()`/
+    `dict()`/`frozenset()` costs zero recursion depth; the general
+    recursive fallback that would otherwise classify the exact same shape
+    costs one hop of `_collection_kind`'s own `depth > 5` budget just by
+    being *called*, whatever it is asked to classify. At depth 5 (still
+    inside the budget), the direct check answers `_DYNAMIC` for free; a
+    recursive call from there lands at depth 6, past `depth > 5`, and
+    answers `_UNKNOWN` regardless of shape. A second reader against #488
+    deleted the `set()`/`dict()`/`frozenset()` half of `_is_empty_builder`'s
+    enumeration and the full 115-test suite stayed green -- nothing
+    exercised the fast path at exactly the depth where losing it becomes
+    visible, because every other fixture calls `_collection_kind` starting
+    at depth 0. This calls it starting at depth 5 directly, once per
+    deleted name, rather than constructing five hops of real aliasing to
+    reach the same boundary."""
+    fixture = _write(
+        tmp_path,
+        """
+def probe_dict():
+    built = dict()
+    built["k"] = 1
+    return len(built)
+
+def probe_set():
+    built = set()
+    built.add("k")
+    return len(built)
+
+def probe_frozenset():
+    built = frozenset()
+    return len(built)
+""",
+    )
+    module = next(m for m in floor_sweep._module_infos(tmp_path) if m.stem == "mod")
+    for func_name in ("probe_dict", "probe_set", "probe_frozenset"):
+        func = next(
+            f
+            for f in ast.walk(module.tree)
+            if isinstance(f, ast.FunctionDef) and f.name == func_name
+        )
+        kind, count = floor_sweep._collection_kind(
+            ast.Name(id="built", ctx=ast.Load()), module.tree, func, None, 5
+        )
+        assert (kind, count) == (floor_sweep._DYNAMIC, None), (
+            f"{func_name}: at depth 5, the direct empty-builder check must answer "
+            f"_DYNAMIC without recursing; got {(kind, count)}"
+        )
+    del fixture
 
 
 def test_employer_boards_minimum_conforming_is_not_cleared_by_prose() -> None:
@@ -3189,12 +3300,15 @@ def test_a_dynamic_marker_restated_at_the_lowered_value_is_not_an_argument(
     floors` or `arithmetically_checked` -- the marker buys silence (no
     finding), not verification, and the sweep's own renamed vocabulary
     (`UnpinnableFloor`, not `EvidencePinnedFloor`) says so. A residual gap
-    this does not close: nothing here can tell a genuine, freshly-emitted
-    marker from one hand-forged in the same commit that lowered the value --
-    see F2's closing discussion in the round-3 review for the fuller remedy
-    (emission tooling, or an explicit committed floor on the unpinnable
-    count) this task deliberately leaves for a follow-up rather than
-    widening into T164's registry."""
+    this one fixture does not close by itself: nothing here can tell a
+    genuine, freshly-emitted marker from one hand-forged in the same commit
+    that lowered the value -- round 4 (R3-1/R3-2) measures that residual for
+    real, across every live unpinnable floor rather than this one isolated
+    fixture, in `test_the_live_unpinnable_floors_marker_restatement_residual_
+    is_measured_honestly` below, and reports it under its own evidence key
+    rather than folding a nonzero number into `floors_cleared_by_prose_
+    alone`. Closing it outright (telling a genuine marker from a forged one)
+    needs T164's registry, still out of this task's scope."""
     fixture = _write(
         tmp_path,
         f"""
@@ -3223,6 +3337,227 @@ def check():
     assert not any(d["name"] == "MINIMUM_TURNS" for d in measured["evidence_pinned_floors"])
     assert measured["arithmetically_checked"] == 0
     del fixture
+
+
+def test_an_unpinnable_floors_marker_is_retyped_to_match_a_lowered_value(
+    tmp_path: Path,
+) -> None:
+    """R3-1/R3-2 (round 4, second-reader BLOCK on #488): the harder attack
+    `_apply_prose_mutation` cannot exercise, reproduced directly.
+    `_apply_marker_restatement_mutation` lowers the floor to `0` *and*
+    retypes its own marker's `value=` to `0` to match, keeping the marker
+    shape and its explanation intact -- unlike `_replace_comment_block_with_
+    prose`, which strips the marker to plain prose (a different, weaker
+    attack `_classify_floor` already refuses via `undocumented`/`silent_
+    margin`). This is R3-1's exact criticism made concrete: the marker-
+    shaped comment survives, unmodified in every way except the one number a
+    commit editing the marker could always keep consistent, and
+    `_classify_floor`'s sole check for this branch (`claimed_value !=
+    literal_value`) cannot tell the difference -- so the floor still clears."""
+    fixture = _write(
+        tmp_path,
+        f"""
+#: {floor_sweep.margin_marker("MINIMUM_TURNS", 5)}
+#: The margin here is deliberate.
+MINIMUM_TURNS = 5
+
+
+def probe():
+    turns = 0
+    for _ in range(5):
+        turns += 1
+    return {{"turns_evaluated": turns}}
+
+
+def check():
+    measured = probe()
+    if measured["turns_evaluated"] < MINIMUM_TURNS:
+        raise SystemExit(1)
+""",
+    )
+    before = floor_sweep.measure(tmp_path)
+    assert {d["name"] for d in before["unpinnable_floors"]} == {"MINIMUM_TURNS"}
+    sites = floor_sweep._swept_floor_sites(tmp_path)
+    mutated = floor_sweep._apply_marker_restatement_mutation(sites)
+    assert {name for _, name, _, _ in mutated} == {"MINIMUM_TURNS"}
+    after = floor_sweep.measure(tmp_path)
+    assert after["findings"] == []
+    assert fixture.read_text(encoding="utf-8").count("value=0") == 1
+    assert "MINIMUM_TURNS = 0" in fixture.read_text(encoding="utf-8")
+
+
+def test_a_site_with_no_marker_is_not_touched_by_the_restatement_mutation(
+    tmp_path: Path,
+) -> None:
+    """A floor with no marker to retype (still on the `undocumented`/`silent_
+    margin` path) is excluded from `_apply_marker_restatement_mutation`'s
+    return value and left byte-for-byte alone -- that attack is `_apply_
+    prose_mutation`'s own case, and mixing the two would double-count the
+    same floor across both batteries' `scenarios_checked`."""
+    fixture = _write(
+        tmp_path,
+        """
+MINIMUM_TURNS = 5
+
+
+def probe():
+    turns = 0
+    for _ in range(5):
+        turns += 1
+    return {"turns_evaluated": turns}
+
+
+def check():
+    measured = probe()
+    if measured["turns_evaluated"] < MINIMUM_TURNS:
+        raise SystemExit(1)
+""",
+    )
+    original = fixture.read_text(encoding="utf-8")
+    sites = floor_sweep._swept_floor_sites(tmp_path)
+    mutated = floor_sweep._apply_marker_restatement_mutation(sites)
+    assert mutated == []
+    assert fixture.read_text(encoding="utf-8") == original
+
+
+def test_two_floors_sharing_one_comment_block_refuse_the_prose_mutation(
+    tmp_path: Path,
+) -> None:
+    """R3-5 (round 4, second-reader flagged on #488, latent): `_comment_block_
+    above`'s own documented behaviour -- skip back past a bare sibling
+    declaration so a comment written once for a group of floors is read for
+    each of them -- means two floors can resolve to the identical comment
+    range. `MINIMUM_FIRST` below has no comment of its own; `_comment_block_
+    range_above` walks past its bare `MINIMUM_FIRST = 5` line and lands on
+    the same block `MINIMUM_SECOND` reads directly. `_apply_prose_mutation`
+    must refuse this pair loudly, before writing anything, rather than
+    silently rewrite a block that does not belong to only one of them."""
+    fixture = _write(
+        tmp_path,
+        """
+#: shared explanation covering both floors below
+MINIMUM_FIRST = 1
+MINIMUM_SECOND = 1
+
+
+def probe_one(probes=(1, 2, 3, 4, 5, 6, 7, 8, 9)):
+    if len(probes) < MINIMUM_FIRST:
+        raise SystemExit(1)
+    if len(probes) < MINIMUM_SECOND:
+        raise SystemExit(1)
+""",
+    )
+    module = next(m for m in floor_sweep._module_infos(tmp_path) if m.stem == "mod")
+    range_first = floor_sweep._comment_block_range_above(module.lines, 3)
+    range_second = floor_sweep._comment_block_range_above(module.lines, 4)
+    assert range_first is not None
+    assert range_first == range_second, "fixture must actually construct the shared-block case"
+    sites = floor_sweep._swept_floor_sites(tmp_path)
+    names = {name for _module, name, _lineno, _value in sites}
+    assert {"MINIMUM_FIRST", "MINIMUM_SECOND"} <= names
+    original = fixture.read_text(encoding="utf-8")
+    with pytest.raises(AssertionError, match="share one comment block"):
+        floor_sweep._apply_prose_mutation(sites)
+    assert fixture.read_text(encoding="utf-8") == original
+
+
+def test_the_live_tree_has_no_two_swept_floors_sharing_one_comment_block() -> None:
+    """R3-5's other half: the refusal above is only safe to ship if nothing
+    in the real tree hits it today -- confirmed here rather than only
+    asserted in a docstring, so a future floor added in the shared-comment
+    style would fail this test instead of failing the whole prose-clearance
+    battery with an opaque `AssertionError` at `make evidence` time."""
+    sites = floor_sweep._swept_floor_sites(floor_sweep._SRC_DIR)
+    by_path: dict[Path, list[tuple[str, int]]] = {}
+    for module, name, lineno, _value in sites:
+        by_path.setdefault(module.path, []).append((name, lineno))
+    for path, floors in by_path.items():
+        lines = path.read_text(encoding="utf-8").splitlines()
+        ranges = [
+            (name, lineno, floor_sweep._comment_block_range_above(lines, lineno))
+            for name, lineno in floors
+        ]
+        for i, (name_a, lineno_a, range_a) in enumerate(ranges):
+            for name_b, lineno_b, range_b in ranges[i + 1 :]:
+                assert not (range_a is not None and range_a == range_b), (
+                    f"{path.name}: {name_a} ({lineno_a}) and {name_b} ({lineno_b}) "
+                    f"share comment block {range_a} -- R3-5's guard will now refuse "
+                    "the prose-clearance battery outright; give one of them its own "
+                    "comment"
+                )
+    assert len(sites) > 0
+
+
+def test_the_live_unpinnable_floors_marker_restatement_residual_is_measured_honestly() -> None:
+    """R3-1 (second-reader BLOCK on #488): round 3's response to F2 renamed
+    `DynamicFloor` to `UnpinnableFloor` and added a single hand-built
+    fixture asserting the gap is survivable -- which pins one isolated case
+    as "acceptable", not the real, live residual the reader's own repro (41
+    of 41 unpinnable floors settable to `value=1` by editing the comment)
+    was about.
+
+    This runs the actual mutation battery -- `measure_marker_restatement_
+    clearance` -- against the real tree's real unpinnable floors, the same
+    way `test_employer_boards_minimum_conforming_is_not_cleared_by_prose`
+    pins F1 against the real tree rather than a fixture. Two things are
+    asserted, both loosely (a moving population, per-module, over time is
+    expected and is not this test's subject):
+
+    * every live unpinnable floor is actually exercised (nonzero
+      `marker_restatement_scenarios_checked`) -- the battery is not
+      vacuously measuring an empty set;
+    * the residual is reported, not silently absorbed into `floors_cleared_
+      by_prose_alone`, which stays exactly what T163's gate requires: 0.
+
+    `_zero_slack_claim_contradicts` (T159's own, unrelated to this task)
+    already catches some of these via their prose explanation restating a
+    specific number, which is why the residual is smaller than the full
+    unpinnable count -- itself evidence this is a real measurement, not an
+    always-100%-or-always-0% metric that could not disagree with its own
+    denominator."""
+    measured = floor_sweep.measure_marker_restatement_clearance()
+    assert measured["marker_restatement_scenarios_checked"] > 0
+    assert measured["unpinnable_floors_cleared_by_marker_restatement"] >= 0
+    assert (
+        measured["unpinnable_floors_cleared_by_marker_restatement"]
+        <= measured["marker_restatement_scenarios_checked"]
+    )
+    # Honestly folded into T163's evidence file, but never into the fixed gate key.
+    prose_measured = floor_sweep.write_prose_clearance_evidence(
+        floor_sweep.DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH
+    )
+    assert prose_measured["floors_cleared_by_prose_alone"] == 0
+    assert "unpinnable_floors_cleared_by_marker_restatement" in prose_measured
+
+
+def test_emit_prints_a_computed_marker_line(capsys: pytest.CaptureFixture[str]) -> None:
+    """R3-1: the `emit` subcommand `margin_marker` was written for did not
+    exist until round 4 -- `_main(["emit", ...])` now prints exactly what
+    `margin_marker` computes, the `review_reader emit` idiom applied here."""
+    code = floor_sweep._main(["emit", "--name", "MINIMUM_TURNS", "--value", "5"])
+    assert code == 0
+    out = capsys.readouterr().out.strip()
+    assert out == floor_sweep.margin_marker("MINIMUM_TURNS", 5)
+
+
+def test_emit_rejects_a_negative_value(capsys: pytest.CaptureFixture[str]) -> None:
+    """`_emit_command` surfaces `margin_marker`'s own `ValueError` at exit 2,
+    the same convention `review_reader`'s `_cmd_emit` uses -- never prints a
+    marker line for an argument `margin_marker` itself refuses."""
+    code = floor_sweep._main(["emit", "--name", "MINIMUM_TURNS", "--value", "-1"])
+    assert code == 2
+
+
+def test_main_with_an_evidence_path_override_is_not_shadowed_by_emit(
+    tmp_path: Path,
+) -> None:
+    """The existing, tested `_main([str(evidence_path)])` convention -- an
+    evidence-path override, not a subcommand -- still works: `"emit"` is the
+    one string this dispatch treats specially, and no evidence-path override
+    any caller passes is ever that literal string."""
+    evidence_path = tmp_path / "T159.json"
+    floor_sweep._main([str(evidence_path)])
+    assert evidence_path.exists()
 
 
 def test_every_dynamic_floor_is_mutated_by_the_prose_battery(tmp_path: Path) -> None:

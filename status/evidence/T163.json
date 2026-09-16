@@ -3,5 +3,175 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
+  "unpinnable_floors_cleared_by_marker_restatement": 33,
+  "marker_restatement_cleared": [
+    {
+      "module": "approval",
+      "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
+      "lineno": 3397
+    },
+    {
+      "module": "approval",
+      "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
+      "lineno": 3392
+    },
+    {
+      "module": "approval",
+      "name": "_SHINGLE",
+      "lineno": 429
+    },
+    {
+      "module": "arsenal_source",
+      "name": "MINIMUM_BUNDLE_FILES",
+      "lineno": 108
+    },
+    {
+      "module": "arsenal_source",
+      "name": "MINIMUM_VENDORED_SKILLS",
+      "lineno": 114
+    },
+    {
+      "module": "capture_provenance",
+      "name": "MINIMUM_CAPTURES_SCANNED",
+      "lineno": 174
+    },
+    {
+      "module": "connector_health",
+      "name": "MINIMUM_PROBES_COMPARED",
+      "lineno": 986
+    },
+    {
+      "module": "connector_policy",
+      "name": "PACKAGES_AT_LEAST",
+      "lineno": 486
+    },
+    {
+      "module": "connector_procedure",
+      "name": "MINIMUM_CASES",
+      "lineno": 69
+    },
+    {
+      "module": "employer_boards",
+      "name": "MINIMUM_CONFORMING",
+      "lineno": 71
+    },
+    {
+      "module": "extraction",
+      "name": "_CONFIRMING_MATCHES_FOR_BIPOLAR",
+      "lineno": 155
+    },
+    {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DETECTOR_STATES_PROBED",
+      "lineno": 148
+    },
+    {
+      "module": "gate_detector_states",
+      "name": "MINIMUM_DISTINCT_STATE_TRACES",
+      "lineno": 187
+    },
+    {
+      "module": "gate_reader_agreement",
+      "name": "MINIMUM_ARRANGEMENTS_PROBED",
+      "lineno": 123
+    },
+    {
+      "module": "generate",
+      "name": "GENERATION_CAP",
+      "lineno": 74
+    },
+    {
+      "module": "interview",
+      "name": "MAX_EXTRA_EPISODE_ATTEMPTS",
+      "lineno": 124
+    },
+    {
+      "module": "naming",
+      "name": "MINIMUM_SCANNED",
+      "lineno": 229
+    },
+    {
+      "module": "pagination_capture",
+      "name": "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
+      "lineno": 1305
+    },
+    {
+      "module": "pagination_capture",
+      "name": "MINIMUM_REQUEST_KEYS",
+      "lineno": 122
+    },
+    {
+      "module": "plan_v2",
+      "name": "_MIN_TASK_CELLS",
+      "lineno": 139
+    },
+    {
+      "module": "query_capture",
+      "name": "MINIMUM_STEERABLE_PACKAGES_CHECKED",
+      "lineno": 117
+    },
+    {
+      "module": "reader_notes",
+      "name": "MINIMUM_PROBES",
+      "lineno": 523
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_DISTINCT_SCOPE_STATES",
+      "lineno": 336
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_PRS_EVALUATED",
+      "lineno": 306
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_REPORTS_FOUND",
+      "lineno": 311
+    },
+    {
+      "module": "review_reader",
+      "name": "MINIMUM_SCOPE_STATES",
+      "lineno": 317
+    },
+    {
+      "module": "second_reader",
+      "name": "FAIL_OPEN_CASES_AT_LEAST",
+      "lineno": 832
+    },
+    {
+      "module": "second_reader",
+      "name": "FIXTURES_AT_LEAST",
+      "lineno": 822
+    },
+    {
+      "module": "second_reader",
+      "name": "REGRESSION_CASES_AT_LEAST",
+      "lineno": 863
+    },
+    {
+      "module": "second_reader",
+      "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
+      "lineno": 849
+    },
+    {
+      "module": "sourcing",
+      "name": "DETAIL_FETCH_CEILING",
+      "lineno": 116
+    },
+    {
+      "module": "sourcing",
+      "name": "MINIMUM_OFFERS_COLLECTED",
+      "lineno": 107
+    },
+    {
+      "module": "spec_consistency",
+      "name": "MINIMUM_DECLARATIONS_FOUND",
+      "lineno": 109
+    }
+  ],
+  "marker_restatement_scenarios_checked": 41,
+  "marker_restatement_gate_status": "measured",
   "scenarios_checked_at_least": 79
 }

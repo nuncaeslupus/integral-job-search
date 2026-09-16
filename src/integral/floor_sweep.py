@@ -503,6 +503,7 @@ this task's gate, which is precisely what T122's review round flagged and what
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -1349,20 +1350,6 @@ def _assignments_to_subscript(
     return [value for _, value in found]
 
 
-def _appended_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
-    """True if `name.append(...)` / `.add(...)` / `.update(...)` appears anywhere in `func`."""
-    for node in ast.walk(func):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in {"append", "add", "update", "extend"}
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == name
-        ):
-            return True
-    return False
-
-
 def _incremented_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
     """True if `name += ...` appears anywhere in `func` — the running-count shape
     `naming.measure`'s `scanned` and `review_reader.measure`'s `reports_found` both
@@ -1376,35 +1363,6 @@ def _incremented_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: s
         ):
             return True
     return False
-
-
-def _subscripted_in_a_loop(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
-    """True if `name[...] = ...` appears anywhere in `func` — the subscript-fill shape
-    an empty `{}`/`dict()` builder uses instead of `.update()`."""
-    for node in ast.walk(func):
-        if isinstance(node, ast.Assign):
-            targets: list[ast.expr] = list(node.targets)
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets = [node.target]
-        else:
-            continue
-        for target in targets:
-            if (
-                isinstance(target, ast.Subscript)
-                and isinstance(target.value, ast.Name)
-                and target.value.id == name
-            ):
-                return True
-    return False
-
-
-def _filled_after_binding(func: ast.FunctionDef | ast.AsyncFunctionDef, name: str) -> bool:
-    """True if `name` is mutated anywhere in `func` — by `.append`/`.add`/`.update`/
-    `.extend` (`_appended_in_a_loop`) or by subscript assignment
-    (`_subscripted_in_a_loop`). One check for both an empty-literal-plus-`.add` builder
-    and an empty-builder-call-plus-subscript one (`set()`, `dict()`, `frozenset()`,
-    `{}`, `[]` all resolve to the same `_LITERAL, 0` before this is asked)."""
-    return _appended_in_a_loop(func, name) or _subscripted_in_a_loop(func, name)
 
 
 def _is_empty_builder(rhs: ast.expr) -> bool:
@@ -1673,46 +1631,45 @@ def _collection_kind(
                     and _incremented_in_a_loop(func, expr.id)
                 ):
                     return _DYNAMIC, None
-                # F1 (second-reader BLOCK, this PR): a count of zero taken
-                # right at the binding is not a population when the same
-                # name is filled afterward. The guard this replaced only
-                # matched an empty `[]`/`{}` *literal* combined with
-                # `.append`/`.add`/`.update`/`.extend` — never a call to
-                # `set()`/`dict()`/`frozenset()` (an `ast.Call`, not an
-                # `ast.List`/`ast.Set`), and never a `{}` filled by
-                # subscript assignment rather than `.update()`. Both are
-                # `_is_empty_builder(rhs)`, checked directly against `rhs`'s
-                # own AST shape rather than through a recursive call — the
-                # first version of this fix instead always recursed into
-                # `_collection_kind(rhs, ...)` before checking, which costs
-                # one more hop of that function's `depth > 5` budget than
-                # this direct check for the exact shape the old guard
-                # already matched with none. A resolution chain already
-                # near that budget (`spec_consistency.MINIMUM_DECLARATIONS_
-                # FOUND`'s `found = []` inside `find_declarations`, five
-                # hops deep from its compare site) tipped over the cutoff
-                # under that version and silently dropped out of scope —
-                # the exact "second-order side effect of a fix" this direct
-                # check avoids by costing nothing beyond a plain isinstance
-                # check when the shape is already visible in the AST node.
+                # F1 (second-reader BLOCK, #488) then R3-3 (round 4, same PR):
+                # a count of zero taken right at the binding is not a
+                # population — full stop, not only when a fill idiom this
+                # sweep happens to recognize is also present. F1's original
+                # guard required `_filled_after_binding` (`.append`/`.add`/
+                # `.update`/`.extend`, or subscript assignment) alongside the
+                # empty-builder shape, which is exactly the enumeration
+                # CLAUDE.md warns has no last element: a second reader found
+                # three ordinary `AugAssign` spellings it doesn't recognize
+                # (`rows[k] += 1`, `rows |= {k}`, `rows += [k]`), and 42 live
+                # names in this tree resolved to `(_LITERAL, 0)` outside the
+                # closed-rule test's own reach as a result. This sweep cannot
+                # prove a collection is *never* filled anywhere — it can only
+                # fail to recognize one more idiom — so it no longer tries:
+                # any name last bound to an empty-builder shape is `_DYNAMIC`,
+                # whether or not a fill is found. That can only make the
+                # sweep *more* cautious (a floor that used to auto-pass on a
+                # phantom zero now needs a marker instead), never less —
+                # dropping the fill check can never turn a real defect
+                # invisible, only turn an invisible one into one that needs
+                # justifying. `_is_empty_builder(rhs)` is still checked
+                # directly against `rhs`'s own AST shape before the general
+                # recursive fallback, purely to avoid costing this function's
+                # `depth > 5` budget an extra hop for a shape already visible
+                # in the node — see `_is_empty_builder`'s own docstring.
                 # `employer_boards.MINIMUM_CONFORMING` (`hosts: set[str] =
-                # set()`, filled by `hosts.add(...)` in a loop) was cleared
+                # set()`, filled by `hosts.add(...)` in a loop) is cleared
                 # this way: `_margin_finding(literal_value=5, population=0)`
                 # computes `margin=-5`, `margin <= 0`, compliant — before any
                 # marker is read.
-                if _is_empty_builder(rhs) and _filled_after_binding(func, expr.id):
+                if _is_empty_builder(rhs):
                     return _DYNAMIC, None
                 rhs_kind, rhs_count = _collection_kind(rhs, tree, func, before_lineno, depth + 1)
-                if rhs_kind == _LITERAL and rhs_count == 0 and _filled_after_binding(func, expr.id):
+                if rhs_kind == _LITERAL and rhs_count == 0:
                     # A genuinely indirect empty builder — `rhs` itself isn't
                     # one of `_is_empty_builder`'s direct shapes, but resolves
                     # to a literal zero anyway once `_collection_kind` chases
                     # it (through another name, a dict-subscript lookup, a
-                    # same-module call). Same rule, general fallback: whether
-                    # `rhs` denotes an empty collection, not which syntax
-                    # spelled it, and a collection genuinely, permanently
-                    # empty (nothing ever fills it) still resolves as a real,
-                    # literal zero.
+                    # same-module call). Same rule, general fallback.
                     return _DYNAMIC, None
                 return rhs_kind, rhs_count
             param_names = (
@@ -3304,16 +3261,163 @@ def _apply_prose_mutation(sites: list[tuple[_ModuleInfo, str, int, ast.expr]]) -
     processing bottom-to-top means that only ever moves lines *above* a floor
     not yet processed, never invalidating a line number already captured for
     one that comes later in this loop.
+
+    R3-5 (round 4, second-reader flagged on #488, latent): that invariant
+    assumes each floor owns its own comment block. `_comment_block_above`'s
+    own docstring documents the opposite for a *read* — "a comment written
+    once for a group of floors is read for each of them", by walking back
+    past bare sibling declarations — so two floors in `sites` can resolve to
+    the exact same `(start, end)` range. Bottom-up-by-declaration-lineno does
+    not order that case correctly: mutating the later floor's shared block
+    first can leave the earlier floor's own comment already rewritten by the
+    time its turn comes, and the reader confirmed a constructed case
+    corrupting a shared block into invalid source. Refused loudly here,
+    before any line is touched, the same way a multi-line value is refused
+    above — nothing in the live tree hits this today (checked: no two swept
+    floors share a block), so refusing rather than guessing a fix keeps a
+    silent corruption from ever being the first thing anyone sees.
     """
     by_path: dict[Path, tuple[_ModuleInfo, list[tuple[int, ast.expr]]]] = {}
     for module, _name, lineno, value_expr in sites:
         by_path.setdefault(module.path, (module, []))[1].append((lineno, value_expr))
     for module, floors in by_path.values():
         lines = module.lines
+        ranges = [(lineno, _comment_block_range_above(lines, lineno)) for lineno, _ in floors]
+        for i, (lineno_a, range_a) in enumerate(ranges):
+            for lineno_b, range_b in ranges[i + 1 :]:
+                if range_a is not None and range_a == range_b:
+                    raise AssertionError(
+                        f"{module.stem}: floors declared at lines {lineno_a} and "
+                        f"{lineno_b} share one comment block {range_a} — the "
+                        "prose-clearance mutation only knows how to rewrite one "
+                        "floor's comment independently of another's"
+                    )
         for lineno, value_expr in sorted(floors, key=lambda f: f[0], reverse=True):
             _replace_expr_with_zero(lines, value_expr)
             _replace_comment_block_with_prose(lines, lineno)
         module.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _find_marker_line_index(lines: list[str], lineno: int, name: str) -> int | None:
+    """The 0-indexed line, within the comment block `_comment_block_above`
+    would read for the 1-indexed declaration at `lineno`, that carries a
+    marker naming `name` — or `None` if there is no such line. Used to
+    locate a marker for in-place, same-line rewriting rather than the
+    whole-block replacement `_replace_comment_block_with_prose` does."""
+    block = _comment_block_range_above(lines, lineno)
+    if block is None:
+        return None
+    start, end = block
+    for idx in range(start, end + 1):
+        for match in MARGIN_MARKER_RE.finditer(lines[idx]):
+            if match.group("name") == name:
+                return idx
+    return None
+
+
+def _apply_marker_restatement_mutation(
+    sites: list[tuple[_ModuleInfo, str, int, ast.expr]],
+) -> list[tuple[_ModuleInfo, str, int, ast.expr]]:
+    """R3-1/R3-2 (round 4, second-reader BLOCK on #488): the harder, more
+    realistic attack `_apply_prose_mutation` was never built to exercise —
+    keep a marker-*shaped* comment, keep its explanation, retype only the
+    number, rather than stripping the marker to plain prose. Every site in
+    `sites` that already carries a marker naming itself has its literal
+    value lowered to `0` and its marker's own `value=` rewritten to match,
+    in place; a site with no such marker is left untouched (the "no
+    marker" attack is `_apply_prose_mutation`'s own case, not this one) and
+    excluded from the returned list.
+
+    Unlike `_apply_prose_mutation`, this never changes a file's line count
+    — both rewrites replace a span with different text of possibly
+    different length, but on the *same* line, so no bottom-up-by-lineno
+    ordering is needed here the way R3-5 flags it is for whole-block
+    replacement (the two never interact: this function only ever touches
+    a line an earlier `_replace_expr_with_zero`/marker rewrite in this same
+    loop cannot have shifted).
+    """
+    by_path: dict[Path, tuple[_ModuleInfo, list[tuple[int, ast.expr, str]]]] = {}
+    mutated: list[tuple[_ModuleInfo, str, int, ast.expr]] = []
+    for module, name, lineno, value_expr in sites:
+        comment = _comment_block_above(module.lines, lineno)
+        if _margin_marker_claim(comment, name) is None:
+            continue
+        by_path.setdefault(module.path, (module, []))[1].append((lineno, value_expr, name))
+        mutated.append((module, name, lineno, value_expr))
+    for module, floors in by_path.values():
+        lines = module.lines
+        for lineno, value_expr, name in floors:
+            idx = _find_marker_line_index(lines, lineno, name)
+            assert idx is not None, f"{module.stem}.{name}: marker vanished before rewrite"
+            match = next(
+                m for m in MARGIN_MARKER_RE.finditer(lines[idx]) if m.group("name") == name
+            )
+            new_line = (
+                lines[idx][: match.start()] + margin_marker(name, 0) + lines[idx][match.end() :]
+            )
+            lines[idx] = new_line
+            _replace_expr_with_zero(lines, value_expr)
+        module.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return mutated
+
+
+def measure_marker_restatement_clearance() -> dict[str, Any]:
+    """R3-1/R3-2 (round 4): how many of the real tree's *unpinnable* floors
+    still read compliant after retyping their own marker to match a lowered
+    value, rather than stripping it to plain prose.
+
+    Deliberately **not** folded into `floors_cleared_by_prose_alone` —
+    that metric, and T163's own fixed gate key, are both about prose
+    *replacing* a marker, a property this sweep closes (see
+    `measure_prose_clearance`). Retyping an *existing* marker is a
+    different property, and for the two branches with a real population
+    to check a claim against (arithmetic, evidence-pinned), retyping it
+    honestly — matching the population, which this mutation never touches
+    — is not an attack at all; T159's rule never bounds how large a
+    disclosed margin may be. So this measures only the unpinnable branch,
+    where `_classify_floor`'s sole self-consistency check is `claimed_value
+    != literal_value` — tautologically satisfied whenever the same commit
+    edits the code and the marker together, because by definition of
+    "unpinnable" no independent population exists to check either number
+    against.
+
+    The honest answer, measured here rather than merely argued: every
+    eligible unpinnable floor clears. That is not an oversight this static
+    sweep left open — it is what "no ground truth exists for this
+    population" means. Closing it for real needs the registry T164 owns (a
+    population recorded once, elsewhere, that a commit editing the comment
+    cannot also edit), explicitly out of this task's scope. What this task
+    can do, and does: measure the residual and report it honestly, rather
+    than let `floors_cleared_by_prose_alone`'s clean 0 be read as covering
+    an attack it was never built to run.
+    """
+    with tempfile.TemporaryDirectory() as raw_tmp:
+        tmp_dir = Path(raw_tmp) / "integral"
+        shutil.copytree(_SRC_DIR, tmp_dir)
+        before = measure(tmp_dir)
+        already_broken = {(f["module"], f["name"]) for f in before["findings"]}
+        unpinnable = {(d["module"], d["name"]) for d in before["unpinnable_floors"]}
+        sites = [
+            site
+            for site in _swept_floor_sites(tmp_dir)
+            if (site[0].stem, site[1]) in unpinnable
+            and (site[0].stem, site[1]) not in already_broken
+        ]
+        mutated = _apply_marker_restatement_mutation(sites)
+        after = measure(tmp_dir)
+    site_ids = sorted((module.stem, name, lineno) for module, name, lineno, _ in mutated)
+    caught_after = {(f["module"], f["name"]) for f in after["findings"]}
+    cleared = [
+        {"module": module, "name": name, "lineno": lineno}
+        for module, name, lineno in site_ids
+        if (module, name) not in caught_after
+    ]
+    return {
+        "unpinnable_floors_cleared_by_marker_restatement": len(cleared),
+        "marker_restatement_cleared": cleared,
+        "marker_restatement_scenarios_checked": len(site_ids),
+        "marker_restatement_gate_status": "measured",
+    }
 
 
 #: The battery's own denominator floor (T100/T122) — no longer unpinned in its
@@ -3442,8 +3546,16 @@ def write_prose_clearance_evidence(
     Refuses to write only when the battery itself shrank below its own floor —
     `write_evidence`'s identical rule (T159), applied to a denominator this
     module controls directly rather than one a filesystem scan produces.
+
+    R3-1/R3-2 (round 4): also runs `measure_marker_restatement_clearance` and
+    merges its keys in, so T163.json carries both mutations the report ever
+    asked for — value-and-prose (this gate, fixed at 0) and value-and-retyped-
+    marker (informational, expected nonzero, never gates `write_evidence`'s
+    caller — see that function's own docstring for why it is not folded into
+    `floors_cleared_by_prose_alone`). No key collides: the two dicts' keys are
+    disjoint by name.
     """
-    measured = measure_prose_clearance()
+    measured = {**measure_prose_clearance(), **measure_marker_restatement_clearance()}
     if measured["scenarios_checked"] < MINIMUM_PROSE_MUTATION_SCENARIOS:
         return measured
     evidence.parent.mkdir(parents=True, exist_ok=True)
@@ -3481,6 +3593,47 @@ def write_evidence(
     return measured
 
 
+def _emit_command(argv: list[str]) -> int:
+    """`python -m integral.floor_sweep emit --name NAME --value N [--population M]`
+    — prints the marker line a floor's own comment should carry, computed by
+    `margin_marker` rather than typed by hand. Mirrors `review_reader`'s own
+    `_cmd_emit`.
+
+    R3-1 (second-reader BLOCK on #488): this command did not exist —
+    `margin_marker`'s docstring already said a marker is "emitted rather than
+    typed", the same idiom `review_reader` implements as `emit`/`check`
+    subcommands, but nothing here wired an `emit` subcommand up, so "emitted,
+    not typed" was true of nothing anyone could actually run. This is a real
+    but partial mitigation: it gives the marker line a genuine, non-hand-typed
+    source, but it cannot by itself stop a commit from running this command
+    with a false `--value`/`--population` — closing that needs an independent
+    population to check the arguments against, which is `measure_marker_
+    restatement_clearance`'s subject (and, fully, T164's registry).
+    """
+    parser = argparse.ArgumentParser(
+        prog="floor_sweep emit",
+        description="print a floor's own margin marker line, computed rather than typed",
+    )
+    parser.add_argument("--name", required=True, help="the floor constant's own name")
+    parser.add_argument("--value", required=True, type=int, help="the floor's literal value")
+    parser.add_argument(
+        "--population",
+        type=int,
+        default=None,
+        help="only for a floor this sweep checks arithmetically",
+    )
+    try:
+        parsed = parser.parse_args(argv)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
+    try:
+        print(margin_marker(parsed.name, parsed.value, parsed.population))
+    except ValueError as exc:
+        print(f"floor_sweep: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def _main(argv: list[str] | None = None) -> int:
     """Write T159's evidence, then T163's — `make evidence` invokes this module
     once (`python -m integral.floor_sweep`, no subcommand), so both gates this
@@ -3490,8 +3643,17 @@ def _main(argv: list[str] | None = None) -> int:
     repository's other floors, applied here from the day this one was written: `make
     evidence` prints 3 as "unmeasured (recorded)" and carries on, which makes a floor
     that exits 3 decoration rather than a gate.
+
+    `emit` is the one subcommand: `args[0] == "emit"` dispatches to
+    `_emit_command` before anything below runs. Every other call — including
+    the existing, tested `_main([str(evidence_path)])` convention, where
+    `args[0]` is an evidence-path override rather than a subcommand — falls
+    through unchanged; `"emit"` is not a valid `Path`-like evidence override
+    any caller has ever passed, so the two conventions cannot collide.
     """
     args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] == "emit":
+        return _emit_command(args[1:])
     evidence = Path(args[0]) if args else DEFAULT_EVIDENCE_PATH
     measured = write_evidence(evidence)
     print(json.dumps(measured, ensure_ascii=False))
@@ -3527,6 +3689,21 @@ def _main(argv: list[str] | None = None) -> int:
 
     prose_measured = write_prose_clearance_evidence()
     print(json.dumps(prose_measured, ensure_ascii=False))
+
+    # R3-1/R3-2 (round 4): reported, never gated — this residual is the honest,
+    # currently-unavoidable answer to a harder attack than `floors_cleared_by_
+    # prose_alone` measures (see `measure_marker_restatement_clearance`'s own
+    # docstring), not a regression this call should fail on.
+    if prose_measured["unpinnable_floors_cleared_by_marker_restatement"]:
+        print(
+            f"ⓘ {prose_measured['unpinnable_floors_cleared_by_marker_restatement']} "
+            "unpinnable floor(s) still read compliant after their own marker was "
+            "retyped to match a lowered value in the same commit — expected, and does "
+            "not fail this gate: no independent population exists for an unpinnable "
+            "floor's marker to be checked against short of T164's registry (out of "
+            "this task's scope).",
+            file=sys.stderr,
+        )
 
     if prose_measured["scenarios_checked"] < MINIMUM_PROSE_MUTATION_SCENARIOS:
         print(
