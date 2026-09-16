@@ -1,5 +1,41 @@
 # Session handover
 
+## 00002. All four carried-over items closed: #486/T162, T178(→T179)/#497, the ijs-t174 conflict, and #488/T163
+
+**Verified live via `gh pr view`, not carried from memory.**
+
+- **#486 (T162) merged.** `mergedAt: 2026-09-15T22:31:28Z`, head `4235dd9b`. Nothing left.
+- **T178 was renumbered T179 mid-work** (same task id `t-02d4d2c7`) and merged as
+  **#497**, `mergedAt: 2026-09-16T09:32:22Z`, head `95d0a5f9` — "A capture whose URL is
+  not parseable makes an evidence gate raise, not name the package." Archived to
+  `arsenal/tasks/_history/t-02d4d2c7.md`. Nothing left.
+- **The `ijs-t174` merge-conflict worktree no longer exists** — resolved and cleaned up
+  by whichever cloud session owned it (`task_a11a6b07` per the prior handover entry).
+  Not touched by this session; confirmed only that the path is gone.
+- **#488 (T163) merged.** `mergedAt: 2026-09-16T21:08:21Z`, squash commit `1de96809`,
+  head `3377ceb2`. This was the long one: **round 10** (of a chain starting at the
+  initial review and running through rounds 3, 5, 6, 8, 9-fix/10-review) found round 9's
+  frozenset-phantom-zero fix ("the object is immutable, the name is not") had been
+  applied to only one of three name-resolution paths in `_collection_kind`
+  (`src/integral/floor_sweep.py`) — module-level and parameter-default resolution were
+  still exposed. Fixed by adding the same `_is_empty_builder` guard at all three points.
+  Mutation-verification (revert-and-confirm-RED, per this file's own "What 'mutation'
+  means here" section) surfaced a **real live bug**, not just the synthetic fixture:
+  `arsenal_source.measure`'s `added` parameter defaults to an empty builder and
+  phantom-resolved to `(_LITERAL, 0)` under the reverted code. `verified_gate.sh` PASS
+  on `3377ceb2` (5167 passed, 7 skipped, evidence clean, verify-gates clean), CI green
+  on the same head, round-10 report posted to the PR. **The user then explicitly said
+  "stop it, merge"** before the round-11 independent-reviewer agent (dispatched, Opus,
+  mid-review) finished — that agent was killed unread and the merge proceeded on the
+  user's direct instruction, superseding the earlier "let it finish" choice from
+  mid-session. Worktree `ijs-t163-r4` removed, branch deleted, local `main`
+  fast-forwarded to `1de96809`.
+- **T163's own house-rule pattern held again**: this repo's CLAUDE.md documents T70
+  (ten defects, five rounds) and a family of "check pinned against a proxy, not the
+  property" findings — round 9→10 is one more instance (a closed rule applied to one of
+  several equivalent cases instead of generalized), worth remembering if a similar
+  "fixed-one-of-N-equivalent-paths" review finding shows up again.
+
 ## 00001. T170 merged; T162/T163 quota-blocked mid-round; T178 one gate run from a PR; two rescues running in separate cloud sessions
 
 **Verified live via `gh pr view`, not carried from memory — trust this over anything older in this file.**
