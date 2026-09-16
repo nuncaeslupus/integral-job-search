@@ -84,6 +84,18 @@ def test_a_steerable_package_with_no_capture_is_named(library: Path) -> None:
     assert [row["package"] for row in qc.measure(library)["findings"]] == [name]
 
 
+def test_a_steerable_packages_unparseable_capture_is_named_not_a_crash(library: Path) -> None:
+    """T179 second reader on #497: the same `urlsplit` hole T179 fixed in
+    `pagination_capture.query_keys` also sat in `_normalised_path`, reached
+    from `measure()` over every steerable package's own capture."""
+    name = _STEERABLE[0]
+    capture = library / name / "probe" / "captured.json"
+    record = json.loads(capture.read_text(encoding="utf-8"))
+    record["url"] = "https://[::1/jobs"
+    capture.write_text(json.dumps(record), encoding="utf-8")
+    assert [row["package"] for row in qc.measure(library)["findings"]] == [name]
+
+
 def test_an_unreadable_package_is_named_not_skipped(library: Path) -> None:
     """Whether it is steerable is unknown, so it cannot be scored as clean."""
     name = _STEERABLE[0]
@@ -110,6 +122,10 @@ def test_an_unreadable_package_is_named_not_skipped(library: Path) -> None:
         ("https://b.test/jobs/{query}/", "https://b.test/jobs/python/extra/", False),
         ("https://b.test/jobs/{query}/", "https://b.test/other/python/", False),
         ("https://b.test/jobs?q={query}", None, False),
+        # T179 second reader on #497: an unmatched IPv6 bracket makes `urlsplit`
+        # raise `ValueError` — neither side may crash `query_measured`.
+        ("https://b.test/jobs?q={query}", "https://[::1/jobs?q=python", False),
+        ("https://[::1/jobs?q={query}", "https://b.test/jobs?q=python", False),
         # Second read on #461, F1: blank once decoded, so `build_list_urls`
         # would have refused to send it.
         ("https://b.test/jobs?q={query}&page={page}", "https://b.test/jobs?q=+&page=2", False),

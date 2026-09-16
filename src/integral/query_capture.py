@@ -87,7 +87,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, quote_plus, unquote, unquote_plus, urlsplit
+from urllib.parse import quote, quote_plus, unquote, unquote_plus
 
 from integral.connector_coverage import is_example_site, read_package
 from integral.connectors import (
@@ -97,6 +97,7 @@ from integral.connectors import (
     ConnectorError,
     accepts_query,
     load_connector,
+    safe_urlsplit,
 )
 from integral.pagination_capture import read_capture
 
@@ -130,9 +131,15 @@ def _normalised_path(url: str) -> bool:
     """Would §5.2.4's `remove_dot_segments` leave this URL's path as it is?
 
     It does exactly when no segment is a dot-segment, once `%2E` (an escaped
-    unreserved `.`, §6.2.2.2) is read as the `.` it is.
+    unreserved `.`, §6.2.2.2) is read as the `.` it is. A `url` `urlsplit`
+    cannot parse (an unmatched IPv6 bracket) reads as not normalised — the
+    same as any other path this predicate refuses — never a crash out of
+    `measure()` that ends the whole run instead of naming this one package.
     """
-    path = re.sub("%2[eE]", ".", urlsplit(url).path)
+    split = safe_urlsplit(url)
+    if split is None:
+        return False
+    path = re.sub("%2[eE]", ".", split.path)
     return not _DOT_SEGMENTS.intersection(path.split("/"))
 
 
@@ -140,9 +147,12 @@ def _slot_components(url_pattern: str) -> list[bool] | None:
     """For each `{query}` slot in order, whether it is in the query component.
 
     `None` when a slot is anywhere else (scheme, host, fragment), which is a
-    place no request carries a search.
+    place no request carries a search — or when `url_pattern` is not a URL
+    `urlsplit` can parse at all.
     """
-    parts = urlsplit(url_pattern)
+    parts = safe_urlsplit(url_pattern)
+    if parts is None:
+        return None
     in_path = parts.path.count(QUERY_PLACEHOLDER)
     in_query = parts.query.count(QUERY_PLACEHOLDER)
     if in_path + in_query != url_pattern.count(QUERY_PLACEHOLDER):
