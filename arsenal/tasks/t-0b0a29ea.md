@@ -5,7 +5,7 @@ priority: 5
 tags: [step-07-sourcing]
 ---
 
-Candidate note (Ivan, 2026-09-16, step `sourcing`): when this step falls back to a
+Candidate note (2026-09-16, step `sourcing`): when this step falls back to a
 general web search because no connector covers the candidate's market, it should
 expand the search terms into synonyms itself (e.g. "AI engineer" / "LLM engineer" /
 "prompt engineer" / "context engineer" / "agentic engineer"), run the resulting

@@ -5,7 +5,7 @@ priority: 5
 tags: [step-11-application]
 ---
 
-Candidate note (Ivan, 2026-09-17, step `application`): "Los generadores de HTML y PDF
+Candidate note (2026-09-17, step `application`): "Los generadores de HTML y PDF
 deberían servir para todos si son lo bastante genéricos" — the HTML/PDF generators
 should serve every candidate if they're generic enough.
 
@@ -24,7 +24,7 @@ The gap this created, concretely: this same session hand-authored HTML for a
 different candidate's different offer (Bolt.new, `cv.html`/`letter.html`, v1-v3)
 token by token instead of filling the JSON schema and running the existing
 renderer — the exact "spend tokens where a script would do" pattern CLAUDE.md's
-own Automation section and Ivan's separate 2026-09-17 note both name directly
+own Automation section and a separate 2026-09-17 candidate note both name directly
 ("Lo de usar scripts para todo lo que se pueda automatizar en vez de usar tokens,
 también es importante, eso lo intento en todos los proyectos y skills").
 
@@ -40,6 +40,16 @@ the shared copy, and leave the original in place. First real exercise of the
 promoted tool: render Bolt.new's existing `cv.json`/`letter.json` (or fill them
 from its hand-written HTML if they don't yet exist) into a PDF the same way
 Grafana's v13 was.
+
+This task cannot be exercised against fabricated data: proving the promoted renderer
+works means pointing it at a real candidate's `cv/master.json` + `profile/stories.jsonl`,
+not placeholder content — and that data lives outside this repo, under
+`~/.integral-job-search/profiles/<handle>/`. Reading it requires an identified session
+with the profile's own owner present, e.g. a test-mode session where they point the
+assistant at their own data with a `[[...]]` note (`.claude/skills/test-mode/SKILL.md`).
+If this task is picked up with nobody present to supply that pointer, say so in the task
+file and hold rather than fabricate or guess profile data — and never read a profile
+without its own owner's go-ahead.
 
 ## Acceptance gate
 

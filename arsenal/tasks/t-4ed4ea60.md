@@ -5,7 +5,7 @@ priority: 5
 tags: [step-11-application]
 ---
 
-Candidate note (Ivan, 2026-09-17, step `application`): "Todo lo que hayas aprendido
+Candidate note (2026-09-17, step `application`): "Todo lo que hayas aprendido
 y que pueda servir para cualquier candidato, anótalo como una tarea para hacerlo
 siempre. Por ejemplo, revisar otros currículums generados para aprender de lo que
 ya funcionó (o por lo menos se usó) habría que hacerlo, para no generar los CV de
@@ -27,7 +27,7 @@ and asked for its framing to be reused in three other drafts (Cohere, LiveKit,
 Bolt.new) — the skill itself has no step that does this on its own, so the same
 reuse would not happen unprompted next time.
 
-Per Ivan's separate 2026-09-17 note on the same principle ("Lo de usar scripts
+Per a separate 2026-09-17 candidate note on the same principle ("Lo de usar scripts
 para todo lo que se pueda automatizar en vez de usar tokens, también es
 importante"), this should be backed by a script, not by the model re-reading N
 full prior documents from memory each time: something that walks a candidate's
