@@ -307,6 +307,57 @@ def test_a_bash_command_mentioning_no_path_yields_no_paths() -> None:
     assert paths_in_tool_call("Read", {"file_path": "/x/y"}) == ["/x/y"]
 
 
+def test_a_bash_command_naming_another_handle_via_the_id_flag_is_refused(
+    two_profiles: tuple[Path, Identity, Identity],
+) -> None:
+    """The step scripts pass the candidate as `--id <handle>`, never as a
+    `profiles/<handle>` fragment — the CLI-argument gap found alongside T170."""
+    root, first, second = two_profiles
+    blocked = guard_tool_call(
+        "Bash",
+        {
+            "command": (
+                "uv run python3 .claude/skills/step-08-understanding/scripts/"
+                f"run_checkpoint.py --id {second.handle} --dev"
+            )
+        },
+        root=root,
+        active=first.handle,
+    )
+    assert not blocked.allowed
+    assert second.handle in blocked.reason
+
+    allowed = guard_tool_call(
+        "Bash",
+        {"command": f"uv run python3 run_checkpoint.py --id {first.handle} --dev"},
+        root=root,
+        active=first.handle,
+    )
+    assert allowed.allowed
+
+
+def test_the_handle_flag_matches_long_form_equals_and_quoting(
+    two_profiles: tuple[Path, Identity, Identity],
+) -> None:
+    root, first, second = two_profiles
+    for command in (
+        f"run_checkpoint.py --handle {second.handle}",
+        f"run_checkpoint.py --id={second.handle}",
+        f"run_checkpoint.py --id '{second.handle}'",
+        f'run_checkpoint.py --id "{second.handle}"',
+    ):
+        blocked = guard_tool_call("Bash", {"command": command}, root=root, active=first.handle)
+        assert not blocked.allowed, command
+
+
+def test_a_non_handle_shaped_id_value_is_not_treated_as_a_path() -> None:
+    # `_validate_handle` would refuse these too, so they could not have named
+    # a real profile either way — nothing to guard against, only false
+    # positives to avoid.
+    assert paths_in_tool_call("Bash", {"command": "gh issue view --id Some_Weird_ID"}) == []
+    assert paths_in_tool_call("Bash", {"command": "docker run --id UPPERCASE"}) == []
+
+
 def test_the_hook_blocks_with_exit_two_and_explains_itself(
     two_profiles: tuple[Path, Identity, Identity],
 ) -> None:

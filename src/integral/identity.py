@@ -7,10 +7,16 @@ exists because the prose version of it is unenforceable:
 
 * **`ProfileStore`** — every store operation goes through one object that was
   constructed with a handle, and it resolves every path beneath that handle's
-  tree. There is no function here that takes a bare path, so "read the wrong
-  person's evidence" is not an operation a caller can express by accident. A
-  path that escapes the tree raises `ProfileLeak` rather than returning
-  something plausible.
+  tree; a path that escapes it raises `ProfileLeak` rather than returning
+  something plausible. That guarantee is about the tree it was given, not
+  about which handle a caller passes in: `ProfileStore(root, handle)` never
+  checks `handle` against who this session identified, so "read the wrong
+  person's evidence" is an operation a caller *can* express — notably, every
+  `run_checkpoint.py` step script takes the candidate as a bare `--id
+  <handle>` argument. `paths_in_tool_call`'s `_BASH_HANDLE_FLAG` gives the
+  `PreToolUse` hook a heuristic check on that one calling convention; it is
+  not a change to this class, which still trusts its caller's handle
+  completely.
 * **`resolve_handle`** — the four-step order of §6.1 as a pure function that
   returns *what to do next*, never a handle it picked on the candidate's
   behalf. Case 2 (exactly one profile) returns `confirm`, not that profile:
@@ -659,24 +665,46 @@ def guard_decision(
 # `profiles/`, and the alternative is missing the one that matters.
 _BASH_PROFILE_PATH = re.compile(r"profiles/[\w.-]+(?:/[\w.-]+)*")
 
+# The step scripts (`.claude/skills/step-*/scripts/run_checkpoint.py`) take the
+# candidate as `--id <handle>` rather than a `profiles/<handle>` path fragment,
+# so the pattern above cannot see it — the root is resolved from $INTEGRAL_HOME
+# and the handle is a bare token. Matched here and, in `paths_in_tool_call`,
+# turned into the same `profiles/<value>` string the rule above would have
+# produced, so it is judged by the exact same `guard_decision` rules. A value
+# that is not handle-shaped is left alone rather than refused: `_validate_handle`
+# would reject it too, so it could not have named a real profile either way.
+_BASH_HANDLE_FLAG = re.compile(r"--(?:id|handle)[= ](\S+)")
+
 
 def paths_in_tool_call(tool_name: str, tool_input: dict[str, Any]) -> list[str]:
     """Which paths a `PreToolUse` payload is about.
 
     File tools name their path in a field. `Bash` does not, so its command
-    string is scanned for anything that looks like a path under `profiles/`;
-    everything else in the command is left alone, so an unrelated command
-    yields no paths and is never refused.
+    string is scanned for anything that looks like a path under `profiles/`,
+    plus the `--id`/`--handle <handle>` form the step scripts use instead of a
+    path fragment; everything else in the command is left alone, so an
+    unrelated command yields no paths and is never refused.
 
-    The shell is not parsed, and it cannot be — this is a heuristic, and the
-    store-side `ProfileLeak` is the enforcing layer. What the heuristic must
-    not do is *silently* let something through, so it errs towards matching.
+    The shell is not parsed, and it cannot be — this is a heuristic.
+    `ProfileStore`'s own checks are the other layer, but they only refuse a
+    handle's tree being escaped (`..`, an absolute path, a symlink); they
+    never compare the handle a caller constructs against who this session
+    identified. A handle reaching a script as a bare token is invisible to
+    this scan and unchecked at that layer too — `_BASH_HANDLE_FLAG` below
+    closes the one such convention in use today, not every way a handle
+    could arrive outside a path-shaped string. What the heuristic must not
+    do is *silently* let something through, so it errs towards matching.
     """
     if tool_name == "Bash":
         command = tool_input.get("command")
         if not isinstance(command, str):
             return []
-        return [match.group(0) for match in _BASH_PROFILE_PATH.finditer(command)]
+        paths = [match.group(0) for match in _BASH_PROFILE_PATH.finditer(command)]
+        for flag_match in _BASH_HANDLE_FLAG.finditer(command):
+            value = flag_match.group(1).strip("'\"")
+            if HANDLE.match(value):
+                paths.append(f"profiles/{value}")
+        return paths
     found: list[str] = []
     for key in ("file_path", "path", "notebook_path"):
         value = tool_input.get(key)
