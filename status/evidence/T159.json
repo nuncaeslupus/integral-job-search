@@ -486,6 +486,7 @@
     "salary_recovery.HOUSE_ESTIMATE_MINIMUM",
     "salary_recovery.MINIMUM_CORPUS_ADS",
     "scoring.BATCH_THRESHOLD",
+    "session_kind.MINIMUM_SESSION_KIND_CASES",
     "skill_budget.BUDGET_GRANULARITY",
     "skill_budget.FALLBACK_BUDGET_CHARS",
     "skill_budget.MIN_HEADROOM_CHARS",
