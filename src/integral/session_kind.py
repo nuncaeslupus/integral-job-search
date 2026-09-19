@@ -58,6 +58,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from integral.identity import (
     Handle,
     IdentityError,
@@ -176,10 +178,12 @@ def session_kind(root: Path, *, session_id: str | None = None) -> Verdict:
     if session_id:
         try:
             header = NoteLedger(ledger_path(root, session_id)).header()
-        except MetaNoteError:
-            # A ledger this corrupt names no session state reliably — treated
-            # as absent, not as a crash: `session_kind()` promises a `Verdict`
-            # for every reachable tree, corrupt files included.
+        except (MetaNoteError, ValidationError):
+            # A ledger this corrupt — unparseable JSON (MetaNoteError) or
+            # JSON that fails the row schema (ValidationError) — names no
+            # session state reliably. Treated as absent, not as a crash:
+            # `session_kind()` promises a `Verdict` for every reachable
+            # tree, corrupt files included (CodeRabbit, PR #517).
             header = None
         simulated_by_ledger = bool(header is not None and header.simulated)
 
@@ -256,7 +260,11 @@ def resolve_session_kind(
             f"no candidate store here — {exc}",
         )
     verdict = session_kind(root, session_id=session_id)
-    if record and session_id:
+    if record:
+        if not session_id:
+            raise ValueError(
+                "record=True requires a session_id — there is nothing to bind the record to"
+            )
         record_session_kind(root, verdict, session_id=session_id, now=now)
     return verdict
 

@@ -30,6 +30,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from integral.identity import ProfileStore, create_profile, write_active_handle
 from integral.session_kind import (
     read_recorded_kind,
@@ -200,6 +202,29 @@ def test_a_corrupt_ledger_does_not_crash_and_resolves_as_if_absent(tmp_path: Pat
     assert verdict.signal == "resolved_handle"
 
 
+def test_a_schema_invalid_ledger_row_does_not_crash_and_resolves_as_if_absent(
+    tmp_path: Path,
+) -> None:
+    """CodeRabbit, PR #517. Valid JSON that fails `SessionRow`'s schema (missing
+    `session_id`/`simulated`/`at`) makes `NoteLedger.header()` raise pydantic's
+    `ValidationError`, not `test_mode.MetaNoteError` — a sibling of the F4 gap,
+    through a different door: `raw_rows()` only guards against unparseable
+    JSON, and schema validation happens one layer up, in `header()` itself.
+    Same fixture shape as the `MetaNoteError` case, so the two stay comparable.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Schema Invalid", handle="schema-invalid", language="en")
+    write_active_handle(root, identity.handle, session_id="sess-schema-invalid")
+    corrupt = ledger_path(root, "sess-schema-invalid")
+    corrupt.parent.mkdir(parents=True, exist_ok=True)
+    corrupt.write_text('{"kind": "session"}\n', encoding="utf-8")
+
+    verdict = session_kind(root, session_id="sess-schema-invalid")
+
+    assert verdict.kind == "candidate"
+    assert verdict.signal == "resolved_handle"
+
+
 def test_a_real_candidate_under_test_mode_without_fiction_is_still_a_candidate(
     tmp_path: Path,
 ) -> None:
@@ -303,3 +328,19 @@ def test_resolve_session_kind_records_only_when_asked(tmp_path: Path) -> None:
 
     resolved_root = profiles_root(env=env)
     assert read_recorded_kind(resolved_root, session_id="sess-diagnostic") is None
+
+
+def test_resolve_session_kind_refuses_to_record_without_a_session_id(tmp_path: Path) -> None:
+    """CodeRabbit, PR #517. `record=True` with no `session_id` used to no-op
+    silently — a caller who asked for the verdict to be persisted would never
+    learn it was not, since there is nothing to bind the record to (the same
+    reason `record_session_kind` requires a `session_id` at all). Silence on a
+    request that could not be honoured is its own failure mode; this must
+    raise instead.
+    """
+    root = tmp_path / "profiles"
+    root.mkdir(parents=True)
+    env = {"INTEGRAL_HOME": str(tmp_path / "state"), "HOME": str(tmp_path / "unused-home")}
+
+    with pytest.raises(ValueError, match="session_id"):
+        resolve_session_kind(session_id=None, env=env, record=True)
