@@ -1,0 +1,47 @@
+site: es.talent.com
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-09-21"
+
+policy:
+  listings: public
+  # Adjudicated with the repo's own matcher on 2026-09-21, never by reading the
+  # file: `Robots().allows(...)` as `integral-job-search/0.1` returns True for
+  # `/jobs?k=python&l=España` and for `/view?id=600989642228510677`, and False
+  # for `/search-jobs/python` and `/ajax/x` — the negative controls, from the
+  # same file. es.talent.com/robots.txt carries exactly one group, `User-agent:
+  # *`, and no named-agent group at all, so `restated_for_every_named_agent`
+  # cannot arise here: there is no omission to read a permission out of.
+  # Recorded in connectors/robots-adjudications.yaml.
+  robots_txt: respected
+  authentication: none
+
+fixture:
+  provenance: sampled
+  recorded: "2026-09-21"
+  # The advert body in `fixture/detail.html` is truncated by
+  # `tools/excerpt_fixture.py` — 3,351 characters down to 609, ending in the
+  # tool's own marker — so what is committed is enough markup to prove the
+  # selector finds the body and not enough to be a copy of somebody's advert.
+  # The listing fixture is untouched by it and needs to be: this connector maps
+  # no `text` on the card, so there is no teaser span for the tool to cut, and
+  # the board's own preview is ~200 characters anyway.
+  #
+  # Running the tool needed a one-line fix to it, committed alongside: it
+  # located a span with `<div class="X">`, which finds nothing on a board that
+  # serves `class="sc-f4dbceab-10 fRvput"` — and finds it silently, since an
+  # unmatched span is simply left whole.
+  #
+  # Never an advert a candidate was reading: every query and advert here was
+  # chosen for this capture.
+  bodies: excerpted
+  # Not vacuously: the board writes the requester's own address into every
+  # page. All three captures carried `\"ip\":\"<our address>\"` and
+  # `\"ipLocation\":\"<the same>\"` inside the flight payload, twice each,
+  # beside the postcode it geolocated them to. Both were replaced in the raw
+  # bytes — the address by `192.0.2.1` (RFC 5737 TEST-NET-1, which is not
+  # globally routable), the postcode by `00000` — and nothing else in any file
+  # was touched. Re-scanned afterwards for an IPv4 and an IPv6 literal across
+  # all three: no globally-routable address remains.
+  client_ip: redacted

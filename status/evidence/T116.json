@@ -5,7 +5,7 @@
   "competence_fixtures_checked": 16,
   "packages_without_an_adjudication_record": 0,
   "standings": {
-    "two_parsers_agreed": 4,
+    "two_parsers_agreed": 5,
     "single_parser": 18,
     "no_negative_control_possible": 5
   },
@@ -22,6 +22,7 @@
     "arbeitnow.com",
     "boards-api.greenhouse.io",
     "builtin.com",
+    "es.talent.com",
     "examplejobs.test",
     "foorilla.com",
     "getmanfred.com",

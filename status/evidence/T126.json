@@ -1,14 +1,14 @@
 {
   "sourced_offers_without_a_recorded_fetch": 0,
-  "sourced_offers_evaluated": 30,
-  "boards_consulted": 14,
-  "boards_with_a_committed_capture": 6,
-  "boards_steered": 3,
+  "sourced_offers_evaluated": 31,
+  "boards_consulted": 17,
+  "boards_with_a_committed_capture": 7,
+  "boards_steered": 4,
   "boards_starved_by_a_missing_detail_fetch": 0,
-  "boards_needing_the_advert_page": 4,
+  "boards_needing_the_advert_page": 7,
   "unrecorded_offers_detected_by_the_control": 1,
   "advert_requests_after_a_refusal": 0,
   "refused_boards_listed_as_reached": 0,
-  "boards_with_a_second_advert_to_refuse": 2,
+  "boards_with_a_second_advert_to_refuse": 3,
   "gate_status": "measured"
 }

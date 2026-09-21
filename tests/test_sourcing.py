@@ -26,7 +26,13 @@ from integral.candidate import (
     ReachMode,
 )
 from integral.connector_coverage import installed_packages
-from integral.connectors import ListRequest, build_list_requests, build_list_urls, load_connector
+from integral.connectors import (
+    ListRequest,
+    accepts_query,
+    build_list_requests,
+    build_list_urls,
+    load_connector,
+)
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
@@ -43,6 +49,7 @@ from integral.sourcing import (
     measure_browser_route,
     measure_fixture,
     measure_flood,
+    needs_browser,
     offers_without_a_recorded_fetch,
     packages_for,
     read_capture,
@@ -166,7 +173,26 @@ def test_searched_and_handed_everything_are_reported_apart(store: ProfileStore) 
         directory=_CONNECTORS,
         robots=_robots(),
     )
-    assert set(run.steered) == {"tecnoempleo_es", "jobfluent_es", "trabajos_es"}
+    # Derived from the library's own declarations, not listed. Three names were
+    # written out here until `talent_es` landed and made the list a census that
+    # every future package would have to remember to update — `CLAUDE.md`'s
+    # enumeration-has-no-last-element, in a test. What the run is being held to
+    # is the partition: every package whose `url_pattern` takes a query and
+    # whose capture answered is on the steered side, and nothing is on both.
+    answered = set(_captures())
+    steerable = set()
+    for package in packages_for(_spain(), _CONNECTORS):
+        if not package.site or package.site.removeprefix("www.") not in answered:
+            continue
+        connector = load_connector(_CONNECTORS / package.name)
+        # A browser-only board (T173, `infojobs_es`) is steerable and has a
+        # capture and still never reaches this `fetch` — it is routed to the
+        # candidate's own browser instead. Found by this derivation rather than
+        # reasoned about: the three hand-written names had it excluded silently.
+        if accepts_query(connector) and not needs_browser(connector):
+            steerable.add(package.name)
+    assert steerable, "no steerable board answered — the assertion below is vacuous"
+    assert set(run.steered) == steerable
     assert "getmanfred_es" in run.unsteered
     assert not set(run.steered) & set(run.unsteered)
 

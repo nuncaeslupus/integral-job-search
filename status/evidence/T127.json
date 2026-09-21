@@ -1,6 +1,6 @@
 {
   "connectors_whose_probe_repeats_its_fixture": 0,
-  "probes_compared": 25,
+  "probes_compared": 26,
   "probes_compared_floor": 12,
   "gate_status": "measured",
   "tautological_probes": [],
@@ -192,6 +192,17 @@
       "reason": null,
       "fixture_offers": 2,
       "probe_offers": 1,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
+    },
+    {
+      "package": "talent_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 15,
+      "probe_offers": 13,
       "shared_offers": 0,
       "overlap": 0.0,
       "repeats_the_fixture": false,

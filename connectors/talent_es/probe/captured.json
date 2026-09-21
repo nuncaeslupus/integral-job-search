@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-09-21",
+  "url": "https://es.talent.com/jobs?k=enfermera&l=Espa%C3%B1a",
+  "status": 200,
+  "surface": "laptop",
+  "provenance": "live",
+  "response": {
+    "file": "list.html",
+    "bytes": 582365,
+    "sha256": "3acc4d1414a847841e0d9886a03b91965a2a0b6402bbee075fd95043e6e386b3"
+  }
+}

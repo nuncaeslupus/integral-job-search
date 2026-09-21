@@ -58,7 +58,14 @@ def visible(html: str) -> str:
 def _spans(raw: str, css_class: str) -> list[tuple[int, int, str]]:
     """(start, end, inner) for every `<div class="…">…</div>` with that class."""
     found = []
-    for match in re.finditer(rf'<div class="{re.escape(css_class)}"[^>]*>', raw):
+    # The class list is split rather than pattern-matched, because a board that
+    # ships one class per container is not the general case: `es.talent.com`
+    # serves `class="sc-f4dbceab-10 fRvput"`, where the selector names the first
+    # of two and a regex anchored on the closing quote finds nothing at all —
+    # silently, since a span that does not match is simply not excerpted.
+    for match in re.finditer(r'<div class="([^"]*)"[^>]*>', raw):
+        if css_class not in match.group(1).split():
+            continue
         close = raw.find("</div>", match.end())
         if close != -1:
             found.append((match.end(), close, raw[match.end() : close]))

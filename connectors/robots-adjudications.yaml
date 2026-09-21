@@ -559,3 +559,52 @@ adjudications:
       the repo matcher refuses `/internal/x` there and admits
       `/rippling/jobs/<uuid>`, and the engine adjudicates every detail URL
       before fetching it (`sourcing._may_fetch`).
+
+  - site: es.talent.com
+    package: connectors/talent_es
+    checked: 2026-09-21
+    agent: "integral-job-search/0.1"
+    standing: two_parsers_agreed
+    second_reader: "integral.second_reader"
+    source: connectors/talent_es/meta.yaml
+    allowed:
+      - /jobs?k=python&l=Espa%C3%B1a
+      - /view?id=600989642228510677
+    second_reader_refused:
+      - /search-jobs/python
+      - /ajax/x
+    reason: >
+      One group in the whole file — `User-agent: *` — and no named-agent group
+      at all, so `restated_for_every_named_agent` cannot arise here: there is
+      no omission from which a permission could be read. The two paths this
+      package fetches are the listing and the advert page, and neither is
+      covered by any rule. Both readers refuse `/search-jobs/*` and `/ajax/*`,
+      which are the negative controls and come from this same file; both also
+      refuse `/convert`, `/es/redirect?x=1` and `/foo.shtml`, so the agreement
+      is not resting on a single rule shape. The second reader is
+      `integral.second_reader` rather than the stdlib because T120 made it the
+      default, and on this file it matters: the RFC's longest-match precedence
+      is what distinguishes `/jobs` from the `/*.shtml` and `/redirect*`
+      patterns around it. The file also carries two malformed lines —
+      `Disallow: # <comment>` — which under §2.2.2 are empty patterns matching
+      nothing, and neither reader treats them as a blanket refusal.
+    robots_txt: |
+      User-Agent: *
+      Disallow: /services/api-new/search
+      Disallow: /search-jobs/*
+      Disallow: /api/v1/tracker/pixel
+      Disallow: /coreg/register.php
+      Disallow: /neuvooEmailPixel
+      Disallow: /cdn-cgi/rum
+      Disallow: /redirect*
+      Disallow: /*.shtml
+      Disallow: /invoice-report
+      Disallow: /invoice-report?token*
+      Disallow: /ajax/*
+      Disallow: # Block redirect this is the apply form
+      Disallow: /es/redirect*
+      # …and the same `/<xx>/redirect*` line for 25 further locales
+      Disallow: # Block convert due to excesive crawl volume
+      Disallow: /es/convert*
+      # …and the same `/<xx>/convert*` line for 25 further locales
+      Disallow: /convert*

@@ -2759,21 +2759,29 @@ def test_deleting_the_capture_is_not_the_cheapest_way_to_pass(
 
 
 def test_the_committed_library_has_no_unenforced_provenance() -> None:
-    """The gate itself, over the twenty shipped captures — eighteen truthfully
-    `unrecorded`, one `transcribed` naming a ledger line that carries its URL
-    and its body, and one `live` (`jobfluent_es`, re-recorded by T171) whose
-    response bytes are committed beside it."""
+    """The gate itself, over the shipped captures — most truthfully `unrecorded`,
+    one `transcribed` naming a ledger line that carries its URL and its body,
+    and three `live` (`trabajos_es`, `jobfluent_es`, `talent_es`) whose response
+    bytes are committed beside them."""
     measured = cp.measure(_LIBRARY)
 
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
     # 18, plus T144's five ATS-host probes, which say `unrecorded` too, less
-    # the two recorded `live` with their responses committed: T166's
-    # `trabajos_es` and T171's `jobfluent_es`. Both branches asserted one
-    # `live` for their own package, in the same words, so the merge kept a
-    # number neither side measured — `CLAUDE.md`'s census collision, in a test
-    # rather than in evidence.
-    assert measured["claims"] == {"live": 2, "transcribed": 1, "unrecorded": 22}
+    # the three recorded `live` with their responses committed: T166's
+    # `trabajos_es`, T171's `jobfluent_es` and T194's `talent_es`. Two branches
+    # once asserted one `live` each for their own package, in the same words, so
+    # the merge kept a number neither side measured — `CLAUDE.md`'s census
+    # collision, in a test rather than in evidence. That is also why this line
+    # is re-measured rather than incremented whenever a package lands: the
+    # arithmetic below says which packages the three are, so a fourth cannot
+    # arrive anonymously.
+    assert measured["claims"] == {"live": 3, "transcribed": 1, "unrecorded": 22}
+    assert sorted(
+        package.name
+        for package in sorted(_LIBRARY.iterdir())
+        if (record := cp.read_record(package)) is not None and record["provenance"] == pc.LIVE
+    ) == ["jobfluent_es", "talent_es", "trabajos_es"]
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 

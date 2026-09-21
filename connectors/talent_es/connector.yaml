@@ -1,0 +1,93 @@
+# talent.com's Spanish front. One market only: es.talent.com. The
+# international subdomains are separate hosts with their own robots.txt, and
+# nothing here has adjudicated them.
+site: talent
+locale: es
+version: "1.0.0"
+last_verified: "2026-09-21"
+auth: none
+
+list:
+  # `l=` is not optional. `https://es.talent.com/jobs?k=python` answers 307 to
+  # `…&l=<the city the request's IP geolocates to>` — measured 2026-09-21, it
+  # appended `l=Barcelona` unasked. A pattern with no `l=` therefore searches a
+  # city nobody chose, and the engine has no `{location}` placeholder to let the
+  # caller choose one, so the market is named here: `España`, the board's own
+  # nationwide value, which renders as "Empleo en Spain".
+  url_pattern: "https://es.talent.com/jobs?k={query}&l=Espa%C3%B1a"
+  # The board's own next-page link is `…&p=2`, and `p` is honoured — but it is
+  # honoured into an empty page. Measured 2026-09-21 on two queries, with and
+  # without a session cookie: `k=python&l=España` p=1 → 15 adverts, p=2 → 0 and
+  # "No hay resultados"; `k=enfermera&l=Madrid` p=1 → 12, p=2 → 0. One page is
+  # all this board serves us, so no request key is sent and none needs certifying.
+  pagination: {mode: none, max_pages: 1}
+  # The board's own test hook, and the only attribute on the card that is not a
+  # build hash.
+  item: 'article[data-testid="job-card-unified"]'
+  fields:
+    # Bare tags, deliberately. Every class on this page is a Next.js CSS-module
+    # hash (`JobCard_title__X32Qk`) that changes on any redeploy that touches
+    # the stylesheet. Counted with the repo's own parser across all 15 fixture
+    # cards and all 13 probe cards: `h2`, `p` and `a` are each present exactly
+    # once per card, so the bare tag is both correct and the durable spelling.
+    title: {css: "h2"}
+    # No `text:` here, though the card carries a teaser in its one `<p>`. Two
+    # reasons, and the second is the load-bearing one:
+    #
+    #   * The teaser is 212 characters of a 3,310-character advert, so a row
+    #     that completes from it is a row the candidate is matched on a preview.
+    #   * The board's teaser is de-tagged but only half-decoded. Advert
+    #     625247415533179156 stores its body as HTML — `<strong>C&#43;&#43;
+    #     </strong>` — and the card's `<p>` serves that as the *text*
+    #     `C&#43;&#43;`, escaped once more into `C&amp;#43;&amp;#43;`. Read as
+    #     text there is no reference left to decode, so `C&#43;&#43;` is what
+    #     the candidate would be shown, and `make evidence` says so:
+    #     `markup_text` → "talent: offer text carries '&#43;'". The same advert
+    #     read through `detail:` below yields `C++`, because there the value is
+    #     real markup and `text_content` decodes the reference. Declaring
+    #     `take: escaped_html_text` on the `<p>` would also yield `C++` and
+    #     would be a lie about the encoding — the teaser is not escaped HTML,
+    #     it is text with one stray reference in it — and on this board of all
+    #     boards the lie is expensive: an advert writing `&lt;canvas&gt;` would
+    #     have the word deleted (`connectors.py`'s own worked example).
+    # The card's only anchor: "Mostrar más", pointing at `/view?id=…`.
+    detail_url: {css: "a", attr: href}
+    # These two have no tag-level spelling: company, a bullet and location are
+    # three sibling `<span>`s inside one `<address>`, distinguished by nothing
+    # but the hash. Reading the `<address>` whole would yield
+    # "Trinetix•Valencia, Comunidad Valenciana, Spain" as the location, and no
+    # `take:` member splits on a bullet. So the hashes are load-bearing here and
+    # are what `connector_health.assess_package` will see rot first.
+    company: {css: "span.JobCard_company__NmRol"}
+    location_raw: {css: "span.JobCard_location__nmTtw"}
+
+detail:
+  fields:
+    # The advert body, and the only node on the page that is it: measured as
+    # exactly one match on two adverts fetched live on 2026-09-21
+    # (625247415533179156 → 3,212 chars, 600989642228510677 → 3,351). The
+    # wrapper one level out, `div.styles_jobDescriptionColumn__KIcuE`, is the
+    # stabler-looking name and is the wrong node — it drags in the title, the
+    # company, the posting age and a trailing "Crear una alerta de empleo"
+    # block.
+    #
+    # `sc-f4dbceab-10` is a styled-components hash and will not survive a
+    # redeploy that touches this component. There is no stabler anchor on the
+    # page: no id, no data attribute, no semantic element around the body. That
+    # is what `connector_health.assess_package` is for, and it is the first
+    # thing to check when this package returns rows with no text.
+    text: {css: "div.sc-f4dbceab-10"}
+
+# Why the body is fetched per advert rather than read off the listing.
+#
+# `sourcing._one_board` fetches a detail page only when the list row cannot
+# complete an offer (`sourcing.py:1136`). With `text` mapped on the card, a live
+# run on 2026-09-21 reported `items=16 added=16 dropped=0 detail_needed=0` — the
+# advert page was never touched. Dropping `text` is what turns the block above
+# from a declaration whose execution path never arrives into the path itself.
+#
+# The price is one fetch per advert and an offer lost outright whenever that
+# fetch fails, which is the shape ten of this library's twenty-six packages
+# already have (`arbeitnow_en`, `lever_en`, `remotive_en`, …). It buys the real
+# body instead of a preview, and it is the only reading of this board that does
+# not hand the candidate the board's own half-decoded text.
