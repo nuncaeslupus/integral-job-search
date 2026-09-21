@@ -26,13 +26,28 @@ list:
   # So a second page is real for one query and empty for the other, and the
   # earlier reading was a single query generalised. The string "No hay
   # resultados" cannot tell those apart: it appears **7 times on a page carrying
-  # 16 adverts** — it is a Next.js translation string shipped in the props of
-  # every page — and 8 times on an empty one. A count that moves by one out of
-  # seven is not a state indicator, and nothing here reads it.
+  # 15 adverts** — that page is `fixture/list.html`, so the pair is countable
+  # from the committed bytes; it is a Next.js translation string shipped in the
+  # props of every page — and 8 times on an empty one. A count that moves by one
+  # out of seven is not a state indicator, and nothing here reads it.
+  #
+  # The live table above read 16 for that same URL minutes earlier. A board that
+  # moves by one advert between two fetches is the ordinary case, and it is the
+  # reason the clause is now stated against the committed capture rather than
+  # against a live count nothing can re-run.
   #
   # `max_pages: 2`, not 3, because `sourcing._one_board` has no empty-page
   # break: it requests every page in the range whatever the last one returned.
   # Two is one wasted request on a query that has one page; three is two.
+  #
+  # It is also, today, a declaration rather than a request. `connectors.py`
+  # consults `max_pages` only when its caller passes no `page_count`, and
+  # `sourcing.source` declares `page_count: int = 1` and always forwards it —
+  # so nothing outside the tests reaches this number and a live run fetches
+  # page 1 only. That is fail-closed (fewer requests than declared, never
+  # more) and it is an engine gap rather than a connector one, so it is
+  # recorded here rather than worked around by writing a number this file
+  # does not mean.
   pagination: {mode: query_param, param: p, start: 1, max_pages: 2}
   # The board's own test hook, and the only attribute on the card that is not a
   # build hash.
@@ -41,8 +56,11 @@ list:
     # Bare tags, deliberately. Every class on this page is a Next.js CSS-module
     # hash (`JobCard_title__X32Qk`) that changes on any redeploy that touches
     # the stylesheet. Counted with the repo's own parser across all 15 fixture
-    # cards and all 13 probe cards: `h2`, `p` and `a` are each present exactly
+    # cards and all 10 probe cards: `h2`, `p` and `a` are each present exactly
     # once per card, so the bare tag is both correct and the durable spelling.
+    # (The probe read 13 until it was re-captured; the artefact moved and this
+    # sentence did not, which is what a figure in a comment does. Both numbers
+    # are countable from the committed files.)
     title: {css: "h2"}
     # No `text:` here, though the card carries a teaser in its one `<p>`. Two
     # reasons, and the second is the load-bearing one:

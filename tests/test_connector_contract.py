@@ -19,6 +19,7 @@ import json
 import re
 import shutil
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -27,12 +28,15 @@ import yaml
 
 from integral.connector_contract import (
     _PAIR,
+    _RUN_WINDOW,
     ADDRESS_BEARING_KEYS,
     DEFAULT_EVIDENCE_PATH,
     MINIMUM_PACKAGES,
     OPTIONAL_ENTRIES,
     PARSE_FILENAME,
     REQUIRED_ENTRIES,
+    _is_address_bearing,
+    _key_spelling,
     _main,
     check_capture_redaction,
     check_library,
@@ -998,6 +1002,174 @@ def test_every_field_the_board_puts_beside_the_address_is_reached(package: Path)
     assert not unreached, unreached
 
 
+@lru_cache(maxsize=1)
+def _committed_blocks() -> tuple[str, ...]:
+    """Every requester block the board actually ships, as raw slices.
+
+    Read off a committed capture rather than built here. Sliced, because the
+    capture is half a megabyte and the point is the board's *keys*, not a
+    second scan of its adverts — and cached, because finding them costs seconds.
+    """
+    capture = (_LIBRARY / "talent_es" / "probe" / "list.html").read_text(encoding="utf-8")
+    return tuple(capture[start:end] for start, end in requester_location_blocks(capture))
+
+
+def _scalar_pairs(text: str) -> list[tuple[str, str]]:
+    return [
+        (m.group(1), m.group(2))
+        for m in _PAIR.finditer(text)
+        if m.group(2) not in {"true", "false", "null"}
+    ]
+
+
+def test_the_varied_population_is_the_boards_and_not_this_files() -> None:
+    """The population a test varies has to be the one the board writes.
+
+    `_REQUESTER_PAYLOAD` is this file's literal, and a test that derives its
+    cases from it derives them from what somebody remembered to type — the
+    exact shape the docstring above disclaims while doing it. The committed
+    capture carries keys that literal does not, and every one of them is a
+    field the board puts beside the requester's address.
+
+    So the check is a containment: whatever the board ships is reached. If the
+    board ships a key this file never imagined, that is the case that matters.
+    """
+    blocks = _committed_blocks()
+    assert blocks, "the committed capture has no requester block to derive from"
+
+    unreached = []
+    for block in blocks:
+        for key, value in _scalar_pairs(block):
+            leaked = '\\"203.0.113.9\\"' if _is_address_bearing(key) else "41.4085"
+            pair = '\\"' + key + '\\":'
+            dirtied = block.replace(pair + value, pair + leaked, 1)
+            if dirtied == block:
+                continue
+            cleaned, changed = scrub_requester_location(dirtied)
+            if changed == 0 or leaked.strip('\\"') in cleaned:
+                unreached.append(key)
+    assert not unreached, unreached
+
+
+def test_the_board_ships_keys_this_files_literal_does_not() -> None:
+    """The denominator behind the test above — and why it is not decorative.
+
+    If the committed capture's keys were a subset of `_REQUESTER_PAYLOAD`'s,
+    the containment check would be satisfied by the literal and would be
+    measuring nothing. It is not: the board writes fields nobody here typed.
+    """
+    board = {key for block in _committed_blocks() for key, _ in _scalar_pairs(block)}
+    literal = {key for key, _ in _scalar_pairs(_REQUESTER_PAYLOAD)}
+    assert board - literal, sorted(board)
+
+
+def test_a_scalar_written_before_the_block_is_reached(package: Path) -> None:
+    """Clause 3's left edge, pinned — it had no test at all.
+
+    Removing the run from `_LEADING_RUN` (its `)*` to `){0}`) left all of this
+    file green, because every other case varies pairs *inside* the object and
+    the span still starts at the object's own key. The pairs the clause exists
+    for are the ones written before it, so those are what this varies.
+    """
+    head = _REQUESTER_PAYLOAD.split('\\"location\\":', 1)[0]
+    before = [key for key, _ in _scalar_pairs(head)]
+    assert before, head
+
+    for key in before:
+        assert any(key in v for v in check_capture_redaction(package)) or key in _reached_keys(
+            package, key
+        ), key
+
+
+def _reached_keys(package: Path, key: str) -> set[str]:
+    """Whether the sweep reaches `key` when the board leaks it."""
+    pair = '\\"' + key + '\\":'
+    dirtied = _REQUESTER_PAYLOAD.replace(pair + '\\"Barcelona, ES\\"', pair + '\\"41.4085\\"', 1)
+    listing = _with_payload(package, dirtied)
+    try:
+        return {key} if any(key in v for v in check_capture_redaction(package)) else set()
+    finally:
+        listing.write_text(
+            listing.read_text(encoding="utf-8").replace(dirtied, ""), encoding="utf-8"
+        )
+
+
+def test_a_scalar_written_after_a_requester_object_is_reached() -> None:
+    """Clause 3's right edge — the ordering axis, generated rather than listed.
+
+    Which side of a nested member the board writes a scalar on is its choice,
+    and it can change it in a redeploy. So the case is every rotation of the
+    same members, not the one order that happens to be committed today: under
+    each, nothing of the requester survives.
+    """
+    members = [
+        '\\"userID\\":\\"u-8821f0ab\\"',
+        '\\"locale\\":\\"es-ES\\"',
+        '\\"customIDs\\":{\\"nuuid\\":\\"n-77\\",\\"stableID\\":\\"s-31\\"}',
+    ]
+    secrets = ("u-8821f0ab", "es-ES", "n-77", "s-31")
+    for rotation in range(len(members)):
+        ordered = members[rotation:] + members[:rotation]
+        payload = "{" + ",".join(ordered) + "}"
+        scrubbed, changed = scrub_requester_location(payload)
+        assert changed, (rotation, payload)
+        assert not [s for s in secrets if s in scrubbed], (rotation, scrubbed)
+
+
+def test_a_key_spelled_another_way_is_the_same_key() -> None:
+    """Separator and casing are not a vocabulary, so they are closed here.
+
+    Derived from the committed set: every address-bearing key, re-spelled every
+    way the same word can be written, still seeds. `client-ip` did not before —
+    `_KEY` could not even match a hyphen — so the sweep returned nothing at all
+    and the gate stayed green over a leaked address.
+    """
+    for key in sorted(ADDRESS_BEARING_KEYS):
+        spelling = _key_spelling(key)
+        variants = {key, spelling, spelling.upper(), spelling.capitalize()}
+        if len(spelling) > 2:
+            variants |= {spelling[:-2] + "-" + spelling[-2:], spelling[:-2] + "." + spelling[-2:]}
+        for variant in sorted(variants):
+            payload = '{"' + variant + '":"203.0.113.9","city":"Barcelona","lat":41.4085}'
+            scrubbed, changed = scrub_requester_location(payload)
+            assert changed, variant
+            assert "203.0.113.9" not in scrubbed, variant
+            assert "41.4085" not in scrubbed, variant
+
+
+def test_an_escape_in_a_neighbouring_value_does_not_hide_the_block() -> None:
+    """A string grammar that stops at a backslash cannot see an accented city.
+
+    `_VALUE` matched `[^"\\]*`, so one `\\u00f1` anywhere in the requester's own
+    object dropped the seed and the whole block survived. These captures carry
+    roughly nine hundred such escapes apiece, so this is the requester living
+    in A Coruña rather than an exotic input.
+    """
+    for city in (r"A Coru\u00f1a", r"A Coru\\u00f1a", "A Coruna"):
+        payload = '{"ip":"203.0.113.9","city":"' + city + '","lat":43.3623,"zip":"15001"}'
+        scrubbed, changed = scrub_requester_location(payload)
+        assert changed, city
+        assert not [s for s in ("203.0.113.9", "43.3623", "15001") if s in scrubbed], city
+
+
+def test_every_committed_file_is_scanned_and_not_only_the_html(package: Path) -> None:
+    """The extension was a proxy for "the capture", and it was the wrong one.
+
+    `probe/captured.json` records the URL that was fetched, and this board
+    answers 307 by appending the city it geolocated the requester to — so the
+    one committed file that names a URL was the one file never scanned.
+    """
+    probe = package / PROBE_DIRNAME / "captured.json"
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    probe.write_text(
+        json.dumps({"url": "https://example.test/jobs", "ip": "203.0.113.9"}),
+        encoding="utf-8",
+    )
+
+    violations = check_capture_redaction(package)
+    assert any("rule 7" in v and "captured.json" in v for v in violations), violations
+
+
 def test_the_boards_own_rows_are_not_swept_with_the_requesters(package: Path) -> None:
     """The fail-open direction has a fail-closed twin, and it is just as wrong.
 
@@ -1041,3 +1213,27 @@ def test_the_committed_captures_carry_nobody_who_fetched_them() -> None:
         if (violations := check_capture_redaction(package))
     }
     assert not offenders, offenders
+
+
+def test_the_run_window_clears_the_widest_block() -> None:
+    """The window's margin, measured rather than asserted in a comment.
+
+    `_RUN_WINDOW` bounds how far a run of scalar pairs is followed. A window
+    that has quietly shrunk under what the committed captures actually need
+    would leave a requester run partly unredacted, and nothing else here would
+    say so — the blocks would still be found, just cut short. So the margin is
+    re-derived from the captures on every run.
+    """
+    widest = max(
+        end - start
+        for path in sorted((_LIBRARY / "talent_es").rglob("*"))
+        if path.is_file()
+        for start, end in requester_location_blocks(
+            path.read_text(encoding="utf-8", errors="replace")
+        )
+    )
+    assert widest < _RUN_WINDOW, f"widest committed block is {widest}, window is {_RUN_WINDOW}"
+    assert widest * 2 < _RUN_WINDOW, (
+        f"the window has no margin left: widest block {widest} against a "
+        f"{_RUN_WINDOW}-character window"
+    )

@@ -250,6 +250,38 @@ ADDRESS_BEARING_KEYS = frozenset(
     {"ip", "ipLocation", "clientIp", "client_ip", "ipAddress", "remoteAddr", "remote_addr"}
 )
 
+
+def _key_spelling(key: str) -> str:
+    """One spelling per key: `client-ip`, `clientIP` and `client_ip` are one key.
+
+    This is a deletion filter over an allowlist, which is the shape CLAUDE.md
+    records as fail-open for resolving an identity — there it welds decoration
+    onto a login and reads as somebody else. The direction is what differs.
+    Normalisation here only ever **merges** spellings into the address-bearing
+    set, and a member of that set is a key this gate demands be redacted, so a
+    collision asks for more redaction, never less. A key whose true spelling is
+    address-bearing normalises onto its member every time; nothing leaves the
+    set. Fail-closed, and named because the shape invites the other reading.
+    """
+    """One spelling per key, so casing and separators stop being a vocabulary.
+
+    `clientIp`, `client_ip`, `client-ip` and `Client.IP` are one key written
+    four ways, and listing spellings is the enumeration that has no last
+    element. Normalising closes that axis; the *vocabulary* below stays an
+    explicit list and is honestly an enumeration, because the alternative —
+    matching keys that merely contain `ip` — takes `zip` with it, and `zip` is
+    a postcode on the requester and a field on an advert.
+    """
+    return re.sub(r"[^a-z0-9]", "", key.lower())
+
+
+_ADDRESS_BEARING_SPELLINGS = frozenset(_key_spelling(k) for k in ADDRESS_BEARING_KEYS)
+
+
+def _is_address_bearing(key: str) -> bool:
+    return _key_spelling(key) in _ADDRESS_BEARING_SPELLINGS
+
+
 # Clause 1's second seed. An address is not the only thing a board records about
 # whoever fetched: talent.com also ships a Statsig `user` payload carrying a
 # device hash and a stable UUID that are the *same* across two of these three
@@ -275,8 +307,25 @@ REDACTED_NUMBER = "0"
 # as often as plain, so every quote below is optionally backslashed. Matching
 # the text rather than parsing it is not a shortcut: a capture is evidence, and
 # parse-and-reserialise would commit a file the board never sent.
-_KEY = r'\\?"([A-Za-z_][A-Za-z0-9_]*)\\?"\s*:\s*'
-_VALUE = r'(\\?"[^"\\]*\\?"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|null)'
+# A JSON string body, escapes included. Possessive throughout, so it is
+# deterministic: each alternative consumes bytes only it can consume, and the
+# pattern never backtracks. That is not a micro-optimisation — a lazy body
+# inside `_FLAT_JSON_OBJECT`'s repeated group backtracks exponentially and did
+# not finish at all over a 546 KB capture.
+#
+#   [^"\\]++   ordinary bytes
+#   \\\\.       two backslashes and a byte — an escape in the doubled form
+#   \\(?!")    one backslash not opening a terminator — an escape when plain
+#
+# so it halts at `"` or at `\\"`, whichever form the capture is written in.
+# What it cannot represent is an escaped quote inside a *plain* string, where
+# `\\"` is both an escape and a terminator and nothing local decides which.
+# Resolving that needs the enclosing structure, and these captures put 547
+# braces inside string values, so the tokeniser it would take is not writable
+# here. Named rather than hidden; no capture in this library contains one.
+_STRING_BODY = r'(?:[^"\\]++|\\\\.|\\(?!"))*+'
+_KEY = r'\\?"(' + _STRING_BODY + r')\\?"\s*:\s*'
+_VALUE = r'(\\?"' + _STRING_BODY + r'\\?"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|null)'
 _PAIR = re.compile(_KEY + _VALUE)
 _FLAT_JSON_OBJECT = re.compile(
     r"\{\s*" + _KEY + _VALUE + r"(?:\s*,\s*" + _KEY + _VALUE + r")*\s*\}"
@@ -286,7 +335,31 @@ _FLAT_JSON_OBJECT = re.compile(
 # before one returns the leftmost start of that run. Bounded to a window
 # because it is applied to a slice of a capture, not to a parsed document.
 _LEADING_RUN = re.compile(r"(?:" + _KEY + _VALUE + r"\s*,\s*)*" + _KEY + r"\Z")
-_LEADING_RUN_WINDOW = 4000
+# Clause 3's right edge — and it applies to **one** of the two seeds, which is
+# the whole of the distinction. An object introduced by a requester key
+# (`custom`, `customIDs`) sits inside a requester record, so the scalars either
+# side of it are the requester's: on this board that is `userID`, `country`,
+# `locale`, and without a right edge they are covered only by the order the
+# board happened to write them in. A reordering it is free to make at any time
+# would leak them with nothing observable moving — the pair count does not even
+# fall.
+#
+# An object that merely *carries* an address is embedded wherever the page put
+# it, and its siblings are not the requester's. Measured here: extending right
+# from `location` reaches `protocol`, `host` and `children` — the page's own
+# metadata and an RSC stream reference — and redacting those corrupts the
+# capture rather than protecting anybody. So the right edge is not symmetric,
+# because the two seeds are not.
+_TRAILING_RUN = re.compile(r"(?:\s*,\s*" + _KEY + _VALUE + r")*")
+# 4,000 characters, which is the run and not the object: the widest block this
+# finds across the three committed captures is 306, so the window is thirteen
+# times what it has to reach — and `test_the_run_window_clears_the_widest_block`
+# re-measures that rather than leaving the ratio in this comment, because a
+# figure a comment states is the one thing in this file nothing checks. It is a
+# bound on work rather
+# than on correctness — a run longer than this is left partly unredacted and
+# the capture fails the gate loudly, which is the fail-closed direction.
+_RUN_WINDOW = 4000
 # Clause 4. A whole attribute value, never a substring: the board's own advert
 # rows read `Barcelona, Barcelona, ES`, so a substring sweep for the requester's
 # `Barcelona, ES` would cut an advert's location in half.
@@ -602,7 +675,7 @@ def _redacted(key: str, value: str) -> str:
     if not value.endswith('"'):
         return REDACTED_NUMBER
     quote = '\\"' if value.startswith("\\") else '"'
-    word = REDACTED_IP if key in ADDRESS_BEARING_KEYS else REDACTED_STRING
+    word = REDACTED_IP if _is_address_bearing(key) else REDACTED_STRING
     return f"{quote}{word}{quote}"
 
 
@@ -610,22 +683,48 @@ def requester_location_blocks(text: str) -> list[tuple[int, int]]:
     """The span of every requester-location block in a capture.
 
     A block is a flat JSON object — scalar members only, which is what makes it
-    the *innermost* one — carrying an address-bearing key, extended left to
-    take in its own key and the run of scalar pairs written immediately before
-    it. Flatness is what keeps this off the enclosing object: on a Next.js page
-    that is the whole props payload, translation strings and all, and sweeping
-    it would take the board's own copy with it.
+    the *innermost* one — carrying an address-bearing key, extended in **both**
+    directions to take in its own key and the run of scalar pairs written
+    immediately either side of it. Flatness is what keeps this off the
+    enclosing object: on a Next.js page that is the whole props payload,
+    translation strings and all, and sweeping it would take the board's own
+    copy with it.
+
+    The ceiling, stated rather than dressed up: adjacency is not membership. A
+    scalar the board writes in the same object but *separated from the seed by
+    a nested member that does not itself seed* is not reached. Closing that
+    needs the enclosing object's own braces, and these captures put 547 braces
+    inside string values, in a doubly-escaped stream — so the tokeniser it
+    would take does not exist here. What is claimed is the run; what is not
+    claimed is the object.
+
+    A second ceiling, found by auditing this function rather than reported
+    against it: the two runs are **not** symmetric. The leading run is searched
+    for every block; the trailing run fires only for a block a requester key
+    introduced. The symmetric version was written first and over-collected —
+    it swept `children` (an RSC stream reference), `protocol` and `host` into
+    fifteen violations across the library, because a flat object seeded by an
+    address-bearing key is often a page-shaped object whose neighbours are
+    page data. So a requester scalar written *after* a block that seeded on
+    its own address-bearing key is not reached. That is narrower than the
+    sentence above, it is fail-open, and it is recorded here rather than
+    closed, because closing it needs the same object boundary the paragraph
+    above says is unavailable.
     """
     spans = []
     for match in _FLAT_JSON_OBJECT.finditer(text):
-        window = max(0, match.start() - _LEADING_RUN_WINDOW)
+        window = max(0, match.start() - _RUN_WINDOW)
         lead = _LEADING_RUN.search(text, window, match.start())
         introduced_by = lead.group(3) if lead else ""
         if introduced_by not in REQUESTER_OBJECT_KEYS and not any(
-            key in ADDRESS_BEARING_KEYS for key, _ in _PAIR.findall(match.group(0))
+            _is_address_bearing(key) for key, _ in _PAIR.findall(match.group(0))
         ):
             continue
-        spans.append(((lead.start() if lead else match.start()), match.end()))
+        end = match.end()
+        if introduced_by in REQUESTER_OBJECT_KEYS:
+            trail = _TRAILING_RUN.match(text, end, end + _RUN_WINDOW)
+            end = trail.end() if trail else end
+        spans.append(((lead.start() if lead else match.start()), end))
     return spans
 
 
@@ -635,7 +734,7 @@ def _pairs_to_redact(text: str) -> list[tuple[int, int, str, str]]:
     return [
         (match.start(), match.end(), match.group(1), match.group(2))
         for match in _PAIR.finditer(text)
-        if match.group(1) in ADDRESS_BEARING_KEYS
+        if _is_address_bearing(match.group(1))
         or any(start <= match.start() and match.end() <= end for start, end in blocks)
     ]
 
@@ -675,12 +774,22 @@ def scrub_requester_location(text: str) -> tuple[str, int]:
 
 
 def check_capture_redaction(package: Path) -> list[str]:
-    """Rule 7 — no capture in the package still carries who fetched it."""
+    """Rule 7 — no capture in the package still carries who fetched it.
+
+    Every committed file, not every `*.html`. The extension was a proxy for
+    "the capture", and it is the wrong one: `probe/captured.json` records the
+    URL that was fetched, and this board answers 307 by appending the city it
+    geolocated the requester to — so the one file naming a URL was the one file
+    never scanned. A file that cannot be read as text is not a capture and is
+    skipped, which is why the decode error below is no longer a violation.
+    """
     violations = []
-    for path in sorted(package.rglob("*.html")):
+    for path in sorted(p for p in package.rglob("*") if p.is_file()):
         try:
             raw = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
+        except UnicodeDecodeError:
+            continue
+        except OSError as exc:
             violations.append(f"rule 7: {path.name} could not be read: {exc}")
             continue
         for _, _, key, value in _pairs_to_redact(raw):

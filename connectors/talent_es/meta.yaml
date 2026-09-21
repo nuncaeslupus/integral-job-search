@@ -8,8 +8,9 @@ policy:
   listings: public
   # Adjudicated with the repo's own matcher on 2026-09-21, never by reading the
   # file: `Robots().allows(...)` as `integral-job-search/0.1` returns True for
-  # `/jobs?k=python&l=España`, for the same with `&p=2` (this connector asks
-  # for two pages) and for `/view?id=600989642228510677`, and False
+  # `/jobs?k=python&l=España`, for the same with `&p=2` (a URL this pattern
+  # can emit — see `max_pages` in connector.yaml for why the shipped code
+  # does not currently ask for it) and for `/view?id=600989642228510677`, and False
   # for `/search-jobs/python` and `/ajax/x` — the negative controls, from the
   # same file. es.talent.com/robots.txt carries exactly one group, `User-agent:
   # *`, and no named-agent group at all, so `restated_for_every_named_agent`

@@ -119,3 +119,53 @@ def test_the_tool_finds_the_container_the_connector_names(
         f"{width} class(es) and the tool found no span — it would have left the "
         "advert whole and said so only in a count nobody reads"
     )
+
+
+def _membership_variants(token: str) -> tuple[list[str], list[str]]:
+    """Class lists that must match `token`, and class lists that must not.
+
+    Derived from the token rather than listed, because an enumeration of
+    near-misses has no last element. A class attribute matches when the token
+    is one of its whitespace-separated *members*, so the positives are the
+    token at every position of a list, and the negatives are every way of
+    writing a string that merely **contains** it — the welds and the
+    truncations that a substring, prefix or suffix match would accept.
+    """
+    others = ("fRvput", "x")
+    positives = [
+        " ".join([*members[:i], token, *members[i:]])
+        for members in (list(others[:n]) for n in range(len(others) + 1))
+        for i in range(len(members) + 1)
+    ]
+    negatives = [token + others[0], others[0] + token, token[:-1], token + "-1", token + "x"]
+    return positives, negatives
+
+
+@pytest.mark.parametrize(
+    "path,css_class,width",
+    _TARGETS,
+    ids=lambda v: v.name if isinstance(v, Path) else str(v),
+)
+def test_only_the_container_naming_the_class_is_excerpted(
+    path: Path, css_class: str, width: int
+) -> None:
+    """The other direction: found is not the property, found *and only that* is.
+
+    The test above asserts the tool reaches the container, which a locator
+    that returned every `<div>` on the page also satisfies — and that locator
+    excerpts adverts the connector never named. Membership in the class list
+    is the property, so both halves are asserted at once against a document
+    built from the token itself.
+    """
+    positives, negatives = _membership_variants(css_class)
+    assert not set(positives) & set(negatives), f"{css_class!r}: a variant is in both halves"
+    document = "".join(
+        f'<div class="{classes}">body{index}</div>'
+        for index, classes in enumerate([*positives, *negatives])
+    )
+    found = {inner for _, _, inner in _TOOL._spans(document, css_class)}
+    assert found == {f"body{index}" for index in range(len(positives))}, (
+        f"{path.relative_to(_CONNECTORS)}: {css_class!r} matched the wrong set of "
+        "containers — a span that does not name this class was excerpted, or one "
+        "that names it among others was not"
+    )
