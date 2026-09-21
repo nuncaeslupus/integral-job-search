@@ -8,7 +8,8 @@ policy:
   listings: public
   # Adjudicated with the repo's own matcher on 2026-09-21, never by reading the
   # file: `Robots().allows(...)` as `integral-job-search/0.1` returns True for
-  # `/jobs?k=python&l=España` and for `/view?id=600989642228510677`, and False
+  # `/jobs?k=python&l=España`, for the same with `&p=2` (this connector asks
+  # for two pages) and for `/view?id=600989642228510677`, and False
   # for `/search-jobs/python` and `/ajax/x` — the negative controls, from the
   # same file. es.talent.com/robots.txt carries exactly one group, `User-agent:
   # *`, and no named-agent group at all, so `restated_for_every_named_agent`
@@ -36,12 +37,32 @@ fixture:
   # Never an advert a candidate was reading: every query and advert here was
   # chosen for this capture.
   bodies: excerpted
-  # Not vacuously: the board writes the requester's own address into every
-  # page. All three captures carried `\"ip\":\"<our address>\"` and
-  # `\"ipLocation\":\"<the same>\"` inside the flight payload, twice each,
-  # beside the postcode it geolocated them to. Both were replaced in the raw
-  # bytes — the address by `192.0.2.1` (RFC 5737 TEST-NET-1, which is not
-  # globally routable), the postcode by `00000` — and nothing else in any file
-  # was touched. Re-scanned afterwards for an IPv4 and an IPv6 literal across
-  # all three: no globally-routable address remains.
+  # Not vacuously: the board writes who fetched the page into every capture, in
+  # more than one shape. All three carried the requester's own address as
+  # `\"ip\"` and `\"ipLocation\"`, and beside them — inside the same flat JSON
+  # object — the postcode, city, region, timezone and the **latitude and
+  # longitude** it geolocated them to, plus a device hash (`nuuid`) that came
+  # back byte-identical across three separate fetches of this board on one day —
+  # the listing, an advert page and a probe — and changed only when the board
+  # issued a new one for a later session: a persistent identifier, shipped with
+  # every page.
+  #
+  # The first pass here scanned for an IPv4 and an IPv6 literal and reported no
+  # globally-routable address left. That was true and it was not the property:
+  # `41.4085` is not an address, so a scan for addresses could never reach it.
+  # The rule is now structural rather than a list of field names, is stated in
+  # full in `connector_contract.py` (rule 7), and is enforced by
+  # `check_capture_redaction`, which `check_package` runs over every package in
+  # this library — so a capture committed later carrying any of this fails the
+  # gate instead of resting on a comment. Every value was replaced in the raw
+  # bytes (the address by `192.0.2.1`, RFC 5737 TEST-NET-1; other strings by
+  # `redacted`; numbers by `0`) and nothing else in any file was touched: two
+  # changed lines per file, and 28 redacted pairs standing in each of the three
+  # committed captures — countable from the bytes rather than from this comment.
+  #
+  # One clause of that rule is scrub-only and is deliberately not claimed as a
+  # check: an HTML attribute whose whole value is a string the sweep removed is
+  # removed with it (`name="keyword" value="Barcelona, ES"` here). Afterwards
+  # the attribute is indistinguishable from any other, so nothing can verify it
+  # over a committed capture, and this comment does not pretend otherwise.
   client_ip: redacted

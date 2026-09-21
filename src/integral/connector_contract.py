@@ -98,6 +98,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -192,6 +193,104 @@ REQUIRED_POLICY = {
 
 # The fixture must say it was sampled for this purpose. See the docstring.
 ACCEPTED_FIXTURE_PROVENANCE = "sampled"
+
+# Rule 7 — a capture carries the requester's own location, and it must not ship.
+#
+# A board personalises what it serves: talent.com writes the requesting address,
+# the city it geolocates it to, that city's postcode *and its coordinates* into
+# every response. The first redaction of `talent_es` scanned for "an IPv4 and an
+# IPv6 literal", found two of each, replaced them, said so in `meta.yaml` — and
+# left `lat` and `lon` untouched two keys away, because a scan for the fields
+# somebody remembered cannot reach the one they did not. An enumeration has no
+# last element.
+#
+# So the rule is structural, and closed over the capture's own text. The
+# requester's data is not "the fields listed below"; it is whatever the board
+# put in the object it also put the address in:
+#
+#   1. every flat JSON object — scalar members only, so the *innermost* one —
+#      is a requester block if it carries an address-bearing key or if the key
+#      introducing it names the requester, and then every value in it must be a
+#      placeholder. A field the board starts sending tomorrow is inside that
+#      object and is covered without anyone editing a list;
+#   2. an `"<address-bearing key>": <value>` pair is redacted wherever it
+#      appears, block or no block;
+#   3. the run of scalar pairs the board wrote *immediately before* that
+#      object's key belongs to it — talent.com repeats `prefilledLocation`
+#      there, and the run ends at the first character that is not another pair,
+#      which on these captures is two pairs later;
+#   4. an HTML attribute whose *whole* value is one the clauses above removed is
+#      removed too — the board renders the location it geolocated into the
+#      search box as `value="<city>, <country>"`.
+#
+# **Two of the four are seeds, and only the sweep is closed.** Clauses 1 and 2
+# start from key names, and a name nobody thought of starts nothing — that much
+# is a vocabulary and is admitted here rather than dressed up. What the rule
+# buys is that one seed covers *everything around it*: the address key reached
+# the coordinates, the postcode and the timezone without any of them being
+# named, which is precisely what the first redaction of this package could not
+# do. Adding a seed is one word and inherits the whole sweep.
+#
+# Clauses 1-3 are checkable over a committed capture, which is the point:
+# `client_ip: redacted` in `meta.yaml` was prose, and the only code that read it
+# printed it in a table row. **Clause 4 is not checkable afterwards** and is not
+# claimed to be: it compares against the values the scrub removed, and once they
+# are placeholders there is nothing left to compare. `scrub_requester_location`
+# enforces it; `check_capture_redaction` cannot see it.
+#
+# What this deliberately does not do is sweep by key name, by value, or by
+# key-and-value across the whole file. All three were measured against these
+# captures and all three destroy advert data, because the board's own rows carry
+# the same words: `city` occurs seven times, `state` three — `Catalonia` in an
+# advert's address and `Catalonia` in the requester's block are the same bytes —
+# `lat` three, and exactly one of each is the requester's. The object boundary
+# is the only thing in the text that tells them apart, which is why the rule is
+# structural and why clause 3 is bounded by adjacency rather than by matching.
+ADDRESS_BEARING_KEYS = frozenset(
+    {"ip", "ipLocation", "clientIp", "client_ip", "ipAddress", "remoteAddr", "remote_addr"}
+)
+
+# Clause 1's second seed. An address is not the only thing a board records about
+# whoever fetched: talent.com also ships a Statsig `user` payload carrying a
+# device hash and a stable UUID that are the *same* across two of these three
+# captures, in an object with no address key in it at all.
+#
+# It is short because a plausible seed was measured and thrown out. `location`
+# was the obvious first entry and it is **wrong**: on `greenhouse_en` the object
+# introduced by `location` is the *advert's* — `{"name": "Remote"}` — so seeding
+# on it redacted two job locations out of a fixture, which is the board's data
+# and not the requester's. talent.com's own `location` object is reached by
+# clause 1 anyway, because the address key is inside it. A seed is only worth
+# adding once some capture shows a requester record that nothing else reaches.
+REQUESTER_OBJECT_KEYS = frozenset({"custom", "customIDs"})
+
+# The address placeholder is a real one — RFC 5737 TEST-NET-1, not globally
+# routable — so a capture that is parsed still yields something address-shaped
+# where the board expects an address. Everything else becomes the word or zero.
+REDACTED_IP = "192.0.2.1"
+REDACTED_STRING = "redacted"
+REDACTED_NUMBER = "0"
+
+# Captures are served as escaped JSON inside a script literal (`\"lat\":41.4`)
+# as often as plain, so every quote below is optionally backslashed. Matching
+# the text rather than parsing it is not a shortcut: a capture is evidence, and
+# parse-and-reserialise would commit a file the board never sent.
+_KEY = r'\\?"([A-Za-z_][A-Za-z0-9_]*)\\?"\s*:\s*'
+_VALUE = r'(\\?"[^"\\]*\\?"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|null)'
+_PAIR = re.compile(_KEY + _VALUE)
+_FLAT_JSON_OBJECT = re.compile(
+    r"\{\s*" + _KEY + _VALUE + r"(?:\s*,\s*" + _KEY + _VALUE + r")*\s*\}"
+)
+# Clause 3's left edge: the object's own key, preceded by however many scalar
+# pairs run up to it. `\Z` anchors it to the object, so `search` over the text
+# before one returns the leftmost start of that run. Bounded to a window
+# because it is applied to a slice of a capture, not to a parsed document.
+_LEADING_RUN = re.compile(r"(?:" + _KEY + _VALUE + r"\s*,\s*)*" + _KEY + r"\Z")
+_LEADING_RUN_WINDOW = 4000
+# Clause 4. A whole attribute value, never a substring: the board's own advert
+# rows read `Barcelona, Barcelona, ES`, so a substring sweep for the requester's
+# `Barcelona, ES` would cut an advert's location in half.
+_HTML_ATTRIBUTE = re.compile(r'([A-Za-z_:][-A-Za-z0-9_:.]*)="([^"]*)"')
 
 # A clean result over no packages is not a clean result. `verify_gates` and CI
 # both read the number this module writes, and "0 violations" from an empty
@@ -496,6 +595,104 @@ def check_fixture(package: Path) -> list[str]:
     return []
 
 
+def _redacted(key: str, value: str) -> str:
+    """The placeholder for one value, in the spelling the capture already uses."""
+    if value in {"true", "false", "null"}:
+        return value
+    if not value.endswith('"'):
+        return REDACTED_NUMBER
+    quote = '\\"' if value.startswith("\\") else '"'
+    word = REDACTED_IP if key in ADDRESS_BEARING_KEYS else REDACTED_STRING
+    return f"{quote}{word}{quote}"
+
+
+def requester_location_blocks(text: str) -> list[tuple[int, int]]:
+    """The span of every requester-location block in a capture.
+
+    A block is a flat JSON object — scalar members only, which is what makes it
+    the *innermost* one — carrying an address-bearing key, extended left to
+    take in its own key and the run of scalar pairs written immediately before
+    it. Flatness is what keeps this off the enclosing object: on a Next.js page
+    that is the whole props payload, translation strings and all, and sweeping
+    it would take the board's own copy with it.
+    """
+    spans = []
+    for match in _FLAT_JSON_OBJECT.finditer(text):
+        window = max(0, match.start() - _LEADING_RUN_WINDOW)
+        lead = _LEADING_RUN.search(text, window, match.start())
+        introduced_by = lead.group(3) if lead else ""
+        if introduced_by not in REQUESTER_OBJECT_KEYS and not any(
+            key in ADDRESS_BEARING_KEYS for key, _ in _PAIR.findall(match.group(0))
+        ):
+            continue
+        spans.append(((lead.start() if lead else match.start()), match.end()))
+    return spans
+
+
+def _pairs_to_redact(text: str) -> list[tuple[int, int, str, str]]:
+    """Every `"key": value` pair the rule reaches, as `(start, end, key, value)`."""
+    blocks = requester_location_blocks(text)
+    return [
+        (match.start(), match.end(), match.group(1), match.group(2))
+        for match in _PAIR.finditer(text)
+        if match.group(1) in ADDRESS_BEARING_KEYS
+        or any(start <= match.start() and match.end() <= end for start, end in blocks)
+    ]
+
+
+def scrub_requester_location(text: str) -> tuple[str, int]:
+    """Redact the requester's own location out of a capture, in the raw bytes.
+
+    Returns the rewritten text and how many pairs changed. Never parses and
+    re-serialises: what is committed has to be what the board sent, minus the
+    part that is about whoever asked.
+    """
+    out: list[str] = []
+    cursor = 0
+    changed = 0
+    removed: set[str] = set()
+    for start, end, key, value in _pairs_to_redact(text):
+        replacement = _redacted(key, value)
+        if replacement == value:
+            continue
+        out.append(text[cursor:start])
+        out.append(text[start:end].replace(value, replacement, 1))
+        cursor = end
+        changed += 1
+        stripped = value.strip('\\"')
+        if stripped:
+            removed.add(stripped)
+    out.append(text[cursor:])
+
+    def _attribute(match: re.Match[str]) -> str:
+        nonlocal changed
+        if match.group(2) not in removed:
+            return match.group(0)
+        changed += 1
+        return f'{match.group(1)}="{REDACTED_STRING}"'
+
+    return _HTML_ATTRIBUTE.sub(_attribute, "".join(out)), changed
+
+
+def check_capture_redaction(package: Path) -> list[str]:
+    """Rule 7 — no capture in the package still carries who fetched it."""
+    violations = []
+    for path in sorted(package.rglob("*.html")):
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            violations.append(f"rule 7: {path.name} could not be read: {exc}")
+            continue
+        for _, _, key, value in _pairs_to_redact(raw):
+            if _redacted(key, value) != value:
+                violations.append(
+                    f"rule 7: {path.relative_to(package)} carries the requester's own "
+                    f"{key} as {value} — a capture ships the board's response, never "
+                    "who asked for it"
+                )
+    return violations
+
+
 def check_package(package: Path) -> PackageReport:
     """Every rule, over one package."""
     violations = [
@@ -503,6 +700,7 @@ def check_package(package: Path) -> PackageReport:
         *check_meta(package),
         *check_code(package),
         *check_fixture(package),
+        *check_capture_redaction(package),
     ]
     return PackageReport(name=package.name, violations=tuple(violations))
 

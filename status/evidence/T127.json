@@ -202,7 +202,7 @@
       "compared": true,
       "reason": null,
       "fixture_offers": 15,
-      "probe_offers": 13,
+      "probe_offers": 10,
       "shared_offers": 0,
       "overlap": 0.0,
       "repeats_the_fixture": false,

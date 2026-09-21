@@ -569,6 +569,7 @@ adjudications:
     source: connectors/talent_es/meta.yaml
     allowed:
       - /jobs?k=python&l=Espa%C3%B1a
+      - /jobs?k=python&l=Espa%C3%B1a&p=2
       - /view?id=600989642228510677
     second_reader_refused:
       - /search-jobs/python
@@ -588,6 +589,17 @@ adjudications:
       patterns around it. The file also carries two malformed lines —
       `Disallow: # <comment>` — which under §2.2.2 are empty patterns matching
       nothing, and neither reader treats them as a blanket refusal.
+
+      The snapshot below is the file as served, byte for byte — 77 lines, 1,959
+      characters, one `User-Agent` group, 28 `/<xx>/redirect*` lines, 28
+      `/<xx>/convert*` lines, two bare `/redirect*` and three `Sitemap:` lines.
+      It was abridged when this row was written, with two `…and the same line
+      for 25 further locales` comments standing in for the repetition, and the
+      abridgement was wrong in three ways at once: 26 locales, not 28; the
+      second bare `/redirect*` dropped; the sitemaps dropped. A snapshot is
+      evidence about what the host said, and a summary of it is a different
+      claim made in the same field — so the whole file is stored, which at
+      under 2 KB it always could have been.
     robots_txt: |
       User-Agent: *
       Disallow: /services/api-new/search
@@ -602,9 +614,66 @@ adjudications:
       Disallow: /invoice-report?token*
       Disallow: /ajax/*
       Disallow: # Block redirect this is the apply form
+      Disallow: /ar/redirect*
+      Disallow: /pt/redirect*
       Disallow: /es/redirect*
-      # …and the same `/<xx>/redirect*` line for 25 further locales
+      Disallow: /de/redirect*
+      Disallow: /en/redirect*
+      Disallow: /nl/redirect*
+      Disallow: /fr/redirect*
+      Disallow: /it/redirect*
+      Disallow: /zh/redirect*
+      Disallow: /cs/redirect*
+      Disallow: /da/redirect*
+      Disallow: /fi/redirect*
+      Disallow: /el/redirect*
+      Disallow: /hu/redirect*
+      Disallow: /id/redirect*
+      Disallow: /he/redirect*
+      Disallow: /ja/redirect*
+      Disallow: /ko/redirect*
+      Disallow: /ru/redirect*
+      Disallow: /ms/redirect*
+      Disallow: /no/redirect*
+      Disallow: /pl/redirect*
+      Disallow: /ro/redirect*
+      Disallow: /sv/redirect*
+      Disallow: /tr/redirect*
+      Disallow: /th/redirect*
+      Disallow: /uk/redirect*
+      Disallow: /vi/redirect*
+      Disallow: /redirect*
       Disallow: # Block convert due to excesive crawl volume
+      Disallow: /ar/convert*
+      Disallow: /pt/convert*
       Disallow: /es/convert*
-      # …and the same `/<xx>/convert*` line for 25 further locales
+      Disallow: /de/convert*
+      Disallow: /en/convert*
+      Disallow: /nl/convert*
+      Disallow: /fr/convert*
+      Disallow: /it/convert*
+      Disallow: /zh/convert*
+      Disallow: /cs/convert*
+      Disallow: /da/convert*
+      Disallow: /fi/convert*
+      Disallow: /el/convert*
+      Disallow: /hu/convert*
+      Disallow: /id/convert*
+      Disallow: /he/convert*
+      Disallow: /ja/convert*
+      Disallow: /ko/convert*
+      Disallow: /ru/convert*
+      Disallow: /ms/convert*
+      Disallow: /no/convert*
+      Disallow: /pl/convert*
+      Disallow: /ro/convert*
+      Disallow: /sv/convert*
+      Disallow: /tr/convert*
+      Disallow: /th/convert*
+      Disallow: /uk/convert*
+      Disallow: /vi/convert*
       Disallow: /convert*
+
+      Sitemap: https://es.talent.com/sitemaps/salary-es/sitemap.xml
+      Sitemap: https://es.talent.com/sitemaps/tax-calculator-es/sitemap.xml
+      Sitemap: https://es.talent.com/sitemaps/view-es/sitemap.xml

@@ -26,16 +26,21 @@ import pytest
 import yaml
 
 from integral.connector_contract import (
+    _PAIR,
+    ADDRESS_BEARING_KEYS,
     DEFAULT_EVIDENCE_PATH,
     MINIMUM_PACKAGES,
     OPTIONAL_ENTRIES,
     PARSE_FILENAME,
     REQUIRED_ENTRIES,
     _main,
+    check_capture_redaction,
     check_library,
     check_package,
     evidence_target,
     measure,
+    requester_location_blocks,
+    scrub_requester_location,
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
@@ -916,3 +921,123 @@ def test_a_package_with_no_probe_at_all_is_still_valid(package: Path) -> None:
     shutil.rmtree(package / PROBE_DIRNAME, ignore_errors=True)
 
     assert not check_package(package).violations
+
+
+# ---------------------------------------------------------------------------
+# rule 7 — a capture carries the board's response, never who asked for it
+
+# The shape talent.com serves, trimmed to what the rule reads: a flat object of
+# scalars carrying an address, the pairs repeated immediately before it, and an
+# advert's own location elsewhere in the same file spelling the same words.
+# Escaped, because that is how a Next.js flight payload stores it and a plain
+# `"lat":` pattern silently matches nothing there.
+_REQUESTER_PAYLOAD = (
+    '<script>self.__next_f.push([1,"'
+    '\\"prefilledLocation\\":\\"Barcelona, ES\\",\\"userData\\":null,'
+    '\\"location\\":{\\"prefilledLocation\\":\\"Barcelona, ES\\",'
+    '\\"lat\\":41.4085,\\"lon\\":2.1904,\\"timeZone\\":\\"Europe/Madrid\\",'
+    '\\"city\\":\\"Barcelona\\",\\"zip_code\\":\\"08001\\",'
+    '\\"state\\":\\"Catalonia\\",\\"ipLocation\\":\\"203.0.113.9\\"},'
+    '\\"ip\\":\\"203.0.113.9\\""])</script>'
+)
+_ADVERT_PAYLOAD = (
+    '<script>self.__next_f.push([1,"'
+    '\\"source_location\\":\\"Barcelona, Catalonia, ES\\",'
+    '\\"enrich_geo_city\\":\\"Barcelona\\",\\"enrich_geo_region1\\":\\"Catalonia\\",'
+    '\\"enrich_geo_lat\\":41.3873974"])</script>'
+)
+
+
+def _with_payload(package: Path, payload: str) -> Path:
+    """Append a payload to the package's listing capture and return its path."""
+    listing = package / "fixture" / "list.html"
+    listing.write_text(listing.read_text(encoding="utf-8") + payload, encoding="utf-8")
+    return listing
+
+
+def test_a_capture_carrying_the_requesters_own_address_is_rejected(package: Path) -> None:
+    """The board writes who fetched into the page; the package must not ship it."""
+    _with_payload(package, _REQUESTER_PAYLOAD)
+
+    violations = check_package(package).violations
+    assert any("rule 7" in v and "ipLocation" in v for v in violations), violations
+
+
+def test_every_field_the_board_puts_beside_the_address_is_reached(package: Path) -> None:
+    """Derived over the block's own keys, so a field added later is covered.
+
+    This is the test the first redaction of `talent_es` would have failed. That
+    one scanned for "an IPv4 and an IPv6 literal", found both, replaced both and
+    said so in `meta.yaml` — and left `lat` and `lon` two keys away, because a
+    scan for the fields somebody remembered cannot reach the one they did not.
+    Listing the fields here would repeat the mistake in the gate, so the cases
+    are read off the block instead: whatever the board puts in that object is
+    what gets varied.
+    """
+    clean, _ = scrub_requester_location(_REQUESTER_PAYLOAD)
+    (start, end), *_ = requester_location_blocks(clean)
+    pairs = [
+        (m.group(1), m.group(2))
+        for m in _PAIR.finditer(clean, start, end)
+        if m.group(2) not in {"true", "false", "null"}
+    ]
+    assert len(pairs) >= 8, pairs
+
+    unreached = []
+    for key, value in pairs:
+        leaked = '\\"203.0.113.9\\"' if key in ADDRESS_BEARING_KEYS else "41.4085"
+        pair = '\\"' + key + '\\":'
+        dirtied = clean.replace(pair + value, pair + leaked, 1)
+        assert dirtied != clean, key
+        listing = _with_payload(package, dirtied)
+        if not any(key in v for v in check_capture_redaction(package)):
+            unreached.append(key)
+        listing.write_text(
+            listing.read_text(encoding="utf-8").replace(dirtied, ""), encoding="utf-8"
+        )
+    assert not unreached, unreached
+
+
+def test_the_boards_own_rows_are_not_swept_with_the_requesters(package: Path) -> None:
+    """The fail-open direction has a fail-closed twin, and it is just as wrong.
+
+    An advert in the same city spells the same words — `Barcelona`, `Catalonia`,
+    a latitude — and a sweep by key name or by value takes the board's data with
+    the requester's. Measured on the real captures: `city` occurs seven times and
+    exactly one of them is whose fetched it. The object boundary is the only
+    thing in the text that tells them apart.
+    """
+    _with_payload(package, _ADVERT_PAYLOAD)
+
+    assert not check_capture_redaction(package)
+    assert not requester_location_blocks(_ADVERT_PAYLOAD)
+    assert scrub_requester_location(_ADVERT_PAYLOAD) == (_ADVERT_PAYLOAD, 0)
+
+
+def test_an_html_attribute_repeating_a_removed_value_goes_with_it() -> None:
+    """The board renders what it geolocated into the search box, too.
+
+    Whole attribute values only: the board's own rows read `Barcelona,
+    Barcelona, ES`, so a substring sweep would cut an advert's location in half.
+    """
+    page = _REQUESTER_PAYLOAD + '<input name="keyword" value="Barcelona, ES"/>'
+    page += '<span class="loc">Barcelona, Barcelona, ES</span>'
+    scrubbed, _ = scrub_requester_location(page)
+
+    assert 'value="redacted"' in scrubbed
+    assert "Barcelona, Barcelona, ES" in scrubbed
+
+
+def test_the_committed_captures_carry_nobody_who_fetched_them() -> None:
+    """Over the real library — the check `meta.yaml`'s `client_ip` line now has.
+
+    That line said the captures had been "re-scanned for an IPv4 and an IPv6
+    literal". It was true, it was written by the session that did the scanning,
+    and nothing read it: `connector_exchange.py` prints it in a table row.
+    """
+    offenders = {
+        package.name: violations
+        for package in sorted(p for p in _LIBRARY.iterdir() if p.is_dir())
+        if (violations := check_capture_redaction(package))
+    }
+    assert not offenders, offenders

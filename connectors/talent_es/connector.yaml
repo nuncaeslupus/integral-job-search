@@ -14,13 +14,26 @@ list:
   # city nobody chose, and the engine has no `{location}` placeholder to let the
   # caller choose one, so the market is named here: `España`, the board's own
   # nationwide value, which renders as "Empleo en Spain".
-  url_pattern: "https://es.talent.com/jobs?k={query}&l=Espa%C3%B1a"
-  # The board's own next-page link is `…&p=2`, and `p` is honoured — but it is
-  # honoured into an empty page. Measured 2026-09-21 on two queries, with and
-  # without a session cookie: `k=python&l=España` p=1 → 15 adverts, p=2 → 0 and
-  # "No hay resultados"; `k=enfermera&l=Madrid` p=1 → 12, p=2 → 0. One page is
-  # all this board serves us, so no request key is sent and none needs certifying.
-  pagination: {mode: none, max_pages: 1}
+  url_pattern: "https://es.talent.com/jobs?k={query}&l=Espa%C3%B1a&p={page}"
+  # The board's own next-page link is `…&p=2`, and `p` is honoured. The comment
+  # that stood here said it was honoured into an empty page, and that p=2 served
+  # "No hay resultados" — both refuted by re-measuring on 2026-09-21, counting
+  # `data-testid="job-card-unified"` rather than reading the page:
+  #
+  #   k=python&l=España      p=1 → 16   p=2 → 6   p=3 → 0
+  #   k=enfermera&l=Madrid   p=1 → 12   p=2 → 0   p=3 → 0
+  #
+  # So a second page is real for one query and empty for the other, and the
+  # earlier reading was a single query generalised. The string "No hay
+  # resultados" cannot tell those apart: it appears **7 times on a page carrying
+  # 16 adverts** — it is a Next.js translation string shipped in the props of
+  # every page — and 8 times on an empty one. A count that moves by one out of
+  # seven is not a state indicator, and nothing here reads it.
+  #
+  # `max_pages: 2`, not 3, because `sourcing._one_board` has no empty-page
+  # break: it requests every page in the range whatever the last one returned.
+  # Two is one wasted request on a query that has one page; three is two.
+  pagination: {mode: query_param, param: p, start: 1, max_pages: 2}
   # The board's own test hook, and the only attribute on the card that is not a
   # build hash.
   item: 'article[data-testid="job-card-unified"]'
