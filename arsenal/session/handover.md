@@ -1,5 +1,114 @@
 # Session handover
 
+## 00003. T194 / #520 — the talent.com connector is written, green and held at the second reader
+
+**Verified live via `gh pr view` at the end of the session, not carried from memory.**
+
+- **#520 is OPEN, `MERGEABLE`, head `4df6f5e42ae0370608576224802b29df9ab9c243`**, branch
+  `arsenal/t-7c3ab914-a-talent-com-connector-for-the-spanish-m`, opened
+  2026-09-21T15:50:46Z. Task `t-7c3ab914` is archived in the same diff with
+  `status: merged` and its `status/plan.md` row ticked, so the merge closes it by itself.
+- **Both halves of the local evidence are done.** CI green on that head (pytest 4m51s,
+  ruff+mypy 21s, evidence 1m57s, verify-gates 15s); `bash tools/verified_gate.sh
+  4df6f5e4…` **PASS** (5196 passed, 7 skipped, evidence no drift), verdict block pasted
+  on the PR as `#issuecomment-5763568642`.
+- **The one thing outstanding is the second reader.** `uv run python -m
+  integral.review_reader check <pr-state.json>` exits **2** — no report on record, which
+  is not a pass. The PR holds there deliberately. Next session: dispatch one
+  independent reader (`model: opus`) against that exact head, then merge only while the
+  head is still `4df6f5e4…`.
+- **Worktree `/home/ivant/dev/ijs-t193` is still on disk** and is the branch's tree.
+  Remove it after the merge (`git worktree remove ../ijs-t193`); remote ref deletion is
+  refused on this surface, so do not script a branch cleanup.
+
+**What the package is.** `connectors/talent_es/` — `es.talent.com` only; the
+international subdomains are separate hosts with their own robots.txt and nothing has
+adjudicated them. List `https://es.talent.com/jobs?k={query}&l=Espa%C3%B1a` (the `l=` is
+not optional: without it the board answers 307 to the city the requester's IP
+geolocates to), `pagination: {mode: none, max_pages: 1}` because p=2 is served empty on
+every query measured, and a `detail:` block that fetches the advert body per row.
+
+**Three findings worth carrying, none of them about talent.com:**
+
+- **`integral.second_reader.allows(text, agent, target)` takes a PATH, not a URL — and
+  a full URL returns True unconditionally.** A fail-open API shape, and the sibling
+  `integral.robots.Robots().allows(url)` takes the full URL, so the two readers disagree
+  about their own argument convention. Re-deriving this row's adjudication (requirement:
+  never trust your own `connector.yaml`) appeared to **refute** it — all four paths True
+  — until the arguments were fixed. Re-run with paths on both the snapshot and the live
+  file: allowed True, refused False, row confirmed, `standing: two_parsers_agreed`
+  stands. **Anyone re-deriving a robots row will hit this; pass paths.**
+- **`tools/excerpt_fixture.py` matched `<div class="X">` exactly**, so it found nothing
+  on a board serving `class="sc-f4dbceab-10 fRvput"` — and found it **silently**, since
+  an unmatched span is left whole. One-line fix committed here (split the attribute,
+  test membership). Any board using a multi-class wrapper was un-excerptable before this
+  and nothing said so.
+- **The `connector-new` skill's step 6 is stale.** It says exactly two committed counts
+  move when a package lands (`connector_runs_evaluated`, T72;
+  `robots_adjudications_without_a_competent_second_reader`, T116) and that "if a third
+  moves, that is a finding". **Seven moved**, all seven truthful: the `+3`s in T126
+  `boards_consulted` and T173 `plain_requests_made` are one outcome per phrase, which is
+  `Run.steered`'s own definition. The stale claim is itself the finding — the skill needs
+  a task.
+
+**Two shared tests were rewritten from enumerations into closed rules**, per this file's
+"an enumeration has no last element":
+
+- `tests/test_pagination_capture.py::test_the_committed_library_has_no_unenforced_provenance`
+  now derives the `live` package names from the library rather than naming three.
+- `tests/test_sourcing.py::test_searched_and_handed_everything_are_reported_apart` now
+  derives the steerable set from `accepts_query(connector) and not needs_browser(connector)`.
+  **The derivation immediately found what the hand-written list had hidden**:
+  `infojobs_es` is steerable, has a capture, and still never reaches `fetch` because it
+  is browser-routed (T173). Note `accepts_query` lives in `integral.connectors`
+  (line 3397), **not** `integral.sourcing` — mypy refuses the re-export.
+
+Both rewrites and the acceptance gate are mutation-verified (mutant red on the
+assertion, restore byte-identical and green), in fresh subprocesses with `.pyc` cleared.
+
+**Two process facts that cost time and will cost it again:**
+
+- **`open_task_pr.sh` has two gates, on opposite sides of the archive.** The **task
+  gate** (`:253`) runs **pre-archive**; the **host gate** (`:645`) runs **post-archive**.
+  So a task file whose acceptance gate is ```` ```bash make host-gate ``` ```` can never
+  be green once its own plan row is ticked — D-27 requires the tick, and the tick is
+  pre-archive at that point. Replaced with a ```` ```gate ```` fence naming a numeric
+  key. **Write a numeric gate fence, never `make host-gate`, in a task file.**
+- **`S8.json` is archive-driven by design and must be committed in its post-archive
+  state.** The host gate read drift because the committed record held the pre-archive
+  red value. Fix: simulate the archive, run `uv run python -m integral.plan_v2`,
+  restore the task file, commit the regenerated record.
+- The gate cell in `status/plan.md` must match `plan_v2._GATE_RE`
+  (`^[a-z][a-z0-9_]*\s*(?:==|!=|<=|>=|<|>)\s*-?\d+(\.\d+)?$`). The first gate chosen
+  here, `robots_adjudications_without_a_competent_second_reader == 0`, reads **23**
+  repo-wide (18 rows predate T120) and is not this task's claim; the gate is
+  `robots_adjudications_misrepresenting_their_standing == 0`, with a paragraph in the
+  task file saying why the sibling key is deliberately not it.
+
+**Candidate-data hygiene, since this package captured live pages:** the board writes the
+requester's own address into every page — all three captures carried the IP and its
+geolocated postcode twice each inside the flight payload. Both replaced in the raw bytes
+(`192.0.2.1`, RFC 5737 TEST-NET-1; postcode `00000`), nothing else touched, re-scanned
+for IPv4 and IPv6 literals afterwards. `client_ip: redacted` in `meta.yaml` is not
+vacuous here. Every query and advert captured was chosen for the capture — **no advert a
+candidate was reading**.
+
+**The `&#43;` finding was fixed at its root, not papered over.** The board's card teaser
+is de-tagged but only half-decoded, so `C&#43;&#43;` is what the candidate would have
+been shown and `make evidence`'s `markup_text` gate (T169) said so. Declaring
+`take: escaped_html_text` would have "fixed" it and lied about the encoding — and on
+this board would delete a literal `&lt;canvas&gt;`. The body moved to the detail page
+instead, where `text_content()` decodes it to `C++`. `markup_text ok`. This reversed an
+earlier decision to drop the `detail:` block, and reversing it is what made the block
+reachable at all: `sourcing._one_board` fetches detail only when the list row cannot
+complete an offer (`sourcing.py:1136`), so mapping `text` on the card makes any
+`detail:` block inert. Measured both ways: with `text` on the card,
+`items=16 added=16 detail_needed=0`; without, `detail_needed=16 detail_fetched=16`.
+
+**The live run worked** — 15 offers parsed end to end, and ~31 real talent.com offers
+were written into the `ivan` ProfileStore. **But the package exists only on this branch**;
+`main` does not have it, so an ordinary session cannot use it until #520 merges.
+
 ## 00002. All four carried-over items closed: #486/T162, T178(→T179)/#497, the ijs-t174 conflict, and #488/T163
 
 **Verified live via `gh pr view`, not carried from memory.**
