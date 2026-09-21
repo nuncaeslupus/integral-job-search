@@ -29,8 +29,8 @@ not this tool's doing and reverting this tool's locator cannot break them.
 from __future__ import annotations
 
 import importlib.util
-import re
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,37 @@ from integral.connectors import load_connector
 
 _ROOT = Path(__file__).resolve().parents[1]
 _CONNECTORS = _ROOT / "connectors"
-_DIV_OPENER = re.compile(r'<div class="([^"]*)"[^>]*>')
+
+
+class _DivClasses(HTMLParser):
+    """Every `<div>`'s class list, read by a parser rather than by a regex.
+
+    This deliberately does **not** re-spell the tool's own locator. The first
+    version of this file did, byte for byte, which made the target list and the
+    non-vacuity guard below blind in exactly the direction the code under test
+    is blind: a `<div>` spelled in any way that regex misses would be missing
+    from both sides at once, and the check would report green over a fixture
+    the tool silently leaves whole. `html.parser` is the stdlib reading the
+    same bytes by other means, which is the only thing that makes the
+    comparison evidence.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.classes: list[list[str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "div":
+            return
+        for name, value in attrs:
+            if name == "class" and value:
+                self.classes.append(value.split())
+
+
+def _div_class_lists(raw: str) -> list[list[str]]:
+    parser = _DivClasses()
+    parser.feed(raw)
+    return parser.classes
 
 
 def _load_excerpt_fixture() -> Any:
@@ -81,11 +111,7 @@ def _addressable_targets() -> list[tuple[Path, str, int]]:
             if not classes:
                 continue
             raw = path.read_text(encoding="utf-8")
-            widths = [
-                len(match.group(1).split())
-                for match in _DIV_OPENER.finditer(raw)
-                if classes[0] in match.group(1).split()
-            ]
+            widths = [len(names) for names in _div_class_lists(raw) if classes[0] in names]
             if widths:
                 found.append((path, classes[0], max(widths)))
     return found
@@ -141,6 +167,24 @@ def _membership_variants(token: str) -> tuple[list[str], list[str]]:
     return positives, negatives
 
 
+def _openers(classes: str) -> list[str]:
+    """Every way a `<div>` can carry that class attribute, as an opening tag.
+
+    The second generated axis, and it is here because the first version of this
+    file did not have it: `class` is not always the first attribute, and a
+    locator anchored on `<div class=` misses the rest **silently**. Varying the
+    position generatively is what stops that from being one more case answered
+    once — a third spelling added below is varied against every class list at
+    no further cost.
+    """
+    return [
+        f'<div class="{classes}">',
+        f'<div id="before" class="{classes}">',
+        f'<div class="{classes}" id="after">',
+        f'<div\n  class="{classes}">',
+    ]
+
+
 @pytest.mark.parametrize(
     "path,css_class,width",
     _TARGETS,
@@ -159,12 +203,16 @@ def test_only_the_container_naming_the_class_is_excerpted(
     """
     positives, negatives = _membership_variants(css_class)
     assert not set(positives) & set(negatives), f"{css_class!r}: a variant is in both halves"
-    document = "".join(
-        f'<div class="{classes}">body{index}</div>'
+    openers = [
+        (opener, classes in positives, f"body{index}")
         for index, classes in enumerate([*positives, *negatives])
-    )
+        for opener in _openers(classes)
+    ]
+    document = "".join(f"{opener}{body}-{n}</div>" for n, (opener, _, body) in enumerate(openers))
     found = {inner for _, _, inner in _TOOL._spans(document, css_class)}
-    assert found == {f"body{index}" for index in range(len(positives))}, (
+    assert found == {
+        f"{body}-{n}" for n, (_, is_positive, body) in enumerate(openers) if is_positive
+    }, (
         f"{path.relative_to(_CONNECTORS)}: {css_class!r} matched the wrong set of "
         "containers — a span that does not name this class was excerpted, or one "
         "that names it among others was not"

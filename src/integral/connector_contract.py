@@ -252,7 +252,14 @@ ADDRESS_BEARING_KEYS = frozenset(
 
 
 def _key_spelling(key: str) -> str:
-    """One spelling per key: `client-ip`, `clientIP` and `client_ip` are one key.
+    """One spelling per key, so casing and separators stop being a vocabulary.
+
+    `clientIp`, `client_ip`, `client-ip` and `Client.IP` are one key written
+    four ways, and listing spellings is the enumeration that has no last
+    element. Normalising closes that axis; the *vocabulary* below stays an
+    explicit list and is honestly an enumeration, because the alternative —
+    matching keys that merely contain `ip` — takes `zip` with it, and `zip` is
+    a postcode on the requester and a field on an advert.
 
     This is a deletion filter over an allowlist, which is the shape CLAUDE.md
     records as fail-open for resolving an identity — there it welds decoration
@@ -262,15 +269,6 @@ def _key_spelling(key: str) -> str:
     collision asks for more redaction, never less. A key whose true spelling is
     address-bearing normalises onto its member every time; nothing leaves the
     set. Fail-closed, and named because the shape invites the other reading.
-    """
-    """One spelling per key, so casing and separators stop being a vocabulary.
-
-    `clientIp`, `client_ip`, `client-ip` and `Client.IP` are one key written
-    four ways, and listing spellings is the enumeration that has no last
-    element. Normalising closes that axis; the *vocabulary* below stays an
-    explicit list and is honestly an enumeration, because the alternative —
-    matching keys that merely contain `ip` — takes `zip` with it, and `zip` is
-    a postcode on the requester and a field on an advert.
     """
     return re.sub(r"[^a-z0-9]", "", key.lower())
 
@@ -327,6 +325,14 @@ _STRING_BODY = r'(?:[^"\\]++|\\\\.|\\(?!"))*+'
 _KEY = r'\\?"(' + _STRING_BODY + r')\\?"\s*:\s*'
 _VALUE = r'(\\?"' + _STRING_BODY + r'\\?"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|null)'
 _PAIR = re.compile(_KEY + _VALUE)
+# The audit on all of the above, and the reason it is not a second opinion from
+# the same regex: **a JSON key name is an identifier, so it cannot contain an
+# escape**, and locating one therefore needs none of `_STRING_BODY`. Every hole
+# in that grammar — the documented one, and the next one — is a hole in
+# `_PAIR`, and a `_PAIR` that matches nothing reads exactly like a capture with
+# nothing to redact. This reading cannot go quiet the same way, so disagreement
+# between the two is reported rather than resolved.
+_ADDRESS_KEY_SITE = re.compile(r'\\?"([A-Za-z_][A-Za-z0-9_.-]*)\\?"\s*:')
 _FLAT_JSON_OBJECT = re.compile(
     r"\{\s*" + _KEY + _VALUE + r"(?:\s*,\s*" + _KEY + _VALUE + r")*\s*\}"
 )
@@ -703,13 +709,29 @@ def requester_location_blocks(text: str) -> list[tuple[int, int]]:
     for every block; the trailing run fires only for a block a requester key
     introduced. The symmetric version was written first and over-collected —
     it swept `children` (an RSC stream reference), `protocol` and `host` into
-    fifteen violations across the library, because a flat object seeded by an
-    address-bearing key is often a page-shaped object whose neighbours are
-    page data. So a requester scalar written *after* a block that seeded on
-    its own address-bearing key is not reached. That is narrower than the
-    sentence above, it is fail-open, and it is recorded here rather than
-    closed, because closing it needs the same object boundary the paragraph
-    above says is unavailable.
+    fifteen violations across the library. So a requester scalar written
+    *after* a block that seeded on its own address-bearing key is not reached.
+    That is fail-open, and it is recorded here rather than closed, because
+    closing it needs the same object boundary the paragraph above says is
+    unavailable.
+
+    **What is actually in that unreached run is measured, not assumed**, and
+    an earlier draft of this docstring got it wrong in the fail-open
+    direction: it said the neighbours are page data. Three of the seven are
+    not. Identically in all three committed captures the run is `ip`,
+    `userAppliedJobs`, `userJobAlertData`, `protocol`, `host`,
+    `isDefaultLanguage`, `children` — so the first is the requester's own
+    address, and the next two are the requester's activity. `ip` is
+    address-bearing, so `_pairs_to_redact` sweeps it wherever it sits and it
+    is redacted in every committed capture; the other two are `$undefined`
+    here, which is a fact about this data and not a property of this rule.
+
+    The risk the paragraph above names — that a reordering the board is free
+    to make would leak them "with nothing observable moving" — is the part
+    that is now closed, and only that part:
+    `test_the_unreached_trailing_run_is_still_what_was_adjudicated`
+    re-measures this list from the committed bytes, so a board that moves a
+    key into this run turns the gate red instead of moving nothing.
     """
     spans = []
     for match in _FLAT_JSON_OBJECT.finditer(text):
@@ -726,6 +748,32 @@ def requester_location_blocks(text: str) -> list[tuple[int, int]]:
             end = trail.end() if trail else end
         spans.append(((lead.start() if lead else match.start()), end))
     return spans
+
+
+def unreached_address_keys(text: str) -> list[int]:
+    """Offsets of address-bearing keys the pair grammar does not reach.
+
+    Rule 7's clauses all begin by matching structure, so every one of them is
+    silent when the structure does not match: a capture the grammar cannot read
+    yields no pairs, no blocks and no violations, which is indistinguishable
+    from a capture with nothing in it. That is the fail-open direction, and it
+    is not hypothetical — `_STRING_BODY` cannot represent an escaped quote in a
+    plain string, and a value ending in an escaped backslash consumes its own
+    terminator, after which `_FLAT_JSON_OBJECT` matches nothing for the rest of
+    the object.
+
+    So this does not widen the grammar; it makes the grammar's *reach*
+    observable. A key located here and not by `_PAIR` means the capture cannot
+    be read at that point — and a capture that cannot be read is a violation,
+    never a pass. Fixing the next hole in `_STRING_BODY` is then an
+    improvement rather than a prerequisite.
+    """
+    reached = {m.start(1) for m in _PAIR.finditer(text) if _is_address_bearing(m.group(1))}
+    return [
+        match.start(1)
+        for match in _ADDRESS_KEY_SITE.finditer(text)
+        if _is_address_bearing(match.group(1)) and match.start(1) not in reached
+    ]
 
 
 def _pairs_to_redact(text: str) -> list[tuple[int, int, str, str]]:
@@ -792,6 +840,12 @@ def check_capture_redaction(package: Path) -> list[str]:
         except OSError as exc:
             violations.append(f"rule 7: {path.name} could not be read: {exc}")
             continue
+        for offset in unreached_address_keys(raw):
+            violations.append(
+                f"rule 7: {path.relative_to(package)} names an address-bearing key at "
+                f"byte {offset} that the pair grammar cannot read — a capture this "
+                "rule cannot parse is never a capture with nothing to redact"
+            )
         for _, _, key, value in _pairs_to_redact(raw):
             if _redacted(key, value) != value:
                 violations.append(

@@ -27,13 +27,17 @@ import pytest
 import yaml
 
 from integral.connector_contract import (
+    _FLAT_JSON_OBJECT,
+    _LEADING_RUN,
     _PAIR,
     _RUN_WINDOW,
+    _TRAILING_RUN,
     ADDRESS_BEARING_KEYS,
     DEFAULT_EVIDENCE_PATH,
     MINIMUM_PACKAGES,
     OPTIONAL_ENTRIES,
     PARSE_FILENAME,
+    REQUESTER_OBJECT_KEYS,
     REQUIRED_ENTRIES,
     _is_address_bearing,
     _key_spelling,
@@ -45,10 +49,11 @@ from integral.connector_contract import (
     measure,
     requester_location_blocks,
     scrub_requester_location,
+    unreached_address_keys,
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
-from integral.connectors import PROBE_DIRNAME
+from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME
 from integral.pagination_capture import measure as pagination_measure
 from integral.repo_gate import PROBE_BASENAME
 
@@ -1236,4 +1241,138 @@ def test_the_run_window_clears_the_widest_block() -> None:
     assert widest * 2 < _RUN_WINDOW, (
         f"the window has no margin left: widest block {widest} against a "
         f"{_RUN_WINDOW}-character window"
+    )
+
+
+# Every escape JSON defines, rather than the ones that were thought of: the
+# axis is generated so an escape nobody listed is varied too.
+_JSON_ESCAPES = (*'"\\/bfnrt', "u0041")
+
+
+def _captures_carrying_an_escape() -> list[tuple[str, str]]:
+    """One capture per (escape x spelling x position), as (label, raw bytes).
+
+    The escape is placed at the end of a value, at the start, and in the
+    middle, because the defect this pins is positional: an alternative that
+    over-consumes only matters when what it eats is the terminator.
+    """
+    out = []
+    for escape in _JSON_ESCAPES:
+        for position in ("end", "start", "middle"):
+            body = {"end": f"C:\\{escape}", "start": f"\\{escape}C:", "middle": f"C\\{escape}:"}[
+                position
+            ]
+            for spelling in ("plain", "doubly-escaped"):
+                q = '"' if spelling == "plain" else '\\"'
+                b = body if spelling == "plain" else body.replace("\\", "\\\\")
+                raw = (
+                    f"{{{q}path{q}:{q}{b}{q},{q}ip{q}:{q}203.0.113.9{q},"
+                    f"{q}zip_code{q}:{q}08001{q}}}"
+                )
+                out.append((f"{escape!r}/{position}/{spelling}", raw))
+    return out
+
+
+def test_rule_7_is_never_silent_about_a_capture_it_cannot_read() -> None:
+    """A capture carrying an address key is redacted, or reported — never clean.
+
+    The grammar cannot read every escape spelling and is not claimed to: the
+    property is that a capture it *fails* on is a violation rather than a pass.
+    Pinning the grammar's coverage instead would be an enumeration, and the
+    next spelling nobody listed would fail open exactly as this one did.
+    """
+    silent = []
+    for label, raw in _captures_carrying_an_escape():
+        _, changed = scrub_requester_location(raw)
+        if changed == 0 and not unreached_address_keys(raw):
+            silent.append(label)
+    assert not silent, (
+        f"{len(silent)} captures carry the requester's address and rule 7 says "
+        f"nothing about them — neither redacted nor reported: {silent}"
+    )
+
+
+def test_the_axis_reaches_the_grammar_hole_it_was_built_for() -> None:
+    """Non-vacuity: the axis must contain captures the grammar really fails on.
+
+    Without this the test above passes just as well over an axis the grammar
+    handles perfectly, which would make it a check that cannot fail.
+    """
+    unread = [label for label, raw in _captures_carrying_an_escape() if unreached_address_keys(raw)]
+    assert unread, "the axis exercises no capture the pair grammar fails to read"
+
+
+def test_a_capture_the_grammar_cannot_read_fails_the_rule(package: Path) -> None:
+    """The wiring, not the helper — `check_capture_redaction` must say it.
+
+    `unreached_address_keys` being right changes nothing on its own: the rule
+    is what the gate runs, and a helper nobody calls is the green fixture over
+    a live defect this repository keeps meeting. So this asserts the violation
+    comes back out of the rule, over a capture written into a real package.
+    """
+    probe = package / PROBE_DIRNAME / "captured.json"
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    # A value ending in an escaped backslash: the escape alternative consumes
+    # the closing quote, and possessively, so the scan cannot back out of it.
+    probe.write_text('{"path":"C:\\\\","ip":"203.0.113.9","zip_code":"08001"}', encoding="utf-8")
+
+    violations = check_capture_redaction(package)
+    assert any("rule 7" in v and "cannot read" in v for v in violations), violations
+
+
+def _unreached_trailing_keys() -> dict[str, list[str]]:
+    """Per capture, the keys in the trailing run the asymmetry does not reach."""
+    out: dict[str, list[str]] = {}
+    for package in sorted(p for p in DEFAULT_CONNECTORS_DIR.iterdir() if p.is_dir()):
+        if not (package / "connector.yaml").exists():
+            continue
+        for path in sorted(p for p in package.rglob("*") if p.is_file()):
+            try:
+                raw = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for match in _FLAT_JSON_OBJECT.finditer(raw):
+                lead = _LEADING_RUN.search(raw, max(0, match.start() - _RUN_WINDOW), match.start())
+                if (lead.group(3) if lead else "") in REQUESTER_OBJECT_KEYS:
+                    continue  # the trailing run does fire for these
+                if not any(_is_address_bearing(k) for k, _ in _PAIR.findall(match.group(0))):
+                    continue
+                trail = _TRAILING_RUN.match(raw, match.end(), match.end() + _RUN_WINDOW)
+                if trail and trail.group(0).strip():
+                    key = f"{package.name}/{path.relative_to(package)}"
+                    out[key] = [k for k, _ in _PAIR.findall(trail.group(0))]
+    return out
+
+
+def test_the_unreached_trailing_run_is_still_what_was_adjudicated() -> None:
+    """The asymmetry is fail-open by design; this makes a change to it visible.
+
+    `requester_location_blocks` does not extend right from an address-seeded
+    block, so the scalars written after one are unreached. That was adjudicated
+    against what is *in* them — and the adjudication is only as good as the
+    list, which the board can reorder at any time. Without this, such a
+    reordering moves a requester key into the blind spot with nothing
+    observable changing: the pair count does not even fall.
+
+    So this is the docstring's own list, re-measured from the committed bytes.
+    A red here is not necessarily a leak — it means the run changed and the
+    asymmetry has to be re-argued against what is in it now.
+    """
+    expected = [
+        "ip",
+        "userAppliedJobs",
+        "userJobAlertData",
+        "protocol",
+        "host",
+        "isDefaultLanguage",
+        "children",
+    ]
+    measured = _unreached_trailing_keys()
+    assert measured, "no address-seeded block has an unreached trailing run — the check is vacuous"
+    assert all(keys == expected for keys in measured.values()), measured
+    leaking = [k for keys in measured.values() for k in keys if _is_address_bearing(k)]
+    assert set(leaking) == {"ip"}, (
+        f"an address-bearing key other than the adjudicated `ip` is in the unreached "
+        f"run: {leaking} — `ip` is swept by _pairs_to_redact wherever it sits, and "
+        "that argument was made about `ip` alone"
     )

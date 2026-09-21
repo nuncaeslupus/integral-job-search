@@ -63,7 +63,14 @@ def _spans(raw: str, css_class: str) -> list[tuple[int, int, str]]:
     # serves `class="sc-f4dbceab-10 fRvput"`, where the selector names the first
     # of two and a regex anchored on the closing quote finds nothing at all —
     # silently, since a span that does not match is simply not excerpted.
-    for match in re.finditer(r'<div class="([^"]*)"[^>]*>', raw):
+    #
+    # `class` is also not the first attribute in the general case, and the same
+    # silence hid that: `builtin_en` serves the advert body as
+    # `<div data-… id="job-post-body-…" class="… html-parsed-content">`, which a
+    # pattern anchored on `<div class=` cannot see, so that fixture could not be
+    # re-excerpted at all. `(?=[\s>])` keeps `<divider>` out, and requiring
+    # whitespace before `class` keeps `data-class` out.
+    for match in re.finditer(r'<div(?=[\s>])[^>]*?\sclass="([^"]*)"[^>]*>', raw):
         if css_class not in match.group(1).split():
             continue
         close = raw.find("</div>", match.end())
