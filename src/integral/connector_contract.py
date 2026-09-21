@@ -326,13 +326,33 @@ _KEY = r'\\?"(' + _STRING_BODY + r')\\?"\s*:\s*'
 _VALUE = r'(\\?"' + _STRING_BODY + r'\\?"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|null)'
 _PAIR = re.compile(_KEY + _VALUE)
 # The audit on all of the above, and the reason it is not a second opinion from
-# the same regex: **a JSON key name is an identifier, so it cannot contain an
-# escape**, and locating one therefore needs none of `_STRING_BODY`. Every hole
+# the same regex: locating a key site needs none of `_STRING_BODY`. Every hole
 # in that grammar — the documented one, and the next one — is a hole in
 # `_PAIR`, and a `_PAIR` that matches nothing reads exactly like a capture with
 # nothing to redact. This reading cannot go quiet the same way, so disagreement
 # between the two is reported rather than resolved.
-_ADDRESS_KEY_SITE = re.compile(r'\\?"([A-Za-z_][A-Za-z0-9_.-]*)\\?"\s*:')
+#
+# The domain is the grammar's own, not an identifier class. It read
+# `[A-Za-z_][A-Za-z0-9_.-]*` for one round, on the argument that a JSON key is
+# an identifier — true of the keys a board happens to serve, and not of the
+# keys `_key_spelling` normalises over, which is the population this rule is
+# about. `"client ip"`, `"client:ip"`, `" ip"` are all address-bearing by that
+# function's own definition and none of them is an identifier: 31 of 31
+# separators tested gave a key `_PAIR` reaches and the identifier class cannot
+# see, so the audit never asked about them. An allowlist narrower than the
+# domain it audits is the deletion-filter defect one level up.
+_SCALAR_KEY_SITE = re.compile(r'\\?"([^"\\]*)\\?"\s*:\s*(?=\\?"|-?\d|true|false|null)')
+# A value the grammar read correctly is followed by a delimiter and nothing
+# else. That is not a second grammar, it is `_PAIR`'s own claim made
+# falsifiable: when `_STRING_BODY` closes a string on a quote that was really
+# an escape, the bytes after the "value" are the rest of the real value, which
+# begins with neither `,` nor `}` nor `]`.
+_VALUE_FOLLOWER = re.compile(r"\s*(?:,|\}|\]|\Z)")
+# Clause 1's second seed, located independently of the object grammar so that a
+# `custom`/`customIDs` block the grammar fails to span is reported instead of
+# passing. Built from the frozenset rather than spelled out, so a seed added
+# later is audited without anyone remembering to.
+_REQUESTER_SEED = re.compile(r'\\?"(' + "|".join(sorted(REQUESTER_OBJECT_KEYS)) + r')\\?"\s*:\s*\{')
 _FLAT_JSON_OBJECT = re.compile(
     r"\{\s*" + _KEY + _VALUE + r"(?:\s*,\s*" + _KEY + _VALUE + r")*\s*\}"
 )
@@ -750,8 +770,8 @@ def requester_location_blocks(text: str) -> list[tuple[int, int]]:
     return spans
 
 
-def unreached_address_keys(text: str) -> list[int]:
-    """Offsets of address-bearing keys the pair grammar does not reach.
+def unaudited_requester_sites(text: str) -> list[tuple[int, str]]:
+    """Every place rule 7 goes silent over structure it cannot read.
 
     Rule 7's clauses all begin by matching structure, so every one of them is
     silent when the structure does not match: a capture the grammar cannot read
@@ -762,18 +782,58 @@ def unreached_address_keys(text: str) -> list[int]:
     terminator, after which `_FLAT_JSON_OBJECT` matches nothing for the rest of
     the object.
 
-    So this does not widen the grammar; it makes the grammar's *reach*
-    observable. A key located here and not by `_PAIR` means the capture cannot
-    be read at that point — and a capture that cannot be read is a violation,
-    never a pass. Fixing the next hole in `_STRING_BODY` is then an
-    improvement rather than a prerequisite.
+    So none of this widens the grammar; it makes the grammar's *reach*
+    observable. Three readings, because a key-level audit alone was measured
+    not to be enough — the round that shipped one caught a capture whose *key*
+    was unreachable and was structurally blind to one whose *object* was
+    unreachable while every key inside it stayed reachable:
+
+    1. a scalar key site `_PAIR` does not reach — the grammar broke at the key;
+    2. a `custom`/`customIDs` seed inside no matched block — clause 1's second
+       seed, which the key-level reading never asked about because those blocks
+       need no address-bearing key in them;
+    3. an address-bearing key inside no block, with a mis-read pair between it
+       and its opening brace — the grammar broke mid-object, so the block that
+       should have swept its neighbours was never located.
+
+    All three are zero on the committed library: 20,789 scalar sites reached,
+    15 requester seeds all inside a matched block, no mis-read pair before an
+    unblocked address key. They are checks rather than descriptions because of
+    that denominator, not despite it.
     """
-    reached = {m.start(1) for m in _PAIR.finditer(text) if _is_address_bearing(m.group(1))}
-    return [
-        match.start(1)
-        for match in _ADDRESS_KEY_SITE.finditer(text)
-        if _is_address_bearing(match.group(1)) and match.start(1) not in reached
+    pairs = list(_PAIR.finditer(text))
+    reached = {match.start(1) for match in pairs}
+    blocks = requester_location_blocks(text)
+    misread = [m.end() for m in pairs if not _VALUE_FOLLOWER.match(text, m.end())]
+
+    out = [
+        (match.start(1), f"the pair grammar cannot read the key {match.group(1)!r} here")
+        for match in _SCALAR_KEY_SITE.finditer(text)
+        if match.start(1) not in reached
     ]
+    out += [
+        (match.start(1), f"the requester object {match.group(1)!r} is in no matched block")
+        for match in _REQUESTER_SEED.finditer(text)
+        if not _within(match.start(1), match.end(1), blocks)
+    ]
+    out += [
+        (match.start(1), f"the object around {match.group(1)!r} was lost to a mis-read value")
+        for match in pairs
+        if _is_address_bearing(match.group(1))
+        and not _within(match.start(), match.end(), blocks)
+        and _brace_holds_a_misread(text, match.start(), misread)
+    ]
+    return sorted(out)
+
+
+def _within(start: int, end: int, blocks: Sequence[tuple[int, int]]) -> bool:
+    return any(a <= start and end <= b for a, b in blocks)
+
+
+def _brace_holds_a_misread(text: str, start: int, misread: Sequence[int]) -> bool:
+    """Is there a pair the grammar mis-read between `start` and its own `{`?"""
+    opener = text.rfind("{", 0, start)
+    return opener != -1 and any(opener < end <= start for end in misread)
 
 
 def _pairs_to_redact(text: str) -> list[tuple[int, int, str, str]]:
@@ -840,11 +900,11 @@ def check_capture_redaction(package: Path) -> list[str]:
         except OSError as exc:
             violations.append(f"rule 7: {path.name} could not be read: {exc}")
             continue
-        for offset in unreached_address_keys(raw):
+        for offset, what in unaudited_requester_sites(raw):
             violations.append(
-                f"rule 7: {path.relative_to(package)} names an address-bearing key at "
-                f"byte {offset} that the pair grammar cannot read — a capture this "
-                "rule cannot parse is never a capture with nothing to redact"
+                f"rule 7: {path.relative_to(package)} at byte {offset}: {what} — a "
+                "capture this rule cannot read is never a capture with nothing to "
+                "redact"
             )
         for _, _, key, value in _pairs_to_redact(raw):
             if _redacted(key, value) != value:

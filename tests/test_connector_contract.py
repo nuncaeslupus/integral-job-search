@@ -31,6 +31,7 @@ from integral.connector_contract import (
     _LEADING_RUN,
     _PAIR,
     _RUN_WINDOW,
+    _SCALAR_KEY_SITE,
     _TRAILING_RUN,
     ADDRESS_BEARING_KEYS,
     DEFAULT_EVIDENCE_PATH,
@@ -49,7 +50,7 @@ from integral.connector_contract import (
     measure,
     requester_location_blocks,
     scrub_requester_location,
-    unreached_address_keys,
+    unaudited_requester_sites,
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
@@ -1284,7 +1285,7 @@ def test_rule_7_is_never_silent_about_a_capture_it_cannot_read() -> None:
     silent = []
     for label, raw in _captures_carrying_an_escape():
         _, changed = scrub_requester_location(raw)
-        if changed == 0 and not unreached_address_keys(raw):
+        if changed == 0 and not unaudited_requester_sites(raw):
             silent.append(label)
     assert not silent, (
         f"{len(silent)} captures carry the requester's address and rule 7 says "
@@ -1298,14 +1299,16 @@ def test_the_axis_reaches_the_grammar_hole_it_was_built_for() -> None:
     Without this the test above passes just as well over an axis the grammar
     handles perfectly, which would make it a check that cannot fail.
     """
-    unread = [label for label, raw in _captures_carrying_an_escape() if unreached_address_keys(raw)]
+    unread = [
+        label for label, raw in _captures_carrying_an_escape() if unaudited_requester_sites(raw)
+    ]
     assert unread, "the axis exercises no capture the pair grammar fails to read"
 
 
 def test_a_capture_the_grammar_cannot_read_fails_the_rule(package: Path) -> None:
     """The wiring, not the helper — `check_capture_redaction` must say it.
 
-    `unreached_address_keys` being right changes nothing on its own: the rule
+    `unaudited_requester_sites` being right changes nothing on its own: the rule
     is what the gate runs, and a helper nobody calls is the green fixture over
     a live defect this repository keeps meeting. So this asserts the violation
     comes back out of the rule, over a capture written into a real package.
@@ -1318,6 +1321,97 @@ def test_a_capture_the_grammar_cannot_read_fails_the_rule(package: Path) -> None
 
     violations = check_capture_redaction(package)
     assert any("rule 7" in v and "cannot read" in v for v in violations), violations
+
+
+def _address_bearing_separator_spellings() -> list[str]:
+    """`client<sep>ip` for every separator `_key_spelling` normalises away.
+
+    The set is derived from that function rather than listed, so a character it
+    starts or stops folding is varied here without anyone remembering to. `"`
+    and `\\` are excluded because they end the key rather than sit inside it.
+    """
+    return [
+        f"client{chr(code)}ip"
+        for code in range(0x20, 0x7F)
+        if chr(code) not in '"\\' and _key_spelling(f"client{chr(code)}ip") == "clientip"
+    ]
+
+
+def test_the_key_locator_covers_the_grammar_it_audits() -> None:
+    """The locator's domain is `_PAIR`'s, not an identifier class.
+
+    This is the round-4 defect stated as a check. That round located key sites
+    with `[A-Za-z_][A-Za-z0-9_.-]*`, on the argument that a JSON key is an
+    identifier — true of the keys a board happens to serve, false of the keys
+    `_key_spelling` normalises over, which is the population the rule audits.
+    Every one of the spellings below is address-bearing by that function's own
+    definition, and `_PAIR` reads every one of them; an audit that cannot see
+    them reports a capture it failed on as a capture with nothing in it.
+    """
+    invisible = []
+    for key in _address_bearing_separator_spellings():
+        raw = f'{{"{key}":"203.0.113.9"}}'
+        assert _PAIR.search(raw), key  # non-vacuity: the grammar really reads it
+        if not any(m.group(1) == key for m in _SCALAR_KEY_SITE.finditer(raw)):
+            invisible.append(key)
+    assert not invisible, (
+        f"{len(invisible)} of {len(_address_bearing_separator_spellings())} "
+        f"address-bearing spellings are reachable by the pair grammar and "
+        f"invisible to the locator that audits it: {invisible}"
+    )
+
+
+def test_every_requester_seed_is_audited() -> None:
+    """Clause 1's seeds are read off the frozenset, never spelled out again.
+
+    A key-level audit is structurally blind to this: a `custom` block needs no
+    address-bearing key in it, so every key inside one can be reachable while
+    the object the sweep depends on is not. A seed added to
+    `REQUESTER_OBJECT_KEYS` later is covered here because the axis is that set.
+    """
+    for seed in sorted(REQUESTER_OBJECT_KEYS):
+        # A block the grammar cannot span: the value swallows its terminator.
+        raw = f'{{"{seed}":{{"a":"C:\\\\","ip":"203.0.113.9"}}}}'
+        found = unaudited_requester_sites(raw)
+        assert any("in no matched block" in what for _, what in found), (seed, found)
+        intact = f'{{"{seed}":{{"ip":"203.0.113.9"}}}}'
+        assert not unaudited_requester_sites(intact), (seed, intact)
+
+
+def test_an_object_the_grammar_loses_is_reported_though_every_key_is_read() -> None:
+    """The reading a key-level audit cannot make, and the reason there are three.
+
+    Here `_PAIR` reads all three keys and the locator sees all three sites, so
+    the key-level reading is silent by construction — and the sweep still fails,
+    because it works on *objects*: with no block located, the postcode beside
+    the address is never touched. The control is the same capture without the
+    escape, where the sweep reaches all three values.
+    """
+    lost = '{"path":"C:\\\\\\"","ip":"203.0.113.9","zip_code":"08001"}'
+    read = '{"path":"C:","ip":"203.0.113.9","zip_code":"08001"}'
+
+    assert [m.start(1) for m in _PAIR.finditer(lost)] == [
+        m.start(1) for m in _SCALAR_KEY_SITE.finditer(lost)
+    ], "the premise is gone: this capture now has an unreached key site"
+    assert "08001" in scrub_requester_location(lost)[0], "the sweep now reaches it"
+    assert "08001" not in scrub_requester_location(read)[0], lost
+
+    assert any("lost to a mis-read value" in what for _, what in unaudited_requester_sites(lost))
+    assert not unaudited_requester_sites(read)
+
+
+def test_the_escape_axis_varies_every_escape_json_defines() -> None:
+    """Breadth, not merely non-vacuity: trimming the axis must go red.
+
+    The test above only needs *one* capture the grammar fails on, so an axis
+    cut down to the single escape that happens to break it would still pass —
+    and the next spelling nobody listed would fail open, which is the shape
+    this whole block exists to stop.
+    """
+    varied = {label.rsplit("/", 2)[0] for label, _ in _captures_carrying_an_escape()}
+    assert varied == {repr(escape) for escape in _JSON_ESCAPES}
+    assert set('"\\/bfnrt') <= set(_JSON_ESCAPES), _JSON_ESCAPES
+    assert len(_captures_carrying_an_escape()) == len(_JSON_ESCAPES) * 3 * 2
 
 
 def _unreached_trailing_keys() -> dict[str, list[str]]:
