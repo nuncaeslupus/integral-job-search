@@ -185,7 +185,8 @@ def test_a_dry_run_reports_pending_work_in_its_exit_code(tmp_path: Path, monkeyp
     assert json.loads(store.read_text("offers", f"{raw['id']}.json"))["salary"]["period"] == "MONTH"
 
     assert _main(["--apply"]) == 0
-    assert load_offer(store, raw["id"]).salary.period == "month"
+    repaired = load_offer(store, raw["id"]).salary
+    assert repaired is not None and repaired.period == "month"
 
     backups = sorted(p.name for p in store.path().glob("offers.pre-t170-backfill.*"))
     assert len(backups) == 1, backups
