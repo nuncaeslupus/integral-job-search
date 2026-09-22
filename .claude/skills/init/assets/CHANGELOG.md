@@ -18,6 +18,120 @@ being a changelog nobody reads.
 
 Format: `## [X.Y.Z] - YYYY-MM-DD`, newest first, plain bullets below.
 
+## [4.21.2] - 2026-09-22
+
+- `arsenal_timings.py` and `references/performance-tuning.md` disagreed about
+  how to read the timing table: the script's header led with p95, the reference
+  led with total. Total is right — a 90-second step that runs once a day is not
+  the bottleneck a 9-second one running 200 times is — and both now say so in
+  the same order.
+- The last row of the shapes table in `references/performance-tuning.md` was
+  missing its `Read` cell, so the one shape that routes to a different section
+  rendered as a row with nowhere to go.
+
+## [4.21.1] - 2026-09-22
+
+- `/init` now gitignores `.claude/skills/*/findings.md`. That file is
+  skill-workshop's per-skill alignment report — author-local by design, pinned
+  to `file:line` in whichever version of the skill was on disk when it ran. A
+  re-vendor moves those lines, so a repo that ran the workshop once carried a
+  stale untracked report per skill from then on. Existing repos get the entry
+  on their next `/init`; nothing is deleted, and re-running the workshop
+  overwrites the report in place.
+
+## [4.21.0] - 2026-09-22
+
+- **The loop now records how long its expensive steps take.** `gate_run.sh`,
+  `open_task_pr.sh`, `adversarial_review.sh` and `merge_ready.sh` each append
+  one tab-separated row — timestamp, event, label, duration, exit code, task id
+  — to `tmp/arsenal-metrics/metrics.tsv`. No paths, no file contents, no diff,
+  no network: the file is local, self-ignoring (`git add -A` cannot pick it up)
+  and never uploaded anywhere.
+
+- **`claude-arsenal/scripts/arsenal_timings.py` reads it back.** p50/p95/count
+  by boundary ordered by total time, review rounds per change, and the slowest
+  individual runs. Collection is always on and costs milliseconds; reading is
+  this script, so nothing enters a context window until you ask. Run it with
+  `python3 claude-arsenal/scripts/arsenal_timings.py` (`--days N`, `--days 0`
+  for everything).
+
+- **New reference: `claude-arsenal/references/performance-tuning.md`.** The
+  measurement-to-remedy map — which shape in that report means the gate is run
+  too often, which means one suite is the long pole, which means parallelism
+  cannot help, and which means the round count rather than the round cost is
+  the bill. It routes to the existing sections rather than restating them.
+
+- **Two new environment knobs.** `ARSENAL_METRICS=off` disables collection
+  entirely; `ARSENAL_METRICS_MAX_LINES` (default 5000) bounds the file.
+
+## [4.20.0] - 2026-09-22
+
+- **New config key `review-bots`.** Which review bots the PR review loop waits
+  on is now set in `arsenal/config.toml` instead of being three vendor names
+  hardcoded in `query_pr_state.py`:
+
+  ```toml
+  review-bots = ["reviewer[bot]"]
+  ```
+
+  The three that shipped before (`gemini-code-assist[bot]`,
+  `coderabbitai[bot]`, `claude[bot]`) remain the default, so nothing changes
+  for a repo already running one of them. `--watch-bots` still overrides per
+  call.
+
+- **A repo with no review bot should set `review-bots = []`.** Before this,
+  the loop waited for a signal that was never coming and sat at `waiting`
+  until someone read the JSON and worked out why. An empty list is the same
+  CI-only mode as `--watch-bots ""`: green CI plus the quiet window reaches
+  `ready_to_merge`, and nothing ever reports `bot_commented`. The `github`
+  skill's `references/pr-review-loop.md` says what that trades away.
+
+- The `har` skill's `--ua-suffix` worked example now uses a `yourproject/0.1`
+  placeholder instead of naming a specific downstream project — copying it no
+  longer makes your crawler identify itself as somebody else's.
+
+## [4.19.1] - 2026-09-22
+
+- `references/github-automation.md` now names a fourth reason CI reports
+  nothing at all: a PR that conflicts with its base produces **no workflow
+  run**, because `on: pull_request` builds `refs/pull/<n>/merge` and that ref
+  cannot be computed. The three causes already documented are outages, where
+  waiting is right; this one is a stale branch, where waiting is wrong and
+  switching `merge-policy` to `after-review` would drop the CI half for a PR
+  whose CI is fine. One `gh pr view <n> --json mergeable,mergeStateStatus`
+  separates them, and the section says to run it before concluding CI is
+  unavailable.
+- Same section: resolve a conflict **last**, not on discovery. Merging the base
+  moves the head, and every verdict and review claim on the PR is bound to a
+  head — so resolving early throws away a gate run you already paid for.
+
+## [4.19.0] - 2026-09-22
+
+Windows + Git Bash works. Five separate faults made the merge step unreachable
+there and two of the three session-start steps crash; all five are fixed.
+
+- **A legacy console codepage no longer kills a script.** Every shipped Python
+  entry point now reconfigures stdout/stderr to UTF-8 with `errors="replace"`.
+  On a cp1252 console (the default on a Spanish Windows) `→` had no encoding, so
+  `init.py --silent` died on the one run that mattered — the upgrade — and
+  `--list-sections` died every time. A progress line now degrades to `?`.
+- **`github_channel.sh --api` works under Git Bash.** The `gh` endpoint is passed
+  without its leading slash, which MSYS was rewriting into a Windows path. The
+  curl channel is unchanged.
+- **Bundle scripts hand `python3` a path it can open.** Each resolves its own
+  directory through `cygpath -m` when one exists — the identity everywhere else.
+  A python.org interpreter reads `/c/Users/...` as relative to the drive root.
+- **`init.py`'s refresh report no longer counts line endings as changes.** With
+  `core.autocrlf=true` a byte comparison called every vendored file stale; one
+  update reported 95 files refreshed of which 38 had no content change at all.
+- **A vendored tree now records where it came from.** `.arsenal-manifest` carries
+  a `# source: <url>` line, and `check_update.sh`'s INERT report prints that URL
+  instead of `<marketplace-url>`. A non-subtree install has no `arsenal` remote
+  by definition, and nothing else in the tree named upstream.
+- **The skill-workshop gate stops refusing read-only tree scans.** `os.walk`,
+  `os.listdir`, `os.scandir` and `glob.glob` over a skill folder join the
+  `Path.rglob` forms already allowed. Writes are still refused.
+
 ## [4.18.0] - 2026-09-22
 
 - `adversarial_review.sh emit` takes a new **`--checks <file>`** option. Point it
