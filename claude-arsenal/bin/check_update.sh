@@ -253,11 +253,13 @@ _report_skill_skew "${installed}"
 # concluded upgrades had to be done by copying files in, which is the exact
 # failure `verify-subtree` exists to catch, arrived at by trusting the tool
 # whose job is to know.
+_nonsubtree_route="if you have the CLI plugin, /plugin update claude-arsenal then /init; if you do not (cloud-only, CI, a fresh container), re-clone upstream at the newer tag and run its plugins/core/skills/init/scripts/init.py --repo-path . — see docs/INSTALL.md. Either way, finish with: python3 .claude/skills/init/scripts/init.py --repo-path . --silent"
+
 if ! git remote get-url "${REMOTE}" >/dev/null 2>&1; then
     if _is_subtree; then
         _warn "no '${REMOTE}' remote configured — update checking is INERT for this repo. '${PREFIX}' IS a git subtree here; only the remote is missing, which is expected on a fresh clone. Wire it up with: git remote add ${REMOTE} <marketplace-url>"
     else
-        _warn "no '${REMOTE}' remote configured — update checking is INERT for this repo, and '${PREFIX}' has no subtree merge in this history either, so it cannot be updated by merge even once the remote is added. Wire up the remote with: git remote add ${REMOTE} <marketplace-url>"
+        _warn "no '${REMOTE}' remote configured and '${PREFIX}' has no subtree merge in this history — which is what a NON-SUBTREE install looks like, not a broken one. Two installs land in this same git state: the marketplace plugin, and running init.py straight from a clone (docs/INSTALL.md), which is the cloud/CI route and has no plugin to update. This script only reports drift for a subtree install, so INERT is the correct steady state for both, and step 0(a) has nothing to act on. To update: ${_nonsubtree_route}. Adding the remote is optional and buys drift REPORTING only (it cannot merge without a subtree): git remote add ${REMOTE} <marketplace-url>"
     fi
     exit 0
 fi
@@ -308,11 +310,10 @@ fi
 # merge — the skill's assets ARE the distribution — so both halves of the subtree
 # command fail, and the consumer is sent down that route twice with nothing in
 # the text to tell them it cannot work here.
-_plugin_route="update the plugin (/plugin update claude-arsenal), re-vendor .claude/skills from it, then: python3 .claude/skills/init/scripts/init.py --repo-path . --silent"
 if _is_subtree; then
     _manual_hint="git fetch ${REMOTE} refs/tags/v${latest}:refs/tags/v${latest} && git subtree merge --prefix=${PREFIX} \"v${latest}^{commit}\" --squash"
 else
-    _manual_hint="'${PREFIX}' is not a git subtree, so there is nothing to merge into — ${_plugin_route}"
+    _manual_hint="'${PREFIX}' is not a git subtree, so there is nothing to merge into — ${_nonsubtree_route}"
 fi
 if [[ ${CHECK_ONLY} -eq 1 ]]; then
     echo "claude-arsenal: installed=v${installed}, latest=v${latest} — UPDATE AVAILABLE"
@@ -338,13 +339,33 @@ fi
 # fixes it. Saying so beats a `fatal:` that reads like a transient failure and a
 # manual command carrying the same wrong prefix.
 if ! _is_subtree; then
-    _warn "'${PREFIX}' was never added as a git subtree, so it cannot be updated by merge. If the subtree lives elsewhere, set ARSENAL_PREFIX to it (and ARSENAL_BUNDLE_DIR to where .bundle-version is). If the bundle came from the plugin instead: ${_plugin_route}"
+    _warn "'${PREFIX}' was never added as a git subtree, so it cannot be updated by merge. If the subtree lives elsewhere, set ARSENAL_PREFIX to it (and ARSENAL_BUNDLE_DIR to where .bundle-version is). If the bundle came from a plugin or clone install instead: ${_nonsubtree_route}"
     exit 0
 fi
 
 if ! git fetch "${REMOTE}" "refs/tags/v${latest}:refs/tags/v${latest}" 2>&1 \
     || ! git subtree merge --prefix="${PREFIX}" "v${latest}^{commit}" --squash \
         -m "chore: update claude-arsenal to v${latest}" 2>&1; then
+    # A conflicting subtree merge leaves MERGE_HEAD, a populated index and
+    # conflict markers behind. This branch then warns and exits 0, so the
+    # session reports no failure and the worker loop runs against a tree it
+    # requires to be clean -- the same tree the check above just confirmed was
+    # clean. Put it back before saying anything.
+    #
+    # MERGE_HEAD, not the abort's exit status, is what says the tree is still
+    # mid-merge: `git merge --abort` also fails when there is no merge to abort,
+    # which is the common case on this branch, since a failed `git fetch` never
+    # started one. And a bare `|| true` would hide the case that matters -- an
+    # abort that could not undo a real conflict. Exiting nonzero is not the
+    # answer either: this script promises never to abort a session (3.2.0) and
+    # session-start runs it as a report. So repair the tree where that is
+    # possible, and name the one state that cannot be repaired loudly enough
+    # that nobody dispatches a worker into it.
+    if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
+        && ! git merge --abort >/dev/null 2>&1; then
+        _warn "subtree update failed AND 'git merge --abort' could not undo it: the working tree is left mid-merge, with conflict markers under '${PREFIX}'. The worker loop requires a clean tree — resolve or abort this merge by hand BEFORE dispatching any worker, then: ${_manual_hint}"
+        exit 0
+    fi
     _warn "subtree update failed — run manually: ${_manual_hint}"
     exit 0
 fi
@@ -376,8 +397,15 @@ fi
 # one, and nothing fails.
 now_installed="$(cat "${VERSION_FILE}" 2>/dev/null || echo "0.0.0")"
 if [[ "${now_installed}" != "${latest}" ]]; then
-    _warn "subtree merged to v${latest} but ${VERSION_FILE} still reads ${now_installed} — the bundle was NOT upgraded. Re-vendor the skills and re-run init.py:
-    bash ${PREFIX}/scripts/vendor-skills.sh --src ${PREFIX} --dest .claude/skills --plugins all
+    # The remedy has to match the layout. `vendor-skills.sh` was the separate
+    # vendoring step before v2.0.0 and is not shipped any more — printing it
+    # unconditionally sent every modern install after a file that is not there,
+    # and the real remedy (init.py, which vendors) read like an afterthought to
+    # it. So name it only where the find above actually located one.
+    _revendor=""
+    [[ -n "${vendor_sh}" ]] && _revendor="
+    bash ${vendor_sh} --src ${PREFIX} --dest .claude/skills --plugins all"
+    _warn "subtree merged to v${latest} but ${VERSION_FILE} still reads ${now_installed} — the bundle was NOT upgraded. Re-vendor the skills and re-run init.py:${_revendor}
     python3 .claude/skills/init/scripts/init.py --repo-path . --silent"
     exit 0
 fi

@@ -12,7 +12,7 @@ repo with a partial file only overrides what it names.
 Keys are flat, except that a TOML table reads as dotted keys — `[models]`
 with `workers = "sonnet"` is the key `models.workers`. Grouping the model
 choices under one header is what lets a consumer state them the way they think
-of them, rather than as two unrelated top-level strings.
+of them — one decision per role — rather than as unrelated top-level strings.
 
 Usage:
     arsenal_config.py                      # print the effective config as JSON
@@ -73,11 +73,22 @@ DEFAULTS: dict[str, Any] = {
     #   required  refuse to open the PR without a CLEAR receipt for this tree.
     #   off       skip the check and write no line.
     "pre-pr-review": "warn",
-    # test-first writes a failing test before the change; test-after writes
-    # tests alongside it. Read by `execution`.
-    "test-discipline": "test-first",
-    # What /session-end writes when a session closes.
-    "session-end": "handoff",
+    # How many adversarial-review rounds one change gets before the loop is
+    # declared non-convergent. Read by bin/adversarial_review.sh, which refuses
+    # to emit a packet past it.
+    #
+    # There is a cap at all because the loop has no natural fixed point: each
+    # round asks a fresh reader to find a reason not to merge, and the fixes
+    # from the last round are new surface for the next one to find one in.
+    # Measured at six and eight rounds on real changes before this existed.
+    # Round two onward is now a bounded follow-up — the previous findings plus
+    # what changed since — so three is a real budget rather than a guillotine:
+    # a change that has not converged by then has a problem the fourth round
+    # will not find either, and splitting it is the answer.
+    #
+    # The counter is bound to the review's base commit, so rebasing or splitting
+    # the change resets it — which is exactly the move a stuck review needs.
+    "review-max-rounds": 3,
     # The skills-listing character budget the auditor enforces. It is a real
     # constraint, but its value differs by surface and has changed over time,
     # so a consumer whose budget differs can set it here instead of being
@@ -109,6 +120,24 @@ DEFAULTS: dict[str, Any] = {
     # whatever the repo already had (init.py:_resolve_sections).
     "skills.workflow": True,
     "skills.python": False,
+    # The auto-compact threshold, in tokens, written into the host's
+    # `.claude/settings.json` as `autoCompactWindow` by `/init`. 0 means "no
+    # opinion" — leave whatever the harness defaults to, and never touch a value
+    # already in settings.json.
+    #
+    # This is the largest single lever on what a fleet costs, and it is the one
+    # that reads backwards. Cost is `turns x context`, not output: a day of nine
+    # sessions read 438M tokens to write 1.3M. A host that raises its window to
+    # "avoid filling up" raises the per-turn floor instead of lowering it —
+    # replaying those same turns at lower caps gives 500k -> 453M, 300k -> 387M,
+    # 200k -> 287M, 120k -> 186M. Compaction is the cheap event; carrying the
+    # context that postpones it is the expensive one.
+    #
+    # Off by default because the right value is a judgement about this repo's
+    # work, not one upstream can make: too low and sessions compact mid-task and
+    # re-read what they dropped, which costs turns instead of context. Set it,
+    # measure with scripts/usage_report.py, move it.
+    "context-window": 0,
     # Which model runs the session that dispatches work. Advisory, and the one
     # key here nothing can enforce from inside a session: a session cannot
     # change the model it is already running as, so this is read and reported
@@ -116,11 +145,32 @@ DEFAULTS: dict[str, Any] = {
     # Empty means "whatever the session was launched with" — no opinion.
     "models.orchestrator": "",
     # Which model runs worker subagents. This one has a data path: the
-    # orchestrator exports it as CLAUDE_CODE_SUBAGENT_MODEL before any Task
-    # dispatch, so it governs every worker in the session. It used to be a
+    # orchestrator resolves it and passes it as the dispatch's own model
+    # argument, so it governs every worker in the session. It used to be a
     # model id hardcoded in the protocol prose, which meant a consumer who
     # wanted a different one had to edit a vendored file an upgrade overwrites.
+    #
+    # The transport is the dispatch argument and not an exported
+    # CLAUDE_CODE_SUBAGENT_MODEL because on cloud surfaces every Bash call gets
+    # a fresh shell: the export died with the call that made it, and the fleet
+    # ran on the orchestrator's model — the expensive default — while this key
+    # resolved to something cheaper and governed nothing (#379).
     "models.workers": "sonnet",
+    # Which model runs adversarial reviewer subagents (`agents/reviewer.md`,
+    # dispatched from a case file by bin/adversarial_review.sh). Empty means
+    # "no separate opinion — use models.workers", which is why it is not
+    # defaulted to a model name: copying the workers value here would make the
+    # two drift the moment a consumer edits one of them.
+    #
+    # It exists because the roles are not symmetric. An implementer is usually
+    # applying a named remedy; the reviewer derives the spec and mutates
+    # against a change it has never seen, and it is the half that earns the
+    # stronger model. Before this key the only lever was `models.workers`,
+    # which governs the other half — and a `reviewers = ...` written anyway
+    # parsed fine, sat in the file looking configured, and reached nothing,
+    # because unknown keys are tolerated on read (below). A key that records a
+    # decision and changes nothing is worse than no key (#380).
+    "models.reviewers": "",
 }
 
 ENUMS: dict[str, set[str]] = {
@@ -131,8 +181,6 @@ ENUMS: dict[str, set[str]] = {
     # minutes, or no CI at all — can only choose between a policy that blocks
     # every merge indefinitely and one that everybody learns to wave through.
     "merge-policy": {"always", "after-review", "after-ci", "after-ci-and-review", "never"},
-    "test-discipline": {"test-first", "test-after"},
-    "session-end": {"handoff", "ticket", "none"},
     # open_task_pr.sh compares this against the literal "required", so anything
     # else — "Required", "requried", "on" — takes the warn path: the PR opens,
     # its body says no review ran, and the consumer who wrote the value believes
@@ -142,6 +190,45 @@ ENUMS: dict[str, set[str]] = {
 }
 
 CONFIG_RELPATH = "config.toml"
+
+# What reads each key, by path from the repository root. A key with no reader
+# is a setting that scaffolds, validates, round-trips through `--explain`, and
+# changes nothing — six shipped that way, and the worst of them was documented
+# in AGENTS.md as configurable, so a consumer who set it silently imported no
+# issues at all. `config_keys_test.sh` asserts this map covers DEFAULTS and
+# that each named file mentions its key, which is what makes adding a key
+# without wiring it a failing build rather than a discovery months later.
+READERS = {
+    "merge-policy": "plugins/core/skills/init/assets/bin/merge_ready.sh",
+    "host-gate": "plugins/core/skills/init/assets/bin/open_task_pr.sh",
+    "host-setup": "plugins/core/skills/init/assets/bin/host_setup.sh",
+    "pre-pr-review": "plugins/core/skills/init/assets/bin/open_task_pr.sh",
+    "review-max-rounds": "plugins/core/skills/init/assets/bin/adversarial_review.sh",
+    "listing-budget": "plugins/skill-workshop/skills/skill-workshop/scripts/audit_library.py",
+    "queue-automation": "plugins/core/skills/init/scripts/init.py",
+    "import-label": "plugins/core/skills/init/assets/scripts/issue_import.py",
+    "task-label": "plugins/core/skills/init/assets/scripts/queue_hooks.py",
+    "claim-prefix": "plugins/core/skills/init/assets/scripts/queue_hooks.py",
+    # `[skills]` is read as a table, so init.py never names a section: the names
+    # are data, and sections.json is where one is declared.
+    "skills.workflow": "plugins/core/skills/init/assets/sections.json",
+    "skills.python": "plugins/core/skills/init/assets/sections.json",
+    "context-window": "plugins/core/skills/init/scripts/init.py",
+    "models.orchestrator": "plugins/core/skills/init/assets/AGENTS.md",
+    "models.workers": "plugins/core/skills/init/assets/agents/worker.md",
+    "models.reviewers": "plugins/core/skills/init/assets/agents/reviewer.md",
+    # `home` is the exception, and the only one: it names the directory holding
+    # config.toml, so it cannot be read from config.toml. ARSENAL_HOME is the
+    # channel, and FILE_ONLY_REJECTS below refuses the key in the file rather
+    # than accepting it and relocating nothing.
+    "home": None,
+}
+
+# Keys that must not be set in the file. Accepting one there looks like it
+# works — `--explain` echoes it back — and does nothing at all.
+FILE_ONLY_REJECTS = {
+    "home": "ARSENAL_HOME (the file lives inside the directory this names)",
+}
 
 
 class ConfigError(Exception):
@@ -157,12 +244,16 @@ def _config_path(repo_root: Path, home: str) -> Path:
 # and a closed set here would reject the model a consumer is actually running
 # — the vendored file would have to ship a new version to allow a name that
 # already works everywhere else. So the check is on shape, not membership: a
-# bare token, because the value ends up inside an exported environment
-# variable, and anything with quotes, spaces or shell metacharacters in it is a
-# typo at best.
+# bare token, because the value is interpolated into a dispatch argument (and,
+# on surfaces where it survives, an exported environment variable), and
+# anything with quotes, spaces or shell metacharacters in it is a typo at best.
 MODEL_VALUE_REGEX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 
-MODEL_KEYS = ("models.orchestrator", "models.workers")
+MODEL_KEYS = ("models.orchestrator", "models.workers", "models.reviewers")
+
+# Claude Code's own accepted bounds for `autoCompactWindow`; it additionally caps
+# the value at the running model's context window, which is not knowable here.
+CONTEXT_WINDOW_RANGE = (100_000, 1_000_000)
 
 
 def _flatten(raw: dict[str, Any]) -> dict[str, Any]:
@@ -195,7 +286,10 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
 
     # ARSENAL_HOME may relocate the whole host-owned tree; it also decides
     # where we look for the config itself, so it is resolved first.
-    home = os.environ.get("ARSENAL_HOME", DEFAULTS["home"])
+    # `or`, not a get() default: an exported but empty ARSENAL_HOME would
+    # otherwise make the host root the empty string, putting every
+    # host-owned path at the repo root.
+    home = os.environ.get("ARSENAL_HOME") or DEFAULTS["home"]
     if home != DEFAULTS["home"]:
         values["home"] = home
         sources["home"] = "ARSENAL_HOME"
@@ -207,6 +301,10 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
         except tomllib.TOMLDecodeError as exc:
             raise ConfigError(f"{path}: not valid TOML — {exc}") from exc
         for key, value in _flatten(raw).items():
+            if key in FILE_ONLY_REJECTS:
+                raise ConfigError(
+                    f"{path}: {key} cannot be set here — use {FILE_ONLY_REJECTS[key]}"
+                )
             if key not in DEFAULTS:
                 # Unknown keys are tolerated rather than fatal: a consumer on
                 # an older bundle should not break when a newer one adds a key,
@@ -216,7 +314,11 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
             sources[key] = str(path)
 
     for key, allowed in ENUMS.items():
-        if values[key] not in allowed:
+        # The isinstance() guard comes first because TOML permits an array or a
+        # table for any key, and both are unhashable: `value not in allowed`
+        # would raise TypeError and print a traceback instead of the readable
+        # ConfigError this function documents.
+        if not isinstance(values[key], str) or values[key] not in allowed:
             raise ConfigError(
                 f"{key}: {values[key]!r} is not one of {sorted(allowed)} (from {sources[key]})"
             )
@@ -236,13 +338,34 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
         raise ConfigError(
             f"listing-budget must be a positive integer, got {values['listing-budget']!r}"
         )
+    # Same `type(...) is int` guard and the same reason as listing-budget above:
+    # `review-max-rounds = true` would otherwise validate and cap the review at
+    # one round, which reads as the gate having become stricter on its own.
+    if type(values["review-max-rounds"]) is not int or values["review-max-rounds"] < 1:
+        raise ConfigError(
+            f"review-max-rounds must be an integer >= 1, got "
+            f"{values['review-max-rounds']!r} (from {sources['review-max-rounds']})"
+        )
+    # Same `type(...) is int` guard and the same reason as listing-budget above.
+    # The bounds are Claude Code's own for `autoCompactWindow`; a value outside
+    # them is rejected here rather than written into settings.json, because a
+    # settings key the harness discards is precisely the failure this key exists
+    # to end — it would sit in two files looking configured and govern nothing.
+    window = values["context-window"]
+    low, high = CONTEXT_WINDOW_RANGE
+    if type(window) is not int or (window != 0 and not low <= window <= high):
+        raise ConfigError(
+            f"context-window must be 0 (no opinion) or an integer between {low} "
+            f"and {high}, got {window!r} (from {sources['context-window']})"
+        )
     for key in MODEL_KEYS:
         value = values[key]
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be a string, got {value!r} (from {sources[key]})")
         # Empty is meaningful for the orchestrator ("no opinion, use whatever
-        # the session was launched with") and meaningless for workers, which
-        # would export an empty CLAUDE_CODE_SUBAGENT_MODEL and silently get the
+        # the session was launched with") and for reviewers ("no separate
+        # opinion, use models.workers"). It is meaningless for workers, which
+        # would hand the dispatch an empty model argument and silently get the
         # default — a setting that looks configured and is not.
         if value == "":
             if key == "models.workers":
@@ -258,6 +381,21 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
             )
 
     return values, sources
+
+
+def setting(key: str, repo_root: Path | None = None) -> Any:
+    """One configured value, for a module that needs a single key.
+
+    Falls back to the shipped default when the config cannot be read, so a
+    module-level constant resolved through this cannot make a script fail to
+    import on a malformed file. An invalid config is still reported loudly
+    where a human is looking — `--explain` and `init.py` both call `load()`
+    directly and let ConfigError out.
+    """
+    try:
+        return load(repo_root)[0][key]
+    except (ConfigError, OSError, KeyError):
+        return DEFAULTS[key]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -294,4 +432,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Windows consoles default to a legacy codepage (cp1252 and friends);
+    # a non-ASCII line must degrade to "?", never take the process down.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
     raise SystemExit(main())

@@ -39,11 +39,25 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHANNEL="${SCRIPT_DIR}/github_channel.sh"
 
-TASK_ID="${1:?claim_task.sh requires <task-id>}"
+# Not `${1:?...}`: that exits 1, and this script documents 1 as `lost`. A caller
+# invoked with an unset or empty id would read its own usage error as a lost
+# race and skip the task as already claimed. Usage errors exit 2, like `_fail`
+# below -- which is defined further down, hence the inline exit.
+TASK_ID="${1:-}"
 ATTEMPT="${2:-1}"
 
+[[ -n "${TASK_ID}" ]] || { echo "error: claim_task.sh requires <task-id>" >&2; exit 2; }
+
 REMOTE="${ARSENAL_QUEUE_REMOTE:-origin}"
-PREFIX="${ARSENAL_CLAIM_PREFIX:-arsenal/claims}"
+# env, then arsenal/config.toml, then the shipped default. `claim-prefix` was a
+# documented, validated setting that nothing read: this line was the hardcoded
+# string it was supposed to control. queue_hooks.py, which prunes these refs,
+# resolves it the same way — the two must agree or a claim outlives its task.
+PREFIX="${ARSENAL_CLAIM_PREFIX:-}"
+if [[ -z "${PREFIX}" ]]; then
+    PREFIX="$(python3 "${SCRIPT_DIR}/../scripts/arsenal_config.py" --get claim-prefix 2>/dev/null || true)"
+fi
+PREFIX="${PREFIX:-arsenal/claims}"
 
 _fail() { echo "error: $1" >&2; exit 2; }
 
@@ -85,7 +99,13 @@ if [[ "${ATTEMPT}" != "1" ]]; then
     echo "warning: bypassing the base claim ${PREFIX}/${TASK_ID} (declared stale)" >&2
 fi
 
-body="$(printf '{"ref":"%s","sha":"%s"}' "${ref}" "${sha}")"
+# json.dumps, not printf: a task id carrying a quote or a backslash produced
+# malformed JSON here, while open_task_pr.sh already builds the equivalent
+# payload this way and adversarial_review.sh charset-checks the same TASK_ID.
+# Today's input is the agent's own task listing, so the exposure is narrow —
+# this was the one place in the project that did not guard the value.
+body="$(python3 -c 'import json,sys; print(json.dumps({"ref":sys.argv[1],"sha":sys.argv[2]}))' \
+    "${ref}" "${sha}")" || _fail "cannot build the claim payload for ${ref}"
 path="/repos/${slug}/git/refs"
 
 out="$(bash "${CHANNEL}" --api POST "${path}" "${body}" 2>/dev/null)"

@@ -48,6 +48,13 @@ from pathlib import Path
 # bot checks and server-side rendering all branch on it. Saying who is asking
 # is a courtesy that costs nothing; pretending to be someone else costs the
 # fidelity the capture exists for.
+#
+# This is the default only. Which token to say is the *caller's* to decide:
+# a repo that already declares a robots identity has to capture under that one,
+# because a `User-agent:` group naming a token is answering a question about
+# that token — a capture taken as something else was taken under a rule the
+# caller never read, and cannot settle whether their own fetch is permitted.
+# `--ua-suffix` overrides it, and `--ua-suffix ""` appends nothing.
 UA_SUFFIX = " claude-arsenal-har/1.0"
 
 
@@ -56,27 +63,47 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", required=True, help="the page to load")
     parser.add_argument("--output", type=Path, required=True, help="destination .har")
     parser.add_argument(
-        "--browser", default="chrome", choices=("chrome", "chromium", "msedge"),
+        "--browser",
+        default="chrome",
+        choices=("chrome", "chromium", "msedge"),
         help="'chrome' uses the installed browser and downloads nothing (default)",
     )
     parser.add_argument(
-        "--wait", type=float, default=6.0, metavar="S",
+        "--wait",
+        type=float,
+        default=6.0,
+        metavar="S",
         help="seconds to keep recording after load, for XHR that fires late (default 6)",
     )
     parser.add_argument(
-        "--timeout", type=float, default=60.0, metavar="S",
+        "--timeout",
+        type=float,
+        default=60.0,
+        metavar="S",
         help="navigation timeout (default 60); a timeout still writes what was recorded",
     )
     parser.add_argument(
-        "--executable", type=Path, metavar="PATH",
+        "--executable",
+        type=Path,
+        metavar="PATH",
         help="launch this browser binary directly — for an environment that provisions "
         "one whose build number playwright does not recognise",
+    )
+    parser.add_argument(
+        "--ua-suffix",
+        default=UA_SUFFIX,
+        metavar="TOKEN",
+        help="appended to the browser's real user agent, so the site is told who is "
+        "asking (default: %(default)r). Pass an empty string to append nothing",
     )
     parser.add_argument("--headed", action="store_true", help="show the browser window")
     args = parser.parse_args(argv)
 
     try:
-        from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
+        from playwright.sync_api import (  # type: ignore[import-not-found]
+            TimeoutError as PlaywrightTimeoutError,
+        )
+        from playwright.sync_api import sync_playwright
     except ImportError:
         print(
             "capture_har: playwright is not installed. Run this script as\n"
@@ -87,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    navigation_failed = False
     with sync_playwright() as play:
         launch: dict[str, object] = {"headless": not args.headed}
         if args.executable:
@@ -97,7 +125,10 @@ def main(argv: list[str] | None = None) -> int:
         try:
             probe = browser.new_context()
             try:
-                user_agent = probe.new_page().evaluate("navigator.userAgent") + UA_SUFFIX
+                # `args.ua_suffix`, never the constant: an empty string is a
+                # real answer ("append nothing"), so this must not fall back to
+                # the default on a falsy value.
+                user_agent = probe.new_page().evaluate("navigator.userAgent") + args.ua_suffix
             finally:
                 probe.close()
             context = browser.new_context(
@@ -108,8 +139,19 @@ def main(argv: list[str] | None = None) -> int:
             page = context.new_page()
             try:
                 page.goto(args.url, wait_until="networkidle", timeout=args.timeout * 1000)
-            except Exception as exc:  # the partial capture is the interesting one
+            except PlaywrightTimeoutError as exc:
+                # The partial capture is the interesting one: the page never went
+                # idle, but everything it did request is already in the HAR, so
+                # this stays a success.
                 print(f"capture_har: navigation did not settle: {exc}", file=sys.stderr)
+            except Exception as exc:
+                # Anything else -- DNS failure, refused connection, a URL with no
+                # scheme -- is a real error. The HAR is still written by the
+                # `finally` so whatever was captured survives, but the exit status
+                # has to say so: returning 0 here made a capture of nothing look
+                # indistinguishable from a good one.
+                print(f"capture_har: navigation failed: {exc}", file=sys.stderr)
+                navigation_failed = True
             else:
                 page.wait_for_timeout(args.wait * 1000)
             finally:
@@ -123,9 +165,20 @@ def main(argv: list[str] | None = None) -> int:
         print("capture_har: no HAR was written", file=sys.stderr)
         return 1
     print(f"wrote {args.output} ({args.output.stat().st_size} bytes)")
+    if navigation_failed:
+        print(
+            "capture_har: the capture is incomplete -- navigation failed",
+            file=sys.stderr,
+        )
+        return 1
     print(f"next: python3 validate_har.py --input {args.output}")
     return 0
 
 
 if __name__ == "__main__":
+    # Windows consoles default to a legacy codepage (cp1252 and friends);
+    # a non-ASCII line must degrade to "?", never take the process down.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
     raise SystemExit(main())

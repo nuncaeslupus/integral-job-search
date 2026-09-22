@@ -2,11 +2,11 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 10073,
-  "skills_counted": 33,
-  "headroom_chars": 927,
+  "description_chars_total": 10447,
+  "skills_counted": 34,
+  "headroom_chars": 553,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 2073,
+  "overage_against_upstream_default": 2447,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -14,11 +14,6 @@
       "skill": "connector-new",
       "description_chars": 448,
       "listing_chars": 465
-    },
-    {
-      "skill": "continue",
-      "description_chars": 245,
-      "listing_chars": 257
     },
     {
       "skill": "coverage-gaps",
@@ -57,13 +52,18 @@
     },
     {
       "skill": "init",
-      "description_chars": 246,
-      "listing_chars": 254
+      "description_chars": 248,
+      "listing_chars": 256
     },
     {
       "skill": "mutmut-report",
       "description_chars": 379,
       "listing_chars": 396
+    },
+    {
+      "skill": "pin-check",
+      "description_chars": 355,
+      "listing_chars": 368
     },
     {
       "skill": "pypi-release",
@@ -79,6 +79,11 @@
       "skill": "queue-add",
       "description_chars": 109,
       "listing_chars": 122
+    },
+    {
+      "skill": "queue-next",
+      "description_chars": 247,
+      "listing_chars": 261
     },
     {
       "skill": "queue-status",

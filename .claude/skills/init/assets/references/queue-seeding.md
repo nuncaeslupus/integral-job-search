@@ -7,6 +7,7 @@ mid-session. A session that picks up existing work never needs this file.
 ## Contents
 
 - [Seeding from a plan table](#seeding-from-a-plan-table) — one procedure, workspace or solo
+- [The handle marker must be visible text](#the-handle-marker-must-be-visible-text)
 - [Importing issues filed between sessions](#importing-issues-filed-between-sessions)
 - [Divergence handling](#divergence-handling) — a `D-N` task, never a note in the handover
 
@@ -62,7 +63,7 @@ Everything below is the same either way. The table columns are:
 3. `create_task.py` writes `arsenal/tasks/<id>.md`; fill in its body and replace the
    placeholder gate:
 
-   ```markdown
+   ````markdown
    # T1: <Description>
 
    ## Acceptance gate
@@ -78,7 +79,7 @@ Everything below is the same either way. The table columns are:
 
    ## Location
    <Location column content>
-   ```
+   ````
 
    `gate_run.sh` executes that block, and a worker opens no PR when it fails —
    so a task cannot reach `done` on a gate that failed or never ran. **The fence
@@ -90,6 +91,20 @@ Everything below is the same either way. The table columns are:
 
 ---
 
+## The handle marker must be visible text
+
+`handle_sync.py` proposes an issue per task file, and that issue carries a
+`` `arsenal-task: <id>` `` line identifying which task it is a handle for.
+
+**Write it as visible text, never as an HTML comment.** Some GitHub tools strip
+angle-bracketed content from issue bodies. An id that is stripped leaves the
+issue anonymous: nothing can resolve it back to its task, `handle_sync.py`
+proposes a *second* handle for the same task file next session, and the board
+reads as stateless while looking fine.
+
+The same rule applies to the marker `issue_import.py` writes back into an
+imported issue, for the same reason.
+
 ## Importing issues filed between sessions
 
 Step 4b of the session-start protocol runs `issue_import.py`. It writes a task
@@ -100,6 +115,7 @@ three remote changes for you to apply:
 |---|---|
 | `add_to_issue_body` | append the `` `arsenal-task: <id>` `` line to that issue's body — visible text, never an HTML comment |
 | `add_label` | add `arsenal:task` to the issue |
+| `add_id_label` | add `arsenal-id:<id>` — what keeps the issue paired to its task after either is renamed, and the only exact marker a body-less fetch can see |
 | `remove_label` | drop the import label |
 
 The first turns the existing issue into the task's handle rather than opening a

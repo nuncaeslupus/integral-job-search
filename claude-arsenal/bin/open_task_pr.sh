@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # open_task_pr.sh <task_id> <title> [<type>]
+# open_task_pr.sh <task_id> --title <title> [--type <type>] [--body-file <path>]
+# open_task_pr.sh --help
 # Commit a worker's task changes on a feature branch cut from the host DEFAULT
 # branch (origin/main), push it, and open a PR that closes the task's issue.
 #
@@ -56,9 +58,87 @@
 set -uo pipefail
 
 REMOTE="${ARSENAL_QUEUE_REMOTE:-origin}"
-TASK_ID="${1:?open_task_pr.sh requires <task_id>}"
-TITLE="${2:?open_task_pr.sh requires <title>}"
-TYPE="${3:-feat}"
+
+_usage() {
+    cat <<'USAGE'
+usage: open_task_pr.sh <task_id> <title> [<type>]
+       open_task_pr.sh <task_id> --title <title> [--type <type>] [--body-file <path>]
+
+  <task_id>            the queue task this PR completes (e.g. lo-cf3d)
+  <title>              the PR/commit subject, WITHOUT the Conventional Commits type
+  <type>               Conventional Commits type; default: feat
+
+Options:
+  --title <text>       same as the second positional argument
+  --type <text>        same as the third positional argument
+  --body-file <path>   file whose contents become the PR body's Summary prose.
+                       The `Closes #<issue>` line, the acceptance-gate note and
+                       the review receipt are still written by this script — a
+                       body that dropped them would break task completion.
+  -h, --help           print this and exit
+
+Env: ARSENAL_QUEUE_REMOTE, ARSENAL_COAUTHOR, ARSENAL_TASK_ISSUE,
+     ARSENAL_ISSUES_JSON, ARSENAL_HOME, ARSENAL_ALLOW_UNLINKED_PR,
+     ARSENAL_ALLOW_SHARED_ADD
+USAGE
+}
+
+# Positional-only parsing let `open_task_pr.sh lo-cf3d --body-file tmp/pr.md` run
+# to completion with TITLE=--body-file and TYPE=tmp/pr.md, and merged the subject
+# `tmp/pr.md: --body-file` into main (#352). The subject is the one part of a PR
+# that survives a squash, so a typo here is only fixable by rewriting shared
+# history. An argument that looks like an option is now never taken as a value:
+# it is either a known option or a usage error, before anything touches git.
+TASK_ID=""
+TITLE=""
+TYPE=""
+BODY_FILE=""
+_positional=()
+
+# The count check above is not the invariant this comment claims. `--title
+# --body-file x.md` satisfies `$# -ge 2`, so TITLE became `--body-file` and
+# `x.md` fell through to positional — the #352 subject bug, reachable again
+# through the option form that was added to fix it. A value is rejected here
+# when it is empty or starts with `-`, in both the spaced and the `=` form.
+# Returns non-zero rather than exiting: this script runs without `set -e`, and
+# called as `TITLE="$(_check ...)"` the exit would have ended only the command
+# substitution's subshell — leaving TITLE empty and the run going, which is a
+# quieter version of the bug being fixed. Callers pair it with `|| exit 1`.
+_reject_optionlike() {  # _reject_optionlike <option> <value>
+    case "$2" in
+        "")  echo "open_task_pr: $1 needs a non-empty value" >&2; _usage >&2; return 1 ;;
+        -*)  echo "open_task_pr: $1 got '$2', which starts with '-' and is rejected as an option — quoting does not change that, the shell strips the quotes before this sees the value. Pass one that does not start with '-'; for a file that really is named that way, prefix the path: ./$2" >&2; _usage >&2; return 1 ;;
+    esac
+}
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help) _usage; exit 0 ;;
+        --title)      [[ $# -ge 2 ]] || { echo "open_task_pr: --title needs a value" >&2; _usage >&2; exit 1; }; _reject_optionlike --title "$2" || exit 1; TITLE="$2"; shift 2 ;;
+        --title=*)    _reject_optionlike --title "${1#--title=}" || exit 1; TITLE="${1#--title=}"; shift ;;
+        --type)       [[ $# -ge 2 ]] || { echo "open_task_pr: --type needs a value" >&2; _usage >&2; exit 1; }; _reject_optionlike --type "$2" || exit 1; TYPE="$2"; shift 2 ;;
+        --type=*)     _reject_optionlike --type "${1#--type=}" || exit 1; TYPE="${1#--type=}"; shift ;;
+        --body-file)  [[ $# -ge 2 ]] || { echo "open_task_pr: --body-file needs a value" >&2; _usage >&2; exit 1; }; _reject_optionlike --body-file "$2" || exit 1; BODY_FILE="$2"; shift 2 ;;
+        --body-file=*) _reject_optionlike --body-file "${1#--body-file=}" || exit 1; BODY_FILE="${1#--body-file=}"; shift ;;
+        --) shift; while [[ $# -gt 0 ]]; do _positional+=("$1"); shift; done ;;
+        -*) echo "open_task_pr: unknown option: $1" >&2; _usage >&2; exit 1 ;;
+        *) _positional+=("$1"); shift ;;
+    esac
+done
+
+[[ -n "${_positional[0]:-}" ]] && TASK_ID="${_positional[0]}"
+[[ -z "${TITLE}" && -n "${_positional[1]:-}" ]] && TITLE="${_positional[1]}"
+[[ -z "${TYPE}"  && -n "${_positional[2]:-}" ]] && TYPE="${_positional[2]}"
+TYPE="${TYPE:-feat}"
+
+if [[ ${#_positional[@]} -gt 3 ]]; then
+    echo "open_task_pr: too many arguments (got ${#_positional[@]}, expected at most 3)" >&2
+    _usage >&2; exit 1
+fi
+[[ -n "${TASK_ID}" ]] || { echo "open_task_pr.sh requires <task_id>" >&2; _usage >&2; exit 1; }
+[[ -n "${TITLE}" ]]   || { echo "open_task_pr.sh requires <title>" >&2; _usage >&2; exit 1; }
+if [[ -n "${BODY_FILE}" && ! -f "${BODY_FILE}" ]]; then
+    echo "open_task_pr: --body-file ${BODY_FILE} does not exist" >&2; exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 BUNDLE_SCRIPTS="$(cd "${SCRIPT_DIR}/../scripts" && pwd 2>/dev/null || echo "${SCRIPT_DIR}/../scripts")"
 ARSENAL_HOME="${ARSENAL_HOME:-arsenal}"
@@ -239,6 +319,21 @@ fi
 
 # 3. The task's own mechanical gate — the precondition AGENTS.md already claims
 #    this script enforces.
+#
+#    This one runs BEFORE the archive, unlike the host gate above, and that
+#    asymmetry is deliberate rather than an oversight left over from #220.
+#    `gate_run.sh` only prefers the default branch's copy of the task file when
+#    a working copy is also on disk; once `_archive_task_file` has moved it to
+#    `tasks/_history/`, a task that is not on the default branch yet — one added
+#    by this very PR — has no copy left to read and the gate exits 2. Running it
+#    here keeps that bootstrap case working.
+#
+#    The cost is the mirror of the host gate's: this gate measures the
+#    PRE-archive tree, so a task gate must not depend on archive-dependent
+#    state. A gate that transitively asserts "every merged task is archived" —
+#    or reuses the host gate, which is written for the post-archive tree — is
+#    unsatisfiable here by construction, and the failure reads as the task's
+#    fault rather than the ordering's. See references/evidence-gates.md.
 if [[ -f "${SCRIPT_DIR}/gate_run.sh" ]]; then
     # Gate chatter goes to stderr: this script's stdout is a contract that
     # callers parse (`branch:…`, the PR URL), and a `gate: passed` line in it
@@ -308,8 +403,23 @@ _in_linked_worktree() {
 }
 
 # Slug: lowercase, non-alphanumerics → single hyphens, trimmed, capped.
-slug="$(printf '%s' "${TITLE}" | tr '[:upper:]' '[:lower:]' \
-    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')"
+#
+# The whole pipeline runs under LC_ALL=C, and a final C-locale pass strips
+# anything that still is not [a-z0-9-] (#350). Both are load-bearing, and the
+# bug they close is invisible to CI because the runners are C.UTF-8:
+#   * Under a UTF-8 locale glibc collates accented letters INSIDE the `a-z`
+#     range, so `[^a-z0-9]` does not match `é` and it survives into the branch
+#     name raw. `tr '[:upper:]' '[:lower:]'` mangles multibyte there too.
+#   * `cut -c1-40` counts bytes, so a multibyte character straddling byte 40 is
+#     left as a lone continuation byte — not even valid UTF-8.
+# `git push` then refuses the ref, on exactly the workstations where people
+# write non-English titles and nowhere the tests run. This was patched three
+# times in one consumer's tree; each bundle bump reverted it, which is why the
+# normalisation belongs here.
+slug="$(export LC_ALL=C; printf '%s' "${TITLE}" | tr -d '\n\r' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 \
+    | sed -E 's/[^a-z0-9-]+//g; s/-+$//')"
 [[ -z "${slug}" ]] && slug="task"
 BRANCH="arsenal/${TASK_ID}-${slug}"
 
@@ -519,7 +629,11 @@ _unarchive_task_file() {
         echo "open_task_pr: could not restore ${_ARCHIVED_LIVE} from ${_ARCHIVED_BACKUP} — the archived copy at ${_ARCHIVED_DEST} is being left in place. Move it back by hand; the backup is at ${_ARCHIVED_BACKUP}." >&2
         return 1
     fi
-    rm -f "${_ARCHIVED_DEST}" "${_ARCHIVED_BACKUP}"
+    # The archive goes now; the BACKUP waits until the assertion below proves the
+    # tree is actually back. Deleting it here made every later failure path — a
+    # failed rm, a broken index restore — report "the backup has been kept" over
+    # a backup that was already gone.
+    rm -f "${_ARCHIVED_DEST}"
     # Put the INDEX back where it was, rather than staging the rollback: the
     # task file may have been untracked (a task added by this very PR) or
     # carrying unstaged edits, and `git add -A` would turn either into a staged
@@ -538,6 +652,7 @@ _unarchive_task_file() {
         echo "open_task_pr: the rollback did not complete — ${_ARCHIVED_LIVE} should be present and ${_ARCHIVED_DEST} should be gone; check both, and the index, by hand." >&2
         return 1
     fi
+    rm -f "${_ARCHIVED_BACKUP}"
     echo "open_task_pr: restored ${_ARCHIVED_LIVE} — the archive was undone" >&2
 }
 
@@ -591,7 +706,20 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 match = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", text, re.DOTALL)
 if not match:
-    sys.exit(0)
+    # Exiting 0 here read as "stamped", and the caller then failed its own
+    # re-check of the same file and reported the vaguer "not a complete
+    # archive" -- the two halves disagreeing about one case, with the specific
+    # cause known here and thrown away. The refusal itself is right: a task
+    # file with no front matter has no `id:` either, so `task_select.py` cannot
+    # attribute it, and inventing a block to satisfy the check would archive a
+    # record the queue still cannot read. Say what is actually wrong instead.
+    print(
+        f"open_task_pr: {path} has no front matter, so 'status: merged' has "
+        "nowhere to go. A task file needs an `id:`/`title:` block; fix the "
+        "file and re-run.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 front = match.group(1)
 if re.search(r"^status:", front, re.MULTILINE):
     front = re.sub(r"^status:.*$", "status: merged", front, count=1, flags=re.MULTILINE)
@@ -628,14 +756,16 @@ if ! _archive_task_file; then
     exit 1
 fi
 
-# The host gate ran at the top, over a tree that did not yet contain the
-# archive. Then the archive moved a tracked file — so the gate certified one
-# tree and the commit carries another. Any host measurement over the repo's own
-# files (a file count, a coverage denominator, a lint sweep) is then stale by
-# exactly that file, and the host's next run fails on a branch whose gate had
-# just passed (#220). Re-run it here, where the tree is final: a gate that
-# regenerates its evidence writes the right numbers into this commit, and one
-# that only checks confirms the tree being committed is the certified one.
+# The host gate runs HERE and nowhere else — once, over the final tree. It used
+# to run at the top as well, over a tree that did not yet contain the archive,
+# and then the archive moved a tracked file: the gate certified one tree and the
+# commit carried another. Any host measurement over the repo's own files (a file
+# count, a coverage denominator, a lint sweep) was stale by exactly that file,
+# and the host's next run failed on a branch whose gate had just passed (#220).
+# So the early call was removed, not duplicated. Running it here, where the tree
+# is final: a gate that regenerates its evidence writes the right numbers into
+# this commit, and one that only checks confirms the tree being committed is the
+# certified one.
 # Not conditional on the archive: `_ARCHIVED_DEST` is empty for an unlinked PR
 # and for a task worked from a payload elsewhere, and gating on it would leave
 # those two cases running no host gate at all — a skip, in the one check the
@@ -694,17 +824,22 @@ if ! commit_err="$(git commit "${commit_args[@]}" 2>&1 >/dev/null)"; then
     # Reaching here then means a hook, a git-config problem, or an identity that
     # cannot be resolved — and the message used to name the one cause that
     # cannot apply, sending the reader to look in the wrong place.
+    # The backup is deleted per-branch, not once at the end: on the failed-rollback
+    # branch the task file is still in tasks/_history/ and this byte-exact copy is
+    # the only way back — and the failure message above names that exact path. The
+    # host-gate failure path keeps it for the same reason.
     if [[ -n "${_ARCHIVED_DEST}" ]]; then
         if _unarchive_task_file; then
             restored="The task file has been restored to ${ARSENAL_HOME}/tasks/."
+            [[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
         else
-            restored="THE ROLLBACK ALSO FAILED — see above; the tree needs a hand before re-running."
+            restored="THE ROLLBACK ALSO FAILED — see above; the tree needs a hand before re-running. The backup at ${_ARCHIVED_BACKUP:-<none>} has been kept."
         fi
     else
         restored="Nothing had been archived, so the tree is unchanged."
+        [[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
     fi
     echo "open_task_pr: could not commit ${TASK_ID} — no PR opened. ${restored} git said: ${commit_err:-<no output>}" >&2
-    [[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
     exit 1
 fi
 # The commit holds the archive now, so the backup has nothing left to protect.
@@ -736,8 +871,16 @@ fi
 # nobody re-reads a worker's log; the PR body is the one surface the person
 # merging this actually looks at, so "nobody independent read this" has to be
 # written where that decision is made.
+# --body-file supplies the Summary prose in place of the bare title. It does
+# NOT replace the whole body: `Closes #<issue>` is the completion mechanism and
+# the review receipt is what the person merging reads, so neither is delegated
+# to a caller-supplied file.
+summary_prose="${TITLE}"
+if [[ -n "${BODY_FILE}" ]]; then
+    summary_prose="$(cat "${BODY_FILE}")"
+fi
 BODY="$(printf '## Summary\n\n%s\n\n%s\n\n## Test plan\n\n%s\n%s' \
-    "${closes_line}" "${TITLE}" "${gate_note}" \
+    "${closes_line}" "${summary_prose}" "${gate_note}" \
     "$([[ -n "${review_note}" ]] && printf '\n%s\n' "${review_note}")")"
 PR_TITLE="${TYPE}: ${TITLE}"
 
