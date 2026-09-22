@@ -10,11 +10,15 @@ every read until repaired.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from integral.identity import ProfileStore, create_profile
 from integral.offers import Offer, connect_manual, load_offer, save_offer
+from integral.revision import REVISIONED, classify
 from integral.salary_period_backfill import (
     _main,
     apply_repairs,
@@ -188,11 +192,47 @@ def test_a_dry_run_reports_pending_work_in_its_exit_code(tmp_path: Path, monkeyp
     repaired = load_offer(store, raw["id"]).salary
     assert repaired is not None and repaired.period == "month"
 
-    backups = sorted(p.name for p in store.path().glob("offers.pre-t170-backfill.*"))
+    backups = sorted(p.name for p in store.path("backups").glob("offers.pre-t170.*"))
     assert len(backups) == 1, backups
-    assert (
-        json.loads((store.path(backups[0]) / f"{raw['id']}.json").read_text())["salary"]["period"]
-        == "MONTH"
-    )
+    backup = store.path("backups", backups[0])
+    assert json.loads((backup / f"{raw['id']}.json").read_text())["salary"]["period"] == "MONTH"
 
     assert _main([]) == 0  # and now it is migrated
+
+
+def test_the_backup_is_not_mistaken_for_an_artefact_to_regenerate() -> None:
+    """A backup is frozen bytes, so `revision` must place it as historical.
+
+    Sited anywhere else in the tree it falls through to `authored`, and
+    `revision.refresh` then writes a `.stale.json` sidecar *inside* the backup
+    and reports every backed-up offer as one to regenerate — a permanent entry
+    per offer in the candidate's staleness report, added by every `--apply`.
+    The backed-up bytes survive either way, so nothing here fails loudly; this
+    is the test that makes the placement visible.
+    """
+    assert classify(Path("backups") / "offers.pre-t170.20260922T000000Z" / "x.json") == "historical"
+    assert "historical" not in REVISIONED
+
+
+def test_a_second_backup_in_the_same_second_does_not_collide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stamp has one-second resolution and `copytree` refuses an existing path.
+
+    Retrying after a partial failure is exactly when two runs land in the same
+    second, and exactly when the backup matters most. Without the suffix loop
+    the second call raises `FileExistsError` and the retry cannot start.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", handle="ada", language="en")
+    store = ProfileStore(root, identity.handle)
+    store.write_json(_raw_offer_with_period("MONTH"), "offers", "legacy-name.json")
+
+    monkeypatch.setattr(
+        "integral.salary_period_backfill.datetime",
+        type("_Frozen", (), {"now": staticmethod(lambda _tz: datetime(2026, 9, 22, tzinfo=UTC))}),
+    )
+    first = backup_offers_dir(store)
+    second = backup_offers_dir(store)
+    assert first != second
+    assert first.is_dir() and second.is_dir()

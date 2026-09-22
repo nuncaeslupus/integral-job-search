@@ -15,8 +15,17 @@ unrecognized label), the whole `salary` object is dropped — mirroring
 means no salary at all, rather than a guessed one.
 
 Defaults to a dry run. `--apply` writes, after copying the affected profile's
-`offers/` directory to a timestamped sibling backup — this data lives under
-`$INTEGRAL_HOME`, outside git, so that copy is the only undo.
+`offers/` directory to a timestamped copy under `backups/` — this data lives
+under `$INTEGRAL_HOME`, outside git, so that copy is the only undo.
+
+Each repair goes back to the file it was read from, by name. `save_offer` is
+the only production writer into `offers/` and always uses `f"{offer.id}.json"`,
+so a file whose name differs from its id is not something anything here has
+observed — this just declines to assume it. One consequence if such a file does
+exist: repairing it leaves it repaired but still unreachable by
+`load_offer(store, id)`, which reads `offers/<id>.json`, and still invisible to
+`employer_boards`, which globs `offers/sha256:*.json`. That is true of the file
+before this runs too; this neither causes it nor fixes it.
 """
 
 from __future__ import annotations
@@ -66,12 +75,16 @@ def repair_raw_offer(raw: dict[str, Any]) -> tuple[dict[str, Any], str] | None:
 def scan_profile(store: ProfileStore) -> list[tuple[str, dict[str, Any], str]]:
     """Every repairable offer in `store`, read-only, as `(filename, patched, why)`.
 
-    The filename travels with the repair because it is where the repair must
-    go back. Writing by `offer.id` instead assumes every legacy filename
-    already equals its content id — an assumption about pre-T170 data that the
-    rest of this module refuses to make, and one that fails by *duplicating*
-    the record: the fixed copy lands at `<id>.json`, the broken original stays
-    where it was, and the next run reports the same repair forever.
+    The filename travels with the repair because it is where the repair must go
+    back. Writing by `offer.id` instead assumes every legacy filename already
+    equals its content id. That assumption very likely holds — `save_offer` is
+    the only production writer into `offers/` and always uses `<id>.json` — but
+    it is an assumption about data written before T170 by code this migration
+    exists precisely because it cannot re-run, and it is the kind that fails by
+    *duplicating* the record: the fixed copy lands at `<id>.json`, the broken
+    original stays where it was, and the next run reports the same repair
+    forever. Reading the name back off the file costs nothing and needs no
+    assumption at all.
     """
     offers_dir = store.path("offers")
     if not offers_dir.is_dir():
@@ -82,10 +95,13 @@ def scan_profile(store: ProfileStore) -> list[tuple[str, dict[str, Any], str]]:
         # likely to meet, and a decoder exception escaping here would abort
         # the run mid-write — profiles already processed written, profiles
         # after this one silently left broken. `ProfileStore.read_json` has
-        # the same rule for the same reason.
+        # the same rule for the same reason. `OSError` too, not just the decode
+        # errors: a permission or I/O failure on the read aborts the run in
+        # exactly the same place, and narrowing to decode errors would fix the
+        # malformed-file case while leaving the unreadable-file one.
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             print(f"  skipped unreadable {path.name}: {exc}", file=sys.stderr)
             continue
         result = repair_raw_offer(raw)
@@ -98,22 +114,32 @@ def scan_profile(store: ProfileStore) -> list[tuple[str, dict[str, Any], str]]:
 def backup_offers_dir(store: ProfileStore) -> Path:
     """Copy `offers/` aside before anything writes to it, and return the copy.
 
-    Nothing prunes these. They sit inside the profile and accumulate one per
-    `--apply` run, which is deliberate for a one-shot migration over data with
-    no other copy, but it is not self-limiting: a caller that runs this on a
-    schedule grows the profile without bound. They are not a retention leak —
-    `retraction.plan_deletion` walks the profile directory, so a retracted
-    profile takes its backups with it — but nobody deletes them otherwise.
+    Under `backups/`, which `revision.classify` places as `historical`. That
+    placement is load-bearing, not tidiness: anywhere else in the tree the copy
+    falls through to `authored`, and `revision.refresh` then writes
+    `.stale.json` sidecars *inside* the backup and reports every backed-up
+    offer as one to regenerate — a permanent entry per offer in the candidate's
+    staleness report.
+
+    Inside the profile home rather than beside it, so the copy is covered by
+    retraction: `retraction.delete_profile` is an `rmtree` of the home, so a
+    retracted candidate takes their backups with them. Siting it outside would
+    leave personal data behind a retraction that reported success.
+
+    Nothing prunes these, though. They accumulate one per `--apply` run, which
+    is deliberate for a one-shot migration over data with no other copy, but it
+    is not self-limiting: a caller that runs this on a schedule grows the
+    profile without bound.
     """
     # The stamp has one-second resolution, and `copytree` refuses an existing
     # destination. A second run inside the same second is not hypothetical:
     # it is what retrying after a partial failure looks like, which is the one
     # moment the backup matters most.
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    backup = store.path(f"offers.pre-t170-backfill.{stamp}")
+    backup = store.path("backups", f"offers.pre-t170.{stamp}")
     suffix = 1
     while backup.exists():
-        backup = store.path(f"offers.pre-t170-backfill.{stamp}.{suffix}")
+        backup = store.path("backups", f"offers.pre-t170.{stamp}.{suffix}")
         suffix += 1
     shutil.copytree(store.path("offers"), backup)
     return backup
