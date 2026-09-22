@@ -392,28 +392,61 @@ def test_the_shell_wrapper_survives_a_project_dir_naming_another_repo(tmp_path: 
     """A stale `CLAUDE_PROJECT_DIR` must not turn the guard into a block.
 
     A session moved between repositories keeps the old value. The wrapper used
-    to `cd` there and run `uv` against a project that does not define this one's
-    `dev` extra; uv exits 2, and a PreToolUse hook exiting 2 means *blocked* —
-    so every tool call in the session fails, `Read` included, leaving no way to
-    read the guard and find out why. Fail-open is the contract the script's own
-    header states, and this is the instance it was stated in.
+    to `cd` there and run `uv` against that project instead of this one; uv's
+    own resolution failure exits 2, and a PreToolUse hook exiting 2 means
+    *blocked* — so every tool call in the session fails, `Read` included,
+    leaving no way to read the guard and find out why. Fail-open is the
+    contract the script's own header states, and this is the instance it was
+    stated in.
     """
     # Another *uv project* is what makes this bite: uv resolves the directory it
-    # is run from, and a project that does not define this one's `dev` extra is
-    # a hard error rather than a fallback. An empty directory does not reproduce
-    # it — uv falls back to the ambient environment and exits 0 either way.
+    # is run from, so a foreign `pyproject.toml` is a resolution of somebody
+    # else's project. An empty directory does not reproduce it — uv falls back
+    # to the ambient environment the test runner already provides, and the
+    # wrapper exits 0 either way.
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "not-this-repo"\nversion = "0"\nrequires-python = ">=3.12"\n'
     )
+    result = _run_profile_guard("", CLAUDE_PROJECT_DIR=str(tmp_path))
+    assert result.returncode == 0, result.stderr
+
+
+def test_the_shell_wrapper_still_blocks_a_cross_profile_read(tmp_path: Path) -> None:
+    """Fail-open is about the wrapper's own failures, not about the rule.
+
+    The companion above pins that a stale `CLAUDE_PROJECT_DIR` cannot turn the
+    guard into a block; `exit 0` would satisfy it on its own. This one pins the
+    other direction end to end — through the real script, the real `uv`
+    invocation and the real `$INTEGRAL_HOME` resolution — so a wrapper that
+    stopped reaching Python could not pass as a wrapper that allows.
+    """
+    root = tmp_path / "profiles"
+    first = create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    second = create_profile(root, "Núria Puig", language="ca", now=FIXED)
+    write_active_handle(root, first.handle, session_id="s1", now=FIXED)
+    payload = json.dumps(
+        {
+            "session_id": "s1",
+            "tool_name": "Read",
+            "tool_input": {"file_path": str(root / second.handle / "profile" / "evidence.jsonl")},
+        }
+    )
+    result = _run_profile_guard(payload, INTEGRAL_HOME=str(tmp_path))
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert second.handle in result.stderr
+
+
+def _run_profile_guard(payload: str, **env: str) -> subprocess.CompletedProcess[str]:
     guard = Path(__file__).resolve().parents[1] / "tools" / "profile_guard.sh"
-    result = subprocess.run(
+    return subprocess.run(
         ["bash", str(guard)],
-        input="",
+        input=payload,
         capture_output=True,
         text=True,
-        env={**os.environ, "CLAUDE_PROJECT_DIR": str(tmp_path)},
+        encoding="utf-8",
+        timeout=60,
+        env={**os.environ, **env},
     )
-    assert result.returncode == 0, result.stderr
 
 
 # --- the gate --------------------------------------------------------------
