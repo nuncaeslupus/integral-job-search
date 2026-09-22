@@ -294,6 +294,26 @@ def _is_address_bearing(key: str) -> bool:
 # adding once some capture shows a requester record that nothing else reaches.
 REQUESTER_OBJECT_KEYS = frozenset({"custom", "customIDs"})
 
+
+def _seeds_a_block(key: str) -> bool:
+    """Clause 1's seeding vocabulary, in one place because it was in two.
+
+    Clause 1 reads *"a block seeds if the key introducing it names the
+    requester"*, and an address-bearing key names the requester — that is what
+    `ADDRESS_BEARING_KEYS` is for. `requester_location_blocks` consulted only
+    `REQUESTER_OBJECT_KEYS` as an introducing key, so
+    `{"ipLocation":{"city":"Barcelona","zip_code":"08001","lat":41.3874}}`
+    scrubbed to itself: no block, no audit site, no census site, no violation,
+    and the object carrying the city, the postcode and the coordinates was
+    invisible to every clause and every reading at once. The block needs no
+    object boundary to find — the introducing key is already in hand.
+
+    Both seeds run through here, so the vocabulary cannot widen in one caller
+    and not the other, which is how it came apart the first time.
+    """
+    return key in REQUESTER_OBJECT_KEYS or _is_address_bearing(key)
+
+
 # The address placeholder is a real one — RFC 5737 TEST-NET-1, not globally
 # routable — so a capture that is parsed still yields something address-shaped
 # where the board expects an address. Everything else becomes the word or zero.
@@ -340,29 +360,47 @@ _SCALAR_VALUES: tuple[tuple[str, str], ...] = (
 _VALUE = "(" + "|".join(whole for whole, _ in _SCALAR_VALUES) + ")"
 _PAIR = re.compile(_KEY + _VALUE)
 # The audit on all of the above, and the reason it is not a second opinion from
-# the same regex: locating a key site needs none of `_STRING_BODY`. Every hole
-# in that grammar — the documented one, and the next one — is a hole in
-# `_PAIR`, and a `_PAIR` that matches nothing reads exactly like a capture with
-# nothing to redact. This reading cannot go quiet the same way, so disagreement
-# between the two is reported rather than resolved.
+# the same regex: `_PAIR` has to match a whole value and this needs only a
+# lookahead at the value's first character. Every hole in the *value* grammar —
+# the documented escaped quote, and the next one — is a hole in `_PAIR`, and a
+# `_PAIR` that matches nothing reads exactly like a capture with nothing to
+# redact. That asymmetry is where the independence lives, and it is the whole
+# of it: disagreement between the two is reported rather than resolved.
 #
-# The domain is the grammar's own, not an identifier class. It read
-# `[A-Za-z_][A-Za-z0-9_.-]*` for one round, on the argument that a JSON key is
-# an identifier — true of the keys a board happens to serve, and not of the
-# keys `_key_spelling` normalises over, which is the population this rule is
-# about. `"client ip"`, `"client:ip"`, `" ip"` are all address-bearing by that
-# function's own definition and none of them is an identifier: 31 of 31
-# separators tested gave a key `_PAIR` reaches and the identifier class cannot
-# see, so the audit never asked about them. An allowlist narrower than the
-# domain it audits is the deletion-filter defect one level up.
+# The **key** is where the two must not differ, and it differed twice. The
+# domain is the grammar's own, not an identifier class: `[A-Za-z_][A-Za-z0-9_.-]*`
+# stood for one round on the argument that a JSON key is an identifier — true
+# of the keys a board happens to serve, and not of the keys `_key_spelling`
+# normalises over, which is the population this rule is about. `"client ip"`,
+# `"client:ip"`, `" ip"` are all address-bearing by that function's own
+# definition and none of them is an identifier: 31 of 31 separators tested gave
+# a key `_PAIR` reaches and the identifier class could not see.
+#
+# `[^"\\]*` replaced it and was narrower again, one notch along the same axis:
+# it can represent no escape at all. So `"ip\/"` seeds a block this reading
+# cannot see, and one nested member inserted to cost that block left
+# `Barcelona` and `41.3874` in the scrubbed output with the census reading 0,
+# the audit silent and the gate green. Not hypothetical — `_PAIR` reached **4**
+# key sites this locator could not on committed bytes: `campaign_objective\t`
+# and `paced\t`, in both list captures. Two key classes that agree today are
+# the enumeration again, so there is one: `_STRING_BODY` itself, and
+# `unaudited_requester_sites` reading 3 asserts the containment in the
+# direction nothing ever computed.
 _SCALAR_KEY_SITE = re.compile(
-    r'\\?"([^"\\]*)\\?"\s*:\s*(?=' + "|".join(head for _, head in _SCALAR_VALUES) + ")"
+    r'\\?"('
+    + _STRING_BODY
+    + r')\\?"\s*:\s*(?='
+    + "|".join(head for _, head in _SCALAR_VALUES)
+    + ")"
 )
-# Clause 1's second seed, located independently of the object grammar so that a
-# `custom`/`customIDs` block the grammar fails to span is reported instead of
-# passing. Built from the frozenset rather than spelled out, so a seed added
-# later is audited without anyone remembering to.
-_REQUESTER_SEED = re.compile(r'\\?"(' + "|".join(sorted(REQUESTER_OBJECT_KEYS)) + r')\\?"\s*:\s*\{')
+# Clause 1's seeds, located independently of the object grammar so that a block
+# the grammar fails to span is reported instead of passing. Every key that
+# introduces an object, filtered by `_seeds_a_block` in Python rather than
+# spelled into the pattern: an alternation of literals cannot express the
+# spellings `_key_spelling` normalises over, so listing them here would audit a
+# narrower vocabulary than the one that seeds — which is the defect this round
+# closed one level up.
+_OBJECT_SEED = re.compile(_KEY + r"\{")
 _FLAT_JSON_OBJECT = re.compile(
     r"\{\s*" + _KEY + _VALUE + r"(?:\s*,\s*" + _KEY + _VALUE + r")*\s*\}"
 )
@@ -396,6 +434,27 @@ _TRAILING_RUN = re.compile(r"(?:\s*,\s*" + _KEY + _VALUE + r")*")
 # than on correctness — a run longer than this is left partly unredacted and
 # the capture fails the gate loudly, which is the fail-closed direction.
 _RUN_WINDOW = 4000
+# The ceiling on that window — here, beside what it bounds, rather than in the
+# test that held it for one round. A test cannot be this guard, and the reason
+# is ordering rather than taste: the run scan is quadratic in this number, so
+# the guard has to fire before anything walks the library, and pytest runs a
+# module's tests in definition order. Measured at `_RUN_WINDOW = 10_000_000`:
+# the test holding the ceiling failed in 0.61 s, and the library walk defined
+# 23 lines above it was killed at 300 s against a 22 s baseline — `make test`,
+# `make host-gate` and `verified_gate.sh` all hung exactly as they did before
+# the ceiling existed. An import-time refusal has no ordering to lose: nothing
+# in this module runs, so no test can be the one that runs first.
+#
+# Eight times the present window, so ordinary growth never reaches it. Raising
+# *both* numbers together is still a silent edit, and no constant can catch
+# that — `test_the_library_walk_stays_inside_its_time_budget` is what does,
+# because it measures the wall clock the ceiling exists to protect.
+_RUN_WINDOW_CEILING = 32_000
+if _RUN_WINDOW >= _RUN_WINDOW_CEILING:
+    raise ValueError(
+        f"_RUN_WINDOW is {_RUN_WINDOW}, at or above the {_RUN_WINDOW_CEILING}-character "
+        "ceiling: the run scan is quadratic in it, and the gate does not finish"
+    )
 # Clause 4. A whole attribute value, never a substring: the board's own advert
 # rows read `Barcelona, Barcelona, ES`, so a substring sweep for the requester's
 # `Barcelona, ES` would cut an advert's location in half.
@@ -719,9 +778,13 @@ def requester_location_blocks(text: str) -> list[tuple[int, int]]:
     """The span of every requester-location block in a capture.
 
     A block is a flat JSON object — scalar members only, which is what makes it
-    the *innermost* one — carrying an address-bearing key, extended in **both**
-    directions to take in its own key and the run of scalar pairs written
-    immediately either side of it. Flatness is what keeps this off the
+    the *innermost* one — that either carries an address-bearing key or is
+    **introduced by** one (`_seeds_a_block`), extended in **both** directions to
+    take in its own key and the run of scalar pairs written immediately either
+    side of it. The introducing key seeded for `custom`/`customIDs` alone for
+    six rounds, so an object announced by the address key rather than
+    containing one — `{"ipLocation":{"city":…,"zip_code":…,"lat":…}}` — was
+    reached by no clause and reported by no reading. Flatness is what keeps this off the
     enclosing object: on a Next.js page that is the whole props payload,
     translation strings and all, and sweeping it would take the board's own
     copy with it.
@@ -768,7 +831,7 @@ def requester_location_blocks(text: str) -> list[tuple[int, int]]:
         window = max(0, match.start() - _RUN_WINDOW)
         lead = _LEADING_RUN.search(text, window, match.start())
         introduced_by = lead.group(3) if lead else ""
-        if introduced_by not in REQUESTER_OBJECT_KEYS and not any(
+        if not _seeds_a_block(introduced_by) and not any(
             _is_address_bearing(key) for key, _ in _PAIR.findall(match.group(0))
         ):
             continue
@@ -793,13 +856,22 @@ def unaudited_requester_sites(text: str) -> list[tuple[int, str]]:
     the object.
 
     So none of this widens the grammar; it makes the grammar's *reach*
-    observable. Two readings, each asking a question the structure answers
+    observable. Three readings, each asking a question the structure answers
     without the grammar having to have succeeded:
 
     1. a scalar key site `_PAIR` does not reach — the grammar broke at the key;
-    2. a `custom`/`customIDs` seed inside no matched block — clause 1's second
-       seed, which the key-level reading never asked about because those blocks
-       need no address-bearing key in them.
+    2. a seed inside no matched block — clause 1's introducing-key seed, which
+       the key-level reading never asked about because those blocks need no
+       address-bearing key in them;
+    3. a key `_PAIR` reaches that the key-site reading cannot locate — the
+       containment in the direction nothing computed for six rounds. Reading 1
+       has always been `site - pair`; while the two carried different key
+       classes, `pair - site` was **4** on committed bytes and no reading
+       anywhere said so, which is how a key the locator could not spell came to
+       seed a block the census could not count. Both now share `_STRING_BODY`,
+       so this reading is empty by construction — and it is asserted rather
+       than argued, because "empty by construction" is what the value axis was
+       said to be for a round before it was.
 
     **A third reading was written here twice and both were unsound, so what
     stands in its place is a census rather than a rule.** The question it tried
@@ -817,18 +889,24 @@ def unaudited_requester_sites(text: str) -> list[tuple[int, str]]:
     cases that leak. `unblocked_address_key_sites` measures the thing directly
     instead, and `measure` commits the count.
     """
-    reached = {match.start(1) for match in _PAIR.finditer(text)}
+    reached = {match.start(1): match.group(1) for match in _PAIR.finditer(text)}
+    located = {match.start(1): match.group(1) for match in _SCALAR_KEY_SITE.finditer(text)}
     blocks = requester_location_blocks(text)
 
     out = [
-        (match.start(1), f"the pair grammar cannot read the key {match.group(1)!r} here")
-        for match in _SCALAR_KEY_SITE.finditer(text)
-        if match.start(1) not in reached
+        (start, f"the pair grammar cannot read the key {key!r} here")
+        for start, key in located.items()
+        if start not in reached
     ]
     out += [
         (match.start(1), f"the requester object {match.group(1)!r} is in no matched block")
-        for match in _REQUESTER_SEED.finditer(text)
-        if not _within(match.start(1), match.end(1), blocks)
+        for match in _OBJECT_SEED.finditer(text)
+        if _seeds_a_block(match.group(1)) and not _within(match.start(1), match.end(1), blocks)
+    ]
+    out += [
+        (start, f"the key-site reading cannot locate the key {key!r} the pair grammar reaches")
+        for start, key in reached.items()
+        if start not in located
     ]
     return sorted(out)
 
@@ -848,9 +926,10 @@ def unblocked_address_key_sites(text: str) -> list[tuple[int, str]]:
     It is not zero and cannot be: clause 1 is scoped to the innermost **flat**
     object, and talent.com writes `ip` one level out from the block, beside
     `userAppliedJobs`, `protocol` and `host` in an object that has nested
-    members and so is deliberately out of that scope. One per capture, three in
-    the library, and `requester_location_blocks` adjudicates what is in that
-    unreached run.
+    members and so is deliberately out of that scope. One per talent.com
+    capture, and `requester_location_blocks` adjudicates what is in that
+    unreached run. `measure` commits those counts one row per capture rather
+    than as their sum, for the reason given there.
 
     The number moves the moment a block stops being located, which is the
     failure no rule expressible here catches: breaking `prefilledLocation`'s
@@ -911,15 +990,25 @@ def scrub_requester_location(text: str) -> tuple[str, int]:
     return _HTML_ATTRIBUTE.sub(_attribute, "".join(out)), changed
 
 
-def captures(package: Path) -> Iterator[tuple[Path, str | OSError]]:
+def captures(package: Path) -> Iterator[tuple[Path, str | Exception]]:
     """Every committed file in the package, as text or as the error reading it.
 
     Every committed file, not every `*.html`. The extension was a proxy for
     "the capture", and it is the wrong one: `probe/captured.json` records the
     URL that was fetched, and this board answers 307 by appending the city it
     geolocated the requester to — so the one file naming a URL was the one file
-    never scanned. A file that cannot be *decoded* is not a capture and is
-    skipped; one that cannot be *read* is reported by the caller.
+    never scanned.
+
+    **The encoding was the same proxy, one axis over, and it survived the round
+    that removed the glob.** The `OSError` arm reported; the `UnicodeDecodeError`
+    arm one line above it `continue`d, so a file this rule could not decode left
+    the population silently rather than loudly. Measured: re-encoding a leaky
+    `probe/captured.json` as UTF-16 took the package from 1 violation to **0**
+    with the address still on disk and `captures` yielding 5 of its 6 files. The
+    latin-1 backstop does not cover it either — `_quads_in` finds nothing
+    through the NULs, and on ISO-8859-1 it catches a bare IPv4 and never a city,
+    a postcode or a pair of coordinates. So both arms report: whether a file is
+    a capture is not a question this decides by whether it decodes.
 
     One traversal, shared by the rule and by the measurement `measure` commits
     about it. Two would be two populations that agree today.
@@ -927,9 +1016,7 @@ def captures(package: Path) -> Iterator[tuple[Path, str | OSError]]:
     for path in sorted(p for p in package.rglob("*") if p.is_file()):
         try:
             yield path, path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
             yield path, exc
 
 
@@ -937,7 +1024,7 @@ def check_capture_redaction(package: Path) -> list[str]:
     """Rule 7 — no capture in the package still carries who fetched it."""
     violations = []
     for path, raw in captures(package):
-        if isinstance(raw, OSError):
+        if not isinstance(raw, str):
             violations.append(f"rule 7: {path.name} could not be read: {raw}")
             continue
         for offset, what in unaudited_requester_sites(raw):
@@ -1014,21 +1101,29 @@ def measure(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
             for positional, own in _FOREIGN_INVOCATIONS
             if evidence_target(positional, own) == DEFAULT_EVIDENCE_PATH
         ),
-        # Rule 7's own ceiling, committed as a number rather than described in
+        # Rule 7's own ceiling, committed as numbers rather than described in
         # prose, because prose is what a regression walks past. An
         # address-bearing key clause 1 located no block around is a key whose
         # *neighbours* nothing swept, and that sweep is the whole of what rule
-        # 7 buys over a list of field names. Three today — one per capture, the
-        # `ip` talent.com writes one level out from the block — and this is the
-        # only reading that moves when a block stops being located, which no
-        # rule expressible here detects: see `unaudited_requester_sites` on the
-        # two proxies that tried and the tokeniser they would have needed.
-        "address_key_sites_outside_every_block": sum(
-            len(unblocked_address_key_sites(text))
+        # 7 buys over a list of field names. One per talent.com capture today —
+        # the `ip` the board writes one level out from the block — and this is
+        # the only reading that moves when a block stops being located, which
+        # no rule expressible here detects: see `unaudited_requester_sites` on
+        # the two proxies that tried and the tokeniser they would have needed.
+        #
+        # **Per capture, because one integer summed over 27 packages can be
+        # compensated.** Measured: losing the block in `talent_es`'s
+        # `fixture/detail.html` takes the pooled total 3 → 4 and leaves
+        # `Barcelona` in the scrubbed output; renaming one unrelated `ip` in
+        # `probe/list.html` takes it back to 3, with the block still lost,
+        # still leaking, and `make evidence` clean. A row names the capture it
+        # is about, so the two edits move two rows and neither hides the other.
+        "address_key_sites_outside_every_block": {
+            f"{package.name}/{path.relative_to(package)}": len(sites)
             for package in connector_packages(directory)
-            for _, text in captures(package)
-            if isinstance(text, str)
-        ),
+            for path, text in captures(package)
+            if isinstance(text, str) and (sites := unblocked_address_key_sites(text))
+        },
         "violations": report.violations,
     }
 

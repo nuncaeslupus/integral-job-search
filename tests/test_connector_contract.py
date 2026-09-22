@@ -18,6 +18,9 @@ import ast
 import json
 import re
 import shutil
+import sys
+import time
+import types
 from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
@@ -26,13 +29,16 @@ from typing import Any
 import pytest
 import yaml
 
+from integral import connector_contract
 from integral.connector_contract import (
     _FLAT_JSON_OBJECT,
     _LEADING_RUN,
     _PAIR,
     _RUN_WINDOW,
+    _RUN_WINDOW_CEILING,
     _SCALAR_KEY_SITE,
     _SCALAR_VALUES,
+    _STRING_BODY,
     _TRAILING_RUN,
     ADDRESS_BEARING_KEYS,
     DEFAULT_EVIDENCE_PATH,
@@ -44,6 +50,8 @@ from integral.connector_contract import (
     _is_address_bearing,
     _key_spelling,
     _main,
+    _seeds_a_block,
+    captures,
     check_capture_redaction,
     check_library,
     check_package,
@@ -56,12 +64,20 @@ from integral.connector_contract import (
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
-from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME
+from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME, connector_packages
 from integral.pagination_capture import measure as pagination_measure
 from integral.repo_gate import PROBE_BASENAME
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
+
+#: What `test_the_library_walk_stays_inside_its_time_budget` allows itself, and
+#: the floor that stops a walk of nothing from meeting it. Six times the 10.1 s
+#: measured over this library on 2026-09-22, against 153 captures in 27
+#: packages — margin for a slower machine, and nothing like the 99.7 s a
+#: four-fold widening of `_RUN_WINDOW` costs.
+_LIBRARY_WALK_BUDGET_SECONDS = 60.0
+MINIMUM_CAPTURES_WALKED = 100
 _REFERENCE = _LIBRARY / "examplejobs_es"
 
 
@@ -603,10 +619,17 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
 ) -> None:
     """A documented status and a message, never a traceback.
 
-    **1**, not 3: bytes nobody can decode are a fault in *that package*, so it
-    is reported beside any other violation and the rest of the library is still
-    checked. Exit 3 is reserved for the library itself being unreachable, where
-    there is nothing to report about.
+    Exit **1**, not 3: bytes nobody can decode are a fault in *that package*, so
+    it is reported beside any other violation and the rest of the library is
+    still checked. Exit 3 is reserved for the library itself being unreachable,
+    where there is nothing to report about.
+
+    **Two** violations rather than one, since round 7. `captures` used to skip a
+    file it could not decode and now yields the exception, so rule 7's capture
+    sweep reports the same undecodable `meta.yaml` that rule 5 reports — one
+    fault named by both rules that read the file, which is what a fail-closed
+    decode costs and is worth more than the tidier count. Both are asserted by
+    rule number: a count alone would survive either rule going silent.
     """
     library = tmp_path / "connectors"
     shutil.copytree(_REFERENCE, library / _REFERENCE.name)
@@ -615,8 +638,9 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
 
     assert _main(["x", str(evidence), "--connectors", str(library)]) == 1
     measured = json.loads(evidence.read_text(encoding="utf-8"))
-    assert measured["connector_contract_violations"] == 1
-    assert "could not be read" in measured["violations"][0]
+    assert measured["connector_contract_violations"] == 2
+    assert all("could not be read" in v for v in measured["violations"]), measured
+    assert [v.split(": ")[1] for v in measured["violations"]] == ["rule 5", "rule 7"], measured
 
 
 #: The only globally routable dotted quads the repository may carry, each with
@@ -628,6 +652,39 @@ _NOT_ADDRESSES = {
         "Chrome's version in a browser User-Agent"
     ),
 }
+
+
+def test_a_capture_that_cannot_be_decoded_is_reported_rather_than_skipped(
+    tmp_path: Path,
+) -> None:
+    """A file rule 7 cannot read is a finding, not one fewer file to check.
+
+    `captures` used to swallow `UnicodeDecodeError` alongside `OSError` and move
+    on, so a capture nobody could decode left the sweep reporting a clean pass
+    over a package one file smaller than it was. That is the fail-open
+    direction: bytes nobody read are exactly where an unredacted address
+    survives. Measured on this construction before the fix — **4** of 5 files
+    reached and **0** violations; after it, 5 of 5 and one violation naming the
+    file.
+
+    Committed bytes cost nothing for this: all 27 packages decode as UTF-8
+    today, so the fail-closed arm fires only on something new.
+    """
+    package = tmp_path / _REFERENCE.name
+    shutil.copytree(_REFERENCE, package)
+    (package / PROBE_DIRNAME).mkdir()
+    undecodable = package / PROBE_DIRNAME / "captured.json"
+    undecodable.write_bytes('{"url":"https://example.invalid"}'.encode("utf-16"))
+
+    reached = list(captures(package))
+    assert len(reached) == 5, [str(path) for path, _ in reached]
+    assert [
+        str(path.relative_to(package)) for path, text in reached if not isinstance(text, str)
+    ] == [f"{PROBE_DIRNAME}/captured.json"], reached
+
+    violations = check_package(package).violations
+    assert len(violations) == 1, violations
+    assert violations[0].startswith("rule 7: captured.json could not be read"), violations[0]
 
 
 def _quads_in_every_file() -> dict[tuple[str, str], None]:
@@ -1145,6 +1202,33 @@ def test_a_key_spelled_another_way_is_the_same_key() -> None:
             assert "41.4085" not in scrubbed, variant
 
 
+def test_an_address_bearing_key_seeds_the_block_it_introduces() -> None:
+    """Clause 1's seeding vocabulary is one predicate, because it was two.
+
+    `requester_location_blocks` asked whether the **introducing** key was in
+    `REQUESTER_OBJECT_KEYS`, and separately whether any key *inside* the object
+    was address-bearing. So an object introduced by an address-bearing key that
+    contains no address-bearing key of its own seeded nothing — and the board's
+    own spelling is exactly that shape: `ipLocation` introduces `city`,
+    `zip_code`, `lat` and `lon`, and not one of those four is address-bearing.
+    Measured before the fix: 0 pairs redacted, 0 blocks, the city, the postcode
+    and the latitude all still in the scrubbed output.
+
+    Both halves now go through `_seeds_a_block`, so a key added to either
+    vocabulary seeds through the introducing position too, without anybody
+    remembering to add it twice.
+    """
+    raw = (
+        '{"pageProps":{"ipLocation":{"city":"Barcelona","zip_code":"08001",'
+        '"lat":41.3874,"lon":2.1686},"jobs":[]}}'
+    )
+    assert len(requester_location_blocks(raw)) == 1, "the introducing key seeds no block"
+    scrubbed, changed = scrub_requester_location(raw)
+    assert changed == 4, f"{changed} pairs redacted, not the four members of the object"
+    for secret in ("Barcelona", "08001", "41.3874", "2.1686"):
+        assert secret not in scrubbed, secret
+
+
 def test_an_escape_in_a_neighbouring_value_does_not_hide_the_block() -> None:
     """A string grammar that stops at a backslash cannot see an accented city.
 
@@ -1223,15 +1307,6 @@ def test_the_committed_captures_carry_nobody_who_fetched_them() -> None:
     assert not offenders, offenders
 
 
-# The window's ceiling, and the one bound here that is a literal rather than a
-# measurement. That is deliberate and it is the finding: a ceiling expressed as
-# a multiple of the widest committed block cannot fire, because deriving
-# `widest` runs the very scan a widened window makes quadratic — the assert
-# would be reached hours after the thing it was going to report. Eight times
-# the present window, so ordinary growth never touches it.
-_RUN_WINDOW_CEILING = 32_000
-
-
 def test_the_run_window_is_bounded_on_both_sides() -> None:
     """The window's margins, measured rather than asserted in a comment.
 
@@ -1249,9 +1324,17 @@ def test_the_run_window_is_bounded_on_both_sides() -> None:
     notice `verified_gate.sh` had not come back. A wall-clock intuition is not
     a check.
 
-    It is asserted first, before a single capture is read, for the reason
-    `_RUN_WINDOW_CEILING` gives: under the mutation it is about, every line
-    below it costs hours.
+    The ceiling itself is **imported**, not restated. It lived here as a local
+    literal for one round, and a ceiling a test holds cannot fire: the run scan
+    is quadratic in the window, so the guard has to answer before anything walks
+    the library, and pytest runs a module's tests in definition order. Measured
+    at `_RUN_WINDOW = 10_000_000`: this test failed in 0.61 s while the library
+    walk defined above it was killed at 300 s against a 22 s baseline, and the
+    whole gate hung exactly as it had before the ceiling existed. The refusal is
+    at **import** now, which has no ordering to lose. What is left here is the
+    margin between the two numbers, which is a fact about the window rather than
+    about the guard — and a copy of the constant would have let the source's
+    value move while this file kept asserting against the old one.
     """
     assert _RUN_WINDOW < _RUN_WINDOW_CEILING, (
         f"the window is no longer a window: {_RUN_WINDOW} characters, against a "
@@ -1269,6 +1352,88 @@ def test_the_run_window_is_bounded_on_both_sides() -> None:
     assert widest * 2 < _RUN_WINDOW, (
         f"the window has no margin left: widest block {widest} against a "
         f"{_RUN_WINDOW}-character window"
+    )
+
+
+def _execute_module_source(source: str) -> None:
+    """Run a variant of the module's own source as a module, then forget it.
+
+    It is registered in `sys.modules` because `@dataclass` resolves a string
+    annotation through the declaring module and cannot find one that is not
+    there, and under a name of its own because overwriting the real entry would
+    leave every later test in this file importing the variant.
+    """
+    name = "_connector_contract_variant"
+    module = types.ModuleType(name)
+    module.__file__ = connector_contract.__file__
+    sys.modules[name] = module
+    try:
+        exec(compile(source, f"<{name}>", "exec"), module.__dict__)
+    finally:
+        del sys.modules[name]
+
+
+def test_a_window_at_the_ceiling_refuses_to_import() -> None:
+    """The guard above is a margin; this is the guard.
+
+    The module is executed from its own source with `_RUN_WINDOW` substituted,
+    in this interpreter and without importing it, so the refusal is measured
+    rather than read off the source text — the class of check that let three
+    rounds of `verified_gate.sh` pass over a script that ran nothing. Executing
+    the module runs no scan, so the case that costs hours in production costs
+    milliseconds here.
+    """
+    source = Path(connector_contract.__file__).read_text(encoding="utf-8")
+    at_the_ceiling = source.replace(
+        f"_RUN_WINDOW = {_RUN_WINDOW}", f"_RUN_WINDOW = {_RUN_WINDOW_CEILING}", 1
+    )
+    assert at_the_ceiling != source, "the constant is no longer spelled the way this substitutes"
+
+    with pytest.raises(ValueError, match="ceiling"):
+        _execute_module_source(at_the_ceiling)
+
+    below = source.replace(
+        f"_RUN_WINDOW = {_RUN_WINDOW}", f"_RUN_WINDOW = {_RUN_WINDOW_CEILING - 1}", 1
+    )
+    _execute_module_source(below)
+
+
+def test_the_library_walk_stays_inside_its_time_budget() -> None:
+    """The only thing pinning the ceiling *upward*, and why it costs ten seconds.
+
+    A constant cannot catch its own widening: raising `_RUN_WINDOW` and
+    `_RUN_WINDOW_CEILING` in one edit satisfies every assertion above, and the
+    ceiling's own comment says so. What that edit actually costs is wall clock,
+    because the run scan is super-linear in the window — measured over this
+    library on 2026-09-22, one process per window:
+
+        _RUN_WINDOW = 4_000 (committed)    10.1 s
+        _RUN_WINDOW = 8_000                28.1 s
+        _RUN_WINDOW = 16_000               99.7 s
+
+    So the budget is the check, and it is set at six times the committed
+    measurement rather than at the measurement: a slower machine must not turn
+    this red, and a doubling that moves both constants together still blows
+    through it. It walks the whole library because that is what the gate walks;
+    a cheaper scope would measure a number nobody waits on.
+    """
+    started = time.monotonic()
+    walked = 0
+    for package in connector_packages(_LIBRARY):
+        for _, text in captures(package):
+            if isinstance(text, str):
+                requester_location_blocks(text)
+                walked += 1
+    elapsed = time.monotonic() - started
+
+    assert walked >= MINIMUM_CAPTURES_WALKED, (
+        f"only {walked} captures were walked, against a floor of "
+        f"{MINIMUM_CAPTURES_WALKED} — a budget met by scanning nothing is not a budget"
+    )
+    assert elapsed < _LIBRARY_WALK_BUDGET_SECONDS, (
+        f"the library walk took {elapsed:.1f}s against a {_LIBRARY_WALK_BUDGET_SECONDS}s "
+        f"budget over {walked} captures — if `_RUN_WINDOW` was widened, this is the cost "
+        "the ceiling exists to refuse, and no constant could have caught the widening"
     )
 
 
@@ -1388,15 +1553,38 @@ def test_the_key_locator_covers_the_grammar_it_audits() -> None:
     )
 
 
+def _seeding_vocabulary() -> list[str]:
+    """Every key `_seeds_a_block` accepts, derived rather than listed.
+
+    Both halves of clause 1's seeding vocabulary, filtered by the predicate the
+    sweep itself uses — so a key added to either frozenset is varied here, and
+    so is a widening of the predicate that admits a key from neither.
+    """
+    spellings = REQUESTER_OBJECT_KEYS | {_key_spelling(key) for key in ADDRESS_BEARING_KEYS}
+    return sorted(key for key in spellings if _seeds_a_block(key))
+
+
 def test_every_requester_seed_is_audited() -> None:
-    """Clause 1's seeds are read off the frozenset, never spelled out again.
+    """Clause 1's seeds are read off the predicate, never spelled out again.
 
     A key-level audit is structurally blind to this: a `custom` block needs no
     address-bearing key in it, so every key inside one can be reachable while
-    the object the sweep depends on is not. A seed added to
-    `REQUESTER_OBJECT_KEYS` later is covered here because the axis is that set.
+    the object the sweep depends on is not.
+
+    The axis was `REQUESTER_OBJECT_KEYS` alone for six rounds, and that is
+    exactly one half of what seeds a block: an **address-bearing** key in the
+    introducing position seeds one too, which is what the board's `ipLocation`
+    turned out to be. So the audit's own vocabulary had to widen with the
+    sweep's, and the two are now the same call. The assertion below that the
+    vocabulary is strictly larger than the frozenset is what stops this going
+    quietly vacuous if the predicate is ever narrowed back.
     """
-    for seed in sorted(REQUESTER_OBJECT_KEYS):
+    vocabulary = _seeding_vocabulary()
+    assert set(vocabulary) > REQUESTER_OBJECT_KEYS, (
+        f"the seeding vocabulary is back to the object keys alone: {vocabulary} — an "
+        "address-bearing key in the introducing position seeds a block and must be audited"
+    )
+    for seed in vocabulary:
         # A block the grammar cannot span: the value swallows its terminator.
         raw = f'{{"{seed}":{{"a":"C:\\\\","ip":"203.0.113.9"}}}}'
         found = unaudited_requester_sites(raw)
@@ -1432,6 +1620,48 @@ def test_a_lost_block_moves_the_count_no_reading_can_reach() -> None:
     ), "the census no longer moves, so nothing in this rule sees a lost block"
 
 
+def test_a_lost_block_cannot_be_hidden_by_an_unrelated_capture(tmp_path: Path) -> None:
+    """Why the census is a row per capture and not one integer.
+
+    It was `sum(...)` over every capture in the library. A sum is compensable:
+    a capture that loses a block gains a site, and any *other* capture that
+    loses an unrelated address key loses one, and the committed number does not
+    move. Nothing else would have said so — the sum is the only thing this key
+    reported, and the test above compares two readings of the **same** capture,
+    which is the one arrangement a pooled total survives.
+
+    The payload is synthetic because the subject here is the shape of the key
+    rather than the board's markup; the test above pins the same loss against
+    the board's own capture.
+    """
+    library = tmp_path / "connectors"
+    package = library / _REFERENCE.name
+    shutil.copytree(_REFERENCE, package)
+    (package / PROBE_DIRNAME).mkdir()
+    a, b = (package / PROBE_DIRNAME / f"{name}.json" for name in ("a", "b"))
+
+    # An object whose nested member costs it its block, leaving `ip` uncovered.
+    lost = '{"pageProps":{"ipLocation":{"ip":"198.51.100.7","nested":{"x":1}}}}'
+    a.write_text(lost, encoding="utf-8")
+    b.write_text(lost, encoding="utf-8")
+    before = measure(library)["address_key_sites_outside_every_block"]
+    assert before == {
+        f"{_REFERENCE.name}/{PROBE_DIRNAME}/a.json": 1,
+        f"{_REFERENCE.name}/{PROBE_DIRNAME}/b.json": 1,
+    }, before
+
+    a.write_text(lost + lost, encoding="utf-8")  # one more block lost
+    b.write_text(lost.replace('"ip"', '"marker"'), encoding="utf-8")  # one site gone
+    after = measure(library)["address_key_sites_outside_every_block"]
+
+    assert sum(after.values()) == sum(before.values()), (
+        "the compensation no longer balances, so this says nothing about pooling"
+    )
+    assert after != before, (
+        "a lost block and an unrelated deletion cancelled: the census is pooled again"
+    )
+
+
 def test_the_key_locator_admits_every_value_the_grammar_does() -> None:
     """The locator's domain is the grammar's, and one table is why.
 
@@ -1449,6 +1679,74 @@ def test_the_key_locator_admits_every_value_the_grammar_does() -> None:
         text = f'{{"k":{sample}}}'
         assert [m.group(1) for m in _SCALAR_KEY_SITE.finditer(text)] == ["k"], sample
         assert [m.group(1) for m in _PAIR.finditer(text)] == ["k"], sample
+
+
+def test_the_key_locator_spells_a_key_the_way_the_grammar_does() -> None:
+    """The locator's *key* class is the grammar's, by construction.
+
+    `_PAIR` reads a key with `_STRING_BODY`; `_SCALAR_KEY_SITE` read one with a
+    hand-written `[^"\\\\]*`, which cannot spell an escape. So a key the board
+    writes as `ip\\/` was reached by the sweep and invisible to the census that
+    audits it — and a block lost around such a key was therefore counted as
+    zero. Both are `_STRING_BODY` now.
+
+    The substitute that suggests itself is a *wider* class — something like
+    `(?:[^"\\\\]|\\\\.)*` — and it is measured to be much worse: greedy `\\.`
+    runs straight through an escaped quote, so one "key" swallows the rest of
+    the stream. Over this library it lost 6,873 real key sites in one capture
+    alone and manufactured 64 multi-kilobyte nonsense keys. `_STRING_BODY`'s
+    refusal of `\\"` is load-bearing, which is why sharing it is the fix rather
+    than widening either side.
+    """
+    assert _STRING_BODY in _SCALAR_KEY_SITE.pattern, _SCALAR_KEY_SITE.pattern
+    assert _STRING_BODY in _PAIR.pattern, _PAIR.pattern
+
+    # The board's own spelling, in an object a nested member costs its block.
+    raw = '{"a":{"ip\\/":"198.51.100.7","city":"Barcelona","n":{"x":1}}}'
+    assert not requester_location_blocks(raw), "the block is no longer the lost one"
+    assert [key for _, key in unblocked_address_key_sites(raw)] == ["ip\\/"], (
+        "the census cannot spell an escaped key, so a block lost around one reads as zero"
+    )
+
+
+def test_no_capture_carries_a_key_one_reading_reaches_and_the_other_cannot() -> None:
+    """Reading 3 — the containment nothing computed for six rounds.
+
+    `unaudited_requester_sites` checked that every key the **locator** finds is
+    reachable by the pair grammar, and never the converse, so a key class the
+    locator could not spell was invisible to the audit by construction. Over
+    this library that direction read **4** before the two classes were shared
+    and reads 0 now; the reading is what makes a future divergence a failure
+    rather than a silence.
+
+    Run over the committed captures rather than a constructed payload, because
+    the divergence it is about was a property of the board's real markup and
+    none of the six rounds' constructed cases had it.
+    """
+    walked = 0
+    unaudited = {}
+    for package in connector_packages(_LIBRARY):
+        for path, text in captures(package):
+            assert isinstance(text, str), f"{path} does not decode: {text}"
+            walked += 1
+            if sites := unaudited_requester_sites(text):
+                unaudited[f"{package.name}/{path.relative_to(package)}"] = sites
+
+    assert walked >= MINIMUM_CAPTURES_WALKED, f"only {walked} captures were read"
+    assert not unaudited, unaudited
+
+    # Non-vacuity: a clean sweep over the library is also what a deleted reading
+    # returns, so the reading has to be shown to fire. This is the shortest
+    # string it fires on, found by searching every string of length <= 6 over
+    # `"`, `\\`, `/`, `:`, `,`, `{`, `}`, `a`, `1`, ` ` and `t` — an exhaustive
+    # search rather than a case somebody thought of, because "the grammar
+    # reaches a key the locator cannot" is precisely the thing no round before
+    # the seventh managed to imagine an instance of.
+    divergent = '"":":1'
+    assert [what for _, what in unaudited_requester_sites(divergent)] == [
+        "the pair grammar cannot read the key '' here",
+        "the key-site reading cannot locate the key ':' the pair grammar reaches",
+    ], unaudited_requester_sites(divergent)
 
 
 def test_the_escape_axis_varies_every_escape_json_defines() -> None:

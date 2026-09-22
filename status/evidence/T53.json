@@ -2,6 +2,10 @@
   "connector_contract_violations": 0,
   "packages_checked": 27,
   "evidence_writes_for_a_foreign_library": 0,
-  "address_key_sites_outside_every_block": 3,
+  "address_key_sites_outside_every_block": {
+    "talent_es/fixture/detail.html": 1,
+    "talent_es/fixture/list.html": 1,
+    "talent_es/probe/list.html": 1
+  },
   "violations": []
 }

@@ -419,6 +419,7 @@
     "calibration.TWENTY",
     "connector_contract.MINIMUM_PACKAGES",
     "connector_contract._RUN_WINDOW",
+    "connector_contract._RUN_WINDOW_CEILING",
     "connector_exchange.LEAK_NEEDLE_MINIMUM",
     "connector_health.MAX_PROBE_ATTEMPTS",
     "connector_policy.ADJUDICATIONS_AT_LEAST",
