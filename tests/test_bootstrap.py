@@ -465,6 +465,25 @@ def test_the_hook_does_not_use_uv_run_to_ask_whether_uv_is_needed() -> None:
     assert "uv run" not in code
 
 
+def test_neither_hook_resolves_the_repo_from_CLAUDE_PROJECT_DIR() -> None:
+    """A stale value points at the repo the session was in before.
+
+    Both hooks used to `cd "${CLAUDE_PROJECT_DIR:-…}"`, and a session that moved
+    between repositories keeps the old value. `profile_guard.sh` then blocked
+    every tool call in the session; this one is worse to detect, because it
+    exits 0 regardless — the install silently never happens and the candidate is
+    never told.
+
+    Asserted on the text, like the two tests around it, because the behaviour
+    itself is not reachable from here: the suite runs with the cwd already at
+    the repo root, so deleting the `cd` outright leaves every other test green.
+    """
+    for name in ("profile_guard.sh", "bootstrap_hook.sh"):
+        script = (_REPO_ROOT / "tools" / name).read_text(encoding="utf-8")
+        code = "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("#"))
+        assert "CLAUDE_PROJECT_DIR" not in code, name
+
+
 def test_the_hook_does_not_discard_the_announcement() -> None:
     """The announcement goes to stderr, so a hook that silences stderr silences it.
 

@@ -392,22 +392,35 @@ def test_the_shell_wrapper_survives_a_project_dir_naming_another_repo(tmp_path: 
     """A stale `CLAUDE_PROJECT_DIR` must not turn the guard into a block.
 
     A session moved between repositories keeps the old value. The wrapper used
-    to `cd` there and run `uv` against that project instead of this one; uv's
-    own resolution failure exits 2, and a PreToolUse hook exiting 2 means
-    *blocked* — so every tool call in the session fails, `Read` included,
-    leaving no way to read the guard and find out why. Fail-open is the
-    contract the script's own header states, and this is the instance it was
-    stated in.
+    to `cd` there and run `uv` against that project instead of this one, and
+    because it also asked for `--extra dev` the resolution failure exited 2 —
+    which a PreToolUse hook reads as *blocked*, so every tool call in the
+    session failed, `Read` included, leaving no way to read the guard and find
+    out why. That exact 2 is what the two fixes together removed; measured
+    against the current script the same fixture exits 1. What this test pins is
+    the weaker and more durable property: non-zero or not, the wrapper's own
+    failure to start never comes back as a block. Fail-open is the contract the
+    script's own header states, and this is the instance it was stated in.
     """
     # Another *uv project* is what makes this bite: uv resolves the directory it
     # is run from, so a foreign `pyproject.toml` is a resolution of somebody
-    # else's project. An empty directory does not reproduce it — uv falls back
-    # to the ambient environment the test runner already provides, and the
-    # wrapper exits 0 either way.
+    # else's project. An empty directory is the wrong fixture because it depends
+    # on how the suite was started: when the test runner is itself inside a
+    # `uv run`, the nested one inherits `VIRTUAL_ENV` and falls back to that
+    # environment, so the wrapper exits 0 and the test passes for a reason it
+    # was not written for. Measured, with the stale-`cd` restored: empty
+    # directory exits 0 with `VIRTUAL_ENV` set and 1 without it, while this
+    # fixture exits non-zero under both.
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "not-this-repo"\nversion = "0"\nrequires-python = ">=3.12"\n'
     )
-    result = _run_profile_guard("", CLAUDE_PROJECT_DIR=str(tmp_path))
+    # `INTEGRAL_HOME` too, or the subprocess falls through to the developer's
+    # real `~/.integral-job-search`. Read-only in practice, but on a machine
+    # whose `HOME` sits inside a git work tree the guard returns 0 via
+    # `StateHomeRefused` instead of the path under test — passing vacuously.
+    result = _run_profile_guard(
+        "", CLAUDE_PROJECT_DIR=str(tmp_path), INTEGRAL_HOME=str(tmp_path / "home")
+    )
     assert result.returncode == 0, result.stderr
 
 
@@ -442,7 +455,6 @@ def _run_profile_guard(payload: str, **env: str) -> subprocess.CompletedProcess[
         ["bash", str(guard)],
         input=payload,
         capture_output=True,
-        text=True,
         encoding="utf-8",
         timeout=60,
         env={**os.environ, **env},
