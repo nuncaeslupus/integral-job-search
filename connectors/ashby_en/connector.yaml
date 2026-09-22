@@ -8,9 +8,23 @@
 # 2026-09-10. The board pages at jobs.ashbyhq.com disallow `/api/`, which is why
 # this reads the posting API and not the page's own GraphQL.
 #
-# Salary is left unmapped: `compensation.summaryComponents` lists salary,
-# equity and bonus in no fixed order, and this grammar cannot pick the salary
-# one by type. A wrong figure ranks an offer wrongly; a missing one is visible.
+# `includeCompensation=true` adds a `compensation` object, and beside the list
+# this grammar cannot read — `summaryComponents` names salary, equity and bonus
+# in no fixed order — the board publishes the salary alone, pre-formatted, in
+# `scrapeableCompensationSalarySummary` (`"$165K - $330K"`). That is a plain
+# string on a two-segment path, so the three fields below need no new grammar:
+# `range_low`/`range_high` resolve a two-number band and refuse anything else,
+# and `currency` refuses a symbol outside the closed table, so a board paying
+# in a money this repository does not recognise reports no salary rather than a
+# real figure in the wrong currency.
+#
+# T200: reais used to be that example. `fixture/list.html` carries
+# `"R$170K - R$190K"`; the two numbers read fine and only the symbol did not,
+# so the declaration-aware guard in `build_offer` dropped the whole band and
+# this board published a salary nobody read. `R$` is now in `_CURRENCIES` and
+# the row resolves to 170000–190000 BRL. The refusal the paragraph above
+# describes is still real — it is just no longer about Brazil, because the
+# table is closed and short rather than because reais are unreadable.
 site: ashby
 locale: en
 version: "1.0.0"
@@ -19,7 +33,7 @@ source_kind: employer
 auth: none
 
 list:
-  url_pattern: "https://api.ashbyhq.com/posting-api/job-board/{employer}"
+  url_pattern: "https://api.ashbyhq.com/posting-api/job-board/{employer}?includeCompensation=true"
   pagination:
     mode: none
     max_pages: 1
@@ -31,6 +45,15 @@ list:
       title: title
       location_raw: location
       text: descriptionPlain
+      salary_min:
+        path: compensation.scrapeableCompensationSalarySummary
+        take: range_low
+      salary_max:
+        path: compensation.scrapeableCompensationSalarySummary
+        take: range_high
+      salary_currency:
+        path: compensation.scrapeableCompensationSalarySummary
+        take: currency
   # Postings carry no employer name, so this is where `company` comes from.
   employers:
     1password: 1Password

@@ -10,8 +10,12 @@
 #
 # `content=true` puts each advert's body in the listing, so no advert page is
 # fetched. The body arrives HTML-escaped (`&lt;p&gt;`) and is kept verbatim.
-# Salary is left unmapped: it appears only inside that prose, and
-# `pay_input_ranges` is in cents — a figure off by 100 is worse than none.
+# Salary is left unmapped here on purpose, and the reason this comment used to
+# give was wrong: `pay_input_ranges` is not a field this endpoint returns at
+# all — the nineteen keys per job carry no structured pay. The band is in the
+# prose ("Annual Salary: $320,000 - $405,000 USD"), which is a body to read
+# rather than a field to map, so `sourcing._offer_from` runs
+# `salary_recovery.recover` over every silent offer instead (T200, #549).
 site: greenhouse
 locale: en
 version: "1.0.0"

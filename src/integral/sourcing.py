@@ -61,6 +61,7 @@ from integral.connectors import (
     Connector,
     ConnectorError,
     ListRequest,
+    _number_text,
     accepts_query,
     build_list_requests,
     build_list_urls,
@@ -80,6 +81,7 @@ from integral.lifecycle import (
 )
 from integral.offers import Offer, SourceKind, compute_offer_id
 from integral.robots import Robots, RobotsError
+from integral.salary_recovery import applied, band_in_text, recover
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -1196,6 +1198,46 @@ def _one_board(
     )
 
 
+#: The four values a band is built from. A connector that maps any of them has
+#: already said where its salary is; `salary_text` is for the boards that have
+#: not, and declaring both is two readings of one band.
+_BAND_FIELDS = ("salary_min", "salary_max", "salary_currency", "salary_period")
+
+
+def _with_stated_band(fields: dict[str, str]) -> dict[str, str]:
+    """`fields` with a `salary_text` phrase resolved into the four band fields.
+
+    `tecnoempleo_es` states "30.000\u20ac - 36.000\u20ac b/a" in a text node it shares
+    with the posting date, so `take: range_low` sees five numbers and refuses;
+    `infojobs_es` and `jobsacuk_en` state theirs with the period attached
+    ("Bruto/a\u00f1o", "per annum"), which no arrangement of `take:` members reads.
+    All three are one phrase `salary_recovery.band_in_text` already reads — the
+    reader `recover` runs over an advert body below, pointed instead at the
+    element the board states its band in.
+
+    Fail-closed at both ends: a phrase the reader refuses leaves the row silent
+    rather than half-read, and the values go back through `build_offer` as text
+    rather than around it, so a band read here is validated exactly like a band
+    a selector mapped.
+    """
+    phrase = fields.get("salary_text")
+    if phrase is None or any(field in fields for field in _BAND_FIELDS):
+        return fields
+    band = band_in_text(phrase)
+    if band is None:
+        return fields
+    stated = {
+        "salary_min": band.min,
+        "salary_max": band.max,
+    }
+    return {
+        **fields,
+        **{name: _number_text(value) for name, value in stated.items() if value is not None},
+        **({"salary_currency": band.currency} if band.currency else {}),
+        **({"salary_period": band.period} if band.period else {}),
+    }
+
+
 def _offer_from(
     connector: Connector,
     item: dict[str, str],
@@ -1212,17 +1254,24 @@ def _offer_from(
     which field the board stopped supplying.
     """
     try:
-        return (
-            build_offer(
-                connector,
-                list_fields=item,
-                detail_fields=detail_fields,
-                url=url or item.get("detail_url"),
-            ),
-            None,
+        offer = build_offer(
+            connector,
+            list_fields=_with_stated_band(item),
+            detail_fields=_with_stated_band(detail_fields) if detail_fields else detail_fields,
+            url=url or item.get("detail_url"),
         )
     except (ConnectorError, ValueError) as exc:
         return None, str(exc).splitlines()[0][:160]
+    # T92 built a reader for the band a board prints in its prose and nothing in
+    # this path ever called it, so `greenhouse_en` — whose adverts state
+    # "Annual Salary: $320,000 - $405,000 USD" in the body — sourced 553 silent
+    # offers out of 623 (T200, #549). `recover` returns `None` for an offer that
+    # already carries a figure, so this neither overrides a mapped salary nor
+    # runs on one. Only the `advert_text` route is available here: the duplicate
+    # and detail-page routes need a batch and a fetcher, and both belong to the
+    # caller that has them.
+    found, _ = recover(offer)
+    return (offer if found is None else applied(offer, found)), None
 
 
 def _record_fetch(

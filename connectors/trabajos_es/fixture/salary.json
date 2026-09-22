@@ -1,0 +1,40 @@
+{
+  "rows": {
+    "3": {
+      "verdict": "read",
+      "min": 17139.0,
+      "max": 17140.0,
+      "currency": "EUR",
+      "period": null
+    },
+    "8": {
+      "verdict": "read",
+      "min": 18000.0,
+      "max": 19000.0,
+      "currency": "EUR",
+      "period": null
+    },
+    "9": {
+      "verdict": "read",
+      "min": 15000.0,
+      "max": 25000.0,
+      "currency": "EUR",
+      "period": null
+    },
+    "17": {
+      "verdict": "refused",
+      "why": "\"18.000 €\" is a single figure. `_numbers_in` returns one number, so `range_low`/`range_high` both decline, and the currency resolves to EUR with nothing to attach it to. Refused deliberately rather than read as a minimum with no maximum: the advert does not say whether 18.000 € is a floor, a ceiling or a fixed offer, and each reading ranks the job differently."
+    },
+    "22": {
+      "verdict": "refused",
+      "why": "\"22.000 €\" is a single figure, refused for the same reason as row 17: one number is not a band, and nothing in the advert says whether it is a floor, a ceiling or a fixed offer. Written out rather than cross-referenced because a refusal that points at another refusal is one edit away from pointing at nothing, and each row is adjudicated on its own advert."
+    },
+    "29": {
+      "verdict": "read",
+      "min": 9.0,
+      "max": 13.0,
+      "currency": "EUR",
+      "period": null
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "rows": {
+    "*": {
+      "verdict": "read",
+      "min": 15000.0,
+      "max": 21500.0,
+      "currency": "PLN",
+      "period": "month"
+    }
+  }
+}

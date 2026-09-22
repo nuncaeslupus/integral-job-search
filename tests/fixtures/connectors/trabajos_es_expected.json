@@ -1,5 +1,5 @@
 {
-  "annotated_by": "lxml + BeautifulSoup full CSS, independent of integral.connectors",
+  "annotated_by": "lxml + BeautifulSoup full CSS, independent of integral.connectors; the six `span.salario` cells re-annotated 2026-09-22 with stdlib `html.parser` over the same fixture (40 cards, six carrying a span) and the declared takes applied by hand",
   "detail_fields": {
     "text": "Desde IMAN Temporing, empresa especializada en RRHH, queremos acompañarte en tu trayectoria laboral. #Conectamoseltalentoconlasoportunidades ¿Te apasiona la atención al cliente y el sector del transporte y la logística? ¿Tienes experiencia gestionando incidencias y ofreciendo unservicio de calidad al cliente? Atención telefónica y por correo electrónico a clientes nacionales e internacionales. Gestión y resolución de incidencias relacionadas con las rutas de transporte nacional. [fixture excerpt — body truncated, see meta.yaml]",
     "title": "Administrativo/a Atención al Cliente con Inglés"
@@ -30,7 +30,10 @@
       "company": "Iman Temporing",
       "detail_url": "https://www.trabajos.com/ofertas/1196550064/teleoperador-a-call-center-parcial/",
       "location_raw": "Barcelona",
-      "title": "Teleoperador/a call center parcial"
+      "title": "Teleoperador/a call center parcial",
+      "salary_min": "17139",
+      "salary_max": "17140",
+      "salary_currency": "EUR"
     },
     {
       "company": "Crit Interim España ETT",
@@ -63,14 +66,20 @@
       "company": "Crit Interim España ETT",
       "detail_url": "https://www.trabajos.com/ofertas/1196550322/dependiente-maquinaria-y-construccion-h-m-/",
       "location_raw": "Valencia",
-      "title": "Dependiente maquinaria y construcción (H - M)"
+      "title": "Dependiente maquinaria y construcción (H - M)",
+      "salary_min": "18000",
+      "salary_max": "19000",
+      "salary_currency": "EUR"
     },
     {
       "company": "Àkteon",
       "detail_url": "https://www.trabajos.com/ofertas/1196545573/informador-a-de-credito-inmobiliario/",
       "location_raw": "Mataro , Barcelona",
       "text": "Buscamos comerciales de crédito inmobiliario para nuestra oficina de Mataró . En este puesto ...",
-      "title": "Informador/a de crédito inmobiliario"
+      "title": "Informador/a de crédito inmobiliario",
+      "salary_min": "15000",
+      "salary_max": "25000",
+      "salary_currency": "EUR"
     },
     {
       "company": "Empresa de Selección",
@@ -122,7 +131,8 @@
       "detail_url": "https://www.trabajos.com/ofertas/1196549594/agente-de-atencion-al-cliente-alcobendas/",
       "location_raw": "Madrid",
       "text": "Desde IMAN Temporing, empresa especializada en RRHH, queremos acompañarte en tu trayectoria laboral. ...",
-      "title": "Agente de atención al cliente - Alcobendas"
+      "title": "Agente de atención al cliente - Alcobendas",
+      "salary_currency": "EUR"
     },
     {
       "company": "Iman Temporing",
@@ -156,7 +166,8 @@
       "detail_url": "https://www.trabajos.com/ofertas/1196549618/gestor-cuentas-kyc-frances-amex/",
       "location_raw": "Madrid",
       "text": "Buscamos profesionales para incorporarse al equipo de Gestores especializados en KYC (Know Your Customer) sin ...",
-      "title": "Gestor Cuentas KYC Francés AMEX"
+      "title": "Gestor Cuentas KYC Francés AMEX",
+      "salary_currency": "EUR"
     },
     {
       "company": "Crit Interim España ETT",
@@ -204,7 +215,10 @@
       "detail_url": "https://www.trabajos.com/ofertas/1196541301/representant-service-client/",
       "location_raw": "Todo Madrid Madrid",
       "text": "Description du poste En tant qu'agent Onepilot, tu es un freelance chargé d'assister les consommateurs de nos ...",
-      "title": "Représentant service client"
+      "title": "Représentant service client",
+      "salary_min": "9",
+      "salary_max": "13",
+      "salary_currency": "EUR"
     },
     {
       "company": "Crit Interim España ETT",

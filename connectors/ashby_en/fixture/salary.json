@@ -1,0 +1,29 @@
+{
+  "rows": {
+    "0": {
+      "verdict": "read",
+      "min": 30000.0,
+      "max": 45000.0,
+      "currency": "EUR",
+      "period": null
+    },
+    "1": {
+      "verdict": "refused",
+      "why": "This row publishes no salary: `compensationTierSummary` and `scrapeableCompensationSalarySummary` are both null and `compensationTiers` is empty. The figure the scan saw is the fixture's own truncation note (\"truncated at 600 characters for the fixture\"), which is an artefact of recording, not something Ashby published. Kept as a declared refusal rather than narrowed away in the scanner: a money detector that learns to ignore one phrase is an enumeration, and the next fixture annotation gets past it."
+    },
+    "2": {
+      "verdict": "read",
+      "min": 54600.0,
+      "max": 61200.0,
+      "currency": "USD",
+      "period": null
+    },
+    "3": {
+      "verdict": "read",
+      "min": 170000.0,
+      "max": 190000.0,
+      "currency": "BRL",
+      "period": null
+    }
+  }
+}

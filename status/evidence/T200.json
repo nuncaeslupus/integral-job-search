@@ -1,0 +1,8 @@
+{
+  "boards_that_publish_a_salary_we_do_not_read": 0,
+  "salary_rows_refused": 7,
+  "salary_expectation_mismatches": 0,
+  "detail_rows_sharing_one_fixture": 142,
+  "salary_rows_read_at_least": 100,
+  "packages_measured_at_least": 24
+}

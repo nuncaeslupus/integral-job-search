@@ -40,8 +40,9 @@ gate is the reason" this module exists in this shape.
   (§5.2's "connectors may not invent fields") — a typo'd or smuggled key is a
   load-time `ConnectorError`, never a silently-ignored setting. The selector
   fields themselves are further restricted to a fixed vocabulary
-  (`ALLOWED_OFFER_FIELDS`) naming exactly the `Offer` fields a markup selector
-  could plausibly produce, so a field named `password` or `api_key` is
+  (`ALLOWED_OFFER_FIELDS`) naming the `Offer` fields a markup selector could
+  plausibly produce, plus `salary_text` for the phrase a band is stated in,
+  so a field named `password` or `api_key` is
   rejected for not being one of them — before it is ever asked whether it
   *looks* like a credential.
 * **Carry a credential.** There is no field anywhere in this schema for one.
@@ -155,9 +156,10 @@ VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 # which is the same confusion, one layer down, that D-16 is about.
 SEARCH_SOURCE = "web_search"
 
-# The whole vocabulary of things a connector may claim to extract: exactly the
-# fields `integral.offers.Offer` (T11) can hold, flattened for the nested
-# `location`/`salary` objects. Anything else — `password`, `cookie`, a
+# The whole vocabulary of things a connector may claim to extract: the fields
+# `integral.offers.Offer` (T11) can hold, flattened for the nested
+# `location`/`salary` objects, and one that is not an `Offer` field at all
+# (`salary_text`, noted where it is listed). Anything else — `password`, `cookie`, a
 # scraper's own internal bookkeeping — is rejected at load by the field
 # validators below, not merely left unused.
 ALLOWED_OFFER_FIELDS = frozenset(
@@ -174,6 +176,17 @@ ALLOWED_OFFER_FIELDS = frozenset(
         "salary_max",
         "salary_currency",
         "salary_period",
+        # Not an `Offer` field: the element a board states its band *in*, for
+        # the boards that print it as a phrase rather than as four values.
+        # `tecnoempleo_es` writes "30.000\u20ac - 36.000\u20ac b/a" in a text node
+        # sharing its element with the posting date, so `take: range_low` sees
+        # five numbers and refuses — correctly, and to no one's benefit. What
+        # reads that phrase is `salary_recovery.band_in_text`, which this module
+        # cannot call (`salary_recovery` imports `_as_float` from here), so
+        # `sourcing._offer_from` reads it on the way in and hands `build_offer`
+        # the four values. Declaring it alongside `salary_min` is refused there:
+        # two readings of one band are two answers.
+        "salary_text",
     }
 )
 # `detail_url` is not an `Offer` field — it is the pointer from a list item to
@@ -1140,7 +1153,31 @@ _CURRENCIES: dict[str, str] = {
     "DKK": "DKK",
     "CAD": "CAD",
     "AUD": "AUD",
+    # T200. `ashby_en` publishes "R$170K - R$190K" and the two numbers were
+    # already being read; only the currency was missing, and `build_offer`
+    # drops a whole band whose declared currency did not resolve — so a board
+    # that states its pay plainly was contributing none. Safe to add because
+    # the guards this table already has do the work: the token is longer than
+    # `$` so it is tried first, the lookbehind below blocks the bare `$` inside
+    # it either way, and `_take`'s distinct-set rule collapses the two
+    # occurrences to one. `bulk_filter` never compares a band against a floor
+    # in another currency, so nothing downstream reads BRL as anything else.
+    "R$": "BRL",
 }
+
+#: A currency token, bounded by ASCII letters on both sides. Substring matching
+#: is what a closed table cannot afford: `CAD` inside `CADENCE` is a real figure
+#: in the wrong currency — worse than the silence `take: currency` gives an
+#: unknown one. The same guard is what lets `R$` and `$` coexist above: at the
+#: `$` of `R$170K` the lookbehind sees an ASCII letter and refuses, so the bare
+#: symbol cannot claim a Brazilian figure as dollars. Longest token first, so
+#: `USD$` resolves once rather than twice and `R$` is tried before `$`.
+_CURRENCY_TOKEN = re.compile(
+    "|".join(
+        rf"(?<![A-Z]){re.escape(token)}(?![A-Z])"
+        for token in sorted(_CURRENCIES, key=len, reverse=True)
+    )
+)
 
 #: A run that could be one number in either thousands convention, with an
 #: optional magnitude suffix. Deliberately not anchored to a currency: boards
@@ -1207,7 +1244,7 @@ def _take(take: Take, value: str) -> str | None:
         # than showing the candidate a row of tags.
         return text or None
     if take == "currency":
-        seen = {code for token, code in _CURRENCIES.items() if token in value.upper()}
+        seen = {_CURRENCIES[token] for token in _CURRENCY_TOKEN.findall(value.upper())}
         # One currency, or none. A text naming two is a conversion or a
         # comparison, and either way nobody can say which one the pay is in.
         return seen.pop() if len(seen) == 1 else None
@@ -3835,6 +3872,23 @@ def source_kind_of(connector: Connector) -> SourceKind | None:
     return connector.source_kind
 
 
+def _declares(connector: Connector, field: str) -> bool:
+    """Whether any of this connector's four field maps names `field`.
+
+    "The board was asked for this and said nothing" is a different fact from
+    "nobody asked", and `merged` cannot tell them apart: a `take` that refuses
+    its value omits the key exactly as an unmapped field does.
+    """
+    for source in (connector.list, connector.detail):
+        if source is None:
+            continue
+        if field in source.fields:
+            return True
+        if source.from_json is not None and field in source.from_json.fields:
+            return True
+    return False
+
+
 def build_offer(
     connector: Connector,
     *,
@@ -3886,11 +3940,30 @@ def build_offer(
     else:
         minimum = _as_wage(merged.get("salary_min"))
         maximum = _as_wage(merged.get("salary_max"))
-        if minimum is not None or maximum is not None:
+        currency = merged.get("salary_currency")
+        # The period rule above, applied to the currency, and for the reason the
+        # `_CURRENCIES` table was always documented as having: a connector that
+        # asks for a currency and gets nothing back was told something its
+        # closed table does not recognise, and a figure with no unit is not a
+        # smaller error than no salary — it is a number a ranking will compare
+        # against a band in euros. (`R$170K - R$190K` from an Ashby board was
+        # this comment's worked example until T200 added `R$` to the table and
+        # the example became a row that reads. The rule did not change; the
+        # table did, which is the only way to stop dropping a real band.) A
+        # connector
+        # that declares no currency field at all is unaffected — `usajobs_en`
+        # maps `MinimumRange` and no currency, and keeps reading it. (This
+        # sentence named `ticjob_es` and `nofluffjobs_en` until T200 measured
+        # it: neither maps a band at all, so the guard was being documented by
+        # two connectors it could never reach. `usajobs_en` is the only package
+        # in the library actually in that position.)
+        if not _present(currency) and _declares(connector, "salary_currency"):
+            pass  # a stated, unreadable currency — no salary at all
+        elif minimum is not None or maximum is not None:
             salary = Salary(
                 min=minimum,
                 max=maximum,
-                currency=merged.get("salary_currency"),
+                currency=currency,
                 period=period,
                 stated=True,
             )
