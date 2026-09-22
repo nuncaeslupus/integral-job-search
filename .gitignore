@@ -269,3 +269,11 @@ corpus/blind-ranking.html
 tmp/
 
 arsenal/session/worktree_isolation.why
+
+# skill-workshop's per-skill alignment report. Author-local by design: it
+# records what a validator run found and whether each finding was fixed,
+# dismissed or deferred, against file:line in whatever version of the
+# vendored skill was on disk that day. Upstream gitignores it for the same
+# reason; a consumer that re-vendors leaves eight stale ones sitting
+# untracked otherwise.
+.claude/skills/*/findings.md
