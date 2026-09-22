@@ -484,6 +484,43 @@ read.
 reads: online pharmacies, chains and hospital groups. That route may be cheaper
 than any of the three engine changes.
 
+## 2b. Filed from a live candidate session, 2026-09-22 (`arsenal:queue`)
+
+A real sourcing round for one candidate surfaced three defects, each filed with a
+gate rather than a description. None has a task file yet.
+
+- **#546 — the advert's own page is fetched only when the list row fails.**
+  `sourcing.py:1136` reads `connector.detail` inside `if offer is None`, so a board
+  whose list row carries a teaser never reads its `detail:` block, and
+  `detail_needed` is incremented in that same branch — an affected board reports
+  `detail_needed=0, detail_fetched=0` and the run looks complete. Measured: 63 of
+  124 offers stored as fragments; median body 118 -> 5,651 chars on jobfluent, 192
+  -> 3,957 on tecnoempleo, 285 -> 2,570 on trabajos. All five salary bands in the
+  whole run came out of the backfill.
+  **The obvious gate is wrong** and a correction comment on the issue says so:
+  "fields the `detail:` block declares minus the fields the list supplies" is empty
+  for `tecnoempleo_es` and `trabajos_es`, which declare `text` in *both* blocks with
+  different content. The gate is over the parse path —
+  `connectors_whose_detail_block_is_never_reached == 0`, derived by running each
+  connector's own fixture list row through `_offer_from`. Four more connectors are
+  in the same shape and untested: `builtin_en`, `jobsacuk_en`, `ticjob_es`,
+  `weworkremotely_en`.
+- **#547 — nothing filters stored offers by reach, and the obvious filter rejects
+  on an absent field.** A location regex lost 19 jobfluent Barcelona offers whose
+  location field is empty, then 16 more (`\bremote` misses "remoto", `malaga`
+  misses "Málaga", bare `ES` unlisted). Enumeration failed three times in the same
+  direction; the closed rule is that **the board declares its market** in its own
+  `connector.yaml` and the location field only refines it. Gate:
+  `offers_rejected_on_an_absent_field == 0`, with an `unplaced` bucket mirroring
+  `liveness.presentable`'s withhold-on-absence rule.
+- **#548 — a conjoint can price dimensions adverts never state, and the ranking
+  degenerates to id order in silence.** `salary_equivalent_total` returns `None`
+  when any priced dimension is absent, `dominates()` returns False on the first
+  unknown axis, so every offer lands on the Pareto frontier. Measured on this
+  profile: `mission_alignment` is priced and scores on **2 of 124**; offers with
+  both priced dimensions **and** a salary: **0**. Gate:
+  `rankings_presented_without_a_single_total == 0`.
+
 ## 3. Standing answers, still true
 
 - `review_reader check` reads **exit 2** on this surface and always will:
