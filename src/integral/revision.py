@@ -51,6 +51,12 @@ ArtefactClass = Literal["derived", "authored", "historical"]
 # of what happened, which is not revisable, next to the notes made before it,
 # which are.
 _CLASSES: tuple[tuple[tuple[str, ...], ArtefactClass], ...] = (
+    # A copy taken aside before a migration writes: frozen bytes recording what
+    # was there, never recomputed against a revision. Unplaced it fell through
+    # to `authored`, so `refresh` wrote `.stale.json` sidecars *inside* the
+    # backup and reported every backed-up copy as an offer to regenerate — one
+    # permanent entry per offer, per run, in the candidate's staleness report.
+    (("backups",), "historical"),
     (("profile", "evidence.jsonl"), "historical"),
     (("offers", "tombstones.jsonl"), "historical"),
     (("applications",), "historical"),
