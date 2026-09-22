@@ -16,6 +16,8 @@ Three properties carry the task:
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -384,6 +386,34 @@ def test_an_unparseable_hook_payload_lets_the_call_through(tmp_path: Path) -> No
     for payload in ("not json", "[]", '{"tool_name": 3}'):
         code, _ = hook_main(payload, root=tmp_path / "profiles")
         assert code == 0
+
+
+def test_the_shell_wrapper_survives_a_project_dir_naming_another_repo(tmp_path: Path) -> None:
+    """A stale `CLAUDE_PROJECT_DIR` must not turn the guard into a block.
+
+    A session moved between repositories keeps the old value. The wrapper used
+    to `cd` there and run `uv` against a project that does not define this one's
+    `dev` extra; uv exits 2, and a PreToolUse hook exiting 2 means *blocked* —
+    so every tool call in the session fails, `Read` included, leaving no way to
+    read the guard and find out why. Fail-open is the contract the script's own
+    header states, and this is the instance it was stated in.
+    """
+    # Another *uv project* is what makes this bite: uv resolves the directory it
+    # is run from, and a project that does not define this one's `dev` extra is
+    # a hard error rather than a fallback. An empty directory does not reproduce
+    # it — uv falls back to the ambient environment and exits 0 either way.
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "not-this-repo"\nversion = "0"\nrequires-python = ">=3.12"\n'
+    )
+    guard = Path(__file__).resolve().parents[1] / "tools" / "profile_guard.sh"
+    result = subprocess.run(
+        ["bash", str(guard)],
+        input="",
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(tmp_path)},
+    )
+    assert result.returncode == 0, result.stderr
 
 
 # --- the gate --------------------------------------------------------------

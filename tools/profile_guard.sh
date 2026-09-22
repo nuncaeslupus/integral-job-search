@@ -11,7 +11,11 @@
 # A hook that cannot start must not wedge the session, so anything unexpected
 # here exits 0 — the store-side `ProfileLeak` is the enforcing half.
 set -u
-cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}" || exit 0
+# Resolve the repo from this script's own location, never from
+# CLAUDE_PROJECT_DIR: a session moved between repos keeps the old value, and
+# `cd`-ing there runs `uv` against a project with no `dev` extra, whose exit 2
+# reads as this guard blocking — wedging every tool call, Read included.
+cd "$(dirname "$0")/.." || exit 0
 
 if command -v uv >/dev/null 2>&1; then
   exec uv run --quiet --extra dev python -m integral.identity --hook
