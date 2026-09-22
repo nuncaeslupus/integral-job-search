@@ -544,7 +544,7 @@ floor — unmeasured being a third outcome, distinct from pass and from fail.
 
 **Milestones are queue tags.** Every task carries `m1`, `m2`, `m3`, `m4`, `m5`
 or `cross`, so a worker session scopes to the milestone rather than to raw
-priority: `/continue m1`, which sets `LOOP_TAGS` and makes `queue_batch.sh`
+priority: `/queue-next m1`, which sets `LOOP_TAGS` and makes `task_select.py`
 return only that milestone's unblocked tasks. Without the tag the selector is
 ordered by priority alone and will hand back an M4 task beside an M1 one.
 
