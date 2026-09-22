@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-09-21",
+  "url": "https://es.talent.com/jobs?k=enfermera&l=Espa%C3%B1a&p=1",
+  "status": 200,
+  "surface": "laptop",
+  "provenance": "live",
+  "response": {
+    "file": "list.html",
+    "bytes": 546906,
+    "sha256": "e77d2e1d4536b6cb91e2e05a5f90fb7cf6bf2b2ad46508027f2dc5873ec2a57e"
+  },
+  "redacted": "the requester's own address, coordinates and device hash were replaced in the raw bytes before commit (connector_contract rule 7); bytes and sha256 are of the committed file, which is what any check can reach"
+}

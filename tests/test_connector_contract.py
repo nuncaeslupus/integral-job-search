@@ -18,33 +18,82 @@ import ast
 import json
 import re
 import shutil
+import sys
+import time
+import types
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
+from integral import connector_contract
 from integral.connector_contract import (
+    _FLAT_JSON_OBJECT,
+    _LEADING_RUN,
+    _PAIR,
+    _RUN_WINDOW,
+    _RUN_WINDOW_CEILING,
+    _SCALAR_KEY_SITE,
+    _SCALAR_VALUES,
+    _STRING_BODY,
+    _TRAILING_RUN,
+    ADDRESS_BEARING_KEYS,
     DEFAULT_EVIDENCE_PATH,
     MINIMUM_PACKAGES,
     OPTIONAL_ENTRIES,
     PARSE_FILENAME,
+    REQUESTER_OBJECT_KEYS,
     REQUIRED_ENTRIES,
+    _is_address_bearing,
+    _key_spelling,
     _main,
+    _seeds_a_block,
+    captures,
+    check_capture_redaction,
     check_library,
     check_package,
     evidence_target,
     measure,
+    requester_location_blocks,
+    scrub_requester_location,
+    unaudited_requester_sites,
+    unblocked_address_key_sites,
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
-from integral.connectors import PROBE_DIRNAME
+from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME, connector_packages
 from integral.pagination_capture import measure as pagination_measure
 from integral.repo_gate import PROBE_BASENAME
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
+
+#: What `test_the_library_walk_stays_inside_its_time_budget` allows itself, and
+#: the floor that stops a walk of nothing from meeting it. Six times the 10.1 s
+#: measured over this library on 2026-09-22, against 153 captures in 27
+#: packages — margin for a slower machine, and nothing like the 99.7 s a
+#: four-fold widening of `_RUN_WINDOW` costs.
+_LIBRARY_WALK_BUDGET_SECONDS = 60.0
+MINIMUM_CAPTURES_WALKED = 100
+# The budget is spent on bytes, so the floor under it has to be bytes. A floor
+# counting *files* is satisfied by the 100 smallest: dropping the 53 largest
+# captures leaves 100 files and 5.7% of the library (232,171 of 4,058,112
+# bytes), so the walk finishes in a fraction of the budget and the floor still
+# passes. That is not hypothetical here — the two largest captures in the
+# library are the two `talent_es` listing pages this task adds, and
+# `tools/excerpt_fixture.py` exists to shrink captures. Both floors stay: one
+# catches a library walked over too few files, the other too few bytes.
+#
+# Half the library rather than three quarters, because `excerpt_fixture.py` is the
+# reason: excerpting both `talent_es` listing pages takes 1,159,687 bytes out at
+# once, which a floor at 3,000,000 would turn red on a pull request that did
+# nothing wrong. At 2,000,000 the mutant above is still caught by nearly an order
+# of magnitude, and a walk that silently skips half the library's bytes is not one
+# of the things this has to let through.
+MINIMUM_CAPTURE_BYTES_WALKED = 2_000_000
 _REFERENCE = _LIBRARY / "examplejobs_es"
 
 
@@ -586,10 +635,17 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
 ) -> None:
     """A documented status and a message, never a traceback.
 
-    **1**, not 3: bytes nobody can decode are a fault in *that package*, so it
-    is reported beside any other violation and the rest of the library is still
-    checked. Exit 3 is reserved for the library itself being unreachable, where
-    there is nothing to report about.
+    Exit **1**, not 3: bytes nobody can decode are a fault in *that package*, so
+    it is reported beside any other violation and the rest of the library is
+    still checked. Exit 3 is reserved for the library itself being unreachable,
+    where there is nothing to report about.
+
+    **Two** violations rather than one, since round 7. `captures` used to skip a
+    file it could not decode and now yields the exception, so rule 7's capture
+    sweep reports the same undecodable `meta.yaml` that rule 5 reports — one
+    fault named by both rules that read the file, which is what a fail-closed
+    decode costs and is worth more than the tidier count. Both are asserted by
+    rule number: a count alone would survive either rule going silent.
     """
     library = tmp_path / "connectors"
     shutil.copytree(_REFERENCE, library / _REFERENCE.name)
@@ -598,8 +654,9 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
 
     assert _main(["x", str(evidence), "--connectors", str(library)]) == 1
     measured = json.loads(evidence.read_text(encoding="utf-8"))
-    assert measured["connector_contract_violations"] == 1
-    assert "could not be read" in measured["violations"][0]
+    assert measured["connector_contract_violations"] == 2
+    assert all("could not be read" in v for v in measured["violations"]), measured
+    assert [v.split(": ")[1] for v in measured["violations"]] == ["rule 5", "rule 7"], measured
 
 
 #: The only globally routable dotted quads the repository may carry, each with
@@ -611,6 +668,46 @@ _NOT_ADDRESSES = {
         "Chrome's version in a browser User-Agent"
     ),
 }
+
+
+def test_a_capture_that_cannot_be_decoded_is_reported_rather_than_skipped(
+    tmp_path: Path,
+) -> None:
+    """A file rule 7 cannot read is a finding, not one fewer file to check.
+
+    `captures` used to swallow `UnicodeDecodeError` alongside `OSError` and move
+    on, so a capture nobody could decode left the sweep reporting a clean pass
+    over a package one file smaller than it was. That is the fail-open
+    direction: bytes nobody read are exactly where an unredacted address
+    survives. Measured on this construction before the fix — **4** of 5 files
+    reached and **0** violations; after it, 5 of 5 and one violation naming the
+    file.
+
+    Committed bytes cost nothing for this: all 27 packages decode as UTF-8
+    today, so the fail-closed arm fires only on something new.
+    """
+    package = tmp_path / _REFERENCE.name
+    shutil.copytree(_REFERENCE, package)
+    (package / PROBE_DIRNAME).mkdir()
+    undecodable = package / PROBE_DIRNAME / "captured.json"
+    undecodable.write_bytes('{"url":"https://example.invalid"}'.encode("utf-16"))
+
+    reached = list(captures(package))
+    assert len(reached) == 5, [str(path) for path, _ in reached]
+    assert [
+        str(path.relative_to(package)) for path, text in reached if not isinstance(text, str)
+    ] == [f"{PROBE_DIRNAME}/captured.json"], reached
+
+    violations = check_package(package).violations
+    assert len(violations) == 1, violations
+    # Qualified by its directory, not `path.name`: a package may hold two
+    # captures with the same basename — `talent_es` ships `fixture/list.html`
+    # and `probe/list.html` — and a violation naming only `list.html` does not
+    # say which file to go and look at. The sibling violation two lines away in
+    # `check_capture_redaction` already spelled it this way.
+    assert violations[0].startswith(f"rule 7: {PROBE_DIRNAME}/captured.json could not be read"), (
+        violations[0]
+    )
 
 
 def _quads_in_every_file() -> dict[tuple[str, str], None]:
@@ -916,3 +1013,966 @@ def test_a_package_with_no_probe_at_all_is_still_valid(package: Path) -> None:
     shutil.rmtree(package / PROBE_DIRNAME, ignore_errors=True)
 
     assert not check_package(package).violations
+
+
+# ---------------------------------------------------------------------------
+# rule 7 — a capture carries the board's response, never who asked for it
+
+# The shape talent.com serves, trimmed to what the rule reads: a flat object of
+# scalars carrying an address, the pairs repeated immediately before it, and an
+# advert's own location elsewhere in the same file spelling the same words.
+# Escaped, because that is how a Next.js flight payload stores it and a plain
+# `"lat":` pattern silently matches nothing there.
+_REQUESTER_PAYLOAD = (
+    '<script>self.__next_f.push([1,"'
+    '\\"prefilledLocation\\":\\"Barcelona, ES\\",\\"userData\\":null,'
+    '\\"location\\":{\\"prefilledLocation\\":\\"Barcelona, ES\\",'
+    '\\"lat\\":41.4085,\\"lon\\":2.1904,\\"timeZone\\":\\"Europe/Madrid\\",'
+    '\\"city\\":\\"Barcelona\\",\\"zip_code\\":\\"08001\\",'
+    '\\"state\\":\\"Catalonia\\",\\"ipLocation\\":\\"203.0.113.9\\"},'
+    '\\"ip\\":\\"203.0.113.9\\""])</script>'
+)
+_ADVERT_PAYLOAD = (
+    '<script>self.__next_f.push([1,"'
+    '\\"source_location\\":\\"Barcelona, Catalonia, ES\\",'
+    '\\"enrich_geo_city\\":\\"Barcelona\\",\\"enrich_geo_region1\\":\\"Catalonia\\",'
+    '\\"enrich_geo_lat\\":41.3873974"])</script>'
+)
+
+
+def _with_payload(package: Path, payload: str) -> Path:
+    """Append a payload to the package's listing capture and return its path."""
+    listing = package / "fixture" / "list.html"
+    listing.write_text(listing.read_text(encoding="utf-8") + payload, encoding="utf-8")
+    return listing
+
+
+def test_a_capture_carrying_the_requesters_own_address_is_rejected(package: Path) -> None:
+    """The board writes who fetched into the page; the package must not ship it."""
+    _with_payload(package, _REQUESTER_PAYLOAD)
+
+    violations = check_package(package).violations
+    assert any("rule 7" in v and "ipLocation" in v for v in violations), violations
+
+
+def test_every_field_the_board_puts_beside_the_address_is_reached(package: Path) -> None:
+    """Derived over the block's own keys, so a field added later is covered.
+
+    This is the test the first redaction of `talent_es` would have failed. That
+    one scanned for "an IPv4 and an IPv6 literal", found both, replaced both and
+    said so in `meta.yaml` — and left `lat` and `lon` two keys away, because a
+    scan for the fields somebody remembered cannot reach the one they did not.
+    Listing the fields here would repeat the mistake in the gate, so the cases
+    are read off the block instead: whatever the board puts in that object is
+    what gets varied.
+    """
+    clean, _ = scrub_requester_location(_REQUESTER_PAYLOAD)
+    (start, end), *_ = requester_location_blocks(clean)
+    pairs = [
+        (m.group(1), m.group(2))
+        for m in _PAIR.finditer(clean, start, end)
+        if m.group(2) not in {"true", "false", "null"}
+    ]
+    assert len(pairs) >= 8, pairs
+
+    unreached = []
+    for key, value in pairs:
+        leaked = '\\"203.0.113.9\\"' if key in ADDRESS_BEARING_KEYS else "41.4085"
+        pair = '\\"' + key + '\\":'
+        dirtied = clean.replace(pair + value, pair + leaked, 1)
+        assert dirtied != clean, key
+        listing = _with_payload(package, dirtied)
+        if not any(key in v for v in check_capture_redaction(package)):
+            unreached.append(key)
+        listing.write_text(
+            listing.read_text(encoding="utf-8").replace(dirtied, ""), encoding="utf-8"
+        )
+    assert not unreached, unreached
+
+
+@lru_cache(maxsize=1)
+def _committed_blocks() -> tuple[str, ...]:
+    """Every requester block the board actually ships, as raw slices.
+
+    Read off a committed capture rather than built here. Sliced, because the
+    capture is half a megabyte and the point is the board's *keys*, not a
+    second scan of its adverts — and cached, because finding them costs seconds.
+    """
+    capture = (_LIBRARY / "talent_es" / "probe" / "list.html").read_text(encoding="utf-8")
+    return tuple(capture[start:end] for start, end in requester_location_blocks(capture))
+
+
+def _scalar_pairs(text: str) -> list[tuple[str, str]]:
+    return [
+        (m.group(1), m.group(2))
+        for m in _PAIR.finditer(text)
+        if m.group(2) not in {"true", "false", "null"}
+    ]
+
+
+def test_the_varied_population_is_the_boards_and_not_this_files() -> None:
+    """The population a test varies has to be the one the board writes.
+
+    `_REQUESTER_PAYLOAD` is this file's literal, and a test that derives its
+    cases from it derives them from what somebody remembered to type — the
+    exact shape the docstring above disclaims while doing it. The committed
+    capture carries keys that literal does not, and every one of them is a
+    field the board puts beside the requester's address.
+
+    So the check is a containment: whatever the board ships is reached. If the
+    board ships a key this file never imagined, that is the case that matters.
+    """
+    blocks = _committed_blocks()
+    assert blocks, "the committed capture has no requester block to derive from"
+
+    unreached = []
+    for block in blocks:
+        for key, value in _scalar_pairs(block):
+            leaked = '\\"203.0.113.9\\"' if _is_address_bearing(key) else "41.4085"
+            pair = '\\"' + key + '\\":'
+            dirtied = block.replace(pair + value, pair + leaked, 1)
+            if dirtied == block:
+                continue
+            cleaned, changed = scrub_requester_location(dirtied)
+            if changed == 0 or leaked.strip('\\"') in cleaned:
+                unreached.append(key)
+    assert not unreached, unreached
+
+
+def test_the_board_ships_keys_this_files_literal_does_not() -> None:
+    """The denominator behind the test above — and why it is not decorative.
+
+    If the committed capture's keys were a subset of `_REQUESTER_PAYLOAD`'s,
+    the containment check would be satisfied by the literal and would be
+    measuring nothing. It is not: the board writes fields nobody here typed.
+    """
+    board = {key for block in _committed_blocks() for key, _ in _scalar_pairs(block)}
+    literal = {key for key, _ in _scalar_pairs(_REQUESTER_PAYLOAD)}
+    assert board - literal, sorted(board)
+
+
+def test_a_scalar_written_before_the_block_is_reached(package: Path) -> None:
+    """Clause 3's left edge, pinned — it had no test at all.
+
+    Removing the run from `_LEADING_RUN` (its `)*` to `){0}`) left all of this
+    file green, because every other case varies pairs *inside* the object and
+    the span still starts at the object's own key. The pairs the clause exists
+    for are the ones written before it, so those are what this varies.
+    """
+    head = _REQUESTER_PAYLOAD.split('\\"location\\":', 1)[0]
+    before = [key for key, _ in _scalar_pairs(head)]
+    assert before, head
+
+    for key in before:
+        assert any(key in v for v in check_capture_redaction(package)) or key in _reached_keys(
+            package, key
+        ), key
+
+
+def _reached_keys(package: Path, key: str) -> set[str]:
+    """Whether the sweep reaches `key` when the board leaks it."""
+    pair = '\\"' + key + '\\":'
+    dirtied = _REQUESTER_PAYLOAD.replace(pair + '\\"Barcelona, ES\\"', pair + '\\"41.4085\\"', 1)
+    listing = _with_payload(package, dirtied)
+    try:
+        return {key} if any(key in v for v in check_capture_redaction(package)) else set()
+    finally:
+        listing.write_text(
+            listing.read_text(encoding="utf-8").replace(dirtied, ""), encoding="utf-8"
+        )
+
+
+def test_a_scalar_written_after_a_requester_object_is_reached() -> None:
+    """Clause 3's right edge — the ordering axis, generated rather than listed.
+
+    Which side of a nested member the board writes a scalar on is its choice,
+    and it can change it in a redeploy. So the case is every rotation of the
+    same members, not the one order that happens to be committed today: under
+    each, nothing of the requester survives.
+    """
+    members = [
+        '\\"userID\\":\\"u-8821f0ab\\"',
+        '\\"locale\\":\\"es-ES\\"',
+        '\\"customIDs\\":{\\"nuuid\\":\\"n-77\\",\\"stableID\\":\\"s-31\\"}',
+    ]
+    secrets = ("u-8821f0ab", "es-ES", "n-77", "s-31")
+    for rotation in range(len(members)):
+        ordered = members[rotation:] + members[:rotation]
+        payload = "{" + ",".join(ordered) + "}"
+        scrubbed, changed = scrub_requester_location(payload)
+        assert changed, (rotation, payload)
+        assert not [s for s in secrets if s in scrubbed], (rotation, scrubbed)
+
+
+def test_a_key_spelled_another_way_is_the_same_key() -> None:
+    """Separator and casing are not a vocabulary, so they are closed here.
+
+    Derived from the committed set: every address-bearing key, re-spelled every
+    way the same word can be written, still seeds. `client-ip` did not before —
+    `_KEY` could not even match a hyphen — so the sweep returned nothing at all
+    and the gate stayed green over a leaked address.
+    """
+    for key in sorted(ADDRESS_BEARING_KEYS):
+        spelling = _key_spelling(key)
+        variants = {key, spelling, spelling.upper(), spelling.capitalize()}
+        if len(spelling) > 2:
+            variants |= {spelling[:-2] + "-" + spelling[-2:], spelling[:-2] + "." + spelling[-2:]}
+        for variant in sorted(variants):
+            payload = '{"' + variant + '":"203.0.113.9","city":"Barcelona","lat":41.4085}'
+            scrubbed, changed = scrub_requester_location(payload)
+            assert changed, variant
+            assert "203.0.113.9" not in scrubbed, variant
+            assert "41.4085" not in scrubbed, variant
+
+
+def test_an_address_bearing_key_seeds_the_block_it_introduces() -> None:
+    """Clause 1's seeding vocabulary is one predicate, because it was two.
+
+    `requester_location_blocks` asked whether the **introducing** key was in
+    `REQUESTER_OBJECT_KEYS`, and separately whether any key *inside* the object
+    was address-bearing. So an object introduced by an address-bearing key that
+    contains no address-bearing key of its own seeded nothing — and the board's
+    own spelling is exactly that shape: `ipLocation` introduces `city`,
+    `zip_code`, `lat` and `lon`, and not one of those four is address-bearing.
+    Measured before the fix: 0 pairs redacted, 0 blocks, the city, the postcode
+    and the latitude all still in the scrubbed output.
+
+    Both halves now go through `_seeds_a_block`, so a key added to either
+    vocabulary seeds through the introducing position too, without anybody
+    remembering to add it twice.
+    """
+    raw = (
+        '{"pageProps":{"ipLocation":{"city":"Barcelona","zip_code":"08001",'
+        '"lat":41.3874,"lon":2.1686},"jobs":[]}}'
+    )
+    assert len(requester_location_blocks(raw)) == 1, "the introducing key seeds no block"
+    scrubbed, changed = scrub_requester_location(raw)
+    assert changed == 4, f"{changed} pairs redacted, not the four members of the object"
+    for secret in ("Barcelona", "08001", "41.3874", "2.1686"):
+        assert secret not in scrubbed, secret
+
+
+def test_an_escape_in_a_neighbouring_value_does_not_hide_the_block() -> None:
+    """A string grammar that stops at a backslash cannot see an accented city.
+
+    `_VALUE` matched `[^"\\]*`, so one `\\u00f1` anywhere in the requester's own
+    object dropped the seed and the whole block survived. These captures carry
+    roughly nine hundred such escapes apiece, so this is the requester living
+    in A Coruña rather than an exotic input.
+    """
+    for city in (r"A Coru\u00f1a", r"A Coru\\u00f1a", "A Coruna"):
+        payload = '{"ip":"203.0.113.9","city":"' + city + '","lat":43.3623,"zip":"15001"}'
+        scrubbed, changed = scrub_requester_location(payload)
+        assert changed, city
+        assert not [s for s in ("203.0.113.9", "43.3623", "15001") if s in scrubbed], city
+
+
+def test_every_committed_file_is_scanned_and_not_only_the_html(package: Path) -> None:
+    """The extension was a proxy for "the capture", and it was the wrong one.
+
+    `probe/captured.json` records the URL that was fetched, and this board
+    answers 307 by appending the city it geolocated the requester to — so the
+    one committed file that names a URL was the one file never scanned.
+    """
+    probe = package / PROBE_DIRNAME / "captured.json"
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    probe.write_text(
+        json.dumps({"url": "https://example.test/jobs", "ip": "203.0.113.9"}),
+        encoding="utf-8",
+    )
+
+    violations = check_capture_redaction(package)
+    assert any("rule 7" in v and "captured.json" in v for v in violations), violations
+
+
+def test_the_boards_own_rows_are_not_swept_with_the_requesters(package: Path) -> None:
+    """The fail-open direction has a fail-closed twin, and it is just as wrong.
+
+    An advert in the same city spells the same words — `Barcelona`, `Catalonia`,
+    a latitude — and a sweep by key name or by value takes the board's data with
+    the requester's. Measured on the real captures: `city` occurs seven times and
+    exactly one of them is whose fetched it. The object boundary is the only
+    thing in the text that tells them apart.
+    """
+    _with_payload(package, _ADVERT_PAYLOAD)
+
+    assert not check_capture_redaction(package)
+    assert not requester_location_blocks(_ADVERT_PAYLOAD)
+    assert scrub_requester_location(_ADVERT_PAYLOAD) == (_ADVERT_PAYLOAD, 0)
+
+
+def test_an_html_attribute_repeating_a_removed_value_goes_with_it() -> None:
+    """The board renders what it geolocated into the search box, too.
+
+    Whole attribute values only: the board's own rows read `Barcelona,
+    Barcelona, ES`, so a substring sweep would cut an advert's location in half.
+    """
+    page = _REQUESTER_PAYLOAD + '<input name="keyword" value="Barcelona, ES"/>'
+    page += '<span class="loc">Barcelona, Barcelona, ES</span>'
+    scrubbed, _ = scrub_requester_location(page)
+
+    assert 'value="redacted"' in scrubbed
+    assert "Barcelona, Barcelona, ES" in scrubbed
+
+
+def test_the_committed_captures_carry_nobody_who_fetched_them() -> None:
+    """Over the real library — the check `meta.yaml`'s `client_ip` line now has.
+
+    That line said the captures had been "re-scanned for an IPv4 and an IPv6
+    literal". It was true, it was written by the session that did the scanning,
+    and nothing read it: `connector_exchange.py` prints it in a table row.
+    """
+    offenders = {
+        package.name: violations
+        for package in sorted(p for p in _LIBRARY.iterdir() if p.is_dir())
+        if (violations := check_capture_redaction(package))
+    }
+    assert not offenders, offenders
+
+
+def test_the_run_window_is_bounded_on_both_sides() -> None:
+    """The window's margins, measured rather than asserted in a comment.
+
+    `_RUN_WINDOW` bounds how far a run of scalar pairs is followed. A window
+    that has quietly shrunk under what the committed captures actually need
+    would leave a requester run partly unredacted, and nothing else here would
+    say so — the blocks would still be found, just cut short. So the floor is
+    re-derived from the captures on every run.
+
+    The **ceiling** is here because only the floor was, and a mutation round
+    measured what that costs: widening `_RUN_WINDOW` to span the whole text
+    left all 83 tests green — in **5h21m**, against three minutes. That is the
+    fail-closed direction for correctness and a denial of service on the gate,
+    and the only thing standing against it was that somebody would eventually
+    notice `verified_gate.sh` had not come back. A wall-clock intuition is not
+    a check.
+
+    The ceiling itself is **imported**, not restated. It lived here as a local
+    literal for one round, and a ceiling a test holds cannot fire: the run scan
+    is quadratic in the window, so the guard has to answer before anything walks
+    the library, and pytest runs a module's tests in definition order. Measured
+    at `_RUN_WINDOW = 10_000_000`: this test failed in 0.61 s while the library
+    walk defined above it was killed at 300 s against a 22 s baseline, and the
+    whole gate hung exactly as it had before the ceiling existed. The refusal is
+    at **import** now, which has no ordering to lose. What is left here is the
+    margin between the two numbers, which is a fact about the window rather than
+    about the guard — and a copy of the constant would have let the source's
+    value move while this file kept asserting against the old one.
+    """
+    assert _RUN_WINDOW < _RUN_WINDOW_CEILING, (
+        f"the window is no longer a window: {_RUN_WINDOW} characters, against a "
+        f"ceiling of {_RUN_WINDOW_CEILING} — the run scan is quadratic in it"
+    )
+    widest = max(
+        end - start
+        for path in sorted((_LIBRARY / "talent_es").rglob("*"))
+        if path.is_file()
+        for start, end in requester_location_blocks(
+            path.read_text(encoding="utf-8", errors="replace")
+        )
+    )
+    assert widest < _RUN_WINDOW, f"widest committed block is {widest}, window is {_RUN_WINDOW}"
+    assert widest * 2 < _RUN_WINDOW, (
+        f"the window has no margin left: widest block {widest} against a "
+        f"{_RUN_WINDOW}-character window"
+    )
+
+
+def _execute_module_source(source: str) -> None:
+    """Run a variant of the module's own source as a module, then forget it.
+
+    It is registered in `sys.modules` because `@dataclass` resolves a string
+    annotation through the declaring module and cannot find one that is not
+    there, and under a name of its own because overwriting the real entry would
+    leave every later test in this file importing the variant.
+    """
+    name = "_connector_contract_variant"
+    module = types.ModuleType(name)
+    module.__file__ = connector_contract.__file__
+    sys.modules[name] = module
+    try:
+        exec(compile(source, f"<{name}>", "exec"), module.__dict__)
+    finally:
+        del sys.modules[name]
+
+
+def test_a_window_at_the_ceiling_refuses_to_import() -> None:
+    """The guard above is a margin; this is the guard.
+
+    The module is executed from its own source with `_RUN_WINDOW` substituted,
+    in this interpreter and without importing it, so the refusal is measured
+    rather than read off the source text — the class of check that let three
+    rounds of `verified_gate.sh` pass over a script that ran nothing. Executing
+    the module runs no scan, so the case that costs hours in production costs
+    milliseconds here.
+    """
+    source = Path(connector_contract.__file__).read_text(encoding="utf-8")
+    at_the_ceiling = source.replace(
+        f"_RUN_WINDOW = {_RUN_WINDOW}", f"_RUN_WINDOW = {_RUN_WINDOW_CEILING}", 1
+    )
+    assert at_the_ceiling != source, "the constant is no longer spelled the way this substitutes"
+
+    with pytest.raises(ValueError, match="ceiling"):
+        _execute_module_source(at_the_ceiling)
+
+    below = source.replace(
+        f"_RUN_WINDOW = {_RUN_WINDOW}", f"_RUN_WINDOW = {_RUN_WINDOW_CEILING - 1}", 1
+    )
+    _execute_module_source(below)
+
+
+def test_the_library_walk_stays_inside_its_time_budget() -> None:
+    """The only thing pinning the ceiling *upward*, and why it costs ten seconds.
+
+    A constant cannot catch its own widening: raising `_RUN_WINDOW` and
+    `_RUN_WINDOW_CEILING` in one edit satisfies every assertion above, and the
+    ceiling's own comment says so. What that edit actually costs is wall clock,
+    because the run scan is super-linear in the window — measured over this
+    library on 2026-09-22, one process per window:
+
+        _RUN_WINDOW = 4_000 (committed)    10.1 s
+        _RUN_WINDOW = 8_000                28.1 s
+        _RUN_WINDOW = 16_000               99.7 s
+
+    So the budget is the check, and it is set at six times the committed
+    measurement rather than at the measurement: a slower machine must not turn
+    this red, and a doubling that moves both constants together still blows
+    through it. It walks the whole library because that is what the gate walks;
+    a cheaper scope would measure a number nobody waits on.
+
+    Two floors, because the budget is spent on bytes and the obvious floor
+    counts files — see `MINIMUM_CAPTURE_BYTES_WALKED`.
+    """
+    started = time.monotonic()
+    walked = 0
+    scanned = 0
+    for package in connector_packages(_LIBRARY):
+        for _, text in captures(package):
+            if isinstance(text, str):
+                requester_location_blocks(text)
+                walked += 1
+                scanned += len(text)
+    elapsed = time.monotonic() - started
+
+    assert walked >= MINIMUM_CAPTURES_WALKED, (
+        f"only {walked} captures were walked, against a floor of "
+        f"{MINIMUM_CAPTURES_WALKED} — a budget met by scanning nothing is not a budget"
+    )
+    assert scanned >= MINIMUM_CAPTURE_BYTES_WALKED, (
+        f"only {scanned:,} bytes were walked, against a floor of "
+        f"{MINIMUM_CAPTURE_BYTES_WALKED:,} — the file floor above is satisfied by the "
+        "smallest captures in the library, and the budget is spent on bytes"
+    )
+    assert elapsed < _LIBRARY_WALK_BUDGET_SECONDS, (
+        f"the library walk took {elapsed:.1f}s against a {_LIBRARY_WALK_BUDGET_SECONDS}s "
+        f"budget over {walked} captures — if `_RUN_WINDOW` was widened, this is the cost "
+        "the ceiling exists to refuse, and no constant could have caught the widening"
+    )
+
+
+# Every escape JSON defines, rather than the ones that were thought of: the
+# axis is generated so an escape nobody listed is varied too.
+_JSON_ESCAPES = (*'"\\/bfnrt', "u0041")
+
+
+def _captures_carrying_an_escape() -> list[tuple[str, str]]:
+    """One capture per (escape x spelling x position), as (label, raw bytes).
+
+    The escape is placed at the end of a value, at the start, and in the
+    middle, because the defect this pins is positional: an alternative that
+    over-consumes only matters when what it eats is the terminator.
+    """
+    out = []
+    for escape in _JSON_ESCAPES:
+        for position in ("end", "start", "middle"):
+            body = {"end": f"C:\\{escape}", "start": f"\\{escape}C:", "middle": f"C\\{escape}:"}[
+                position
+            ]
+            for spelling in ("plain", "doubly-escaped"):
+                q = '"' if spelling == "plain" else '\\"'
+                b = body if spelling == "plain" else body.replace("\\", "\\\\")
+                raw = (
+                    f"{{{q}path{q}:{q}{b}{q},{q}ip{q}:{q}203.0.113.9{q},"
+                    f"{q}zip_code{q}:{q}08001{q}}}"
+                )
+                out.append((f"{escape!r}/{position}/{spelling}", raw))
+    return out
+
+
+def test_rule_7_is_never_silent_about_a_capture_it_cannot_read() -> None:
+    """A capture carrying an address key is redacted, or reported — never clean.
+
+    The grammar cannot read every escape spelling and is not claimed to: the
+    property is that a capture it *fails* on is a violation rather than a pass.
+    Pinning the grammar's coverage instead would be an enumeration, and the
+    next spelling nobody listed would fail open exactly as this one did.
+    """
+    silent = []
+    for label, raw in _captures_carrying_an_escape():
+        _, changed = scrub_requester_location(raw)
+        if changed == 0 and not unaudited_requester_sites(raw):
+            silent.append(label)
+    assert not silent, (
+        f"{len(silent)} captures carry the requester's address and rule 7 says "
+        f"nothing about them — neither redacted nor reported: {silent}"
+    )
+
+
+def test_the_axis_reaches_the_grammar_hole_it_was_built_for() -> None:
+    """Non-vacuity: the axis must contain captures the grammar really fails on.
+
+    Without this the test above passes just as well over an axis the grammar
+    handles perfectly, which would make it a check that cannot fail.
+    """
+    unread = [
+        label for label, raw in _captures_carrying_an_escape() if unaudited_requester_sites(raw)
+    ]
+    assert unread, "the axis exercises no capture the pair grammar fails to read"
+
+
+def test_a_capture_the_grammar_cannot_read_fails_the_rule(package: Path) -> None:
+    """The wiring, not the helper — `check_capture_redaction` must say it.
+
+    `unaudited_requester_sites` being right changes nothing on its own: the rule
+    is what the gate runs, and a helper nobody calls is the green fixture over
+    a live defect this repository keeps meeting. So this asserts the violation
+    comes back out of the rule, over a capture written into a real package.
+    """
+    probe = package / PROBE_DIRNAME / "captured.json"
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    # A value ending in an escaped backslash: the escape alternative consumes
+    # the closing quote, and possessively, so the scan cannot back out of it.
+    probe.write_text('{"path":"C:\\\\","ip":"203.0.113.9","zip_code":"08001"}', encoding="utf-8")
+
+    violations = check_capture_redaction(package)
+    assert any("rule 7" in v and "cannot read" in v for v in violations), violations
+
+
+def _address_bearing_separator_spellings() -> list[str]:
+    """`client<sep>ip` for every separator `_key_spelling` normalises away.
+
+    The set is derived from that function rather than listed, so a character it
+    starts or stops folding is varied here without anyone remembering to. `"`
+    and `\\` are excluded because they end the key rather than sit inside it.
+    """
+    return [
+        f"client{chr(code)}ip"
+        for code in range(0x20, 0x7F)
+        if chr(code) not in '"\\' and _key_spelling(f"client{chr(code)}ip") == "clientip"
+    ]
+
+
+def test_the_key_locator_covers_the_grammar_it_audits() -> None:
+    """The locator's domain is `_PAIR`'s, not an identifier class.
+
+    This is the round-4 defect stated as a check. That round located key sites
+    with `[A-Za-z_][A-Za-z0-9_.-]*`, on the argument that a JSON key is an
+    identifier — true of the keys a board happens to serve, false of the keys
+    `_key_spelling` normalises over, which is the population the rule audits.
+    Every one of the spellings below is address-bearing by that function's own
+    definition, and `_PAIR` reads every one of them; an audit that cannot see
+    them reports a capture it failed on as a capture with nothing in it.
+    """
+    invisible = []
+    for key in _address_bearing_separator_spellings():
+        raw = f'{{"{key}":"203.0.113.9"}}'
+        assert _PAIR.search(raw), key  # non-vacuity: the grammar really reads it
+        if not any(m.group(1) == key for m in _SCALAR_KEY_SITE.finditer(raw)):
+            invisible.append(key)
+    assert not invisible, (
+        f"{len(invisible)} of {len(_address_bearing_separator_spellings())} "
+        f"address-bearing spellings are reachable by the pair grammar and "
+        f"invisible to the locator that audits it: {invisible}"
+    )
+
+
+def _respellings(key: str) -> list[str]:
+    """The equivalence class `_key_spelling` erases, generated rather than listed.
+
+    `_key_spelling` deletes everything outside `[a-z0-9]` after lowercasing, so
+    the class of one key is: any casing, and any separator between any two
+    characters. Five representatives per key cover both axes — three casings and
+    one of each separator character the normaliser knows how to drop.
+
+    Generated because listing spellings is what this file keeps being caught
+    doing. `customids` and `custom_ids` were not in any list, seeded nothing, and
+    the audit's axis quietly dropped them — see `test_every_seeding_respelling_seeds`.
+    """
+    return [key, key.upper(), key.capitalize(), *(f"{key[:1]}{sep}{key[1:]}" for sep in "_-.")]
+
+
+def _seeding_vocabulary() -> list[str]:
+    """Every spelling of every key that must seed a block, derived rather than listed.
+
+    Both halves of clause 1's seeding vocabulary, each expanded over its own
+    respellings — so a key added to either frozenset is varied here, and so is
+    every way of writing it.
+
+    **It does not filter by `_seeds_a_block`, and that is the whole repair.** It
+    did, for seven rounds, which made the axis a description of the predicate
+    instead of a claim about it: a spelling the predicate rejected was dropped
+    from the vocabulary rather than failing anything, so the audit below ran over
+    exactly the keys that already worked and the round-8 reader found `Custom`,
+    `customids` and `custom_ids` seeding nothing with every test green. The
+    predicate is now the subject, asserted in the test rather than consulted
+    here.
+    """
+    return sorted(
+        {
+            spelling
+            for key in REQUESTER_OBJECT_KEYS | ADDRESS_BEARING_KEYS
+            for spelling in _respellings(key)
+        }
+    )
+
+
+def test_every_seeding_respelling_seeds() -> None:
+    """The predicate accepts every way of writing a key it accepts one way of.
+
+    `_key_spelling` exists so that casing and separators stop being a vocabulary,
+    and its docstring argues the normalisation is fail-closed: collisions only
+    ever merge spellings into a set whose members must be redacted. That argument
+    was applied to the address half and simply not to the object half, which
+    compared `key in REQUESTER_OBJECT_KEYS` against the raw string. So `custom`
+    seeded a block and `Custom` did not — and reading 2 of
+    `unaudited_requester_sites` is gated on the same predicate, which made the
+    miss silent rather than merely wrong.
+
+    Written as a generated class rather than three more accepted spellings,
+    because an enumeration has no last element.
+    """
+    for key in REQUESTER_OBJECT_KEYS | ADDRESS_BEARING_KEYS:
+        respellings = _respellings(key)
+        # Without this, `_respellings = lambda key: [key]` passes the loop below
+        # over every key, which is the same vacuity `_seeding_vocabulary`'s filter
+        # had: a generator that generates nothing agrees with any predicate. Both
+        # axes the normaliser erases have to be present, and every member has to
+        # still be the same key.
+        assert {_key_spelling(s) for s in respellings} == {_key_spelling(key)}, respellings
+        assert any(s != s.lower() for s in respellings), respellings
+        assert any(not s.isalnum() for s in respellings), respellings
+
+        for spelling in respellings:
+            assert _seeds_a_block(spelling), (
+                f"{spelling!r} is {key!r} written differently and seeds nothing — "
+                "the predicate compares a raw string somewhere it should normalise"
+            )
+
+
+def test_every_requester_seed_is_audited() -> None:
+    """Clause 1's seeds are read off the predicate, never spelled out again.
+
+    A key-level audit is structurally blind to this: a `custom` block needs no
+    address-bearing key in it, so every key inside one can be reachable while
+    the object the sweep depends on is not.
+
+    The axis was `REQUESTER_OBJECT_KEYS` alone for six rounds, and that is
+    exactly one half of what seeds a block: an **address-bearing** key in the
+    introducing position seeds one too, which is what the board's `ipLocation`
+    turned out to be. Round 8 widened it again, over respellings — see
+    `_seeding_vocabulary`, whose docstring says why filtering by the predicate
+    was the defect rather than the derivation. The assertion below that the
+    vocabulary strictly contains the frozenset is what stops this going quietly
+    vacuous if either half is ever emptied.
+    """
+    vocabulary = _seeding_vocabulary()
+    assert set(vocabulary) > REQUESTER_OBJECT_KEYS, (
+        f"the seeding vocabulary is back to the object keys alone: {vocabulary} — an "
+        "address-bearing key in the introducing position seeds a block and must be audited"
+    )
+    for seed in vocabulary:
+        # A block the grammar cannot span: the value swallows its terminator.
+        raw = f'{{"{seed}":{{"a":"C:\\\\","ip":"203.0.113.9"}}}}'
+        found = unaudited_requester_sites(raw)
+        assert any("in no matched block" in what for _, what in found), (seed, found)
+        intact = f'{{"{seed}":{{"ip":"203.0.113.9"}}}}'
+        assert not unaudited_requester_sites(intact), (seed, intact)
+
+
+def test_a_lost_block_moves_the_count_no_reading_can_reach() -> None:
+    """The board-shaped break, on the board's own capture.
+
+    Breaking one value inside the real `location` object costs rule 7 that
+    block and leaves the city it geolocated the requester to in the scrubbed
+    output — and every reading in `unaudited_requester_sites` stays silent,
+    because noticing it needs the object's own boundary and a capture is a
+    whole HTML page whose braces do not balance. What moves is the census: the
+    address key whose block was lost joins the one clause 1 never covered.
+    """
+    raw = (DEFAULT_CONNECTORS_DIR / "talent_es/fixture/detail.html").read_text()
+    anchor = r"\"location\":{\"prefilledLocation\":\"redacted\""
+    assert raw.count(anchor) == 1, "the capture no longer has the shape this breaks"
+    control = raw.replace(anchor, r"\"location\":{\"prefilledLocation\":\"Barcelona ES\"")
+    lost = raw.replace(anchor, r"\"location\":{\"prefilledLocation\":\"Barcelona\\\" ES\"")
+
+    assert [key for _, key in unblocked_address_key_sites(control)] == ["ip"], (
+        "the census now counts keys clause 1 did locate a block around"
+    )
+    assert "Barcelona" not in scrub_requester_location(control)[0]
+    assert "Barcelona" in scrub_requester_location(lost)[0], "the break no longer costs the block"
+    assert not unaudited_requester_sites(lost), "a reading reaches it now — pin that instead"
+    assert (
+        len(unblocked_address_key_sites(lost)) == len(unblocked_address_key_sites(control)) + 1
+    ), "the census no longer moves, so nothing in this rule sees a lost block"
+
+
+def test_a_lost_block_cannot_be_hidden_by_an_unrelated_capture(tmp_path: Path) -> None:
+    """Why the census is a row per capture and not one integer.
+
+    It was `sum(...)` over every capture in the library. A sum is compensable:
+    a capture that loses a block gains a site, and any *other* capture that
+    loses an unrelated address key loses one, and the committed number does not
+    move. Nothing else would have said so — the sum is the only thing this key
+    reported, and the test above compares two readings of the **same** capture,
+    which is the one arrangement a pooled total survives.
+
+    The payload is synthetic because the subject here is the shape of the key
+    rather than the board's markup; the test above pins the same loss against
+    the board's own capture.
+    """
+    library = tmp_path / "connectors"
+    package = library / _REFERENCE.name
+    shutil.copytree(_REFERENCE, package)
+    (package / PROBE_DIRNAME).mkdir()
+    a, b = (package / PROBE_DIRNAME / f"{name}.json" for name in ("a", "b"))
+
+    # An object whose nested member costs it its block, leaving `ip` uncovered.
+    lost = '{"pageProps":{"ipLocation":{"ip":"198.51.100.7","nested":{"x":1}}}}'
+    a.write_text(lost, encoding="utf-8")
+    b.write_text(lost, encoding="utf-8")
+    before = measure(library)["address_key_sites_outside_every_block"]
+    site = [lost.index('ip":"198'), "ip"]
+    assert before == {
+        f"{_REFERENCE.name}/{PROBE_DIRNAME}/a.json": [site],
+        f"{_REFERENCE.name}/{PROBE_DIRNAME}/b.json": [site],
+    }, before
+
+    a.write_text(lost + lost, encoding="utf-8")  # one more block lost
+    b.write_text(lost.replace('"ip"', '"marker"'), encoding="utf-8")  # one site gone
+    after = measure(library)["address_key_sites_outside_every_block"]
+
+    assert sum(map(len, after.values())) == sum(map(len, before.values())), (
+        "the compensation no longer balances, so this says nothing about pooling"
+    )
+    assert after != before, (
+        "a lost block and an unrelated deletion cancelled: the census is pooled again"
+    )
+
+
+def test_a_lost_block_cannot_be_hidden_within_one_capture(tmp_path: Path) -> None:
+    """Round 7's remedy, one scope in — and why the record is sites, not a count.
+
+    Round 7 measured that a pooled integer hides a loss and made the census a
+    row per capture. The row was `len(sites)`, which is the same defect inside
+    the fix: the two compensating edits do not have to live in two captures.
+    Put both in **one** capture — an object loses its block, and an unrelated
+    address key elsewhere in the same file stops being one — and the row holds
+    at 1 while a requester object that was swept is not swept any more.
+
+    That is a count standing proxy for the sites it counts. There is no summary
+    that survives this: the keys alone cancel too, whenever the key the lost
+    block exposes happens to equal the key that went away. So the record holds
+    each site's offset and key, which are unique within a capture, and two
+    edits move two entries.
+
+    Synthetic, because the subject is the shape of the record rather than the
+    board's markup; the two tests above pin the board's own capture and the
+    pooled case respectively.
+    """
+    library = tmp_path / "connectors"
+    package = library / _REFERENCE.name
+    shutil.copytree(_REFERENCE, package)
+    (package / PROBE_DIRNAME).mkdir()
+    capture = package / PROBE_DIRNAME / "one.json"
+    row = f"{_REFERENCE.name}/{PROBE_DIRNAME}/one.json"
+
+    # `x` is nested, so nothing blocks `clientIp`; `custom` is flat, so its
+    # `ip` is swept. One unblocked site.
+    before_text = (
+        '{"x":{"clientIp":"203.0.113.9","n":{"y":1}},'
+        '"custom":{"ip":"198.51.100.7","city":"Barcelona"}}'
+    )
+    # The same capture after two ordinary edits: `custom` gains a nested member
+    # and loses its block, so its `ip` is now unswept — and the free
+    # `clientIp` is renamed to something this gate does not know. Still one
+    # unblocked site, and a requester object that was swept no longer is.
+    after_text = (
+        '{"x":{"marker":"203.0.113.9","n":{"y":1}},'
+        '"custom":{"ip":"198.51.100.7","city":"Barcelona","m":{"y":1}}}'
+    )
+
+    capture.write_text(before_text, encoding="utf-8")
+    before = measure(library)["address_key_sites_outside_every_block"]
+    capture.write_text(after_text, encoding="utf-8")
+    after = measure(library)["address_key_sites_outside_every_block"]
+
+    assert len(before[row]) == len(after[row]) == 1, (
+        "the two edits no longer cancel at the count, so this says nothing "
+        f"about counting: {before[row]} then {after[row]}"
+    )
+    assert requester_location_blocks(before_text) and not requester_location_blocks(after_text), (
+        "the block is meant to be lost between the two, and it was not"
+    )
+    assert before[row] != after[row], (
+        "a lost block and an unrelated rename cancelled inside one capture: "
+        "the row is a count again, and a count is a proxy for the sites"
+    )
+
+
+def test_the_key_locator_admits_every_value_the_grammar_does() -> None:
+    """The locator's domain is the grammar's, and one table is why.
+
+    Removing `true|false|null` from the locator's lookahead alone left the
+    audited domain 9.3% smaller with the whole suite green — a locator narrower
+    than the grammar it audits, silently. Both are built from `_SCALAR_VALUES`
+    now, so the first loop dies on any edit that separates them; the second is
+    there because a containment check over a pattern string is not a check that
+    the pattern runs.
+    """
+    for whole, head in _SCALAR_VALUES:
+        assert whole in _PAIR.pattern, whole
+        assert head in _SCALAR_KEY_SITE.pattern, head
+    for sample in ('"x"', "-1.5e3", "true", "false", "null"):
+        text = f'{{"k":{sample}}}'
+        assert [m.group(1) for m in _SCALAR_KEY_SITE.finditer(text)] == ["k"], sample
+        assert [m.group(1) for m in _PAIR.finditer(text)] == ["k"], sample
+
+
+def test_the_key_locator_spells_a_key_the_way_the_grammar_does() -> None:
+    """The locator's *key* class is the grammar's, by construction.
+
+    `_PAIR` reads a key with `_STRING_BODY`; `_SCALAR_KEY_SITE` read one with a
+    hand-written `[^"\\\\]*`, which cannot spell an escape. So a key the board
+    writes as `ip\\/` was reached by the sweep and invisible to the census that
+    audits it — and a block lost around such a key was therefore counted as
+    zero. Both are `_STRING_BODY` now.
+
+    The substitute that suggests itself is a *wider* class — something like
+    `(?:[^"\\\\]|\\\\.)*` — and it is measured to be much worse: greedy `\\.`
+    runs straight through an escaped quote, so one "key" swallows the rest of
+    the stream. Over this library it lost 6,873 real key sites in one capture
+    alone and manufactured 64 multi-kilobyte nonsense keys. `_STRING_BODY`'s
+    refusal of `\\"` is load-bearing, which is why sharing it is the fix rather
+    than widening either side.
+    """
+    assert _STRING_BODY in _SCALAR_KEY_SITE.pattern, _SCALAR_KEY_SITE.pattern
+    assert _STRING_BODY in _PAIR.pattern, _PAIR.pattern
+
+    # The board's own spelling, in an object a nested member costs its block.
+    raw = '{"a":{"ip\\/":"198.51.100.7","city":"Barcelona","n":{"x":1}}}'
+    assert not requester_location_blocks(raw), "the block is no longer the lost one"
+    assert [key for _, key in unblocked_address_key_sites(raw)] == ["ip\\/"], (
+        "the census cannot spell an escaped key, so a block lost around one reads as zero"
+    )
+
+
+def test_no_capture_carries_a_key_one_reading_reaches_and_the_other_cannot() -> None:
+    """Reading 3 — the containment nothing computed for six rounds.
+
+    `unaudited_requester_sites` checked that every key the **locator** finds is
+    reachable by the pair grammar, and never the converse, so a key class the
+    locator could not spell was invisible to the audit by construction. Over
+    this library that direction read **4** before the two classes were shared
+    and reads 0 now; the reading is what makes a future divergence a failure
+    rather than a silence.
+
+    Run over the committed captures rather than a constructed payload, because
+    the divergence it is about was a property of the board's real markup and
+    none of the six rounds' constructed cases had it.
+    """
+    walked = 0
+    unaudited = {}
+    for package in connector_packages(_LIBRARY):
+        for path, text in captures(package):
+            assert isinstance(text, str), f"{path} does not decode: {text}"
+            walked += 1
+            if sites := unaudited_requester_sites(text):
+                unaudited[f"{package.name}/{path.relative_to(package)}"] = sites
+
+    assert walked >= MINIMUM_CAPTURES_WALKED, f"only {walked} captures were read"
+    assert not unaudited, unaudited
+
+    # Non-vacuity: a clean sweep over the library is also what a deleted reading
+    # returns, so the reading has to be shown to fire. This is the shortest
+    # string it fires on, found by searching every string of length <= 6 over
+    # `"`, `\\`, `/`, `:`, `,`, `{`, `}`, `a`, `1`, ` ` and `t` — an exhaustive
+    # search rather than a case somebody thought of, because "the grammar
+    # reaches a key the locator cannot" is precisely the thing no round before
+    # the seventh managed to imagine an instance of.
+    divergent = '"":":1'
+    assert [what for _, what in unaudited_requester_sites(divergent)] == [
+        "the pair grammar cannot read the key '' here",
+        "the key-site reading cannot locate the key ':' the pair grammar reaches",
+    ], unaudited_requester_sites(divergent)
+
+
+def test_the_escape_axis_varies_every_escape_json_defines() -> None:
+    """Breadth, not merely non-vacuity: trimming the axis must go red.
+
+    The test above only needs *one* capture the grammar fails on, so an axis
+    cut down to the single escape that happens to break it would still pass —
+    and the next spelling nobody listed would fail open, which is the shape
+    this whole block exists to stop.
+    """
+    varied = {label.rsplit("/", 2)[0] for label, _ in _captures_carrying_an_escape()}
+    assert varied == {repr(escape) for escape in _JSON_ESCAPES}
+    assert set('"\\/bfnrt') <= set(_JSON_ESCAPES), _JSON_ESCAPES
+    assert len(_captures_carrying_an_escape()) == len(_JSON_ESCAPES) * 3 * 2
+
+
+def _unreached_trailing_keys() -> dict[str, list[str]]:
+    """Per capture, the keys in the trailing run the asymmetry does not reach."""
+    out: dict[str, list[str]] = {}
+    for package in sorted(p for p in DEFAULT_CONNECTORS_DIR.iterdir() if p.is_dir()):
+        if not (package / "connector.yaml").exists():
+            continue
+        for path in sorted(p for p in package.rglob("*") if p.is_file()):
+            try:
+                raw = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for match in _FLAT_JSON_OBJECT.finditer(raw):
+                lead = _LEADING_RUN.search(raw, max(0, match.start() - _RUN_WINDOW), match.start())
+                if (lead.group(3) if lead else "") in REQUESTER_OBJECT_KEYS:
+                    continue  # the trailing run does fire for these
+                if not any(_is_address_bearing(k) for k, _ in _PAIR.findall(match.group(0))):
+                    continue
+                trail = _TRAILING_RUN.match(raw, match.end(), match.end() + _RUN_WINDOW)
+                if trail and trail.group(0).strip():
+                    key = f"{package.name}/{path.relative_to(package)}"
+                    out[key] = [k for k, _ in _PAIR.findall(trail.group(0))]
+    return out
+
+
+def test_the_unreached_trailing_run_is_still_what_was_adjudicated() -> None:
+    """The asymmetry is fail-open by design; this makes a change to it visible.
+
+    `requester_location_blocks` does not extend right from an address-seeded
+    block, so the scalars written after one are unreached. That was adjudicated
+    against what is *in* them — and the adjudication is only as good as the
+    list, which the board can reorder at any time. Without this, such a
+    reordering moves a requester key into the blind spot with nothing
+    observable changing: the pair count does not even fall.
+
+    So this is the docstring's own list, re-measured from the committed bytes.
+    A red here is not necessarily a leak — it means the run changed and the
+    asymmetry has to be re-argued against what is in it now.
+    """
+    expected = [
+        "ip",
+        "userAppliedJobs",
+        "userJobAlertData",
+        "protocol",
+        "host",
+        "isDefaultLanguage",
+        "children",
+    ]
+    measured = _unreached_trailing_keys()
+    assert measured, "no address-seeded block has an unreached trailing run — the check is vacuous"
+    assert all(keys == expected for keys in measured.values()), measured
+    leaking = [k for keys in measured.values() for k in keys if _is_address_bearing(k)]
+    assert set(leaking) == {"ip"}, (
+        f"an address-bearing key other than the adjudicated `ip` is in the unreached "
+        f"run: {leaking} — `ip` is swept by _pairs_to_redact wherever it sits, and "
+        "that argument was made about `ip` alone"
+    )

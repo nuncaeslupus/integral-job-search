@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 25,
-  "silent_connector_failures_evaluated": 25,
-  "connector_runs_probed": 25,
+  "connector_runs_evaluated": 26,
+  "silent_connector_failures_evaluated": 26,
+  "connector_runs_probed": 26,
   "disabled": [],
   "gate_status": "measured",
   "readings": [
@@ -191,6 +191,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-09-10",
+      "rate_limited": null
+    },
+    {
+      "connector": "talent",
+      "site": "es.talent.com",
+      "health": "healthy",
+      "baseline_items": 15,
+      "probe_items": 10,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-09-21",
       "rate_limited": null
     },
     {
