@@ -18,7 +18,7 @@ deps: []
 # backfilling ES and DE: a locator nobody fetched is invented.
 #
 # Same declaration and same reason as T25 (`lo-1af2`), which needs egress to
-# job boards. `/continue EGRESS` on a surface that has it is how this is
+# job boards. `/queue-next EGRESS` on a surface that has it is how this is
 # reached.
 requires: [surface:egress]
 workspace: BACKEND
