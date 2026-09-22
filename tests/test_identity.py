@@ -16,6 +16,8 @@ Three properties carry the task:
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -384,6 +386,79 @@ def test_an_unparseable_hook_payload_lets_the_call_through(tmp_path: Path) -> No
     for payload in ("not json", "[]", '{"tool_name": 3}'):
         code, _ = hook_main(payload, root=tmp_path / "profiles")
         assert code == 0
+
+
+def test_the_shell_wrapper_survives_a_project_dir_naming_another_repo(tmp_path: Path) -> None:
+    """A stale `CLAUDE_PROJECT_DIR` must not turn the guard into a block.
+
+    A session moved between repositories keeps the old value. The wrapper used
+    to `cd` there and run `uv` against that project instead of this one, and
+    because it also asked for `--extra dev` the resolution failure exited 2 —
+    which a PreToolUse hook reads as *blocked*, so every tool call in the
+    session failed, `Read` included, leaving no way to read the guard and find
+    out why. That exact 2 is what the two fixes together removed; measured
+    against the current script the same fixture exits 1. What this test pins is
+    the weaker and more durable property: non-zero or not, the wrapper's own
+    failure to start never comes back as a block. Fail-open is the contract the
+    script's own header states, and this is the instance it was stated in.
+    """
+    # Another *uv project* is what makes this bite: uv resolves the directory it
+    # is run from, so a foreign `pyproject.toml` is a resolution of somebody
+    # else's project. An empty directory is the wrong fixture because it depends
+    # on how the suite was started: when the test runner is itself inside a
+    # `uv run`, the nested one inherits `VIRTUAL_ENV` and falls back to that
+    # environment, so the wrapper exits 0 and the test passes for a reason it
+    # was not written for. Measured, with the stale-`cd` restored: empty
+    # directory exits 0 with `VIRTUAL_ENV` set and 1 without it, while this
+    # fixture exits non-zero under both.
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "not-this-repo"\nversion = "0"\nrequires-python = ">=3.12"\n'
+    )
+    # `INTEGRAL_HOME` too, or the subprocess falls through to the developer's
+    # real `~/.integral-job-search`. Read-only in practice, but on a machine
+    # whose `HOME` sits inside a git work tree the guard returns 0 via
+    # `StateHomeRefused` instead of the path under test — passing vacuously.
+    result = _run_profile_guard(
+        "", CLAUDE_PROJECT_DIR=str(tmp_path), INTEGRAL_HOME=str(tmp_path / "home")
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_the_shell_wrapper_still_blocks_a_cross_profile_read(tmp_path: Path) -> None:
+    """Fail-open is about the wrapper's own failures, not about the rule.
+
+    The companion above pins that a stale `CLAUDE_PROJECT_DIR` cannot turn the
+    guard into a block; `exit 0` would satisfy it on its own. This one pins the
+    other direction end to end — through the real script, the real `uv`
+    invocation and the real `$INTEGRAL_HOME` resolution — so a wrapper that
+    stopped reaching Python could not pass as a wrapper that allows.
+    """
+    root = tmp_path / "profiles"
+    first = create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    second = create_profile(root, "Núria Puig", language="ca", now=FIXED)
+    write_active_handle(root, first.handle, session_id="s1", now=FIXED)
+    payload = json.dumps(
+        {
+            "session_id": "s1",
+            "tool_name": "Read",
+            "tool_input": {"file_path": str(root / second.handle / "profile" / "evidence.jsonl")},
+        }
+    )
+    result = _run_profile_guard(payload, INTEGRAL_HOME=str(tmp_path))
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert second.handle in result.stderr
+
+
+def _run_profile_guard(payload: str, **env: str) -> subprocess.CompletedProcess[str]:
+    guard = Path(__file__).resolve().parents[1] / "tools" / "profile_guard.sh"
+    return subprocess.run(
+        ["bash", str(guard)],
+        input=payload,
+        capture_output=True,
+        encoding="utf-8",
+        timeout=60,
+        env={**os.environ, **env},
+    )
 
 
 # --- the gate --------------------------------------------------------------

@@ -14,7 +14,11 @@
 # would be worse than the ImportError it was avoiding, and the candidate has
 # already been told in words.
 set -u
-cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/..}" || exit 0
+# Same reason as `profile_guard.sh`: a stale `CLAUDE_PROJECT_DIR` points at
+# whatever repo the session was in before, and `integral.bootstrap` is not
+# there. This hook exits 0 either way, so the failure is silent — the install
+# never happens and the candidate is never told.
+cd "$(dirname "$0")/.." || exit 0
 export INTEGRAL_ENTRY_POINT=session-start
 
 # Deliberately NOT `uv run`: that would install the environment as a side
