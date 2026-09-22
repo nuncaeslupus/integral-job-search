@@ -32,6 +32,7 @@ from integral.connector_contract import (
     _PAIR,
     _RUN_WINDOW,
     _SCALAR_KEY_SITE,
+    _SCALAR_VALUES,
     _TRAILING_RUN,
     ADDRESS_BEARING_KEYS,
     DEFAULT_EVIDENCE_PATH,
@@ -51,6 +52,7 @@ from integral.connector_contract import (
     requester_location_blocks,
     scrub_requester_location,
     unaudited_requester_sites,
+    unblocked_address_key_sites,
     write_evidence,
 )
 from integral.connector_shape import measure as shape_measure
@@ -1221,15 +1223,40 @@ def test_the_committed_captures_carry_nobody_who_fetched_them() -> None:
     assert not offenders, offenders
 
 
-def test_the_run_window_clears_the_widest_block() -> None:
-    """The window's margin, measured rather than asserted in a comment.
+# The window's ceiling, and the one bound here that is a literal rather than a
+# measurement. That is deliberate and it is the finding: a ceiling expressed as
+# a multiple of the widest committed block cannot fire, because deriving
+# `widest` runs the very scan a widened window makes quadratic — the assert
+# would be reached hours after the thing it was going to report. Eight times
+# the present window, so ordinary growth never touches it.
+_RUN_WINDOW_CEILING = 32_000
+
+
+def test_the_run_window_is_bounded_on_both_sides() -> None:
+    """The window's margins, measured rather than asserted in a comment.
 
     `_RUN_WINDOW` bounds how far a run of scalar pairs is followed. A window
     that has quietly shrunk under what the committed captures actually need
     would leave a requester run partly unredacted, and nothing else here would
-    say so — the blocks would still be found, just cut short. So the margin is
+    say so — the blocks would still be found, just cut short. So the floor is
     re-derived from the captures on every run.
+
+    The **ceiling** is here because only the floor was, and a mutation round
+    measured what that costs: widening `_RUN_WINDOW` to span the whole text
+    left all 83 tests green — in **5h21m**, against three minutes. That is the
+    fail-closed direction for correctness and a denial of service on the gate,
+    and the only thing standing against it was that somebody would eventually
+    notice `verified_gate.sh` had not come back. A wall-clock intuition is not
+    a check.
+
+    It is asserted first, before a single capture is read, for the reason
+    `_RUN_WINDOW_CEILING` gives: under the mutation it is about, every line
+    below it costs hours.
     """
+    assert _RUN_WINDOW < _RUN_WINDOW_CEILING, (
+        f"the window is no longer a window: {_RUN_WINDOW} characters, against a "
+        f"ceiling of {_RUN_WINDOW_CEILING} — the run scan is quadratic in it"
+    )
     widest = max(
         end - start
         for path in sorted((_LIBRARY / "talent_es").rglob("*"))
@@ -1378,26 +1405,50 @@ def test_every_requester_seed_is_audited() -> None:
         assert not unaudited_requester_sites(intact), (seed, intact)
 
 
-def test_an_object_the_grammar_loses_is_reported_though_every_key_is_read() -> None:
-    """The reading a key-level audit cannot make, and the reason there are three.
+def test_a_lost_block_moves_the_count_no_reading_can_reach() -> None:
+    """The board-shaped break, on the board's own capture.
 
-    Here `_PAIR` reads all three keys and the locator sees all three sites, so
-    the key-level reading is silent by construction — and the sweep still fails,
-    because it works on *objects*: with no block located, the postcode beside
-    the address is never touched. The control is the same capture without the
-    escape, where the sweep reaches all three values.
+    Breaking one value inside the real `location` object costs rule 7 that
+    block and leaves the city it geolocated the requester to in the scrubbed
+    output — and every reading in `unaudited_requester_sites` stays silent,
+    because noticing it needs the object's own boundary and a capture is a
+    whole HTML page whose braces do not balance. What moves is the census: the
+    address key whose block was lost joins the one clause 1 never covered.
     """
-    lost = '{"path":"C:\\\\\\"","ip":"203.0.113.9","zip_code":"08001"}'
-    read = '{"path":"C:","ip":"203.0.113.9","zip_code":"08001"}'
+    raw = (DEFAULT_CONNECTORS_DIR / "talent_es/fixture/detail.html").read_text()
+    anchor = r"\"location\":{\"prefilledLocation\":\"redacted\""
+    assert raw.count(anchor) == 1, "the capture no longer has the shape this breaks"
+    control = raw.replace(anchor, r"\"location\":{\"prefilledLocation\":\"Barcelona ES\"")
+    lost = raw.replace(anchor, r"\"location\":{\"prefilledLocation\":\"Barcelona\\\" ES\"")
 
-    assert [m.start(1) for m in _PAIR.finditer(lost)] == [
-        m.start(1) for m in _SCALAR_KEY_SITE.finditer(lost)
-    ], "the premise is gone: this capture now has an unreached key site"
-    assert "08001" in scrub_requester_location(lost)[0], "the sweep now reaches it"
-    assert "08001" not in scrub_requester_location(read)[0], lost
+    assert [key for _, key in unblocked_address_key_sites(control)] == ["ip"], (
+        "the census now counts keys clause 1 did locate a block around"
+    )
+    assert "Barcelona" not in scrub_requester_location(control)[0]
+    assert "Barcelona" in scrub_requester_location(lost)[0], "the break no longer costs the block"
+    assert not unaudited_requester_sites(lost), "a reading reaches it now — pin that instead"
+    assert (
+        len(unblocked_address_key_sites(lost)) == len(unblocked_address_key_sites(control)) + 1
+    ), "the census no longer moves, so nothing in this rule sees a lost block"
 
-    assert any("lost to a mis-read value" in what for _, what in unaudited_requester_sites(lost))
-    assert not unaudited_requester_sites(read)
+
+def test_the_key_locator_admits_every_value_the_grammar_does() -> None:
+    """The locator's domain is the grammar's, and one table is why.
+
+    Removing `true|false|null` from the locator's lookahead alone left the
+    audited domain 9.3% smaller with the whole suite green — a locator narrower
+    than the grammar it audits, silently. Both are built from `_SCALAR_VALUES`
+    now, so the first loop dies on any edit that separates them; the second is
+    there because a containment check over a pattern string is not a check that
+    the pattern runs.
+    """
+    for whole, head in _SCALAR_VALUES:
+        assert whole in _PAIR.pattern, whole
+        assert head in _SCALAR_KEY_SITE.pattern, head
+    for sample in ('"x"', "-1.5e3", "true", "false", "null"):
+        text = f'{{"k":{sample}}}'
+        assert [m.group(1) for m in _SCALAR_KEY_SITE.finditer(text)] == ["k"], sample
+        assert [m.group(1) for m in _PAIR.finditer(text)] == ["k"], sample
 
 
 def test_the_escape_axis_varies_every_escape_json_defines() -> None:

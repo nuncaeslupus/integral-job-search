@@ -100,7 +100,7 @@ import ast
 import json
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -323,7 +323,21 @@ REDACTED_NUMBER = "0"
 # here. Named rather than hidden; no capture in this library contains one.
 _STRING_BODY = r'(?:[^"\\]++|\\\\.|\\(?!"))*+'
 _KEY = r'\\?"(' + _STRING_BODY + r')\\?"\s*:\s*'
-_VALUE = r'(\\?"' + _STRING_BODY + r'\\?"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|null)'
+# Every scalar a value can be, paired with the shortest prefix that identifies
+# it. `_VALUE` and `_SCALAR_KEY_SITE` are both built from this one table, so a
+# value shape dropped from one cannot survive in the other. That is not
+# tidiness: the locator's lookahead was written out by hand for one round, and
+# removing `true|false|null` from it alone left the audited domain 9.3% smaller
+# with the whole suite green — a locator quietly narrower than the grammar it
+# audits, which is the deletion-filter defect one level up, again.
+_SCALAR_VALUES: tuple[tuple[str, str], ...] = (
+    (r'\\?"' + _STRING_BODY + r'\\?"', r'\\?"'),
+    (r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?", r"-?\d"),
+    ("true", "true"),
+    ("false", "false"),
+    ("null", "null"),
+)
+_VALUE = "(" + "|".join(whole for whole, _ in _SCALAR_VALUES) + ")"
 _PAIR = re.compile(_KEY + _VALUE)
 # The audit on all of the above, and the reason it is not a second opinion from
 # the same regex: locating a key site needs none of `_STRING_BODY`. Every hole
@@ -341,13 +355,9 @@ _PAIR = re.compile(_KEY + _VALUE)
 # separators tested gave a key `_PAIR` reaches and the identifier class cannot
 # see, so the audit never asked about them. An allowlist narrower than the
 # domain it audits is the deletion-filter defect one level up.
-_SCALAR_KEY_SITE = re.compile(r'\\?"([^"\\]*)\\?"\s*:\s*(?=\\?"|-?\d|true|false|null)')
-# A value the grammar read correctly is followed by a delimiter and nothing
-# else. That is not a second grammar, it is `_PAIR`'s own claim made
-# falsifiable: when `_STRING_BODY` closes a string on a quote that was really
-# an escape, the bytes after the "value" are the rest of the real value, which
-# begins with neither `,` nor `}` nor `]`.
-_VALUE_FOLLOWER = re.compile(r"\s*(?:,|\}|\]|\Z)")
+_SCALAR_KEY_SITE = re.compile(
+    r'\\?"([^"\\]*)\\?"\s*:\s*(?=' + "|".join(head for _, head in _SCALAR_VALUES) + ")"
+)
 # Clause 1's second seed, located independently of the object grammar so that a
 # `custom`/`customIDs` block the grammar fails to span is reported instead of
 # passing. Built from the frozenset rather than spelled out, so a seed added
@@ -783,28 +793,32 @@ def unaudited_requester_sites(text: str) -> list[tuple[int, str]]:
     the object.
 
     So none of this widens the grammar; it makes the grammar's *reach*
-    observable. Three readings, because a key-level audit alone was measured
-    not to be enough — the round that shipped one caught a capture whose *key*
-    was unreachable and was structurally blind to one whose *object* was
-    unreachable while every key inside it stayed reachable:
+    observable. Two readings, each asking a question the structure answers
+    without the grammar having to have succeeded:
 
     1. a scalar key site `_PAIR` does not reach — the grammar broke at the key;
     2. a `custom`/`customIDs` seed inside no matched block — clause 1's second
        seed, which the key-level reading never asked about because those blocks
-       need no address-bearing key in them;
-    3. an address-bearing key inside no block, with a mis-read pair between it
-       and its opening brace — the grammar broke mid-object, so the block that
-       should have swept its neighbours was never located.
+       need no address-bearing key in them.
 
-    All three are zero on the committed library: 20,789 scalar sites reached,
-    15 requester seeds all inside a matched block, no mis-read pair before an
-    unblocked address key. They are checks rather than descriptions because of
-    that denominator, not despite it.
+    **A third reading was written here twice and both were unsound, so what
+    stands in its place is a census rather than a rule.** The question it tried
+    to answer is *"did the grammar lose an object it should have swept?"*, and
+    answering it needs the object's own boundary. Round 5 approximated the
+    boundary with `text.rfind("{")` — the nearest preceding brace, which any
+    `{` inside a string value closes over — and round 6 replaced that with a
+    string-aware brace-balance scan, which is the tokeniser
+    `requester_location_blocks` says twice cannot be written here. The scan was
+    run to find out rather than argued about: at the one unblocked address key
+    in `fixture/detail.html` it arrives with an unclosed `[` on the stack and
+    no enclosing object at all, because a capture is a whole HTML page and its
+    braces do not balance. Both proxies answer "did the grammar break?" when
+    the question is "was this key's object swept?", and both were silent on
+    cases that leak. `unblocked_address_key_sites` measures the thing directly
+    instead, and `measure` commits the count.
     """
-    pairs = list(_PAIR.finditer(text))
-    reached = {match.start(1) for match in pairs}
+    reached = {match.start(1) for match in _PAIR.finditer(text)}
     blocks = requester_location_blocks(text)
-    misread = [m.end() for m in pairs if not _VALUE_FOLLOWER.match(text, m.end())]
 
     out = [
         (match.start(1), f"the pair grammar cannot read the key {match.group(1)!r} here")
@@ -816,13 +830,6 @@ def unaudited_requester_sites(text: str) -> list[tuple[int, str]]:
         for match in _REQUESTER_SEED.finditer(text)
         if not _within(match.start(1), match.end(1), blocks)
     ]
-    out += [
-        (match.start(1), f"the object around {match.group(1)!r} was lost to a mis-read value")
-        for match in pairs
-        if _is_address_bearing(match.group(1))
-        and not _within(match.start(), match.end(), blocks)
-        and _brace_holds_a_misread(text, match.start(), misread)
-    ]
     return sorted(out)
 
 
@@ -830,10 +837,33 @@ def _within(start: int, end: int, blocks: Sequence[tuple[int, int]]) -> bool:
     return any(a <= start and end <= b for a, b in blocks)
 
 
-def _brace_holds_a_misread(text: str, start: int, misread: Sequence[int]) -> bool:
-    """Is there a pair the grammar mis-read between `start` and its own `{`?"""
-    opener = text.rfind("{", 0, start)
-    return opener != -1 and any(opener < end <= start for end in misread)
+def unblocked_address_key_sites(text: str) -> list[tuple[int, str]]:
+    """Address-bearing key sites clause 1 located no block around.
+
+    Clause 2 redacts the pair itself wherever it sits, so a site here is not a
+    leak of the address. What it is, is a site whose *neighbours* nothing
+    swept — and that is the whole of what rule 7 buys over a list of field
+    names, so the number of them is worth committing rather than describing.
+
+    It is not zero and cannot be: clause 1 is scoped to the innermost **flat**
+    object, and talent.com writes `ip` one level out from the block, beside
+    `userAppliedJobs`, `protocol` and `host` in an object that has nested
+    members and so is deliberately out of that scope. One per capture, three in
+    the library, and `requester_location_blocks` adjudicates what is in that
+    unreached run.
+
+    The number moves the moment a block stops being located, which is the
+    failure no rule expressible here catches: breaking `prefilledLocation`'s
+    value inside the real `location` object of `fixture/detail.html` costs that
+    block, leaves `Barcelona` in the scrubbed output — and moves this count
+    from 1 to 2 for that capture while every other reading stays silent.
+    """
+    blocks = requester_location_blocks(text)
+    return sorted(
+        (match.start(1), match.group(1))
+        for match in _SCALAR_KEY_SITE.finditer(text)
+        if _is_address_bearing(match.group(1)) and not _within(match.start(1), match.end(1), blocks)
+    )
 
 
 def _pairs_to_redact(text: str) -> list[tuple[int, int, str, str]]:
@@ -881,24 +911,34 @@ def scrub_requester_location(text: str) -> tuple[str, int]:
     return _HTML_ATTRIBUTE.sub(_attribute, "".join(out)), changed
 
 
-def check_capture_redaction(package: Path) -> list[str]:
-    """Rule 7 — no capture in the package still carries who fetched it.
+def captures(package: Path) -> Iterator[tuple[Path, str | OSError]]:
+    """Every committed file in the package, as text or as the error reading it.
 
     Every committed file, not every `*.html`. The extension was a proxy for
     "the capture", and it is the wrong one: `probe/captured.json` records the
     URL that was fetched, and this board answers 307 by appending the city it
     geolocated the requester to — so the one file naming a URL was the one file
-    never scanned. A file that cannot be read as text is not a capture and is
-    skipped, which is why the decode error below is no longer a violation.
+    never scanned. A file that cannot be *decoded* is not a capture and is
+    skipped; one that cannot be *read* is reported by the caller.
+
+    One traversal, shared by the rule and by the measurement `measure` commits
+    about it. Two would be two populations that agree today.
     """
-    violations = []
     for path in sorted(p for p in package.rglob("*") if p.is_file()):
         try:
-            raw = path.read_text(encoding="utf-8")
+            yield path, path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
         except OSError as exc:
-            violations.append(f"rule 7: {path.name} could not be read: {exc}")
+            yield path, exc
+
+
+def check_capture_redaction(package: Path) -> list[str]:
+    """Rule 7 — no capture in the package still carries who fetched it."""
+    violations = []
+    for path, raw in captures(package):
+        if isinstance(raw, OSError):
+            violations.append(f"rule 7: {path.name} could not be read: {raw}")
             continue
         for offset, what in unaudited_requester_sites(raw):
             violations.append(
@@ -973,6 +1013,21 @@ def measure(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
             1
             for positional, own in _FOREIGN_INVOCATIONS
             if evidence_target(positional, own) == DEFAULT_EVIDENCE_PATH
+        ),
+        # Rule 7's own ceiling, committed as a number rather than described in
+        # prose, because prose is what a regression walks past. An
+        # address-bearing key clause 1 located no block around is a key whose
+        # *neighbours* nothing swept, and that sweep is the whole of what rule
+        # 7 buys over a list of field names. Three today — one per capture, the
+        # `ip` talent.com writes one level out from the block — and this is the
+        # only reading that moves when a block stops being located, which no
+        # rule expressible here detects: see `unaudited_requester_sites` on the
+        # two proxies that tried and the tokeniser they would have needed.
+        "address_key_sites_outside_every_block": sum(
+            len(unblocked_address_key_sites(text))
+            for package in connector_packages(directory)
+            for _, text in captures(package)
+            if isinstance(text, str)
         ),
         "violations": report.violations,
     }
