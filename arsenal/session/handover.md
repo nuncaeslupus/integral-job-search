@@ -1,5 +1,71 @@
 # Session handover
 
+## 00004. T194 / #520 merged, nine reader rounds, and the cost of that loop filed upstream
+
+**Verified live via `gh` after the merge, not carried from memory.**
+
+- **#520 is MERGED** — squash `e185301f399b391a8000a68610b3f54639c9084d` at
+  2026-09-22T10:12:45Z, closing **#519** (`t-7c3ab914`). The worktree `../ijs-t193` is
+  removed. The remote branch survives; branch deletion is still blocked here and
+  scripting it is the silent no-op CLAUDE.md warns about.
+- **It merged over a `BLOCK`, by the owner's explicit decision** taken before round 9
+  existed: one more reader, then merge regardless, findings become follow-up tasks. Four
+  accepted findings are queued as **#529, #530, #531** (two fail-open, in the *checker*
+  rather than in the committed captures - the shipped library still measures the same
+  three known address-key sites). The round-9 report and the response mapping each
+  finding to its issue are on #520.
+- **The squash body was written by hand, and had to be.** Measured on the repository:
+  `squash_merge_commit_message: COMMIT_MESSAGES`, so a squash body *is* the concatenation
+  of the branch's commit messages. Round 8's F5 argued the opposite from three
+  single-parent merges rather than from the setting, and was wrong - `939bb9d9`'s claim
+  that the exhaustive search ran to length 8 would have reached `main` verbatim. The
+  correct bound is **length <= 6** over the 11-character alphabet: 772 strings fire
+  `unaudited_requester_sites` at all, exactly one reaches reading 3. **Check that setting
+  before trusting any "the branch message never lands" argument.**
+
+### The connector was done in the first commit; the other eight rounds were the gate
+
+`4df6f5e4` shipped all five files of `connectors/talent_es/` - ~320 lines. The remaining
+eight commits, ~1,670 lines of a 3,099-line diff, are review rounds on
+`src/integral/connector_contract.py`. **Six consecutive rounds had their finding inside
+the previous round's remedy.** That is not a run of bad luck; it is a loop with no
+stopping rule, and it cost roughly **2 h 40 min of gate alone** (8 x host-gate + 8 x
+`verified_gate`, ~10 min each).
+
+Filed upstream as a comment on
+[claude-arsenal#445](https://github.com/nuncaeslupus/claude-arsenal/issues/445#issuecomment-5774526807),
+whose existing "Shape 3" already asks for the editing-loop rule. Two things added that it
+did not have:
+
+- **`-n auto` can be *negative* on a scoped run.** `--dist loadfile` pins a whole file to
+  one worker, so a suite's wall clock cannot fall below its longest file. Measured on
+  `tests/test_connector_contract.py` (92 tests): **211.79 s with `-n auto` against
+  204 s serial** - eight workers, seven idle. ~150 s of the 204 s is five tests that each
+  build and re-measure a throwaway connector library. The **full** gate does gain (5264
+  tests, 498.78 s), which is why the advice reads as universal and is not. Upstream
+  v4.16.0's `evidence-gates.md` has a *"When one file is the long pole"* section; the
+  vendored **v3.3.0** here does not.
+- **A per-*round* budget, which nothing upstream states.** Proposed: one verdict block
+  per **merged** head rather than per push, and a bound on review rounds after which
+  findings become queued tasks. This repository already says an enumeration has no last
+  element about test cases; it had never applied it to rounds.
+
+### Still open
+
+- **Re-vendor the arsenal bundle, v3.3.0 -> v4.16.0**, as its own docs-only PR:
+  `/plugin update claude-arsenal`, re-vendor `.claude/skills` from it, then re-run the
+  init skill's refresh script (`--repo-path . --silent`). Note `claude-arsenal` is **not**
+  a git subtree here, so `check_update.sh` without `--check-only` has nothing to merge.
+  The four `evidence-gates.md` sections v3.3.0 lacks are exactly the test-speed material
+  above.
+- **The round bound belongs in this repo's CLAUDE.md too**, not only upstream. Two of the
+  three speed rules are already there ("scope the test run", "`make host-gate` once");
+  the one that would have ended this loop - bound the rounds, queue the remainder - is
+  not. Docs-only, so it merges on green CI.
+- An earlier reader's public comment on #520 quotes capture coordinates; whether to edit
+  or delete it was put to the owner and is unanswered.
+
+
 ## 00003. T194 / #520 — the talent.com connector is written, green and held at the second reader
 
 **Verified live via `gh pr view` at the end of the session, not carried from memory.**
