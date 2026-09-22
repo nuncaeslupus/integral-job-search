@@ -16,6 +16,7 @@ from typing import Any
 from integral.identity import ProfileStore, create_profile
 from integral.offers import Offer, connect_manual, load_offer, save_offer
 from integral.salary_period_backfill import (
+    _main,
     apply_repairs,
     backup_offers_dir,
     repair_raw_offer,
@@ -83,7 +84,7 @@ def test_a_second_fault_inside_salary_is_left_alone() -> None:
     stated pay range is silently deleted from a record this module promised to
     leave alone. Only the guard refuses it.
     """
-    raw = _raw_offer_with_period("hourly")  # unrepresentable: would drop salary
+    raw = _raw_offer_with_period("fortnightly")  # unrepresentable: would drop salary
     raw["salary"]["min"] = "sixty thousand"  # a second fault, inside salary
     assert repair_raw_offer(raw) is None
 
@@ -108,7 +109,7 @@ def test_scan_and_apply_round_trip_through_load_offer(tmp_path: Path) -> None:
     save_offer(store, fine)
 
     repairs = scan_profile(store)
-    assert [patched["id"] for patched, _ in repairs] == [broken.id]
+    assert [patched["id"] for _, patched, _ in repairs] == [broken.id]
 
     backup = backup_offers_dir(store)
     assert (backup / f"{broken.id}.json").is_file()
@@ -120,3 +121,77 @@ def test_scan_and_apply_round_trip_through_load_offer(tmp_path: Path) -> None:
     assert repaired.salary is not None
     assert repaired.salary.period == "hour"
     load_offer(store, fine.id)  # the untouched offer still loads
+
+
+def test_a_repair_goes_back_to_the_file_it_came_from(tmp_path: Path) -> None:
+    """Not to `offers/<id>.json`, which is a different file for a legacy name.
+
+    Writing by id assumes every pre-T170 filename already equals its content
+    id. When it does not, the failure is silent and permanent: the repaired
+    copy lands beside the broken one, `load_offer` finds the good one, and the
+    scan keeps reporting the same offer as needing repair on every future run.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", handle="ada", language="en")
+    store = ProfileStore(root, identity.handle)
+
+    broken = connect_manual("Senior Widget Engineer, remote")
+    raw = broken.model_dump(mode="json")
+    raw["salary"] = {"min": None, "max": 2500.0, "currency": "EUR", "period": "annual"}
+    raw["salary"]["stated"] = True
+    store.write_json(raw, "offers", "legacy-name.json")
+
+    apply_repairs(store, scan_profile(store))
+
+    offers = sorted(p.name for p in store.path("offers").glob("*.json"))
+    assert offers == ["legacy-name.json"], offers
+    assert (
+        json.loads((store.path("offers") / "legacy-name.json").read_text())["salary"]["period"]
+        == "year"
+    )
+    assert scan_profile(store) == []  # and the migration is actually done
+
+
+def test_one_unreadable_file_does_not_abort_the_run(tmp_path: Path) -> None:
+    """A half-written record is what a migration over old data is likely to
+    meet. Letting the decoder exception escape would leave the run half
+    applied, with no summary saying which profiles were never reached."""
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", handle="ada", language="en")
+    store = ProfileStore(root, identity.handle)
+
+    raw = _raw_offer_with_period("MONTH")
+    store.write_json(raw, "offers", f"{raw['id']}.json")
+    store.write_text('{"id": "truncated"', "offers", "half-written.json")
+
+    repairs = scan_profile(store)
+    assert [patched["id"] for _, patched, _ in repairs] == [raw["id"]]
+
+
+def test_a_dry_run_reports_pending_work_in_its_exit_code(tmp_path: Path, monkeypatch: Any) -> None:
+    """So `python -m integral.salary_period_backfill` is usable as a check.
+
+    This also pins the ordering `--apply` depends on: the backup exists before
+    any offer is rewritten. Asserting that by reading `_main` pins nothing.
+    """
+    root = tmp_path / "profiles"
+    identity = create_profile(root, "Ada Lovelace", handle="ada", language="en")
+    store = ProfileStore(root, identity.handle)
+    raw = _raw_offer_with_period("MONTH")
+    store.write_json(raw, "offers", f"{raw['id']}.json")
+    monkeypatch.setattr("integral.salary_period_backfill.default_profiles_root", lambda: root)
+
+    assert _main([]) == 1  # pending work, nothing written
+    assert json.loads(store.read_text("offers", f"{raw['id']}.json"))["salary"]["period"] == "MONTH"
+
+    assert _main(["--apply"]) == 0
+    assert load_offer(store, raw["id"]).salary.period == "month"
+
+    backups = sorted(p.name for p in store.path().glob("offers.pre-t170-backfill.*"))
+    assert len(backups) == 1, backups
+    assert (
+        json.loads((store.path(backups[0]) / f"{raw['id']}.json").read_text())["salary"]["period"]
+        == "MONTH"
+    )
+
+    assert _main([]) == 0  # and now it is migrated
