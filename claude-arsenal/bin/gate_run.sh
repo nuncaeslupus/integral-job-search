@@ -59,10 +59,24 @@ if [[ -z "${TASK_ID}" ]]; then
     exit 2
 fi
 
+# Boundary timing: how long this gate took, appended to a local TSV that never
+# leaves the machine. See bin/_timing.sh; ARSENAL_METRICS=off disables it.
+# shellcheck source=/dev/null
+_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ -f "${_BIN_DIR}/_timing.sh" ]] && source "${_BIN_DIR}/_timing.sh"
+command -v arsenal_timing_begin >/dev/null 2>&1 && arsenal_timing_begin gate "${TASK_ID}" "${TASK_ID}"
+
 PAYLOAD_TMP=""
 # `return 0` matters: under `set -e` a non-zero status out of an EXIT trap
 # becomes the script's exit status, which would report every clean run as failed.
-cleanup() { [[ -n "${PAYLOAD_TMP}" ]] && rm -f "${PAYLOAD_TMP}"; return 0; }
+# `local rc=$?` is the FIRST line for the same family of reasons: every command
+# below overwrites it, and the gate's own exit code is the one worth recording.
+cleanup() {
+    local rc=$?
+    command -v arsenal_timing_end >/dev/null 2>&1 && arsenal_timing_end "${rc}"
+    [[ -n "${PAYLOAD_TMP}" ]] && rm -f "${PAYLOAD_TMP}"
+    return 0
+}
 trap cleanup EXIT
 
 # The task file is ordinary versioned content on the default branch, so any
@@ -140,7 +154,11 @@ WORKING_PAYLOAD=""
 # A declared evidence gate can never pass vacuously (CA-12): a missing evidence
 # file or a measurement that violates the threshold fails the gate right here,
 # before the prose/bash-block path can let it through.
-GATE_EVIDENCE_PY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../scripts/gate_evidence.py"
+GATE_EVIDENCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Git Bash: a native python.exe cannot open a `/c/...` path. Resolve to `C:/...`
+# here; identity on every other platform.
+command -v cygpath >/dev/null 2>&1 && GATE_EVIDENCE_DIR="$(cygpath -m "${GATE_EVIDENCE_DIR}")"
+GATE_EVIDENCE_PY="${GATE_EVIDENCE_DIR}/../scripts/gate_evidence.py"
 if [[ -f "${GATE_EVIDENCE_PY}" ]]; then
     # `|| _ev=$?`, not a bare call followed by `$?`: under `set -e` a non-zero
     # exit from a simple command ends the script right there, so every line
