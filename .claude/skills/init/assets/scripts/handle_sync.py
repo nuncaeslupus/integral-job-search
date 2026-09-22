@@ -16,15 +16,16 @@ not claimable yet — but nothing is corrupted.
 Prints one JSON object per missing handle, ready to create with whatever GitHub
 channel the surface offers:
 
-    {"task":"t-3f8a91c2","title":"…","labels":["arsenal:task"],"body":"…"}
+    {"task":"t-3f8a91c2","title":"…","labels":["arsenal:task","arsenal-id:t-3f8a91c2"],"body":"…"}
 
 A task whose title is a near-match for an issue that resolved to nothing is
-reported on stderr instead of proposed: since the board resolves handles by
-title as well as by id, "no id resolved" can mean the fold missed rather than
-that no issue exists, and a duplicate handle corrupts state where a delay does
-not. When SEVERAL tasks fold to that same title the guard cannot say which one
-the issue covers, so they are proposed with an `"ambiguous"` key naming the
-collision — a person can weigh it, and the unattended caller creates nothing.
+reported on stderr instead of proposed: the board still resolves handles by
+title where no `arsenal-id:` label has been stamped yet, so "no id resolved" can
+mean the fold missed rather than that no issue exists, and a duplicate handle
+corrupts state where a delay does not. When SEVERAL tasks fold to that same
+title the guard cannot say which one the issue covers, so they are proposed with
+an `"ambiguous"` key naming the collision — a person can weigh it, and the
+unattended caller creates nothing.
 
 Exit: 0 when everything has a handle or the missing ones were printed,
 2 on unreadable input.
@@ -41,10 +42,15 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from task_select import (
+    ID_LABEL_PREFIX,
     TERMINAL,
+    default_tasks_dir,
     load_tasks,
     loose_title_key,
+    read_issue_payload,
+    task_id_from_body,
     task_id_from_issue,
+    task_id_from_labels,
     title_index,
 )
 
@@ -62,11 +68,27 @@ def missing_handles(
     titles = title_index(tasks)
     handled: set[str] = set()
     unresolved: list[dict[str, Any]] = []
+    by_title = 0
     for issue in issues:
         if task_id := task_id_from_issue(issue, titles=titles):
             handled.add(task_id)
+            if not (task_id_from_labels(issue) or task_id_from_body(issue)):
+                by_title += 1
         else:
             unresolved.append(issue)
+
+    # Said once, not per issue, and said here because this is the script whose
+    # output a caller turns into a new issue. A pairing that rests on the title
+    # is one rename away from reporting the task as having no handle at all —
+    # and that report reads as an instruction to open a second one.
+    if by_title and warnings is not None:
+        warnings.append(
+            f"{by_title} issue(s) resolved to their task by title alone — renaming "
+            "either side unpairs them, and an unpaired task is reported here as "
+            f"having no handle. The `{ID_LABEL_PREFIX}<id>` label is exact and travels "
+            "in the fields a body-less fetch already asks for; `queue_hooks.py "
+            "sync-handles` stamps it from the body marker."
+        )
 
     # The rest of that thought. Resolution by title is a heuristic, so "no id
     # resolved" no longer means "no issue exists" — it can also mean the fold
@@ -90,9 +112,7 @@ def missing_handles(
     # a caller that creates them unattended puts a second issue on the board for
     # whichever one the near-match already covered (#239).
     candidates = [
-        t
-        for t in tasks
-        if t["id"] not in handled and str(t.get("status") or "") not in TERMINAL
+        t for t in tasks if t["id"] not in handled and str(t.get("status") or "") not in TERMINAL
     ]
     key_users: dict[str, int] = {}
     for task in candidates:
@@ -120,16 +140,16 @@ def missing_handles(
                 if warnings is not None:
                     warnings.append(
                         f"{task['id']}: no handle resolved, but issue #{near[key]} has a "
-                        "near-identical title — not proposing a second handle. Add "
-                        f"`arsenal-task: {task['id']}` to that issue if it is the handle, or "
+                        "near-identical title — not proposing a second handle. Label "
+                        f"that issue `{ID_LABEL_PREFIX}{task['id']}` if it is the handle, or "
                         "make the two titles agree."
                     )
                 continue
             ambiguous = (
                 f"{shared} task files fold to the same loose title as issue "
                 f"#{near[key]}, which is therefore the handle for at most one of "
-                f"them. Resolve that before creating this: add `arsenal-task: "
-                f"{task['id']}` to #{near[key]} if it is this task's handle, or make "
+                f"them. Resolve that before creating this: label #{near[key]} "
+                f"`{ID_LABEL_PREFIX}{task['id']}` if it is this task's handle, or make "
                 "the titles distinct."
             )
             if warnings is not None:
@@ -137,11 +157,12 @@ def missing_handles(
         row = {
             "task": task["id"],
             "title": task["title"],
-            "labels": [label],
-            "body": (
-                f"`arsenal-task: {task['id']}`\n\n"
-                f"Task defined in `{task['path']}`"
-            ),
+            # The board label is what makes the issue claimable work; the id
+            # label is what keeps it attached to this task after either side is
+            # renamed. Both are set at creation so a handle opened here never
+            # depends on its title.
+            "labels": [label, f"{ID_LABEL_PREFIX}{task['id']}"],
+            "body": (f"`arsenal-task: {task['id']}`\n\nTask defined in `{task['path']}`"),
         }
         if ambiguous:
             # Reported, never created on its own: the two callers of this list
@@ -155,18 +176,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--tasks-dir", type=Path, default=Path("arsenal/tasks"))
+    parser.add_argument("--tasks-dir", type=Path, default=default_tasks_dir())
     parser.add_argument("--issues", type=Path, required=True, help="JSON array of issues")
     parser.add_argument("--label", default="arsenal:task")
     args = parser.parse_args(argv)
 
-    try:
-        payload = json.loads(args.issues.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"handle_sync: cannot read --issues — {exc}", file=sys.stderr)
+    payload = read_issue_payload(args.issues, "handle_sync")
+    if payload is None:
         return 2
-    if isinstance(payload, dict):
-        payload = payload.get("issues", [])
 
     tasks, warnings = load_tasks(args.tasks_dir)
     for warning in warnings:
@@ -198,4 +215,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Windows consoles default to a legacy codepage (cp1252 and friends);
+    # a non-ASCII line must degrade to "?", never take the process down.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
     raise SystemExit(main())

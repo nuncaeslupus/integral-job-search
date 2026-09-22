@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """init.py - Bootstrap or update claude-arsenal/ in a host repository."""
+
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -23,7 +25,13 @@ _CLAUDE_MD_TEMPLATE = """\
 <!-- claude-arsenal: auto-managed -->
 ## Automatic session protocol
 
-Every session, without waiting to be asked:
+**Were you spawned by another session, with a task already assigned?** Then skip
+straight to that task. Steps 2-5 below need the GitHub API, and a spawned session
+has no `mcp__*` tools — implement, run the gate, and let
+`claude-arsenal/bin/open_task_pr.sh` push. It prints `branch:<name>` when it
+cannot open the PR here; return that line and stop. Never claim or release.
+
+Otherwise, every session, without waiting to be asked:
 
 1. Read `{home}/session/handover.md` for the previous session's context.
 2. List the repository's issues labelled `arsenal:task` — **open and closed** — and
@@ -39,6 +47,9 @@ Every session, without waiting to be asked:
    - **Nothing returned + workspace plans exist** → seed tasks from each plan.
    - **Nothing at all** → ask what to work on.
 5. Open each task's PR with `Closes #<issue>` so merging it closes the task by itself.
+   Dispatching the work to another session instead? Pass the repository explicitly
+   and pass `ARSENAL_TASK_ISSUE` — a spawned worker can resolve neither.
+   → `claude-arsenal/references/orchestrator-tick.md`
 6. After any session with tasks: update `{home}/session/handover.md`.
 
 @claude-arsenal/AGENTS.md
@@ -96,17 +107,31 @@ host-setup = ""
 #   off       Do not check, write nothing in the body.
 pre-pr-review = "warn"
 
-# test-first writes a failing test before the change; test-after writes tests
-# alongside it.
-test-discipline = "test-first"
-
-# What /session-end leaves behind: handoff | ticket | none
-session-end = "handoff"
+# Test discipline and what /session-end leaves behind are set in this repo's
+# own CLAUDE.md, with an HTML comment marker — `<!-- test-discipline: test-after -->`
+# and `<!-- session-end: handoff=no -->`. They were listed here too, and
+# nothing read the copy.
 
 # The skills-listing character budget the auditor enforces. Raise it if your
 # surface's real budget differs, rather than deleting skills to fit a number
 # that is not yours.
 listing-budget = 8000
+
+# Auto-compact threshold in tokens, written into .claude/settings.json as
+# `autoCompactWindow`. 0 = no opinion: leave the harness default alone, and
+# leave any autoCompactWindow already in settings.json untouched.
+#
+# The biggest lever there is on what a fleet costs, and it reads backwards.
+# A turn is charged for the context it carries, not the tokens it writes —
+# nine sessions in one day read 438M tokens to write 1.3M. Raising the window
+# to "avoid filling up" raises the floor every turn pays. The same turns
+# replayed at lower caps: 500k -> 453M, 300k -> 387M, 200k -> 287M, 120k -> 186M.
+#
+# Too low is a real cost too: sessions compact mid-task and re-read what they
+# dropped. Set a value, then check it against what actually happened with
+# `python3 claude-arsenal/scripts/usage_report.py --since <date>`.
+#   context-window = 200000
+context-window = 0
 
 # Which skill sections this repo installs. Written by `/init` from the profile
 # you picked ("what kind of project is this?"), as a [skills] table below.
@@ -119,9 +144,9 @@ listing-budget = 8000
 #
 #   workflow  specify, design, execution, review, ship, gate-check
 #   python    python-bootstrap, pypi-release, coverage-gaps, dep-upgrade,
-#             mutmut-report
+#             mutmut-report, pin-check
 #
-# The core section — init, continue, queue-add, queue-status, github,
+# The core section — init, queue-next, queue-add, queue-status, github,
 # session-end — is always installed and is not listed: the vendored session
 # protocol names those skills directly, so switching one off would break every
 # session rather than save anything worth saving.
@@ -129,8 +154,13 @@ listing-budget = 8000
 # Which model runs what. An alias Claude Code resolves (opus | sonnet | haiku)
 # or a full model id.
 #
-# workers is enforced: the orchestrator exports it as CLAUDE_CODE_SUBAGENT_MODEL
-# before dispatching, so it governs every worker subagent in the session.
+# workers is enforced: the orchestrator resolves it and passes it as each
+# dispatch's own model argument, so it governs every worker subagent in the
+# session.
+#
+# reviewers governs the pre-PR adversarial reviewer the same way. Empty means
+# "no separate opinion" and falls back to workers — set it when you want cheap
+# implementers and a stronger reader, which is the usual split.
 #
 # orchestrator is advisory — a session cannot change the model it is already
 # running as. It is read at session start and reported when the running model
@@ -141,15 +171,24 @@ listing-budget = 8000
 [models]
 orchestrator = ""
 workers = "sonnet"
+reviewers = ""
 """
 
 # Permissive on purpose: until the probe runs, every `surface:` task stays
 # eligible. `access:` capabilities are deliberately absent — they gate work a
 # session may genuinely be unable to do, so they are granted by the probe or by
-# naming one at /continue, never by a default nobody chose.
+# naming one at /queue-next, never by a default nobody chose.
+# Deny by default. A session runs on exactly ONE surface, so claiming cli, web
+# and cloud at once was not permissive — it was false, and every task gated on
+# `requires: [surface:cli]` became selectable on the web, where it cannot run.
+# An undetected surface promises nothing; `bin/detect_surface.sh` overwrites this
+# with what the surface actually offers, and until it has, a task that declares a
+# requirement waits instead of being handed to a surface that may not meet it.
+# Tasks with no `requires:` are unaffected — an empty requirement set is a subset
+# of every profile, this one included.
 DEFAULT_SURFACE_PROFILE = {
     "surface": "unknown",
-    "capabilities": ["surface:cli", "surface:web", "surface:cloud"],
+    "capabilities": [],
 }
 
 WORKSPACE_SPEC_STUB = """\
@@ -252,6 +291,7 @@ def _refresh_bundle(bundle: Path, target: Path, silent: bool = False) -> None:
     Files under a _SCAFFOLD_ONCE prefix are written only when absent and left
     untouched if they already exist (host-owned live data, not bundle content).
     """
+    previous = _read_manifest(target)
     for src in bundle.rglob("*"):
         if src.is_dir():
             continue
@@ -274,37 +314,85 @@ def _refresh_bundle(bundle: Path, target: Path, silent: bool = False) -> None:
             if _has_shebang(src):
                 dst.chmod(dst.stat().st_mode | 0o111)
             print(f"  refreshed:  {rel}")
-    _prune_bundle(bundle, target)
+    _prune_bundle(bundle, target, previous)
+    _write_manifest(bundle, target)
 
 
-# Directories the bundle owns outright: everything in them comes from upstream,
-# so a file there that upstream no longer ships is a leftover, not host data.
-# `references/` is swept for the same reason as the script dirs: a retired
+# Directories the bundle owns outright: everything upstream ships for them lands
+# there. `references/` is swept for the same reason as the script dirs: a retired
 # reference left behind is protocol the bundle no longer means, sitting in the
 # tree a session reads on demand.
 _PRUNABLE_DIRS = ("bin", "scripts", "references")
 
+# Every bundle-relative path this install wrote, read back by the next one.
+# It is what makes "upstream no longer ships it" distinguishable from "upstream
+# never shipped it": the sweep below deletes only files a previous install is on
+# record as having put there.
+_MANIFEST = ".arsenal-manifest"
+_RETIRED_DIR = ".retired"
 
-def _prune_bundle(bundle: Path, target: Path) -> None:
-    """Delete installed bundle files upstream no longer ships.
+
+def _bundle_files(bundle: Path) -> list[str]:
+    return sorted(p.relative_to(bundle).as_posix() for p in bundle.rglob("*") if p.is_file())
+
+
+def _read_manifest(target: Path) -> set[str] | None:
+    """What the previous install wrote, or None when there is no record of it."""
+    try:
+        text = (target / _MANIFEST).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return {line.strip() for line in text.splitlines() if line.strip()}
+
+
+def _write_manifest(bundle: Path, target: Path) -> None:
+    (target / _MANIFEST).write_text("\n".join(_bundle_files(bundle)) + "\n", encoding="utf-8")
+
+
+def _prune_bundle(bundle: Path, target: Path, previous: set[str] | None) -> None:
+    """Retire installed bundle files upstream no longer ships.
 
     Refreshing by checksum updates and adds, but never removed — so an upgrade
     left every retired script sitting in the bundle, still executable. Those are
     not inert leftovers: they are the previous architecture, and a session that
     finds `claim.sh` can still run it against a queue that is no longer the
-    board. Only the two upstream-owned directories are swept; host trees are
-    never touched.
+    board.
+
+    Inside a swept directory only files `previous` records are deleted. Nothing
+    marks `claude-arsenal/bin/` as upstream-owned, so a consumer putting their
+    own `my-helper.sh` there is doing the obvious thing — and the sweep used to
+    unlink it on the next `init.py --silent`, which is every session start. A
+    host file was never in the manifest, so it is now left alone.
+
+    `previous` is None only on the first upgrade from a release that wrote no
+    manifest. With no ownership record to consult, an unshipped file is MOVED to
+    `.retired/` rather than deleted: the old architecture stops being runnable
+    either way, and anything the old sweep would have destroyed is recoverable
+    at a named path. From the next run on, the manifest decides.
+
+    The walk is recursive. It used to `continue` on anything that was not a
+    file, so a retired script under `scripts/lib/` was skipped rather than
+    retired — the function's stated purpose silently not happening.
     """
     for dirname in _PRUNABLE_DIRS:
         src_dir, dst_dir = bundle / dirname, target / dirname
         if not dst_dir.is_dir():
             continue
-        shipped = {p.name for p in src_dir.iterdir() if p.is_file()} if src_dir.is_dir() else set()
-        for installed in sorted(dst_dir.iterdir()):
-            if not installed.is_file() or installed.name in shipped:
+        shipped = set(_bundle_files(src_dir)) if src_dir.is_dir() else set()
+        for installed in sorted(dst_dir.rglob("*")):
+            if not installed.is_file():
                 continue
-            installed.unlink()
-            print(f"  removed (no longer shipped): {dirname}/{installed.name}")
+            rel = installed.relative_to(dst_dir).as_posix()
+            if rel in shipped:
+                continue
+            if previous is None:
+                dest = target / _RETIRED_DIR / dirname / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(installed), str(dest))
+                print(f"  retired to {_RETIRED_DIR}/ (no longer shipped): {dirname}/{rel}")
+            elif f"{dirname}/{rel}" in previous:
+                installed.unlink()
+                print(f"  removed (no longer shipped): {dirname}/{rel}")
 
 
 def _parse_version(text: str) -> tuple[int, ...] | None:
@@ -377,9 +465,7 @@ def _check_bundle_version(bundle: Path, arsenal: Path) -> tuple[str, str] | None
     installed_parsed, bundle_parsed = _parse_version(installed_ver), _parse_version(bundle_ver)
     if installed_parsed and bundle_parsed and installed_parsed > bundle_parsed:
         return installed_ver, bundle_ver
-    print(
-        f"Upgrading claude-arsenal bundle: {installed_ver} → {bundle_ver}"
-    )
+    print(f"Upgrading claude-arsenal bundle: {installed_ver} → {bundle_ver}")
     changelog = _changelog_since(bundle, installed_ver, bundle_ver)
     if changelog:
         print(f"\nWhat's new:\n\n{changelog}\n")
@@ -416,6 +502,59 @@ def _register_statusline(repo_path: Path) -> None:
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     print("  settings.json: registered statusLine (statusline_capture.sh)")
+
+
+def _read_context_window(config: Path) -> int:
+    """The `context-window` key from arsenal/config.toml, or 0 when unset.
+
+    Reads the file directly rather than shelling out to arsenal_config.py: on a
+    fresh install the vendored scripts are not in place yet, and an installer
+    that depends on its own output cannot run the first time.
+
+    Out-of-range and wrong-typed values return 0 rather than exiting. The
+    validator in arsenal_config.py is where a bad value is reported loudly — it
+    runs on every read, so the consumer hears about it — and stopping the whole
+    install over a settings key nobody has typed yet is the wrong trade.
+    """
+    if not config.is_file():
+        return 0
+    try:
+        raw = tomllib.loads(config.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return 0
+    value = raw.get("context-window", 0)
+    if type(value) is not int or not 100_000 <= value <= 1_000_000:
+        return 0
+    return value
+
+
+def _register_context_window(repo_path: Path, window: int) -> None:
+    """Propagate `context-window` into .claude/settings.json as autoCompactWindow.
+
+    Unlike statusLine, an existing value IS overwritten — but only when the host
+    has set the key. The two cases are deliberately asymmetric. statusLine is
+    something a user picked for themselves and `/init` is a guest there; this
+    value is *derived*, in the same sense `make sync-version` propagates
+    `.bundle-version`: `arsenal/config.toml` is where the host states it once,
+    and a settings.json that disagrees is drift, not a second opinion.
+
+    With the key unset (0) nothing is touched at all — including any
+    autoCompactWindow already in the file. Opting out of the lever must not be a
+    way of silently deleting a setting the repo configured by hand.
+    """
+    if window <= 0:
+        return
+    settings_path = repo_path / ".claude" / "settings.json"
+    settings = _read_settings(settings_path)
+    if settings is None:
+        print("  settings.json: unparseable — skipping autoCompactWindow")
+        return
+    if settings.get("autoCompactWindow") == window:
+        return
+    settings["autoCompactWindow"] = window
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    print(f"  settings.json: autoCompactWindow = {window:,} (from arsenal/config.toml)")
 
 
 # --- vendoring --------------------------------------------------------------
@@ -506,16 +645,30 @@ def _known_sections() -> set[str]:
     that adding a section to a SKILL.md is enough to make it requestable. A
     shipped section with no entry in `_SECTION_DEFAULTS` is simply off by
     default — opt-in, which is the right default for anything new.
+
+    The manifest is unioned in because the on-disk scan cannot see a section
+    whose skills are all still un-vendored, and that is a chicken-and-egg a
+    consumer cannot break out of: a vendored `_source_skills_dir()` is the
+    repo's own `.claude/skills/`, so `extract` was unrequestable because `har`
+    was not installed, and `har` was not installed because `extract` was
+    unrequestable. Via `--sections` that failed loudly; via `config.toml` it
+    failed silently — the flag was simply dropped from `known` and the usual
+    `skills: vendored N` line printed as though nothing had been asked for.
+    `sections.json` ships beside this script and carries the full set.
     """
     try:
         shipped = {
-            _skill_section(d)
-            for d in _source_skills_dir().iterdir()
-            if (d / "SKILL.md").is_file()
+            _skill_section(d) for d in _source_skills_dir().iterdir() if (d / "SKILL.md").is_file()
         }
     except OSError:
         shipped = set()
-    return (set(_SECTION_DEFAULTS) | shipped) - {_CORE_SECTION}
+    manifest = _load_manifest() or {}
+    declared = {
+        entry["name"]
+        for entry in manifest.get("sections", [])
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+    }
+    return (set(_SECTION_DEFAULTS) | shipped | declared) - {_CORE_SECTION}
 
 
 def _skill_section(skill_dir: Path) -> str:
@@ -703,9 +856,7 @@ def _read_sections_table(config: Path) -> dict[str, bool] | None:
     # six skills; it now stops the install and says which line to fix.
     for name, value in table.items():
         if not isinstance(value, bool):
-            sys.exit(
-                f"init: {config}: [skills] {name} = {value!r} is not true or false"
-            )
+            sys.exit(f"init: {config}: [skills] {name} = {value!r} is not true or false")
     # Unknown names are NOT fatal, deliberately: a repo that has run a newer
     # bundle carries sections this one has never heard of, and downgrading
     # should not be an error. They are ignored here, and a name absent from the
@@ -728,9 +879,9 @@ def _write_sections_table(config: Path, enabled: set[str], known: list[str]) -> 
     text = config.read_text(encoding="utf-8") if config.is_file() else ""
     existing = re.search(r"^\[skills\]\s*$", text, re.MULTILINE)
     if existing:
-        rest = text[existing.end():]
+        rest = text[existing.end() :]
         nxt = re.search(r"^\[", rest, re.MULTILINE)
-        tail = rest[nxt.start():] if nxt else ""
+        tail = rest[nxt.start() :] if nxt else ""
         text = text[: existing.start()] + header + "\n" + ("\n" + tail if tail else "")
     else:
         text = (text.rstrip("\n") + "\n\n" if text.strip() else "") + header + "\n"
@@ -780,11 +931,21 @@ def _resolve_sections(
     else:
         recorded = _read_sections_table(config)
         if recorded is not None:
-            return {_CORE_SECTION} | {
-                name
-                for name in known
-                if recorded.get(name, _SECTION_DEFAULTS.get(name, False))
+            enabled = {
+                name for name in known if recorded.get(name, _SECTION_DEFAULTS.get(name, False))
             }
+            # A table written under an older bundle has never heard of a section
+            # shipped since. Returning here skipped the write below, so that
+            # section stayed permanently absent from the very file consumers are
+            # told to edit — resolved correctly every run, invisible in every
+            # one. Only written when something is genuinely missing: rewriting
+            # an up-to-date table on every `--silent` session start would churn
+            # the file and drop any comment inside it for nothing.
+            missing = [name for name in known if name not in recorded]
+            if missing:
+                _write_sections_table(config, enabled, known)
+                print(f"  config: recorded newly shipped section(s): {', '.join(missing)}")
+            return {_CORE_SECTION} | enabled
         # Asked of the *bundle*, by name, not of the installed files by their
         # metadata. `_skill_section` falls back to `core` for a SKILL.md it
         # cannot classify — right for its own case, inverted here: a bundle
@@ -796,14 +957,12 @@ def _resolve_sections(
         # consumer's workflow and python skills on a run they invoked to
         # upgrade them. Names are stable across every version that ever
         # shipped, and `by_section` is keyed on them.
-        vendored_names = {
-            d.name
-            for d in dest.iterdir()
-            if d.is_dir() and (d / _VENDOR_MARKER).is_file()
-        } if dest.is_dir() else set()
-        vendored = {
-            section for section, names in by_section.items() if names & vendored_names
-        }
+        vendored_names = (
+            {d.name for d in dest.iterdir() if d.is_dir() and (d / _VENDOR_MARKER).is_file()}
+            if dest.is_dir()
+            else set()
+        )
+        vendored = {section for section, names in by_section.items() if names & vendored_names}
         chosen = (
             vendored - {_CORE_SECTION}
             if vendored
@@ -835,7 +994,29 @@ def _vendor_skills(
     source = _source_skills_dir()
     dest = repo_path / ".claude" / "skills"
     if source.resolve() == dest.resolve():
-        return  # running from the vendored copy; nothing to copy in
+        # Running from the vendored copy: the source IS the destination, so
+        # there is nothing to copy in. Saying nothing was the silent half of
+        # the same bug — a consumer who enabled a section here got the usual
+        # success output and no skill, because a vendored copy can only ever
+        # refresh the skills a repo already has. Name the sections that are on
+        # with nothing on disk to satisfy them, and say where to get them.
+        if not silent:
+            recorded = _read_sections_table(_home(repo_path) / "config.toml") or {}
+            asked = (
+                set(sections)
+                if sections is not None
+                else {name for name, on in recorded.items() if on}
+            )
+            on_disk = {_skill_section(d) for d in source.iterdir() if (d / "SKILL.md").is_file()}
+            empty = sorted(asked - on_disk - {_CORE_SECTION})
+            if empty:
+                print(
+                    f"  skills: section(s) {', '.join(empty)} are enabled but no skill for "
+                    "them is installed — a vendored init.py can only refresh what this repo "
+                    "already has. Re-run the plugin's init.py (or update the bundle) to "
+                    "install them."
+                )
+        return
 
     shipped = {d.name: _skill_section(d) for d in source.iterdir() if (d / "SKILL.md").is_file()}
     by_section: dict[str, set[str]] = {}
@@ -1044,6 +1225,113 @@ def _inject_claude_md(repo_path: Path) -> None:
         return
     claude_md.write_text(replaced.rstrip("\n") + "\n", encoding="utf-8")
     print("  CLAUDE.md: session-protocol block refreshed (was out of date)")
+
+
+# The host-owned handover template. It lives here, not in `assets/`, because
+# anything under `assets/` is a bundle file and `_refresh_bundle` rewrites
+# bundle files into `claude-arsenal/` — which is how this template came to
+# shadow the real handover in the first place (see `_retire_shadow_handover`).
+HANDOVER_TEMPLATE = """# Session Handover
+
+<!-- Written at session end. A new session reading this file can resume without
+     additional context. -->
+
+## Last task
+
+- **ID**: <!-- e.g. lo-a3f8 -->
+- **Title**: <!-- task title -->
+- **Status at handover**: <!-- open | in_progress | done | blocked -->
+
+## What was done this session
+
+<!-- One-paragraph summary. Include commit SHAs if relevant. -->
+
+## What remains
+
+<!-- Bulleted list of sub-tasks or acceptance-criteria items not yet met. -->
+
+## How to continue
+
+1. Read `claude-arsenal/references/worker-loop.md` for the worker loop algorithm.
+2. Run `python3 claude-arsenal/scripts/task_select.py --issues <issues.json>` for
+   the next unblocked task.
+
+## Surface profile at handover
+
+<!-- Copy of session/surface_profile.json for quick reference. -->
+
+## Queue snapshot at handover
+
+<!-- Output of: python3 claude-arsenal/scripts/query_status.py --detail -->
+"""
+
+
+def _handover_is_untouched(text: str) -> bool:
+    """Whether a handover file carries nothing a session would want to read.
+
+    The same test the session-start protocol describes in prose ("content beyond
+    the template"): strip HTML comments, headings, list scaffolding and blank
+    lines, and see whether any prose survives. Deliberately conservative — a
+    file we cannot confidently call empty is one we keep.
+    """
+    # The stock template first, exactly. Its "How to continue" steps are ordinary
+    # numbered prose, so the heuristic below reads them as content a session
+    # wrote — the one file guaranteed to be untouched, called touched.
+    if text.strip() == HANDOVER_TEMPLATE.strip():
+        return True
+    body = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        # An untouched bullet is the label with nothing after the colon.
+        bullet = re.sub(r"^[-*]\s*", "", stripped)
+        bullet = re.sub(r"^\d+\.\s*", "", bullet)
+        if not bullet:
+            continue
+        label, sep, rest = bullet.partition(":")
+        if sep and not rest.strip() and label.startswith("**"):
+            continue
+        return False
+    return True
+
+
+def _retire_shadow_handover(bundle_dir: Path, home: Path, repo_path: Path) -> None:
+    """Remove the handover the bundle used to write into its own prefix.
+
+    Consumers upgraded from a bundle that shipped `session/handover.md` still
+    carry `<bundle>/session/handover.md`. Nothing reads it, and an empty one
+    reads exactly like a fresh install, so it is removed — but only when it is
+    provably untouched. A copy someone actually wrote into is left where it is
+    and reported, because deleting a session's only written record to tidy up a
+    path is the worse failure by far.
+    """
+    shadow = bundle_dir / "session" / "handover.md"
+    if not shadow.is_file() or shadow.resolve() == (home / "session" / "handover.md").resolve():
+        return
+    try:
+        text = shadow.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    rel = shadow.relative_to(repo_path)
+    if _handover_is_untouched(text):
+        # Every other failure in this function is non-fatal; an unguarded unlink
+        # (a read-only checkout, a permission) propagated out of init_base and
+        # aborted the install before _vendor_skills ever ran. Tidying up a shadow
+        # copy is not a reason to leave a repo half-installed.
+        try:
+            shadow.unlink()
+        except OSError as exc:
+            print(f"  note: could not remove {rel} ({exc}) — delete it by hand")
+            return
+        with contextlib.suppress(OSError):
+            shadow.parent.rmdir()
+        print(f"  removed: {rel} (shadowed {home.name}/session/handover.md)")
+    else:
+        print(
+            f"  WARNING: {rel} has content but nothing reads it — the live handover is "
+            f"{home.name}/session/handover.md. Merge it across and delete the old copy."
+        )
 
 
 def _home(repo_path: Path) -> Path:
@@ -1310,21 +1598,24 @@ def init_base(
         config.write_text(_CONFIG_TEMPLATE, encoding="utf-8")
         print(f"  created: {config.relative_to(repo_path)}")
 
-    # Create session handover
+    # Create session handover. This is the ONLY handover the bundle scaffolds.
+    # `assets/session/handover.md` used to ship as a bundle file too, so
+    # `_refresh_bundle` recreated `<bundle>/session/handover.md` on every run,
+    # forever, after the host tree moved to `arsenal/`. Nothing reads that copy
+    # — every reader names `{home}/session/handover.md` — but an empty handover
+    # is indistinguishable from a fresh install, so a session that opened the
+    # wrong one concluded there was no prior context and carried on without it.
     handover = home / "session" / "handover.md"
     if not handover.exists():
-        handover.write_text(
-            "# Session Handover\n\n<!-- Written at session end. -->\n",
-            encoding="utf-8",
-        )
+        handover.write_text(HANDOVER_TEMPLATE, encoding="utf-8")
         print(f"  created: {handover.relative_to(repo_path)}")
+
+    _retire_shadow_handover(arsenal, home, repo_path)
 
     # Default surface profile (gitignored — overwritten by detect_surface.sh hook)
     profile = home / "session" / "surface_profile.json"
     if not profile.exists():
-        profile.write_text(
-            json.dumps(DEFAULT_SURFACE_PROFILE, indent=2) + "\n", encoding="utf-8"
-        )
+        profile.write_text(json.dumps(DEFAULT_SURFACE_PROFILE, indent=2) + "\n", encoding="utf-8")
         print(f"  created: {profile.relative_to(repo_path)}")
 
     # .gitignore — surface profile, the statusLine-written rate-limit snapshot,
@@ -1338,6 +1629,10 @@ def init_base(
         "rate_limits.json",
         "budget_iterations.json",
         "worktree_isolation",
+        # The provenance sidecar record_isolation.sh writes beside it. Same
+        # reason as the sentinel: it is an observation about THIS machine and
+        # this session, not a fact about the repository.
+        "worktree_isolation.why",
         "host_branch",
         # Rescue metadata is machine-local too; it was previously omitted, so a
         # forced-restore snapshot could be swept into a task commit (#140).
@@ -1350,6 +1645,10 @@ def init_base(
 
     # statusLine command feeding budget_check.sh (token-budget stop)
     _register_statusline(repo_path)
+
+    # The other half of the token story: statusLine reports the window, this
+    # bounds what each turn puts in it.
+    _register_context_window(repo_path, _read_context_window(_home(repo_path) / "config.toml"))
 
     # Vendor the skills and wire the gate — the only path that reaches a cloud
     # session — then retire a plugin declaration an older init may have written.
@@ -1385,9 +1684,16 @@ def init_workspace(
     # Strip Windows-style trailing dots/spaces before checking (they normalize
     # to ".." on NTFS) and retain the substring ".." guard for defence-in-depth.
     normalized = workspace.rstrip(". ")
-    bad = (not normalized or normalized in (".", "..") or ".." in workspace
-           or "/" in workspace or "\\" in workspace or "|" in workspace
-           or "\n" in workspace or "\r" in workspace)
+    bad = (
+        not normalized
+        or normalized in (".", "..")
+        or ".." in workspace
+        or "/" in workspace
+        or "\\" in workspace
+        or "|" in workspace
+        or "\n" in workspace
+        or "\r" in workspace
+    )
     if bad or any(c in p for p in (root, spec, plan) for c in ("|", "\n", "\r")):
         sys.exit("init: invalid workspace name or paths (must not contain '|' or newlines)")
 
@@ -1469,8 +1775,7 @@ def main() -> None:
         choices=sorted(_PROFILES),
         help="What kind of project this is, as a starting set of skill sections: "
         + "; ".join(
-            f"{name} = core"
-            + ("".join(f" + {s}" for s in secs) if secs else " only")
+            f"{name} = core" + ("".join(f" + {s}" for s in secs) if secs else " only")
             for name, secs in sorted(_PROFILES.items())
         )
         + ". Recorded as an editable [skills] table in arsenal/config.toml.",
@@ -1496,11 +1801,15 @@ def main() -> None:
     # `--quiet` is the canon's spelling; `--silent` shipped first and keeps
     # working, so no consumer's existing invocation breaks.
     p.add_argument(
-        "--quiet", "--silent", action="store_true", dest="silent",
+        "--quiet",
+        "--silent",
+        action="store_true",
+        dest="silent",
         help="Suppress 'up to date' lines; only print refreshed files and version banner.",
     )
     p.add_argument(
-        "--allow-downgrade", action="store_true",
+        "--allow-downgrade",
+        action="store_true",
         help="Overwrite a NEWER installed bundle with this skill's older copies.",
     )
     args = p.parse_args()
@@ -1521,15 +1830,32 @@ def main() -> None:
         ws_rel = (_home(repo_path).relative_to(repo_path) / "project" / name).as_posix()
         spec = args.spec or f"{ws_rel}/spec.md"
         plan = args.plan or f"{ws_rel}/plan.md"
-        init_workspace(repo_path, name, root, spec, plan, bundle_override,
-                       allow_downgrade=args.allow_downgrade,
-                       skills_profile=args.profile,
-                       sections=_parse_sections(args.sections))
+        init_workspace(
+            repo_path,
+            name,
+            root,
+            spec,
+            plan,
+            bundle_override,
+            allow_downgrade=args.allow_downgrade,
+            skills_profile=args.profile,
+            sections=_parse_sections(args.sections),
+        )
     else:
-        init_base(repo_path, bundle_override, silent=args.silent,
-                  allow_downgrade=args.allow_downgrade, skills_profile=args.profile,
-                  sections=_parse_sections(args.sections))
+        init_base(
+            repo_path,
+            bundle_override,
+            silent=args.silent,
+            allow_downgrade=args.allow_downgrade,
+            skills_profile=args.profile,
+            sections=_parse_sections(args.sections),
+        )
 
 
 if __name__ == "__main__":
+    # Windows consoles default to a legacy codepage (cp1252 and friends);
+    # a non-ASCII line must degrade to "?", never take the process down.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
     main()

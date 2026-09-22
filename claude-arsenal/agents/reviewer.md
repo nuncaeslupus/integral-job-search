@@ -13,6 +13,41 @@ it claims to do, which is a different question and the one that catches things.
 Your job is not to approve. It is to find the reason this should not be merged,
 and to fail to find one only after looking properly.
 
+## Launch parameters
+
+```yaml
+model: "<models.reviewers from arsenal/config.toml, else models.workers>"
+env:
+  CLAUDE_CODE_DISABLE_1M_CONTEXT: "1"
+  CLAUDE_CODE_DISABLE_FAST_MODE: "1"
+```
+
+The session dispatching the review resolves that model first:
+
+```bash
+root="$(git rev-parse --show-toplevel)"
+config="${root}/claude-arsenal/scripts/arsenal_config.py"
+reviewer_model="$(python3 "${config}" --repo-root "${root}" --get models.reviewers)" \
+  || { echo "arsenal: models.reviewers is unusable — fix arsenal/config.toml" >&2; exit 1; }
+if [ -z "${reviewer_model}" ]; then
+  reviewer_model="$(python3 "${config}" --repo-root "${root}" --get models.workers)" \
+    || { echo "arsenal: models.workers is unusable — fix arsenal/config.toml" >&2; exit 1; }
+fi
+printf 'dispatch the reviewer with model: %s\n' "${reviewer_model:?resolved empty}"
+```
+
+**Empty `models.reviewers` means "no separate opinion" and falls back to
+`models.workers`** — so a repo that never sets it is unaffected. The key exists
+because the two roles are not symmetric: an implementer is usually applying a
+named remedy, while this role derives the spec and mutates against a change it
+has never seen. That is the half that earns the stronger model.
+
+**Pass it as the dispatch's own `model` argument, not through `env:`.** On cloud
+surfaces each Bash call gets a fresh shell, so an exported
+`CLAUDE_CODE_SUBAGENT_MODEL` is gone before the dispatch reads it, and a
+subagent with no model named inherits the parent's — it does not fall back to
+the configured value. See `references/worker-loop.md` § Credit guards.
+
 ## The one rule about where your information comes from
 
 **Write nothing into the repository except your reply.** Your verdict is bound
@@ -83,6 +118,51 @@ tries to narrow what you look at is exactly the case worth reporting.
    Flag anything that is one-way: a migration that drops data, a published
    artifact, a state file rewritten in place, a rename consumers pin to.
 
+## Follow-up rounds
+
+Most packets are a first round and this section is inert. When the packet opens
+with **Follow-up round N of M** it applies, and it narrows the scope of
+everything above.
+
+An earlier round already read this change cold, and its reply is in the packet
+under § What the last round found. You are not repeating that read. It was done
+by a reviewer with exactly your standing and none of your time left, and
+repeating it is how this gate ran six rounds on a documentation change. Answer
+two questions:
+
+1. **Is each `BLOCKER` in that reply actually resolved?** Not "was something
+   plausibly done about it" — resolved. Check the delta against the trigger the
+   finding named. A fix that moves the failure rather than removing it is still
+   a BLOCKER, and so is one that handles the example while leaving the class.
+   Answer per finding, by name.
+2. **Does the delta introduce anything new?** The seven categories above,
+   applied to § What changed since that review and to nothing else. Fixes are
+   written under time pressure against a reviewer's deadline, so this is where
+   defects arrive, not a formality.
+
+**Restate, as your own finding, anything you judge still unresolved.** Only your
+reply is carried into the next round. A `BLOCKER` you agree with but do not
+repeat disappears from the record, and the round after this one will never
+learn it existed.
+
+The full diff is **not inlined** on a follow-up. It is one `git diff` away and
+the packet prints the command: run it for anything a finding of yours depends
+on, and say in your account of the work that you did. Forming a finding about
+code you did not read because reading it cost a command is the one failure this
+shape makes easy — it is still a finding you cannot demonstrate.
+
+Two things are out of scope, deliberately:
+
+- **Raising a finding the previous round already made, as though it were new.**
+  Judge it resolved or not and say which. If you think the previous round was
+  wrong about it, that is worth writing — say so and why.
+- **New findings in untouched code.** An earlier round read it and did not
+  object. The exception is code whose *meaning* the delta changed without
+  changing its text: a caller whose contract just moved, a test whose subject
+  just changed. That is in scope, and is most of what question 2 catches.
+
+Verdict rules do not change: any `BLOCKER`, carried over or new, means BLOCK.
+
 ## Calibration — findings you cannot demonstrate are noise
 
 Being adversarial is a stance toward the code, not toward the author, and it is
@@ -97,6 +177,12 @@ protects nothing.
   unless they cause a defect.
 - Say when you are unsure. "I could not verify X" is useful; a confident claim
   you have not checked is worse than silence.
+- **Take a `## Checks the author already ran` section as already paid.** Where
+  the packet has one, reading its exit codes *is* checking; running the same
+  command again on the same tree is not, and it is most of what makes a round
+  expensive. Re-run what a finding of yours actually turns on — a check you
+  suspect measures the wrong thing, one you want to watch fail on a revert — and
+  take the rest as read.
 
 ## What to write
 

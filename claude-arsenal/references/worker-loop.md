@@ -6,6 +6,7 @@ A session that never spawns a worker never needs this file.
 ## Contents
 
 - [Worker loop algorithm (parallel fan-out)](#worker-loop-algorithm-parallel-fan-out) — the loop itself, steps 0–6
+- [What to run while editing](#what-to-run-while-editing) — the touched suite now, the whole gate once
 - [Per-task PRs](#per-task-prs) — what a worker opens, and the web caveat
 - [Reading a precedent](#reading-a-precedent--shape-first-prose-on-demand) — how to follow an existing module without paying for all of it
 - [Credit guards](#credit-guards--set-before-any-task-tool-dispatch) — env to set before any Task-tool dispatch
@@ -92,6 +93,20 @@ dispatches that many workers at once. Run when the queue has open tasks:
      lives in the selector rather than in this protocol on purpose — a rule the
      caller has to remember is one it can skip exactly once, in the round that
      discovers isolation is missing.
+
+     **Dispatching separate sessions rather than Task-tool subagents?** Then no
+     worker ever returns through `worker_postcheck.sh`, which is `available`'s
+     only writer — so the sentinel stays `unknown` and every batch is clamped to
+     one task, permanently, on the surface where separate sessions are the only
+     shape that works. Record the fact instead:
+     `bash claude-arsenal/bin/record_isolation.sh separate-session`. It attests
+     that isolation follows from HOW you dispatched (a container per worker
+     cannot share a tree) rather than from a path comparison, which inverts
+     across containers — two containers routinely check out at the same path.
+     The vocabulary is closed and the provenance is written to
+     `worktree_isolation.why`; an unknown mechanism is refused, not recorded.
+     Do NOT use it for Task-tool subagents: `worker_postcheck.sh` measures that
+     case correctly, and a measurement is worth more than an attestation.
 4. For each task line, `bash claude-arsenal/bin/claim_task.sh <task_id>`
    (sequential — each push is atomic):
    - `won` → keep the task in the dispatch set. `claim_task.sh` reports `won`
@@ -110,8 +125,12 @@ dispatches that many workers at once. Run when the queue has open tasks:
      "Recovering" the claim by giving your branch its own pushable ref defeats
      the shared-ref lock entirely and lets two sessions both win the same task —
      the precise double-claim failure this protocol prevents. Obey the result.
-5. **Spawn every won task as a Task-tool worker subagent in ONE message**
-   (see `agents/worker.md`) so they run concurrently:
+5. **Dispatch every won task.** Which of the two shapes you are in was decided
+   back in step 3, and steps 5 and 6 differ by it — so say which one you are in
+   before reading on.
+
+   **Task-tool dispatch — spawn every won task as a worker subagent in ONE
+   message** (see `agents/worker.md`) so they run concurrently:
    - `isolation: worktree`
    - Inject the relative-path directive and the task payload path.
    - Say that the gates run in the **foreground** and that ending the turn ends
@@ -128,7 +147,24 @@ dispatches that many workers at once. Run when the queue has open tasks:
      non-zero exit — 1 the command failed, 2 the config is unreadable or this is
      not a git repository — means the tree is not set up and the worker returns
      `open`; only exit 0 continues, whether or not a command was declared.
-6. **Wait for all workers.** Then, for each returned outcome:
+   **Separate-session dispatch — open one session per won task instead.** The
+   worker never returns into this session, so there is nothing to spawn in one
+   message and nothing to wait on in step 6: each session opens its own PR (or
+   returns `branch:<name>`), and you pick the outcomes up off GitHub. Isolation
+   was attested with `record_isolation.sh separate-session` in step 3, so the
+   `worker_postcheck.sh` calls below do not apply — there is no returned worker
+   to run them against, and inventing an outcome to feed one would replace a
+   measurement with a guess. Everything else in step 6 — the PR, the gate
+   evidence, `Closes #<issue>` — you read from the PR itself. A session that
+   returns `branch:<name>` had no channel that could open one: **open it
+   yourself**, with the `Closes #<issue>` line, before you count that task as
+   dispatched. Step 6 writes that handoff out, and this mode skips step 6 — so
+   it is named here too, because a pushed branch is not an opened PR: a task
+   left at a branch holds its claim until `sweep-claims` releases it a day
+   later, and its PR never opens by itself.
+
+6. **Wait for all workers** (Task-tool dispatch only — separate sessions are
+   picked up off GitHub, per step 5). Then, for each returned outcome:
    - **Assert the tree invariant first** — pass the worker's reported root so
      isolation is measured rather than inferred, and its outcome and returned
      text so a `done` is checked for the evidence a completion carries:
@@ -214,6 +250,33 @@ function signature.
 
 ---
 
+## What to run while editing
+
+**While editing, run only the suite covering what you touched. Run the whole
+gate once, before opening the PR.**
+
+A worker's natural reading of "the gate is the bar" is to keep checking against
+the gate, and the loop above does nothing to discourage it. But only the last
+run decides anything — `open_task_pr.sh` runs the gate itself, and refuses on
+its failure, so a gate run five edits earlier bought information that the final
+one re-buys. On one measured task that was three whole-gate runs after edits to
+one language's files, against seconds of verification that would have told
+anyone the same thing.
+
+This costs nothing and weakens nothing: the run that gates is still the full
+one. It is the cheapest saving available to a worker, and the one nothing in the
+tooling will make for you.
+
+**Do not make the gate skip suites based on what changed.** The selectivity
+belongs here, in the editing loop, where being wrong costs a re-run and
+certifies nothing. A host that wants every run to be the whole gate just keeps
+running it — there is no knob to set, and nothing in the bundle runs a suite on
+your behalf while you edit. See `references/evidence-gates.md` § How often to
+run the whole gate for the reasoning and for what makes a gate slow in the first
+place.
+
+---
+
 ## Per-task PRs
 
 Each worker implements its task in an isolated worktree, cuts a feature branch off
@@ -264,17 +327,42 @@ Two of these are fixed. The third is the consumer's call, so it is read from
 vendored file is a preference an upgrade overwrites:
 
 ```bash
-export CLAUDE_CODE_DISABLE_1M_CONTEXT=1
-export CLAUDE_CODE_DISABLE_FAST_MODE=1
-
 root="$(git rev-parse --show-toplevel)"
 workers_model="$(python3 "${root}/claude-arsenal/scripts/arsenal_config.py" \
     --repo-root "${root}" --get models.workers)" \
   || { echo "arsenal: models.workers is unusable — fix arsenal/config.toml" >&2; exit 1; }
-export CLAUDE_CODE_SUBAGENT_MODEL="${workers_model:?models.workers resolved empty}"
+printf 'dispatch workers with model: %s\n' "${workers_model:?models.workers resolved empty}"
+
+# Belt-and-braces for surfaces where a shell's exports survive to the dispatch.
+# They are not what decides — the lines above are.
+export CLAUDE_CODE_DISABLE_1M_CONTEXT=1
+export CLAUDE_CODE_DISABLE_FAST_MODE=1
+export CLAUDE_CODE_SUBAGENT_MODEL="${workers_model}"
 ```
 
-**Assign, check, then export** — and anchor both paths on the repo root. Written
+**Pass the resolved value as the dispatch's own `model` argument.** Read the
+model out of that `printf` and write it into each Task dispatch; do not rely on
+the export having reached anything. **On cloud surfaces every Bash tool call
+gets a fresh shell** — env vars and functions do not carry from one call to the
+next, so `CLAUDE_CODE_SUBAGENT_MODEL` is gone before any dispatch could read it
+and `models.workers` governs nothing. The same is true of the two
+`CLAUDE_CODE_DISABLE_*` guards above, which is why they are set in the same call
+as the dispatch rather than once at session start.
+
+Two things make that failure silent rather than loud, and both push toward the
+*expensive* model. An explicit `model:` on the dispatch outranks the env var, so
+an orchestrator that names one wins and is told nothing. And omitting `model:`
+does **not** fall back to `models.workers`: with no env var and no model in the
+agent definition, a subagent inherits the **parent's** model, so an Opus
+orchestrator dispatches Opus workers by default. Naming the model on the
+dispatch is the only path that yields the configured value.
+
+Nothing inside a session can observe which model a subagent actually ran on, and
+the token report arrives after the spend — so this is not pinnable by a gate the
+way the rest of the protocol prefers. Making the correct path the only path is
+the guard.
+
+**Assign, check, then use** — and anchor both paths on the repo root. Written
 as one line, `export VAR="$(cmd)"` reports the exit status of `export`, which
 always succeeds: a rejected model or a script path that did not resolve from a
 subdirectory would set an empty value, `export` would return 0, and the fleet
@@ -306,9 +394,10 @@ before starting; older versions do not support `statusLine.rate_limits`.
 | `ARSENAL_MAX_WORKERS` | `2` | Workers per batch. `2` is the validated git-push concurrency ceiling; higher N raises claim-race churn and PR/merge-conflict surface. **Forced to `1` when worktree isolation is unavailable** (loop step 0): parallel workers are unsafe sharing one tree. |
 | `ARSENAL_QUOTA_STOP_PCT` | `90` | Stop the loop before dispatch at/above this used-percentage on either window. |
 | `ARSENAL_MAX_ITERATIONS` | `50` | Always-available per-session dispatch-round cap (quota-independent). `0` disables it. |
+| `ARSENAL_RATE_LIMITS_FILE` | `<session>/rate_limits.json` | Where the quota guard reads its snapshot. Override it to feed quota from a surface with no statusLine — a cloud session writes this file for itself or the percentage guard never engages. See `references/quota-governance.md`. |
 | `ARSENAL_GATE_INHERIT_ENV` | _(unset)_ | Set `1` to run gate blocks with the caller's full environment instead of the hardened throwaway HOME + restricted PATH. |
-| `LOOP_WORKSPACE` | _(unset)_ | Workspace scope; set by `/continue` token inference. |
-| `LOOP_TAGS` | _(unset)_ | Comma/space-separated tag scope (ANDed); set by `/continue` token inference. |
+| `LOOP_WORKSPACE` | _(unset)_ | Workspace scope; set by `/queue-next` token inference. |
+| `LOOP_TAGS` | _(unset)_ | Comma/space-separated tag scope (ANDed); set by `/queue-next` token inference. |
 | `ARSENAL_QUEUE_REMOTE` | `origin` | Remote for claim refs + per-task pushes. |
 | `ARSENAL_CLAIM_PREFIX` | `arsenal/claims` | Ref namespace for atomic claim refs. |
 | `ARSENAL_HOME` | `arsenal` | Host-owned tree (tasks, specs, plans, config, session). |

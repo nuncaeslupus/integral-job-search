@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from _harlib import decode_body, is_sensitive_header
@@ -89,12 +89,24 @@ def _compile(pattern: str | None, flag: str) -> re.Pattern[str] | None:
         raise FilterError(f"{flag}: {exc}") from exc
 
 
+def _as_utc(when: datetime) -> datetime:
+    """Force a timestamp onto UTC so naive and aware values stay comparable.
+
+    HAR `startedDateTime` carries an offset, but `--since`/`--until` are typed
+    by hand and usually do not. Comparing the two raises TypeError, which no
+    caller catches, so a bare `--since 2026-08-30` used to abort the run. A
+    naive value is read as UTC rather than rejected: that is what someone
+    filtering `Z` timestamps means, and it keeps the flag usable.
+    """
+    return when.replace(tzinfo=UTC) if when.tzinfo is None else when
+
+
 def _parse_time(value: str | None, flag: str) -> datetime | None:
     if value is None:
         return None
     text = value.strip().replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(text)
+        return _as_utc(datetime.fromisoformat(text))
     except ValueError as exc:
         raise FilterError(f"{flag} {value!r}: expected an ISO-8601 timestamp") from exc
 
@@ -128,8 +140,7 @@ class Selection:
     def _header_needs_body(self) -> bool:
         """A value pattern against a header the index redacts cannot be answered there."""
         return any(
-            pattern is not None and is_sensitive_header(name)
-            for name, pattern in self.has_header
+            pattern is not None and is_sensitive_header(name) for name, pattern in self.has_header
         )
 
     def needs_body(self) -> bool:
@@ -177,7 +188,7 @@ class Selection:
         if not isinstance(raw, str):
             return False
         try:
-            when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            when = _as_utc(datetime.fromisoformat(raw.replace("Z", "+00:00")))
         except ValueError:
             return False
         if self.since and when < self.since:
@@ -265,23 +276,30 @@ def add_selection_args(parser: argparse.ArgumentParser) -> argparse._ArgumentGro
     )
     group.add_argument("--mime", metavar="REGEX", help="match the response mime type")
     group.add_argument(
-        "--type", metavar="T", action="append",
+        "--type",
+        metavar="T",
+        action="append",
         help="resource type: xhr, fetch, document, script, image, … (repeatable)",
     )
     group.add_argument("--min-size", type=int, metavar="N", help="response body bytes >= N")
     group.add_argument("--max-size", type=int, metavar="N", help="response body bytes <= N")
     group.add_argument("--slower-than", type=float, metavar="MS", help="total time >= MS")
     group.add_argument(
-        "--has-header", metavar="NAME[=REGEX]", action="append",
+        "--has-header",
+        metavar="NAME[=REGEX]",
+        action="append",
         help="header present, optionally with a value pattern",
     )
     group.add_argument(
-        "--param", metavar="NAME[=REGEX]", action="append",
+        "--param",
+        metavar="NAME[=REGEX]",
+        action="append",
         help="query parameter present, optionally with a value pattern",
     )
     group.add_argument("--body-match", metavar="REGEX", help="match the REQUEST body")
     group.add_argument(
-        "--response-match", metavar="REGEX",
+        "--response-match",
+        metavar="REGEX",
         help="match the RESPONSE body — the operation this toolkit exists for",
     )
     group.add_argument("--page", metavar="ID", help="scope to one page id")

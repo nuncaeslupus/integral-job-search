@@ -55,7 +55,19 @@ def _capabilities(entries: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         response = entry.get("response")
         content = (response.get("content") if isinstance(response, dict) else None) or {}
-        decoded = decode_body(content)
+        # Without the header, _decompress can only sniff magic bytes: gzip and
+        # zlib are guessable, brotli is not. A base64 brotli body then counted
+        # as undecodable here while `query_har.py --show` decoded it fine,
+        # because that path supplies the header.
+        encoding = next(
+            (
+                h.get("value")
+                for h in (response.get("headers") if isinstance(response, dict) else None) or []
+                if isinstance(h, dict) and str(h.get("name", "")).lower() == "content-encoding"
+            ),
+            None,
+        )
+        decoded = decode_body(content, content_encoding=encoding)
         if decoded.present:
             bodies += 1
             if (content.get("encoding") or "").lower() == "base64":
@@ -148,9 +160,7 @@ def validate(path: Path) -> tuple[list[str], list[str], dict[str, Any]]:
             "Re-export with 'Save all as HAR (with content)'"
         )
     if report["resource_type_declared"] == 0 and report["entries"]:
-        warnings.append(
-            "no `_resourceType` on any entry — `--type` filters fall back to inference"
-        )
+        warnings.append("no `_resourceType` on any entry — `--type` filters fall back to inference")
     if report["undecodable_bodies"]:
         warnings.append(
             f"{report['undecodable_bodies']} body(ies) could not be decoded; "
@@ -214,4 +224,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Windows consoles default to a legacy codepage (cp1252 and friends);
+    # a non-ASCII line must degrade to "?", never take the process down.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
     raise SystemExit(main())
