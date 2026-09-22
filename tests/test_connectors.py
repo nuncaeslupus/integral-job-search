@@ -1330,7 +1330,7 @@ def test_one_broken_json_block_does_not_lose_the_others() -> None:
     assert record["title"] == "Mid Data Platform Engineer"
 
 
-def test_a_json_salary_reaches_the_offer_as_real_numbers() -> None:
+def test_a_json_connector_salary_audites_the_offer_as_real_numbers() -> None:
     """The point of the route: `minValue` is a number, so nothing has to be
     split out of a string, and `Salary` carries figures rather than a `stated`
     flag with nothing behind it.

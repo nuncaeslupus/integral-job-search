@@ -21,7 +21,7 @@
       "connector": "ashby",
       "site": "ashbyhq.com",
       "health": "healthy",
-      "baseline_items": 2,
+      "baseline_items": 4,
       "probe_items": 2,
       "reasons": [],
       "probed": true,

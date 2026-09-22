@@ -1,0 +1,22 @@
+{
+  "rows": {
+    "0": {
+      "verdict": "read",
+      "min": 35681.0,
+      "max": 39424.0,
+      "currency": "GBP",
+      "period": "year"
+    },
+    "1": {
+      "verdict": "read",
+      "min": 87465.51,
+      "max": 127834.2,
+      "currency": "GBP",
+      "period": "year"
+    },
+    "2": {
+      "verdict": "refused",
+      "why": "\"Up to £2,206 per module\" is one figure and a cadence this repository does not model. `_numbers_in` returns a single number, so `range_low`/`range_high` both decline (they require exactly two) and no band is built. A per-module rate is also not convertible to any `Period` we carry: the number of modules is the part the advert does not state, so inventing an annual figure from it would be a guess presented as the employer's own number."
+    }
+  }
+}

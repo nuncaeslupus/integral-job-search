@@ -1,0 +1,25 @@
+{
+  "rows": {
+    "0": {
+      "verdict": "read",
+      "min": null,
+      "max": 65000.0,
+      "currency": "€",
+      "period": null
+    },
+    "1": {
+      "verdict": "read",
+      "min": 45000.0,
+      "max": 60000.0,
+      "currency": "€",
+      "period": null
+    },
+    "2": {
+      "verdict": "read",
+      "min": 55000.0,
+      "max": 75000.0,
+      "currency": "€",
+      "period": null
+    }
+  }
+}

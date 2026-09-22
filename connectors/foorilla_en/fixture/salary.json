@@ -1,0 +1,11 @@
+{
+  "rows": {
+    "*": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null
+    }
+  }
+}

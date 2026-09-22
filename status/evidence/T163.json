@@ -198,12 +198,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "lineno": 116
+      "lineno": 118
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "lineno": 107
+      "lineno": 109
     },
     {
       "module": "spec_consistency",

@@ -1,0 +1,22 @@
+{
+  "rows": {
+    "0": {
+      "verdict": "read",
+      "min": 105.0,
+      "max": 115.0,
+      "currency": "PLN",
+      "period": null
+    },
+    "1": {
+      "verdict": "refused",
+      "why": "\"33 000 – 45 000 PLN / month\" is a real band this connector cannot read, and the reason is the space between the thousands: `_numbers_in` returns [33.0, 0.0, 45.0, 0.0] — four numbers, so `range_low`/`range_high` decline rather than reading 33 and 45 as the band. The refusal is therefore fail-safe (nothing wrong is stored) and the row is genuinely lost. PLN is not the obstacle: it is in `_CURRENCIES` and `take: currency` resolves it here. Reading this row means teaching `_numbers_in` about space-grouped thousands, which is a change to every connector in the library and belongs in its own task with its own fixtures."
+    },
+    "2": {
+      "verdict": "read",
+      "min": 35.0,
+      "max": 43.0,
+      "currency": "USD",
+      "period": null
+    }
+  }
+}
