@@ -294,6 +294,16 @@ def _is_address_bearing(key: str) -> bool:
 # adding once some capture shows a requester record that nothing else reaches.
 REQUESTER_OBJECT_KEYS = frozenset({"custom", "customIDs"})
 
+# Both halves of clause 1's vocabulary normalise, because one of them did not.
+# `_key_spelling`'s own docstring argues that normalising only ever *merges*
+# spellings into a set whose members must be redacted, so a collision asks for
+# more redaction and never less — an argument that was true of the address half
+# and simply not applied here. `Custom`, `customids` and `custom_ids` are the
+# same key as `custom`, and until round 8 each of them seeded nothing: the
+# object went unblocked, and reading 2 is gated on this same predicate, so the
+# miss was silent rather than merely wrong.
+_REQUESTER_OBJECT_SPELLINGS = frozenset(_key_spelling(k) for k in REQUESTER_OBJECT_KEYS)
+
 
 def _seeds_a_block(key: str) -> bool:
     """Clause 1's seeding vocabulary, in one place because it was in two.
@@ -311,7 +321,7 @@ def _seeds_a_block(key: str) -> bool:
     Both seeds run through here, so the vocabulary cannot widen in one caller
     and not the other, which is how it came apart the first time.
     """
-    return key in REQUESTER_OBJECT_KEYS or _is_address_bearing(key)
+    return _key_spelling(key) in _REQUESTER_OBJECT_SPELLINGS or _is_address_bearing(key)
 
 
 # The address placeholder is a real one — RFC 5737 TEST-NET-1, not globally
@@ -921,21 +931,21 @@ def unblocked_address_key_sites(text: str) -> list[tuple[int, str]]:
     Clause 2 redacts the pair itself wherever it sits, so a site here is not a
     leak of the address. What it is, is a site whose *neighbours* nothing
     swept — and that is the whole of what rule 7 buys over a list of field
-    names, so the number of them is worth committing rather than describing.
+    names, so the sites themselves are worth committing rather than describing.
 
     It is not zero and cannot be: clause 1 is scoped to the innermost **flat**
     object, and talent.com writes `ip` one level out from the block, beside
     `userAppliedJobs`, `protocol` and `host` in an object that has nested
     members and so is deliberately out of that scope. One per talent.com
     capture, and `requester_location_blocks` adjudicates what is in that
-    unreached run. `measure` commits those counts one row per capture rather
-    than as their sum, for the reason given there.
+    unreached run. `measure` commits the offset and key of each site, one row
+    per capture rather than a count or a sum, for the reason given there.
 
-    The number moves the moment a block stops being located, which is the
+    The record moves the moment a block stops being located, which is the
     failure no rule expressible here catches: breaking `prefilledLocation`'s
     value inside the real `location` object of `fixture/detail.html` costs that
-    block, leaves `Barcelona` in the scrubbed output — and moves this count
-    from 1 to 2 for that capture while every other reading stays silent.
+    block, leaves `Barcelona` in the scrubbed output — and adds a second site to
+    that capture's row while every other reading stays silent.
     """
     blocks = requester_location_blocks(text)
     return sorted(
@@ -1025,7 +1035,7 @@ def check_capture_redaction(package: Path) -> list[str]:
     violations = []
     for path, raw in captures(package):
         if not isinstance(raw, str):
-            violations.append(f"rule 7: {path.name} could not be read: {raw}")
+            violations.append(f"rule 7: {path.relative_to(package)} could not be read: {raw}")
             continue
         for offset, what in unaudited_requester_sites(raw):
             violations.append(
@@ -1111,15 +1121,26 @@ def measure(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
         # no rule expressible here detects: see `unaudited_requester_sites` on
         # the two proxies that tried and the tokeniser they would have needed.
         #
-        # **Per capture, because one integer summed over 27 packages can be
-        # compensated.** Measured: losing the block in `talent_es`'s
-        # `fixture/detail.html` takes the pooled total 3 → 4 and leaves
-        # `Barcelona` in the scrubbed output; renaming one unrelated `ip` in
-        # `probe/list.html` takes it back to 3, with the block still lost,
-        # still leaking, and `make evidence` clean. A row names the capture it
-        # is about, so the two edits move two rows and neither hides the other.
+        # **The sites themselves, because every summary of them compensates.**
+        # Round 7 made this a row per capture, having measured that one integer
+        # summed over 27 packages hides a loss: the block lost in `talent_es`'s
+        # `fixture/detail.html` takes the pooled total 3 → 4, and renaming one
+        # unrelated `ip` in `probe/list.html` takes it back to 3 with the block
+        # still lost and still leaking. A row per capture closes that, and
+        # round 8's reader found the same defect one scope in: the row was
+        # `len(sites)`, so the *same* two edits inside *one* capture cancel at
+        # the count and the committed record does not move at all.
+        #
+        # A count is a proxy for the sites; the sites are the property. There
+        # is no summary of them that cannot be compensated — keys alone cancel
+        # when the exposed key equals the vanished one — so the record holds
+        # each site's offset and key, which are unique within a capture and
+        # therefore cannot cancel. This churns when a fixture is re-captured or
+        # re-excerpted, and that is correct: the record is about those bytes.
         "address_key_sites_outside_every_block": {
-            f"{package.name}/{path.relative_to(package)}": len(sites)
+            f"{package.name}/{path.relative_to(package)}": [
+                [offset, key] for offset, key in sorted(sites)
+            ]
             for package in connector_packages(directory)
             for path, text in captures(package)
             if isinstance(text, str) and (sites := unblocked_address_key_sites(text))

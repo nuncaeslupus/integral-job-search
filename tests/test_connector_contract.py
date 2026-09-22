@@ -78,6 +78,22 @@ _LIBRARY = _REPO_ROOT / "connectors"
 #: four-fold widening of `_RUN_WINDOW` costs.
 _LIBRARY_WALK_BUDGET_SECONDS = 60.0
 MINIMUM_CAPTURES_WALKED = 100
+# The budget is spent on bytes, so the floor under it has to be bytes. A floor
+# counting *files* is satisfied by the 100 smallest: dropping the 53 largest
+# captures leaves 100 files and 5.7% of the library (232,171 of 4,058,112
+# bytes), so the walk finishes in a fraction of the budget and the floor still
+# passes. That is not hypothetical here — the two largest captures in the
+# library are the two `talent_es` listing pages this task adds, and
+# `tools/excerpt_fixture.py` exists to shrink captures. Both floors stay: one
+# catches a library walked over too few files, the other too few bytes.
+#
+# Half the library rather than three quarters, because `excerpt_fixture.py` is the
+# reason: excerpting both `talent_es` listing pages takes 1,159,687 bytes out at
+# once, which a floor at 3,000,000 would turn red on a pull request that did
+# nothing wrong. At 2,000,000 the mutant above is still caught by nearly an order
+# of magnitude, and a walk that silently skips half the library's bytes is not one
+# of the things this has to let through.
+MINIMUM_CAPTURE_BYTES_WALKED = 2_000_000
 _REFERENCE = _LIBRARY / "examplejobs_es"
 
 
@@ -684,7 +700,14 @@ def test_a_capture_that_cannot_be_decoded_is_reported_rather_than_skipped(
 
     violations = check_package(package).violations
     assert len(violations) == 1, violations
-    assert violations[0].startswith("rule 7: captured.json could not be read"), violations[0]
+    # Qualified by its directory, not `path.name`: a package may hold two
+    # captures with the same basename — `talent_es` ships `fixture/list.html`
+    # and `probe/list.html` — and a violation naming only `list.html` does not
+    # say which file to go and look at. The sibling violation two lines away in
+    # `check_capture_redaction` already spelled it this way.
+    assert violations[0].startswith(f"rule 7: {PROBE_DIRNAME}/captured.json could not be read"), (
+        violations[0]
+    )
 
 
 def _quads_in_every_file() -> dict[tuple[str, str], None]:
@@ -1416,19 +1439,29 @@ def test_the_library_walk_stays_inside_its_time_budget() -> None:
     this red, and a doubling that moves both constants together still blows
     through it. It walks the whole library because that is what the gate walks;
     a cheaper scope would measure a number nobody waits on.
+
+    Two floors, because the budget is spent on bytes and the obvious floor
+    counts files — see `MINIMUM_CAPTURE_BYTES_WALKED`.
     """
     started = time.monotonic()
     walked = 0
+    scanned = 0
     for package in connector_packages(_LIBRARY):
         for _, text in captures(package):
             if isinstance(text, str):
                 requester_location_blocks(text)
                 walked += 1
+                scanned += len(text)
     elapsed = time.monotonic() - started
 
     assert walked >= MINIMUM_CAPTURES_WALKED, (
         f"only {walked} captures were walked, against a floor of "
         f"{MINIMUM_CAPTURES_WALKED} — a budget met by scanning nothing is not a budget"
+    )
+    assert scanned >= MINIMUM_CAPTURE_BYTES_WALKED, (
+        f"only {scanned:,} bytes were walked, against a floor of "
+        f"{MINIMUM_CAPTURE_BYTES_WALKED:,} — the file floor above is satisfied by the "
+        "smallest captures in the library, and the budget is spent on bytes"
     )
     assert elapsed < _LIBRARY_WALK_BUDGET_SECONDS, (
         f"the library walk took {elapsed:.1f}s against a {_LIBRARY_WALK_BUDGET_SECONDS}s "
@@ -1553,15 +1586,77 @@ def test_the_key_locator_covers_the_grammar_it_audits() -> None:
     )
 
 
-def _seeding_vocabulary() -> list[str]:
-    """Every key `_seeds_a_block` accepts, derived rather than listed.
+def _respellings(key: str) -> list[str]:
+    """The equivalence class `_key_spelling` erases, generated rather than listed.
 
-    Both halves of clause 1's seeding vocabulary, filtered by the predicate the
-    sweep itself uses — so a key added to either frozenset is varied here, and
-    so is a widening of the predicate that admits a key from neither.
+    `_key_spelling` deletes everything outside `[a-z0-9]` after lowercasing, so
+    the class of one key is: any casing, and any separator between any two
+    characters. Five representatives per key cover both axes — three casings and
+    one of each separator character the normaliser knows how to drop.
+
+    Generated because listing spellings is what this file keeps being caught
+    doing. `customids` and `custom_ids` were not in any list, seeded nothing, and
+    the audit's axis quietly dropped them — see `test_every_seeding_respelling_seeds`.
     """
-    spellings = REQUESTER_OBJECT_KEYS | {_key_spelling(key) for key in ADDRESS_BEARING_KEYS}
-    return sorted(key for key in spellings if _seeds_a_block(key))
+    return [key, key.upper(), key.capitalize(), *(f"{key[:1]}{sep}{key[1:]}" for sep in "_-.")]
+
+
+def _seeding_vocabulary() -> list[str]:
+    """Every spelling of every key that must seed a block, derived rather than listed.
+
+    Both halves of clause 1's seeding vocabulary, each expanded over its own
+    respellings — so a key added to either frozenset is varied here, and so is
+    every way of writing it.
+
+    **It does not filter by `_seeds_a_block`, and that is the whole repair.** It
+    did, for seven rounds, which made the axis a description of the predicate
+    instead of a claim about it: a spelling the predicate rejected was dropped
+    from the vocabulary rather than failing anything, so the audit below ran over
+    exactly the keys that already worked and the round-8 reader found `Custom`,
+    `customids` and `custom_ids` seeding nothing with every test green. The
+    predicate is now the subject, asserted in the test rather than consulted
+    here.
+    """
+    return sorted(
+        {
+            spelling
+            for key in REQUESTER_OBJECT_KEYS | ADDRESS_BEARING_KEYS
+            for spelling in _respellings(key)
+        }
+    )
+
+
+def test_every_seeding_respelling_seeds() -> None:
+    """The predicate accepts every way of writing a key it accepts one way of.
+
+    `_key_spelling` exists so that casing and separators stop being a vocabulary,
+    and its docstring argues the normalisation is fail-closed: collisions only
+    ever merge spellings into a set whose members must be redacted. That argument
+    was applied to the address half and simply not to the object half, which
+    compared `key in REQUESTER_OBJECT_KEYS` against the raw string. So `custom`
+    seeded a block and `Custom` did not — and reading 2 of
+    `unaudited_requester_sites` is gated on the same predicate, which made the
+    miss silent rather than merely wrong.
+
+    Written as a generated class rather than three more accepted spellings,
+    because an enumeration has no last element.
+    """
+    for key in REQUESTER_OBJECT_KEYS | ADDRESS_BEARING_KEYS:
+        respellings = _respellings(key)
+        # Without this, `_respellings = lambda key: [key]` passes the loop below
+        # over every key, which is the same vacuity `_seeding_vocabulary`'s filter
+        # had: a generator that generates nothing agrees with any predicate. Both
+        # axes the normaliser erases have to be present, and every member has to
+        # still be the same key.
+        assert {_key_spelling(s) for s in respellings} == {_key_spelling(key)}, respellings
+        assert any(s != s.lower() for s in respellings), respellings
+        assert any(not s.isalnum() for s in respellings), respellings
+
+        for spelling in respellings:
+            assert _seeds_a_block(spelling), (
+                f"{spelling!r} is {key!r} written differently and seeds nothing — "
+                "the predicate compares a raw string somewhere it should normalise"
+            )
 
 
 def test_every_requester_seed_is_audited() -> None:
@@ -1574,10 +1669,11 @@ def test_every_requester_seed_is_audited() -> None:
     The axis was `REQUESTER_OBJECT_KEYS` alone for six rounds, and that is
     exactly one half of what seeds a block: an **address-bearing** key in the
     introducing position seeds one too, which is what the board's `ipLocation`
-    turned out to be. So the audit's own vocabulary had to widen with the
-    sweep's, and the two are now the same call. The assertion below that the
-    vocabulary is strictly larger than the frozenset is what stops this going
-    quietly vacuous if the predicate is ever narrowed back.
+    turned out to be. Round 8 widened it again, over respellings — see
+    `_seeding_vocabulary`, whose docstring says why filtering by the predicate
+    was the defect rather than the derivation. The assertion below that the
+    vocabulary strictly contains the frozenset is what stops this going quietly
+    vacuous if either half is ever emptied.
     """
     vocabulary = _seeding_vocabulary()
     assert set(vocabulary) > REQUESTER_OBJECT_KEYS, (
@@ -1645,20 +1741,81 @@ def test_a_lost_block_cannot_be_hidden_by_an_unrelated_capture(tmp_path: Path) -
     a.write_text(lost, encoding="utf-8")
     b.write_text(lost, encoding="utf-8")
     before = measure(library)["address_key_sites_outside_every_block"]
+    site = [lost.index('ip":"198'), "ip"]
     assert before == {
-        f"{_REFERENCE.name}/{PROBE_DIRNAME}/a.json": 1,
-        f"{_REFERENCE.name}/{PROBE_DIRNAME}/b.json": 1,
+        f"{_REFERENCE.name}/{PROBE_DIRNAME}/a.json": [site],
+        f"{_REFERENCE.name}/{PROBE_DIRNAME}/b.json": [site],
     }, before
 
     a.write_text(lost + lost, encoding="utf-8")  # one more block lost
     b.write_text(lost.replace('"ip"', '"marker"'), encoding="utf-8")  # one site gone
     after = measure(library)["address_key_sites_outside_every_block"]
 
-    assert sum(after.values()) == sum(before.values()), (
+    assert sum(map(len, after.values())) == sum(map(len, before.values())), (
         "the compensation no longer balances, so this says nothing about pooling"
     )
     assert after != before, (
         "a lost block and an unrelated deletion cancelled: the census is pooled again"
+    )
+
+
+def test_a_lost_block_cannot_be_hidden_within_one_capture(tmp_path: Path) -> None:
+    """Round 7's remedy, one scope in — and why the record is sites, not a count.
+
+    Round 7 measured that a pooled integer hides a loss and made the census a
+    row per capture. The row was `len(sites)`, which is the same defect inside
+    the fix: the two compensating edits do not have to live in two captures.
+    Put both in **one** capture — an object loses its block, and an unrelated
+    address key elsewhere in the same file stops being one — and the row holds
+    at 1 while a requester object that was swept is not swept any more.
+
+    That is a count standing proxy for the sites it counts. There is no summary
+    that survives this: the keys alone cancel too, whenever the key the lost
+    block exposes happens to equal the key that went away. So the record holds
+    each site's offset and key, which are unique within a capture, and two
+    edits move two entries.
+
+    Synthetic, because the subject is the shape of the record rather than the
+    board's markup; the two tests above pin the board's own capture and the
+    pooled case respectively.
+    """
+    library = tmp_path / "connectors"
+    package = library / _REFERENCE.name
+    shutil.copytree(_REFERENCE, package)
+    (package / PROBE_DIRNAME).mkdir()
+    capture = package / PROBE_DIRNAME / "one.json"
+    row = f"{_REFERENCE.name}/{PROBE_DIRNAME}/one.json"
+
+    # `x` is nested, so nothing blocks `clientIp`; `custom` is flat, so its
+    # `ip` is swept. One unblocked site.
+    before_text = (
+        '{"x":{"clientIp":"203.0.113.9","n":{"y":1}},'
+        '"custom":{"ip":"198.51.100.7","city":"Barcelona"}}'
+    )
+    # The same capture after two ordinary edits: `custom` gains a nested member
+    # and loses its block, so its `ip` is now unswept — and the free
+    # `clientIp` is renamed to something this gate does not know. Still one
+    # unblocked site, and a requester object that was swept no longer is.
+    after_text = (
+        '{"x":{"marker":"203.0.113.9","n":{"y":1}},'
+        '"custom":{"ip":"198.51.100.7","city":"Barcelona","m":{"y":1}}}'
+    )
+
+    capture.write_text(before_text, encoding="utf-8")
+    before = measure(library)["address_key_sites_outside_every_block"]
+    capture.write_text(after_text, encoding="utf-8")
+    after = measure(library)["address_key_sites_outside_every_block"]
+
+    assert len(before[row]) == len(after[row]) == 1, (
+        "the two edits no longer cancel at the count, so this says nothing "
+        f"about counting: {before[row]} then {after[row]}"
+    )
+    assert requester_location_blocks(before_text) and not requester_location_blocks(after_text), (
+        "the block is meant to be lost between the two, and it was not"
+    )
+    assert before[row] != after[row], (
+        "a lost block and an unrelated rename cancelled inside one capture: "
+        "the row is a count again, and a count is a proxy for the sites"
     )
 
 
