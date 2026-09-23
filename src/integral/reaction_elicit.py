@@ -138,9 +138,32 @@ def _hostname(url: str) -> str | None:
     spelling), so reading the netloc refused a real board's every advert, while
     `https://permitted.example@evil.test/` read as one long host that ends the
     right way.
+
+    **The refusal has to happen before `urlparse`, because `urlparse` repairs.**
+    It deletes TAB, CR and LF from the authority and it case-folds beyond ASCII,
+    so `https://weworKremotely.com/ad` (U+212A KELVIN SIGN) and
+    `https://wewor<TAB>kremotely.com/ad` both came back as the real
+    `weworkremotely.com` and cleared the whole check — a forged `jobUrl` reading
+    as a permitted board, which is the one failure this function exists to stop
+    (second reader, round 5). Validating the *output* of a repair validates the
+    repair's answer, never the input. RFC 3986 §2 puts a URI wholly inside
+    US-ASCII and §3.2.2's `reg-name` admits no whitespace and no control, so one
+    rule over the characters covers every repair at once — including the ones
+    nobody has thought of, which a list of the three found here would not.
+
+    The last check reads the **returned** host back against the url's own
+    authority, and it sits at the return rather than at the parse on purpose: a
+    check placed after `urlparse` validates a value that every later line is
+    still free to rewrite, so it certifies the input to the repair instead of
+    the output. Two identities are the only slack it grants, both spelt by the
+    RFCs rather than by this module — §3.2.2 makes the host case-insensitive,
+    and RFC 1034 §3.1 makes one trailing dot the same name.
     """
+    if any(not ("\x21" <= character <= "\x7e") for character in url):
+        return None
     try:
-        host = urlparse(url).hostname
+        parsed = urlparse(url)
+        host = parsed.hostname
     except ValueError:
         return None
     if not host:
@@ -153,6 +176,10 @@ def _hostname(url: str) -> str | None:
         host = host[:-1]
     labels = host.split(".")
     if len(labels) < 2 or any(not _LABEL_RE.fullmatch(label) for label in labels):
+        return None
+    if not re.fullmatch(
+        rf"{re.escape(host)}\.?(?::\d*)?", parsed.netloc.lower().rpartition("@")[2]
+    ):
         return None
     return host
 

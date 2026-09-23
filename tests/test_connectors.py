@@ -222,13 +222,15 @@ def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() ->
     from integral.reaction_elicit import _hostname
 
     control = "ab"
-    shapes = [
-        fill * length
-        # the three sides of the character class, at and across the 63-octet cap
-        # RFC 1123 §2.1 puts on a single label
-        for fill in ("a", "1", "A")
-        for length in (1, 2, 3, 62, 63, 64)
-    ]
+    # The axes are named rather than inlined so the floors below can be put on
+    # *them*. A floor counting hosts is satisfied by 150 copies of one shape,
+    # and deleting the single integer `64` from `lengths` left all three of the
+    # old floors green while a composition-side 63-octet cap survived (second
+    # reader, C3). A floor has to assert the boundary, not the volume.
+    fills = ("a", "1", "A")  # the three sides of RFC 1123 §2.1's character class
+    lengths = (1, 2, 3, 62, 63, 64)  # at and across the 63-octet cap on one label
+    counts = (1, 2, 3)  # how many labels the host has
+    shapes = [fill * length for fill in fills for length in lengths]
     shapes += [
         # a hyphen is legal in a label's interior and nowhere else, and "interior"
         # is a different position in a label of two, three and four
@@ -243,7 +245,7 @@ def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() ->
             [
                 ".".join(control if index != position else shape for index in range(count))
                 for shape in shapes
-                for count in (1, 2, 3)
+                for count in counts
                 for position in range(count)
             ]
             # two whole-host axes, which no label can reach: the rooted spelling,
@@ -262,7 +264,24 @@ def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() ->
         # `_hostname` answers a different question, so agreement is that the
         # host it reads back out of a url naming this string is this string —
         # any other answer is a repair, and a repair is a host nobody declared.
-        reads_back = _hostname(f"https://{host}/ad") == host
+        #
+        # `== host` alone collapses two different answers into one `False`: a
+        # refusal, and a *repair into some other host*. 31 of the shapes below
+        # were already the second, scored as agreement, so the predicate could
+        # not have seen the round-5 defect even handed the exploit directly
+        # (second reader, R2). A repair is therefore its own assertion.
+        read = _hostname(f"https://{host}/ad")
+        # Exactly two transformations are the spec's rather than repairs, and
+        # both are identities: RFC 3986 §3.2.2 makes the host case-insensitive,
+        # and RFC 1034 §3.1 makes a single trailing dot the same name written
+        # absolutely. Either returns the host it was given. Anything else
+        # returns a different host, which is what a forged url is for.
+        same_host = host.lower().removesuffix(".")
+        assert read in (same_host, None), (
+            f"{host!r}: `_hostname` repaired it into {read!r} rather than refusing it — "
+            "a url that has to be repaired to name a host names somebody else's"
+        )
+        reads_back = read == host
         assert model_accepts == reads_back, (
             f"{host!r}: the strict model says {model_accepts} and `_hostname` says "
             f"{reads_back} — the two copies of RFC 1123 §2.1 have drifted apart"
@@ -277,6 +296,102 @@ def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() ->
     assert len(hosts) - accepted >= 40, (
         f"only {len(hosts) - accepted} of {len(hosts)} shapes were refused by both"
     )
+    # …and the same again on the axes, which the three counts above cannot see.
+    # Each says the boundary that axis exists to cross was crossed.
+    assert min(lengths) == 1 and max(lengths) > 63, (
+        f"{lengths} does not cross RFC 1123 §2.1's 63-octet cap in both directions"
+    )
+    assert {"a", "1", "A"} <= {fill for fill in fills}, (
+        f"{fills} does not reach all three sides of the character class"
+    )
+    assert max(counts) >= 3, f"{counts} never puts a shape in a middle label"
+
+
+def test_a_url_that_would_have_to_be_repaired_into_a_host_names_none() -> None:
+    """`_hostname` promises a validator; `urlparse` hands it a repair.
+
+    Round 5's live finding. `urlparse` does not refuse an authority it cannot
+    parse — it *mends* one: it deletes TAB, CR and LF from it outright, and it
+    case-folds past ASCII, so U+212A KELVIN SIGN arrives as `k`. Both
+    `https://wewor<U+212A>remotely.com/ad` and the same url with a TAB in the
+    middle came back as `weworkremotely.com`, a permitted board, and cleared
+    the whole check — a forged `jobUrl` reading as somebody else's host, which
+    is the single failure this function exists to stop. Validating the *output*
+    of a repair validates the repair's answer and never the input.
+
+    The population is the **rule**, not the three characters that were found:
+    RFC 3986 §2 puts a URI wholly inside US-ASCII and §3.2.2's `reg-name`
+    admits no whitespace and no control, so every code point outside
+    `%x21-7E` is excluded by the spec and must name nothing wherever it
+    appears. C0 and space are taken whole rather than sampled; DEL and the
+    whole of Latin-1 above ASCII follow the same rule; and four code points
+    that NFKC- or case-fold *into* ASCII are named separately because those are
+    the ones a repair turns into a permitted host rather than into an error.
+    """
+    from integral.reaction_elicit import _hostname
+
+    excluded = (
+        [chr(code) for code in range(0x00, 0x21)]  # every C0 control, and space
+        + [chr(0x7F)]  # DEL
+        + [chr(code) for code in range(0x80, 0x100)]  # all of Latin-1 above ASCII
+        # …and the folding ones, which are the dangerous half: each of these
+        # becomes an ASCII character a permitted host is spelt with.
+        + ["\u212a", "\u2024", "\uff4d", "\u00a0"]
+    )
+    host = "weworkremotely.com"
+    positions = (0, len(host) // 2, len(host))
+
+    refused = 0
+    for character in excluded:
+        for position in positions:
+            forged = f"https://{host[:position]}{character}{host[position:]}/ad"
+            read = _hostname(forged)
+            assert read is None, (
+                f"{character!r} at {position} in the authority read back as {read!r}: "
+                "the url was repaired into a host rather than refused"
+            )
+            refused += 1
+
+    # The clean spelling must still work, or the rule above is "refuse
+    # everything" wearing a fix's clothes — and so must the two legitimate
+    # normalisations, which are the host's own case-insensitivity (RFC 3986
+    # §3.2.2) and a port that is not part of the host.
+    assert _hostname(f"https://{host}/ad") == host
+    assert _hostname("https://WeWorkRemotely.com/ad") == host
+    assert _hostname("https://www.usajobs.gov:443/job/1") == "www.usajobs.gov"
+
+    assert refused >= 3 * (0x21 + 1 + 0x80), f"only {refused} forgeries were tried"
+    assert len(positions) >= 3, "a character was never placed inside the host"
+
+    # The same rule over the *inside* of the ASCII range, which the axis above
+    # cannot reach. RFC 1123 §2.1 spells a label with letters, digits and the
+    # hyphen; §3.2.2 makes the dot the separator. Every other graphic character
+    # is outside the grammar wherever it sits, so a url carrying one names no
+    # host — and a step that removed one to make the name fit would be the
+    # repair this whole function refuses to perform.
+    delimiters = "@"  # §3.2's userinfo delimiter ENDS the host rather than
+    # corrupting it: `https://wewor@kremotely.com/ad` names `kremotely.com`,
+    # a different real host, which is a correct read and not a repair.
+    outside = 0
+    for code in range(0x21, 0x7F):
+        character = chr(code)
+        if character.isalnum() or character in "-." or character in delimiters:
+            continue
+        forged = f"https://{host[: positions[1]]}{character}{host[positions[1] :]}/ad"
+        read = _hostname(forged)
+        assert read is None, (
+            f"{character!r} inside the authority read back as {read!r}: the url "
+            "was repaired into a host rather than refused"
+        )
+        outside += 1
+    assert outside >= 20, f"only {outside} graphic characters were tried"
+
+    # And the authority the answer is read back against is the whole authority,
+    # not the host alone. RFC 3986 §3.2.3 spells `port = *DIGIT`, so a port that
+    # is not digits is not an authority this url validly has — while `:443` is,
+    # and `usajobs_en` serves every advert with one.
+    assert _hostname("https://weworkremotely.com:notaport/ad") is None
+    assert _hostname("https://weworkremotely.com:443/ad") == host
 
 
 def test_a_serves_from_entry_that_is_not_already_a_hostname_is_rejected() -> None:
