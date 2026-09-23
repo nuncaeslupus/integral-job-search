@@ -44,11 +44,18 @@ serving fails T98's gate rather than passing quietly.
 
 ## Ceilings, stated rather than implied
 
-- The permitted-source list is a **pinned allowlist**, not a live robots.txt
-  fetch. `tecnoempleo` and `remoteok` both `Disallow: /` for `ClaudeBot`, which
-  was discovered after a connector had been built against one of them. A list
-  makes adding a board a deliberate act; it does not make the list current.
-  Upgrade path: assert `policy.robots_txt` from the connector package (T32).
+- The permitted set is **derived from the shipped connector packages**, not a
+  live robots.txt fetch. A package is evidence that somebody adjudicated the
+  board (`connectors/robots-adjudications.yaml`) and built against it; it is
+  not evidence that the adjudication is current. What the derivation buys is
+  that it cannot go stale *relative to the connectors* — which the hand-written
+  list it replaces had done three separate ways: a board keyed under a name no
+  offer carries, a board with no connector at all, and a board refused on a
+  ruling its own package retracts. Upgrade path is still a live check
+  (`integral.robots`), which is a fetch and so cannot sit inside a validator.
+- The advert host is checked against the connector's **list** host with one
+  label of slack, because an ATS lists and serves from different hosts of the
+  same site. `_site_domain` states that rule and its ceiling.
 - Provenance proves the text was **fetched**, never that the employer wrote it.
 """
 
@@ -63,6 +70,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+import yaml
+
 from integral.harness import DEFAULT_STORE_PATH, LabelledAd, load_store
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import collect_offer
@@ -75,23 +84,83 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T9.json"
 #: A corpus-drawn stimulus is not a live fetch and carries no url of its own.
 CORPUS_SOURCE = "corpus"
 
-#: Boards whose robots.txt permits us, checked before building against one.
-SOURCE_HOSTS = {
-    "feinaactiva": "feinaactiva.gencat.cat",
-    "manfred": "www.getmanfred.com",
-    "remotive": "remotive.com",
-    "weworkremotely": "weworkremotely.com",
-}
-
-#: Derived from `SOURCE_HOSTS` rather than listed twice. A board is permitted
-#: exactly when we know which host its ads come from: `eures` was dropped when
-#: this map arrived, because nothing has ever fetched from it and its host would
-#: have been my guess — which is the thing the map exists to refuse.
-PERMITTED_LIVE_SOURCES = frozenset(SOURCE_HOSTS)
-
-#: Boards that name ClaudeBot with `Disallow: /`. Named, not merely omitted, so
+#: Boards refused on their own robots.txt, named rather than merely omitted so
 #: that adding one back is a decision someone has to argue with a test about.
-BLOCKED_SOURCES = frozenset({"tecnoempleo", "remoteok"})
+#:
+#: `tecnoempleo` was here and has been removed, because the ruling it encoded
+#: was retracted before this line was written and nothing carried the
+#: retraction here. `connectors/ruled-out.yaml` lists the board under
+#: `corrected` — *"a Claude-agent group does not bind integral-job-search/0.1"*
+#: — `connectors/tecnoempleo_es/connector.yaml` opens with that retraction in
+#: full, and `robots-adjudications.yaml` carries an adjudication against the
+#: package. A pinned list that outlives its own ledger is the defect #558 is
+#: about, one board rather than the whole set.
+#:
+#: `remoteok` stays, and it has no connector package, so the check below would
+#: refuse it anyway — this line is what refuses it on the day somebody writes
+#: one. What the ledger actually refuses is its `?action=get_jobs` endpoint
+#: under `restated_for_every_named_agent`, not its listing pages.
+BLOCKED_SOURCES = frozenset({"remoteok"})
+
+CONNECTORS_DIR = _REPO_ROOT / "connectors"
+CONNECTOR_FILENAME = "connector.yaml"
+
+
+def _site_domain(host: str) -> str:
+    """The site-identifying suffix of a host — one label of slack, never more.
+
+    An ATS serves its list and its adverts from different hosts of the same
+    site: `api.ashbyhq.com` against `jobs.ashbyhq.com`,
+    `boards-api.greenhouse.io` against `job-boards.greenhouse.io` and
+    `job-boards.eu.greenhouse.io`. Host equality therefore refuses every ATS
+    advert there is, which is what #558 was. One label of slack admits them and
+    nothing else: `www.jobs.ac.uk` keeps `jobs.ac.uk`, so a different
+    university under the same `ac.uk` is still refused.
+
+    **Ceiling.** This is not a public-suffix lookup. A list host of exactly
+    three labels whose last two are themselves a public suffix — `jobs.ac.uk`
+    as a *list* host rather than under a `www.` — would reduce to `ac.uk` and
+    admit any sibling. No connector shipped here has that shape, and the
+    upgrade path is a public-suffix list rather than a longer rule.
+    """
+    labels = host.lower().split(".")
+    return ".".join(labels[1:] if len(labels) > 2 else labels)
+
+
+def connector_hosts(directory: Path = CONNECTORS_DIR) -> dict[str, str]:
+    """Each shipped connector's site name against the host it lists from.
+
+    A board with a connector package is a board somebody adjudicated robots for
+    and built against (`connectors/robots-adjudications.yaml`); a board without
+    one is a board nobody checked. So the permitted set is *derived* from the
+    packages rather than hand-listed beside them — which is the whole of #558:
+    reactions were reaching four named boards while the candidate's store held
+    offers from twenty-four, and adding a connector was two edits instead of
+    one. The hand-written map had also drifted: it keyed Manfred as `manfred`
+    while every offer that board has ever produced carries `getmanfred`, and it
+    kept `feinaactiva`, which has no connector and so can produce no live offer
+    at all.
+
+    Read out of the YAML rather than through `integral.connectors`, because
+    T98 bounds what this module may reach on the serving path
+    (`corpus_scope.EXEMPT_CORPUS_READERS`) and two fields of one file is a
+    smaller dependency than the connector runtime.
+    """
+    hosts: dict[str, str] = {}
+    for package in sorted(directory.glob(f"*/{CONNECTOR_FILENAME}")):
+        declared = yaml.safe_load(package.read_text(encoding="utf-8"))
+        site = declared.get("site")
+        listed = urlparse((declared.get("list") or {}).get("url_pattern") or "").netloc
+        if site and listed:
+            hosts[site] = listed
+    return hosts
+
+
+#: Where a live stimulus may come from, and which host its url must name.
+SOURCE_HOSTS = connector_hosts()
+
+#: A board is permitted when it has a connector and is not one we are refused.
+PERMITTED_LIVE_SOURCES = frozenset(SOURCE_HOSTS) - BLOCKED_SOURCES
 
 
 class ElicitationError(Exception):
@@ -123,11 +192,13 @@ def check_stimulus(offer: Offer) -> None:
     parsed = urlparse(offer.url)
     if parsed.scheme != "https":
         raise ElicitationError(f"{offer.id}: a live stimulus must be fetched over https")
-    if parsed.netloc != SOURCE_HOSTS[offer.source]:
+    domain = _site_domain(SOURCE_HOSTS[offer.source])
+    host = parsed.netloc.lower()
+    if host != domain and not host.endswith(f".{domain}"):
         raise ElicitationError(
-            f"{offer.id}: source {offer.source!r} names host "
-            f"{SOURCE_HOSTS[offer.source]!r}, but the url was fetched from "
-            f"{parsed.netloc!r} — the source and the url disagree about where this came from"
+            f"{offer.id}: source {offer.source!r} lists from {SOURCE_HOSTS[offer.source]!r}, "
+            f"so its adverts come from {domain!r} — but the url was fetched from "
+            f"{host!r}, and the source and the url disagree about where this came from"
         )
 
 
@@ -307,8 +378,8 @@ def probe_elicitation() -> dict[str, Any]:
     )
     live = Offer(
         id=compute_offer_id(text),
-        source="feinaactiva",
-        url="https://feinaactiva.gencat.cat/ad/1",
+        source="remotive",
+        url="https://remotive.com/ad/1",
         fetched_at=at,
         text=text,
         status="new",
@@ -319,7 +390,7 @@ def probe_elicitation() -> dict[str, Any]:
         "no_fetched_at", lambda: check_stimulus(live.model_copy(update={"fetched_at": None}))
     )
     must_refuse(
-        "blocked_board", lambda: check_stimulus(live.model_copy(update={"source": "tecnoempleo"}))
+        "blocked_board", lambda: check_stimulus(live.model_copy(update={"source": "remoteok"}))
     )
     must_refuse(
         "unchecked_board", lambda: check_stimulus(live.model_copy(update={"source": "nobody"}))
@@ -330,10 +401,37 @@ def probe_elicitation() -> dict[str, Any]:
     )
     must_refuse(
         "plain_http",
+        lambda: check_stimulus(live.model_copy(update={"url": "http://remotive.com/ad/1"})),
+    )
+    # The suffix the containment rule has to refuse: a host that *ends with*
+    # the site's name without being under it.
+    must_refuse(
+        "url_host_merely_suffixed_with_the_source",
         lambda: check_stimulus(
-            live.model_copy(update={"url": "http://feinaactiva.gencat.cat/ad/1"})
+            live.model_copy(update={"url": "https://remotive.com.evil.test/ad"})
         ),
     )
+    accepted: list[str] = []
+
+    def must_accept(label: str, offer: Offer) -> None:
+        check_stimulus(offer)
+        accepted.append(label)
+
+    must_accept("board_advert_on_its_list_host", live)
+    must_accept(
+        "board_advert_on_a_subdomain",
+        live.model_copy(update={"url": "https://jobs.remotive.com/ad/1"}),
+    )
+    # The case #558 was filed for: an ATS lists from `api.ashbyhq.com` and
+    # serves adverts from `jobs.ashbyhq.com`, so host equality refused every
+    # one of the hundred such offers in the candidate store that filed it.
+    must_accept(
+        "ats_advert_on_a_host_the_connector_does_not_list_from",
+        live.model_copy(
+            update={"source": "ashby", "url": "https://jobs.ashbyhq.com/acme/1"},
+        ),
+    )
+
     twinned = [
         corpus[0],
         corpus[1].model_copy(update={"text": text}),
@@ -375,7 +473,9 @@ def probe_elicitation() -> dict[str, Any]:
         "overlap_detected_when_planted": planted_reading["elicitation_eval_overlap"],
         "reactions_examined": honest_reading["reactions_examined"],
         "refusals": sorted(refusals),
-        "scenarios": len(refusals) + 2,
+        "acceptances": sorted(accepted),
+        "scenarios": len(refusals) + len(accepted) + 2,
+        "permitted_live_source_count": len(PERMITTED_LIVE_SOURCES),
         "permitted_live_sources": sorted(PERMITTED_LIVE_SOURCES),
         "blocked_sources": sorted(BLOCKED_SOURCES),
     }

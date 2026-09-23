@@ -11,17 +11,46 @@
     "plain_http",
     "rewritten_text",
     "unchecked_board",
-    "url_host_disagrees_with_source"
+    "url_host_disagrees_with_source",
+    "url_host_merely_suffixed_with_the_source"
   ],
-  "scenarios": 11,
+  "acceptances": [
+    "ats_advert_on_a_host_the_connector_does_not_list_from",
+    "board_advert_on_a_subdomain",
+    "board_advert_on_its_list_host"
+  ],
+  "scenarios": 15,
+  "permitted_live_source_count": 27,
   "permitted_live_sources": [
-    "feinaactiva",
-    "manfred",
+    "arbeitnow",
+    "ashby",
+    "builtin",
+    "examplejobs",
+    "foorilla",
+    "getmanfred",
+    "greenhouse",
+    "himalayas",
+    "infojobs",
+    "jobfluent",
+    "jobsacuk",
+    "justjoin",
+    "landingjobs",
+    "lever",
+    "nofluffjobs",
+    "pythonorg",
     "remotive",
-    "weworkremotely"
+    "rippling",
+    "talent",
+    "tecnoempleo",
+    "ticjob",
+    "trabajos",
+    "usajobs",
+    "wellfound",
+    "weworkremotely",
+    "workable",
+    "workingnomads"
   ],
   "blocked_sources": [
-    "remoteok",
-    "tecnoempleo"
+    "remoteok"
   ]
 }

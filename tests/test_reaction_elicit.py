@@ -23,10 +23,13 @@ from integral.offers import Offer, compute_offer_id, load_offer
 from integral.profile import EvidenceLog, EvidenceSubject
 from integral.reaction_elicit import (
     BLOCKED_SOURCES,
+    CONNECTOR_FILENAME,
+    CONNECTORS_DIR,
     CORPUS_SOURCE,
     PERMITTED_LIVE_SOURCES,
     SOURCE_HOSTS,
     ElicitationError,
+    _site_domain,
     check_stimulus,
     collect_stimuli,
     corpus_stimuli,
@@ -54,8 +57,8 @@ def _ad(ad_id: str, split: Split, text: str = _TEXT) -> LabelledAd:
 def _live_offer(text: str = _TEXT, **over: object) -> Offer:
     fields: dict[str, object] = {
         "id": compute_offer_id(text),
-        "source": "feinaactiva",
-        "url": "https://feinaactiva.gencat.cat/ad/1",
+        "source": "remotive",
+        "url": "https://remotive.com/ad/1",
         "fetched_at": _AT,
         "text": text,
         "status": "new",
@@ -189,9 +192,9 @@ def test_a_fetched_record_becomes_a_checked_stimulus() -> None:
     from integral.reaction_elicit import stimulus_from_record
 
     record = {
-        "id": "feinaactiva-991",
-        "source": "feinaactiva",
-        "source_url": "https://feinaactiva.gencat.cat/ad/991",
+        "id": "remotive-991",
+        "source": "remotive",
+        "source_url": "https://remotive.com/ad/991",
         "fetched_at": _AT,
         "language": "ca",
         "title": "Cuiner/a",
@@ -203,13 +206,13 @@ def test_a_fetched_record_becomes_a_checked_stimulus() -> None:
 
     # Addressed by its text, never by the id the board happened to use.
     assert stimulus.id == compute_offer_id(_TEXT)
-    assert stimulus.source_ref == "feinaactiva-991"
+    assert stimulus.source_ref == "remotive-991"
     assert stimulus.status == "new"
 
     # A record from a board that blocks us never becomes a stimulus, however
     # well-formed the rest of it is.
     with pytest.raises(ElicitationError, match="robots"):
-        stimulus_from_record({**record, "source": "tecnoempleo"})
+        stimulus_from_record({**record, "source": "remoteok"})
 
 
 def test_the_split_is_a_fact_about_the_text_not_about_the_label() -> None:
@@ -237,9 +240,71 @@ def test_a_url_that_disagrees_with_its_source_is_refused() -> None:
         check_stimulus(_live_offer(url="https://unapproved.example/ad"))
 
     with pytest.raises(ElicitationError, match="https"):
-        check_stimulus(_live_offer(url="http://feinaactiva.gencat.cat/ad/1"))
+        check_stimulus(_live_offer(url="http://remotive.com/ad/1"))
 
     # Every permitted source names the host its ads come from — a source with no
     # known host cannot be permitted, because the check would have nothing to
-    # compare against.
-    assert set(SOURCE_HOSTS) == set(PERMITTED_LIVE_SOURCES)
+    # compare against. The permitted set is the shipped connectors minus the
+    # boards we are refused, derived rather than pinned (#558), so a connector
+    # added tomorrow is reactable without anyone editing a list.
+    assert frozenset(SOURCE_HOSTS) - BLOCKED_SOURCES == PERMITTED_LIVE_SOURCES
+    assert all(SOURCE_HOSTS[source] for source in PERMITTED_LIVE_SOURCES)
+
+
+def test_an_ats_advert_is_not_served_from_the_host_the_connector_lists_from() -> None:
+    """One label of slack, because an ATS lists and serves from different hosts.
+
+    `connectors/ashby/connector.yaml` lists from `api.ashbyhq.com`; the advert
+    url that comes back in that payload is on `jobs.ashbyhq.com`. Requiring
+    host equality refused every ATS advert there is — which is half of #558 —
+    so the check compares the site domain, one label of slack and no more.
+    """
+    assert _site_domain("api.ashbyhq.com") == "ashbyhq.com"
+    assert _site_domain("job-boards.eu.greenhouse.io") == "eu.greenhouse.io"
+    assert _site_domain("remotive.com") == "remotive.com"
+
+    check_stimulus(_live_offer(source="ashby", url="https://jobs.ashbyhq.com/acme/1"))
+    check_stimulus(_live_offer(url="https://jobs.remotive.com/ad/1"))
+
+    # A host that merely *ends with* the source's name is somebody else's.
+    with pytest.raises(ElicitationError, match="disagree"):
+        check_stimulus(_live_offer(url="https://remotive.com.evil.test/ad"))
+
+
+def test_the_slack_is_one_label_and_stops_there() -> None:
+    """The ceiling, and the harm it would do, pinned rather than asserted.
+
+    This is not a public-suffix lookup. A list host of exactly three labels
+    whose last two are themselves a public suffix reduces to that suffix and
+    would admit every sibling under it — **fail-open**, and the one direction
+    that matters. `jobsacuk` lists from `www.jobs.ac.uk`, so it keeps
+    `jobs.ac.uk`; the same board listed one label shorter would keep `ac.uk`.
+
+    What is checked here is the harm rather than the shape: no two shipped
+    connectors may reduce to the same domain, and none may reduce to a suffix
+    of another's. Either would let one board's advert clear under a different
+    board's `source`, which is the whole of what this comparison prevents — and
+    it is what an over-reduced host does first.
+    """
+    assert _site_domain("www.jobs.ac.uk") == "jobs.ac.uk"
+    assert _site_domain("jobs.ac.uk") == "ac.uk"
+
+    domains = sorted(_site_domain(host) for host in SOURCE_HOSTS.values())
+    assert len(set(domains)) == len(domains)
+    for domain in domains:
+        assert not [other for other in domains if other != domain and other.endswith(f".{domain}")]
+
+
+def test_every_shipped_connector_is_a_board_the_candidate_can_react_on() -> None:
+    """#558: the permitted set is derived from `connectors/`, never pinned.
+
+    The defect was a hand-written map of four boards that had drifted from the
+    packages three separate ways at once — a key no offer carries, a board with
+    no package, and a refusal on a ruling the package's own header retracts. A
+    literal cannot be kept in step with a directory, so the check is that the
+    directory *is* the source: every shipped connector answers for a board, and
+    only a board we are refused is missing from the permitted set.
+    """
+    packages = list(CONNECTORS_DIR.glob(f"*/{CONNECTOR_FILENAME}"))
+    assert packages, "no connector packages found — the derivation would be vacuous"
+    assert len(SOURCE_HOSTS) == len(packages)
