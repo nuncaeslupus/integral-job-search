@@ -24,6 +24,7 @@
   "foreign_boards_selected_without_cross_border_reach": 0,
   "home_boards_missing_from_any_reach": 0,
   "worldwide_boards_unreachable_to_a_remote_candidate": 0,
+  "boards_selected_more_than_once": 0,
   "buckets_installed": 3,
-  "reaches_compared": 3
+  "reaches_compared": 16
 }

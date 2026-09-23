@@ -728,6 +728,30 @@ def _why_no_location(constraints: CandidateConstraints) -> str:
     return "every installed board, since you have not said where you are"
 
 
+def _why_unreached(constraints: CandidateConstraints) -> str:
+    """Why the boards `packages_for` left out were left out, narrowest first.
+
+    A cascade rather than a branch beside the selection: the set of withheld
+    boards is now the difference, so this only has to name the reason, and the
+    first condition that fails is the operative one — a candidate with no stated
+    location is not also told their reach did not include remote work.
+    """
+    location = constraints.location
+    if location.state != "stated" or not location.country:
+        return _why_no_location(constraints)
+    if not reaches_worldwide(constraints):
+        return _why_not_worldwide(constraints)
+    if not reaches_across_borders(constraints):
+        return (
+            "other countries' own job boards, since you have not said you would work "
+            "remotely for an employer abroad"
+        )
+    # Every bucket is open, so anything still withheld is unusable rather than
+    # out of reach — `installed_packages` already filtered those out, which is
+    # why this is unreachable in practice and stated rather than guessed at.
+    return "boards this run could not use"
+
+
 def _words(text: str) -> set[str]:
     """Casefolded, NFKD-folded words (NFKD, not NFD: it is what turns Catalan
     `ŀ` into `l·` and fullwidth letters into ASCII).
@@ -808,16 +832,18 @@ def source(
     if aim.terms:
         save_aim(store, aim)
     run = Run(unsearched=aim.terms[PHRASE_CEILING:])
-    location = constraints.location
-    if location.state != "stated" or not location.country:
-        # Nothing is selected at all, so the whole shelf is what went unasked.
-        run.unreached = tuple(p.name for p in installed_packages(directory) if p.usable)
-        run.unreached_because = _why_no_location(constraints)
-    elif not reaches_worldwide(constraints):
-        run.unreached = tuple(
-            p.name for p in installed_packages(directory) if p.usable and p.country == GLOBAL
-        )
-        run.unreached_because = _why_not_worldwide(constraints)
+    # What went unasked is the *difference*, never a branch per bucket. A branch
+    # per bucket is one more thing to remember: #562 added a third bucket to
+    # `packages_for` and no branch here, so a run that deliberately withheld five
+    # installed boards reported nothing withheld (second reader, F4) — and the
+    # summary is the only place the candidate learns those boards exist. A
+    # difference cannot be one bucket behind, whatever `packages_for` grows next.
+    asked = {p.name for p in packages_for(constraints, directory)}
+    run.unreached = tuple(
+        p.name for p in installed_packages(directory) if p.usable and p.name not in asked
+    )
+    if run.unreached:
+        run.unreached_because = _why_unreached(constraints)
     phrases = aim.terms[:PHRASE_CEILING]
     # T174: shared by every board and phrase, so a host's refusal is its
     # answer for the rest of the run rather than for one request.
@@ -1673,23 +1699,37 @@ def measure_reach_selection() -> dict[str, Any]:
     own country and `GLOBAL` and nothing else.
 
     The names are read out of `packages_for`'s answer rather than its length —
-    a count cannot tell a missing foreign board from an extra domestic one.
-    """
-    import tempfile
+    a count cannot tell a missing foreign board from an extra domestic one. The
+    answer is kept as a **list** as well as a set: a set is blind to an extra
+    copy, which is the other half of that same sentence.
 
-    from integral.candidate import Reach
+    **Every reach, not three of them.** This measured one tuple per mode, which
+    is a listing of the cases someone thought of rather than the rule: a reach
+    is a *set* of modes, so `("remote", "commute")` and the profile's own
+    `("remote", "commute", "cross_border_remote_employer")` were never built,
+    and a bucket opened by the wrong half of such a tuple was invisible here
+    (second reader, F1 and F2). The population is now generated from
+    `ReachMode`'s own members — every non-empty combination, plus the unstated
+    reach — so a mode added to that type is varied without anyone remembering
+    to. What each combination *should* open is spelt out from the mode names
+    below rather than read back from `reaches_worldwide` / `reaches_across_
+    borders`, because a bound derived from the thing it bounds cannot fail.
+    """
+    import itertools
+    import tempfile
+    from typing import get_args
+
+    from integral.candidate import Reach, ReachMode
 
     location = ConstraintLocation(state="stated", country="ES", accepts_onsite_in_country=True)
-    reaches = {
-        "unknown": CandidateConstraints(location=location),
-        "remote": CandidateConstraints(
-            location=location, reach=Reach(state="stated", modes=("remote",))
-        ),
-        "cross_border": CandidateConstraints(
-            location=location,
-            reach=Reach(state="stated", modes=("cross_border_remote_employer",)),
-        ),
-    }
+    modes = get_args(ReachMode)
+    reaches = {"unknown": CandidateConstraints(location=location)}
+    for size in range(1, len(modes) + 1):
+        for combination in itertools.combinations(modes, size):
+            reaches["+".join(combination)] = CandidateConstraints(
+                location=location, reach=Reach(state="stated", modes=combination)
+            )
+    stated = {name: reaches[name].reach.modes for name in reaches if name != "unknown"}
     countries = {"home": "ES", "worldwide": GLOBAL, "foreign": "US"}
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -1700,23 +1740,38 @@ def measure_reach_selection() -> dict[str, Any]:
                 f"site: {site}.integral.local\ncountry: {country}\nlanguage: en\n",
                 encoding="utf-8",
             )
-        selected = {
-            name: {p.name for p in packages_for(constraints, directory)}
+        chosen = {
+            name: [p.name for p in packages_for(constraints, directory)]
             for name, constraints in reaches.items()
         }
+    selected = {name: set(names) for name, names in chosen.items()}
 
     home, worldwide, foreign = ("home_en", "worldwide_en", "foreign_en")
+    # The rule each combination is held to, stated from the mode names. Any
+    # stated reach naming remote work of either kind opens `GLOBAL`; only
+    # naming an employer abroad opens another country's own boards; an
+    # unstated reach opens neither, whatever modes it happens to carry.
+    opens_worldwide = {
+        name
+        for name, carried in stated.items()
+        if {"remote", "cross_border_remote_employer"} & set(carried)
+    }
+    opens_foreign = {
+        name for name, carried in stated.items() if "cross_border_remote_employer" in carried
+    }
     components = {
         # #562 itself: the board a cross-border candidate is asking for.
-        "foreign_boards_unreachable_to_a_cross_border_candidate": len(
-            {foreign} - selected["cross_border"]
+        "foreign_boards_unreachable_to_a_cross_border_candidate": sum(
+            len({foreign} - selected[name]) for name in opens_foreign
         ),
         # …and the direction that stops the fix being "ask everyone". A reach
         # that does not say "an employer abroad" does not reach another
         # country's national board, and an unstated reach reaches neither it
         # nor `GLOBAL`.
-        "foreign_boards_selected_without_cross_border_reach": len(
-            (selected["remote"] | selected["unknown"]) & {foreign}
+        "foreign_boards_selected_without_cross_border_reach": sum(
+            len(chosen & {foreign})
+            for name, chosen in selected.items()
+            if name not in opens_foreign
         ),
         # `worldwide_boards_selected_without_remote_reach` is deliberately NOT
         # here: the flood half already writes that key, and a second source
@@ -1725,7 +1780,17 @@ def measure_reach_selection() -> dict[str, Any]:
         "home_boards_missing_from_any_reach": sum(
             1 for chosen in selected.values() if home not in chosen
         ),
-        "worldwide_boards_unreachable_to_a_remote_candidate": len({worldwide} - selected["remote"]),
+        "worldwide_boards_unreachable_to_a_remote_candidate": sum(
+            len({worldwide} - selected[name]) for name in opens_worldwide
+        ),
+        # The other half of "names, not a count". A set answers which boards
+        # were chosen and discards how often, so `p.country != wanted` — one
+        # character from the shipped bucket — duplicated every `GLOBAL` board
+        # and this record read a clean zero (second reader, F3). A duplicate is
+        # the same board fetched twice, spending `OFFER_CEILING` room twice.
+        "boards_selected_more_than_once": sum(
+            len(names) - len(set(names)) for names in chosen.values()
+        ),
     }
     measured: dict[str, Any] = {
         "reach_selection_violations": sum(components.values()),
@@ -1737,11 +1802,12 @@ def measure_reach_selection() -> dict[str, Any]:
     # A clean zero over a directory that installed nothing says nothing at all:
     # the widest reach must see one board of each bucket, or no component below
     # it had a population to count.
-    if len(selected["cross_border"]) != len(countries):
+    widest = "+".join(modes)
+    if len(selected[widest]) != len(countries):
         measured["gate_status"] = "unmeasured"
         measured["reasons"] = [
             "the widest reach was offered "
-            f"{sorted(selected['cross_border'])} rather than one board per bucket, "
+            f"{sorted(selected[widest])} rather than one board per bucket, "
             "so every component below counted over an empty population"
         ]
     return measured

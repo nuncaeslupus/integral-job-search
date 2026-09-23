@@ -9,11 +9,12 @@ a failed run into a run that looks empty.
 
 from __future__ import annotations
 
+import itertools
 import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
@@ -382,28 +383,119 @@ def _foreign_boards() -> set[str]:
     }
 
 
-def test_every_foreign_board_is_asked_of_a_cross_border_candidate() -> None:
-    selected = {p.name for p in packages_for(_cross_border_spain(), _CONNECTORS)}
-    foreign = _foreign_boards()
-    assert foreign, "no installed board is foreign to ES, so this pins nothing"
-    assert foreign <= selected, sorted(foreign - selected)
+def test_which_buckets_a_reach_opens_is_decided_by_one_rule_over_every_reach() -> None:
+    """#562's selection rule, over **every** combination of modes there are.
 
+    The two fixtures this replaces were `("cross_border_remote_employer",)` and
+    `("remote",)` — single-mode tuples, and so was every reach the record built.
+    `ReachMode` has four members and the rule is about one mode being *present
+    in a set*, so a set of two was the one shape nothing constructed. A second
+    reader (F1/F2) drifted it both ways behind a green suite and a clean record:
+    letting `commute` open the foreign boards (fail-open — every foreign board
+    fetched for a reach that authorises none), and letting a candidate who says
+    `remote` *and* cross-border lose them (fail-closed — and that tuple is the
+    one in #562's own Measured block).
 
-@pytest.mark.parametrize(
-    "constraints",
-    [_spain(), _remote_spain()],
-    ids=["reach_unknown", "remote_only"],
-)
-def test_no_foreign_board_is_asked_without_cross_border_reach(
-    constraints: CandidateConstraints,
-) -> None:
-    """The direction that stops the fix being "ask everyone" wearing a gate.
-
-    `remote` alone is compatible with wanting an employer in one's own country,
-    so it opens the `GLOBAL` boards and no other country's national ones.
+    So the axis is `get_args(ReachMode)` rather than a list of tuples: all
+    fifteen non-empty combinations, and a fifth mode added later is varied here
+    without anyone remembering to.
     """
-    selected = {p.name for p in packages_for(constraints, _CONNECTORS)}
-    assert not (_foreign_boards() & selected), sorted(_foreign_boards() & selected)
+    domestic = {p.name for p in installed_packages(_CONNECTORS) if p.usable and p.country == "ES"}
+    worldwide = {
+        p.name for p in installed_packages(_CONNECTORS) if p.usable and p.country == GLOBAL
+    }
+    foreign = _foreign_boards()
+    assert domestic and worldwide and foreign, "a bucket is empty, so this pins nothing"
+
+    modes = get_args(ReachMode)
+    combinations = [
+        combination
+        for size in range(1, len(modes) + 1)
+        for combination in itertools.combinations(modes, size)
+    ]
+    for combination in combinations:
+        constraints = _spain().model_copy(
+            update={"reach": Reach(state="stated", modes=combination)}
+        )
+        selected = {p.name for p in packages_for(constraints, _CONNECTORS)}
+        # Derived from the definitions, not from what the code does: `remote`
+        # and `cross_border_remote_employer` are the two modes that leave the
+        # country at all, and only the second names an employer abroad.
+        opens_worldwide = bool({"remote", "cross_border_remote_employer"} & set(combination))
+        opens_foreign = "cross_border_remote_employer" in combination
+        assert domestic <= selected, (combination, sorted(domestic - selected))
+        assert (worldwide <= selected) is opens_worldwide, (
+            combination,
+            sorted(worldwide & selected),
+        )
+        assert bool(foreign & selected) is opens_foreign, (
+            combination,
+            sorted(foreign & selected),
+        )
+        assert not (worldwide & selected) or opens_worldwide, combination
+
+
+def test_an_unstated_reach_is_the_narrow_one_even_carrying_modes() -> None:
+    """The `state == "stated"` guard on both reach predicates, pinned directly.
+
+    `Reach`'s own validator refuses modes on any state but `stated`, which is
+    why deleting either guard leaves the suite green — the shape it defends
+    against cannot be built through the constructor. It can be built through
+    `model_construct`, which this repo documents in five places as the way
+    validation is bypassed, so the guard is not decoration and this is what says
+    so (second reader, F6). An unstated reach is the narrow one.
+    """
+    for state in ("unknown", "declined"):
+        reach = Reach.model_construct(state=state, modes=("remote", "cross_border_remote_employer"))
+        constraints = _spain().model_copy(update={"reach": reach})
+        assert not sourcing.reaches_worldwide(constraints), state
+        assert not sourcing.reaches_across_borders(constraints), state
+
+
+def test_no_board_is_asked_twice_whatever_the_reach() -> None:
+    """A board selected twice is the same board fetched twice.
+
+    `source` iterates `packages_for`'s answer once per element and each element
+    spends `OFFER_CEILING` room and issues real requests. Writing the foreign
+    bucket as `p.country != wanted` — one character from the shipped one —
+    duplicates every `GLOBAL` package, and both the record (a set of names) and
+    the order tests (a prefix comparison) read that as clean (second reader, F3).
+    """
+    modes = get_args(ReachMode)
+    for size in range(1, len(modes) + 1):
+        for combination in itertools.combinations(modes, size):
+            constraints = _spain().model_copy(
+                update={"reach": Reach(state="stated", modes=combination)}
+            )
+            names = [p.name for p in packages_for(constraints, _CONNECTORS)]
+            duplicated = sorted({n for n in names if names.count(n) > 1})
+            assert not duplicated, (combination, duplicated)
+
+
+def test_a_board_withheld_by_reach_is_named_as_withheld(store: ProfileStore) -> None:
+    """T167's own contract, which #562's third bucket did not inherit.
+
+    "The summary names what was left out, so a quiet run is not read as a quiet
+    world" — and until this, a `remote` reach withheld five installed boards and
+    reported `unreached == ()` (second reader, F4). The summary is the only
+    place the candidate learns those boards exist, which is the conversation
+    that gets them to state `cross_border_remote_employer` in the first place.
+    """
+    asked = {p.name for p in packages_for(_remote_spain(), _CONNECTORS)}
+    withheld = {p.name for p in installed_packages(_CONNECTORS) if p.usable and p.name not in asked}
+    assert withheld >= _foreign_boards(), sorted(_foreign_boards() - withheld)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert set(run.unreached) == withheld, sorted(withheld ^ set(run.unreached))
+    assert "abroad" in run.unreached_because, run.unreached_because
 
 
 def test_foreign_boards_come_after_the_country_s_own_and_the_worldwide_ones() -> None:
@@ -413,15 +505,39 @@ def test_foreign_boards_come_after_the_country_s_own_and_the_worldwide_ones() ->
     assert _foreign_boards() <= set(names[len(worldwide) :]), names
 
 
+def _reach_axis() -> tuple[int, int]:
+    """How many of the record's reaches open the foreign bucket, and how many
+    can *observe* it being opened wrongly — spelled from `ReachMode` here as it
+    is in the record, so neither side is a constant the other can drift away
+    from.
+
+    The two numbers are not complements, and the reason is `packages_for`'s
+    shape: the foreign bucket sits inside the worldwide one, so a reach that
+    does not reach worldwide at all returns before the third bucket is
+    consulted and cannot see a mutation there. Only a reach that opens
+    worldwide and not foreign is in a position to be handed a foreign board it
+    did not ask for.
+    """
+    combinations = [
+        combination
+        for size in range(1, len(get_args(ReachMode)) + 1)
+        for combination in itertools.combinations(get_args(ReachMode), size)
+    ]
+    opens = sum("cross_border_remote_employer" in c for c in combinations)
+    observes = sum("cross_border_remote_employer" not in c and "remote" in c for c in combinations)
+    return opens, observes
+
+
 def test_the_reach_gate_counts_a_foreign_board_the_gate_would_not_ask(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The measurement's own mutation: with the third bucket shut, the number
     it reports must move. A component that cannot move is not a check."""
     monkeypatch.setattr(sourcing, "reaches_across_borders", lambda constraints: False)
+    opens, _ = _reach_axis()
     measured = measure_reach_selection()
-    assert measured["foreign_boards_unreachable_to_a_cross_border_candidate"] == 1
-    assert measured["reach_selection_violations"] == 1
+    assert measured["foreign_boards_unreachable_to_a_cross_border_candidate"] == opens
+    assert measured["reach_selection_violations"] == opens
     assert measured["gate_status"] == "unmeasured"
 
 
@@ -430,9 +546,10 @@ def test_the_reach_gate_counts_a_foreign_board_asked_of_everyone(
 ) -> None:
     """And the opposite mutation: a gate that always says yes is not a gate."""
     monkeypatch.setattr(sourcing, "reaches_across_borders", lambda constraints: True)
+    _, withholds = _reach_axis()
     measured = measure_reach_selection()
-    assert measured["foreign_boards_selected_without_cross_border_reach"] == 1
-    assert measured["reach_selection_violations"] == 1
+    assert measured["foreign_boards_selected_without_cross_border_reach"] == withholds
+    assert measured["reach_selection_violations"] == withholds
 
 
 def test_a_key_both_halves_of_the_record_measure_is_refused(
