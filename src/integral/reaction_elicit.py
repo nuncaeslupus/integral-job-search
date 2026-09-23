@@ -145,7 +145,12 @@ def _hostname(url: str) -> str | None:
         return None
     if not host:
         return None
-    host = host.rstrip(".")  # an absolutely-rooted host is the same host
+    if host.endswith("."):
+        # An absolutely-rooted host is the same host — but exactly one dot is.
+        # `rstrip(".")` is the multi-character spelling of that rule and admits
+        # `remotive.com....`, which is not a host and resolves nowhere. Trimming
+        # one leaves the rest to the label grammar, which refuses the empty label.
+        host = host[:-1]
     labels = host.split(".")
     if len(labels) < 2 or any(not _LABEL_RE.fullmatch(label) for label in labels):
         return None
@@ -189,10 +194,14 @@ def connector_hosts(directory: Path = CONNECTORS_DIR) -> dict[str, frozenset[str
         listed = _hostname((declared.get("list") or {}).get("url_pattern") or "")
         if not site or not listed:
             continue
-        if listed.rsplit(".", 1)[-1] in RESERVED_TLDS:
-            continue
         served = {_hostname(f"https://{host}") for host in declared.get("serves_from") or []}
-        hosts[site] = frozenset({listed} | {host for host in served if host})
+        package_hosts = {listed} | {host for host in served if host}
+        # Applied to EVERY host and not only the list one. A worked-example package
+        # carries the reserved TLD in both keys, so checking one of them made the
+        # claim below true by luck rather than by derivation.
+        if any(host.rsplit(".", 1)[-1] in RESERVED_TLDS for host in package_hosts):
+            continue
+        hosts[site] = frozenset(package_hosts)
     return hosts
 
 
@@ -386,6 +395,34 @@ def measure(*, store: ProfileStore, corpus: Sequence[LabelledAd] | None = None) 
     }
 
 
+def refused_by(label: str, because: str, attempt: Any) -> str:
+    """Run `attempt`, and return `label` only if the rule it names is what refused.
+
+    `because` is a fragment of the message that rule raises, and it is the whole
+    difference between `probe_elicitation` and a probe that cannot fail. Every
+    check in `check_stimulus` runs behind the ones before it, so a scenario aimed
+    at a later rule is answered by an earlier one whenever the later rule is
+    deleted — the refusal still arrives, the label is still recorded, and the
+    mutant survives a green probe. Measured on `blocked_board`: emptying
+    `BLOCKED_SOURCES` left that label recorded, because a board nobody ships a
+    connector for is not a permitted source either.
+
+    Module-level rather than a closure inside the probe so that this mechanism is
+    itself testable. A check that makes the probe falsifiable and is not itself
+    falsifiable is the same defect one level up.
+    """
+    try:
+        attempt()
+    except ElicitationError as refused:
+        if because not in str(refused):
+            raise AssertionError(
+                f"{label}: refused, but by another rule — expected a message carrying "
+                f"{because!r}, got {str(refused)!r}"
+            ) from refused
+        return label
+    raise AssertionError(f"{label}: expected a refusal, none was raised")
+
+
 def probe_elicitation() -> dict[str, Any]:
     """Every rule above, exercised — including one scenario built to breach it.
 
@@ -419,28 +456,7 @@ def probe_elicitation() -> dict[str, Any]:
     refusals: list[str] = []
 
     def must_refuse(label: str, because: str, attempt: Any) -> None:
-        """A refusal counts only when the rule the label names is what refused.
-
-        `because` is a fragment of the message that rule raises, and it is the
-        whole difference between this probe and one that cannot fail. Every
-        check here runs behind the ones before it, so a scenario aimed at a
-        later rule is answered by an earlier one whenever the later rule is
-        deleted — the refusal still arrives, the count is unmoved, and the
-        mutant survives a green probe. Measured on `blocked_board`: emptying
-        `BLOCKED_SOURCES` left that label recorded, because a board nobody
-        ships a connector for is not a permitted source either.
-        """
-        try:
-            attempt()
-        except ElicitationError as refused:
-            if because not in str(refused):
-                raise AssertionError(
-                    f"{label}: refused, but by another rule — expected a message carrying "
-                    f"{because!r}, got {str(refused)!r}"
-                ) from refused
-            refusals.append(label)
-        else:  # pragma: no cover - a passing probe never reaches this
-            raise AssertionError(f"{label}: expected a refusal, none was raised")
+        refusals.append(refused_by(label, because, attempt))
 
     evaluation = evaluation_offer_ids(corpus)
     must_refuse(
@@ -550,9 +566,14 @@ def probe_elicitation() -> dict[str, Any]:
     for label, source, url in (
         ("ats_advert_on_a_declared_serving_host", "ashby", "https://jobs.ashbyhq.com/acme/1"),
         (
-            "ats_advert_on_a_declared_regional_serving_host",
+            "ats_advert_on_a_declared_serving_host_greenhouse",
             "greenhouse",
-            "https://job-boards.eu.greenhouse.io/acme/jobs/1",
+            "https://job-boards.greenhouse.io/acme/jobs/1",
+        ),
+        (
+            "ats_advert_on_a_declared_serving_host_rippling",
+            "rippling",
+            "https://ats.rippling.com/acme/jobs/1",
         ),
         ("ats_advert_on_a_declared_serving_host_lever", "lever", "https://jobs.lever.co/acme/1"),
     ):

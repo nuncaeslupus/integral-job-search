@@ -164,6 +164,42 @@ def test_a_connector_missing_a_required_field_is_rejected_at_load() -> None:
         parse_connector(body)
 
 
+def test_a_serves_from_entry_that_is_not_already_a_hostname_is_rejected() -> None:
+    """#558. A declared serving host is validated, never repaired.
+
+    It is matched against `urlparse(url).hostname` — lowercased, no scheme, no
+    port, no path — so a declaration in any other spelling matches nothing, and
+    the failure is silent in the fail-*closed* direction that reads like a bug
+    in another module ("I declared it and the advert is still refused"). The
+    obvious remedy is to normalise it here, and that is the `resolve_identity`
+    trap: what a repair welds onto the string is a host nobody declared, and
+    provenance is the entire purpose of the field. So each spelling below is
+    refused where the file loads and the error names the connector.
+    """
+    for spelling in (
+        "https://jobs.lever.co",
+        "jobs.lever.co/acme",
+        "jobs.lever.co:443",
+        "JOBS.LEVER.CO",
+        "jobs",
+        "-jobs.lever.co",
+        "jobs..lever.co",
+        "jobs.lever.co.",
+    ):
+        with pytest.raises(ConnectorError, match="serves_from"):
+            parse_connector(VALID + f"serves_from: [{spelling}]\n")
+
+    # RFC 2606 §2 — reserved for documentation, resolves nowhere, so no advert
+    # was ever served from it. Checked here as well as in `reaction_elicit`,
+    # which reads the YAML directly and never builds this model.
+    with pytest.raises(ConnectorError, match="reserved TLD"):
+        parse_connector(VALID + "serves_from: [jobs.lever.example]\n")
+
+    assert parse_connector(VALID + "serves_from: [jobs.lever.co]\n").serves_from == (
+        "jobs.lever.co",
+    )
+
+
 def test_an_unknown_top_level_field_is_rejected_at_load() -> None:
     with pytest.raises(ConnectorError):
         parse_connector(VALID + "notes: some scraped internal id\n")

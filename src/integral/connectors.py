@@ -3205,6 +3205,18 @@ def decode_body(raw: bytes | str, charset: str = "utf-8") -> str:
         ) from error
 
 
+#: RFC 1123 §2.1 labels, two or more of them. Spelled here rather than imported
+#: from `reaction_elicit`, which answers the neighbouring question (what host does
+#: this URL name) and may not import this module at all — `corpus_scope` bounds what
+#: it reaches. `test_reaction_elicit` pins the two against each other over every
+#: shipped declaration, so they cannot drift apart unnoticed.
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_SERVED_HOST_RE: Final = re.compile(rf"{_LABEL}(?:\.{_LABEL})+")
+
+#: RFC 2606 §2. Reserved for documentation and testing; nothing is served from one.
+RESERVED_TLDS: Final = frozenset({"test", "example", "invalid", "localhost"})
+
+
 class Connector(Strict):
     """One site's connector — `connectors/<site>_<locale>.yaml`.
 
@@ -3274,6 +3286,34 @@ class Connector(Strict):
                 "a connector may not claim it"
             )
         return site
+
+    @field_validator("serves_from")
+    @classmethod
+    def _serves_from_are_already_hostnames(cls, hosts: tuple[str, ...]) -> tuple[str, ...]:
+        # A validator, never a repair — the `resolve_identity` rule. A declared
+        # host reaches `reaction_elicit.check_stimulus` as a member of the set an
+        # offer's url host is matched against, and that host arrives from
+        # `urlparse(...).hostname`: lowercased, port stripped, scheme gone. So
+        # anything that is not already in that spelling can never match, and the
+        # two ways to be wrong point opposite ways. `https://jobs.lever.co`
+        # silently matches nothing, which reads as "declared, still refused" and
+        # sends the next session looking in the wrong module. Repairing it — strip
+        # a scheme, drop a path, casefold — is the other direction and worse: what
+        # a repair welds onto the string is a host nobody declared, and the field's
+        # whole job is provenance. Refuse both here, where the file is loaded and
+        # the error names the connector.
+        for host in hosts:
+            if host != host.lower() or _SERVED_HOST_RE.fullmatch(host) is None:
+                raise ValueError(
+                    f"serves_from: {host!r} is not a hostname — declare the host exactly as "
+                    "an advert url spells it, lowercased and with no scheme, port or path"
+                )
+            if host.rsplit(".", 1)[-1] in RESERVED_TLDS:
+                raise ValueError(
+                    f"serves_from: {host!r} is under a reserved TLD (RFC 2606 §2) and resolves "
+                    "nowhere — no advert is served from it"
+                )
+        return hosts
 
     @model_validator(mode="after")
     def _something_produces_the_offer_text(self) -> Connector:

@@ -19,15 +19,19 @@ last_verified: "2026-09-10"
 source_kind: employer
 auth: none
 
-# Advert urls come back on `job-boards[.eu].greenhouse.io`, not on the API
-# host the list is fetched from. Declared rather than inferred from the
-# list host's domain, because `boards.greenhouse.io` shares that domain and
-# `connectors/ruled-out.yaml` REFUSES it (`the * group disallows the
+# Advert urls come back on `job-boards.greenhouse.io`, not on the API host
+# the list is fetched from — that host, and only that host, is what this
+# package's own committed fixture yields. Declared rather than inferred from
+# the list host's domain, because `boards.greenhouse.io` shares that domain
+# and `connectors/ruled-out.yaml` REFUSES it (`the * group disallows the
 # embedded job-board path`, checked 2026-08-30). Anything derived from the
 # registrable domain would have admitted a host this repository is refused.
+#
+# `job-boards.eu.greenhouse.io` was declared here and is removed: no fixture,
+# probe, adjudication row or ledger entry in this repository has ever observed
+# it. It was the derivation this PR deleted, written back in by hand.
 serves_from:
   - job-boards.greenhouse.io
-  - job-boards.eu.greenhouse.io
 
 list:
   url_pattern: "https://boards-api.greenhouse.io/v1/boards/{employer}/jobs?content=true"

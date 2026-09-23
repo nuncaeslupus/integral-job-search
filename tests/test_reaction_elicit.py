@@ -276,10 +276,18 @@ def test_an_ats_advert_is_not_served_from_the_host_the_connector_lists_from() ->
     check_stimulus(
         _live_offer(source="greenhouse", url="https://job-boards.greenhouse.io/acme/jobs/1")
     )
-    check_stimulus(
-        _live_offer(source="greenhouse", url="https://job-boards.eu.greenhouse.io/acme/jobs/1")
-    )
     check_stimulus(_live_offer(source="lever", url="https://jobs.lever.co/acme/1"))
+    check_stimulus(_live_offer(source="rippling", url="https://ats.rippling.com/acme/jobs/1"))
+
+    # `job-boards.eu.greenhouse.io` is the host this PR declared for a whole
+    # review round with no artefact of any kind behind it — the regional
+    # spelling of a host that is real, which is what made it plausible. A
+    # provenance claim nobody has observed is a guess, and it is refused like
+    # any other undeclared host.
+    with pytest.raises(ElicitationError, match="disagree"):
+        check_stimulus(
+            _live_offer(source="greenhouse", url="https://job-boards.eu.greenhouse.io/acme/jobs/1")
+        )
 
     # A board that serves from its own list host declares no `serves_from`, and
     # a subdomain of it is then somebody else's: no slack is extended to anyone.
@@ -454,3 +462,161 @@ def test_a_board_we_are_refused_on_is_never_permitted_even_once_it_ships_a_conne
     blocked = sorted(BLOCKED_SOURCES)[0]
     hosts = {blocked: frozenset({"remoteok.com"}), "remotive": frozenset({"remotive.com"})}
     assert permitted_live_sources(hosts) == frozenset({"remotive"})
+
+
+def test_a_host_the_grammar_only_prefix_matches_is_not_a_host() -> None:
+    """The label grammar is anchored at both ends, and only one end shows it.
+
+    `_LABEL_RE.match` and `_LABEL_RE.fullmatch` agree on every host in this
+    repository, so swapping one for the other leaves the whole suite green while
+    the check stops being one: `match` asks whether a label *begins* legally.
+    `remotive_1` begins with `remotive`, and an underscore is not in RFC 1123
+    §2.1's grammar — so under `match` an offer could name a host no resolver
+    will answer for and pass provenance.
+    """
+    assert _hostname("https://remotive_1.com/ad") is None
+    assert _hostname("https://remo tive.com/ad") is None
+    assert _hostname("https://-remotive.com/ad") is None
+    assert _hostname("https://remotive.com/ad") == "remotive.com"
+
+
+def test_only_one_trailing_dot_is_the_same_host() -> None:
+    """A root-anchored host ends in ONE dot; a run of them is not a spelling.
+
+    `rstrip(".")` is the multi-character reading of "an absolutely-rooted host
+    is the same host" and admits `remotive.com....`, which resolves nowhere.
+    Trimming exactly one leaves the rest to the grammar, which has no empty
+    label.
+    """
+    assert _hostname("https://remotive.com./ad") == "remotive.com"
+    assert _hostname("https://remotive.com../ad") is None
+    assert _hostname("https://remotive.com..../ad") is None
+
+
+def test_a_serving_host_that_is_not_a_host_is_dropped_rather_than_recorded(
+    tmp_path: Path,
+) -> None:
+    """`connector_hosts` reads YAML, so the model's validator never sees it.
+
+    It is deliberately not `integral.connectors` — `corpus_scope` bounds what
+    this module may import — which means a declaration the strict model would
+    refuse still reaches this function. `_hostname` returns `None` for one, and
+    dropping the `if host` filter puts that `None` into the set, where it can
+    never equal a host and silently makes the package's whole declaration inert.
+    """
+    package = tmp_path / "ats_en"
+    package.mkdir()
+    (package / CONNECTOR_FILENAME).write_text(
+        yaml.safe_dump(
+            {
+                "site": "ats",
+                "serves_from": ["https://jobs.ats.example.org"],
+                "list": {"url_pattern": "https://api.ats.org/jobs"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert connector_hosts(tmp_path) == {"ats": frozenset({"api.ats.org"})}
+
+
+def test_a_reserved_tld_is_refused_on_a_serving_host_too(tmp_path: Path) -> None:
+    """The rule is about hosts, and the list host is not the only one.
+
+    `examplejobs_es` — the shipped worked example — carries the reserved TLD in
+    both its list host and anything it serves from, so checking only the list
+    host was true of the shipped tree by luck. A package listing from a real
+    host and declaring a documentation one is where the two readings differ, and
+    a set half of which resolves nowhere is not a provenance claim.
+    """
+    package = tmp_path / "half_en"
+    package.mkdir()
+    (package / CONNECTOR_FILENAME).write_text(
+        yaml.safe_dump(
+            {
+                "site": "half",
+                "serves_from": ["jobs.half.example"],
+                "list": {"url_pattern": "https://api.half.org/jobs"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert connector_hosts(tmp_path) == {}
+
+
+def test_every_declared_serving_host_is_observed_in_its_own_packages_capture() -> None:
+    """The closed rule behind `serves_from`, and the one that deletes a guess.
+
+    `job-boards.eu.greenhouse.io` was declared on `greenhouse_en` for a whole
+    review round with nothing behind it anywhere in the repository — no fixture,
+    no probe, no adjudication row, no ledger entry. It was a derivation written
+    back in by hand after the derivation was removed, and no test could tell it
+    from the three hosts that were real.
+
+    So a declared host must be one this package has been SEEN serving from: it
+    appears in a capture committed under the package's own directory. That is
+    the artefact the connector contract already requires, it cannot be satisfied
+    by writing more YAML, and it refuses the eu host by construction. Note this
+    is not "it appears in `robots-adjudications.yaml`" — `job-boards.greenhouse.io`
+    is corroborated by its capture and by no row, so that rule would delete a
+    host that is real.
+    """
+    declared = {
+        package.name: yaml.safe_load((package / CONNECTOR_FILENAME).read_text(encoding="utf-8"))
+        for package in sorted(CONNECTORS_DIR.iterdir())
+        if (package / CONNECTOR_FILENAME).exists()
+    }
+    serving = {
+        name: tuple(body.get("serves_from") or ()) for name, body in declared.items() if body
+    }
+    assert [name for name, hosts in serving.items() if hosts], "no package declares a serving host"
+
+    for name, hosts in serving.items():
+        captures = [
+            capture.read_text(encoding="utf-8", errors="replace")
+            for capture in sorted((CONNECTORS_DIR / name).rglob("*"))
+            if capture.is_file() and capture.suffix in {".html", ".json", ".txt"}
+        ]
+        for host in hosts:
+            assert any(host in capture for capture in captures), (
+                f"{name} declares it serves adverts from {host!r}, and no capture committed "
+                "under its own directory has ever seen it do that"
+            )
+
+
+def test_the_two_host_grammars_agree_on_every_declared_host() -> None:
+    """`connectors` and `reaction_elicit` spell the same grammar twice.
+
+    They must: `reaction_elicit` may not import `integral.connectors` (the
+    `corpus_scope` bound), and the questions differ — one validates a bare host
+    a package declares, the other extracts one from a url. Two copies drift, so
+    the agreement is pinned rather than trusted: every host the strict model
+    accepts must be the host `_hostname` reads back out of a url naming it.
+    """
+    from integral.connectors import load_connectors
+
+    declared = [host for connector in load_connectors() for host in connector.serves_from]
+    assert declared, "no package declares a serving host — the agreement is vacuous"
+    assert all(_hostname(f"https://{host}/ad") == host for host in declared)
+
+
+def test_a_refusal_raised_by_a_different_rule_does_not_count_as_this_one() -> None:
+    """`refused_by` is what makes the probe falsifiable, so it is itself pinned.
+
+    Every check in `check_stimulus` runs behind the ones before it, so a
+    scenario aimed at a later rule is answered by an earlier one the moment the
+    later rule is deleted — same exception type, same recorded label, dead
+    mutant, green probe. `because` is the whole of the difference, and a check
+    that makes a probe falsifiable and is not itself falsifiable is the same
+    defect one level up.
+    """
+
+    def refuse() -> None:
+        raise ElicitationError("refused because the source is one robots refuses us")
+
+    assert reaction_elicit.refused_by("blocked_board", "robots refuses", refuse) == "blocked_board"
+
+    with pytest.raises(AssertionError, match="refused, but by another rule"):
+        reaction_elicit.refused_by("no_url", "carries no url", refuse)
+
+    with pytest.raises(AssertionError, match="expected a refusal"):
+        reaction_elicit.refused_by("no_url", "carries no url", lambda: None)
