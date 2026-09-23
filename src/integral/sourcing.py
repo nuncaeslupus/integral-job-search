@@ -709,12 +709,19 @@ def _why_not_worldwide(constraints: CandidateConstraints) -> str:
     one is step 7's own conversational duty — establish how far the search can
     travel — so it says the question is open.
     """
+    # Both buckets, because `packages_for` nests them: a reach that does not
+    # reach worldwide never gets as far as the foreign bucket either, so the
+    # withheld set spans the two and naming only the first miscaptions the
+    # national boards in it (second reader, F3 — 5 of 19 for a real profile,
+    # and answering "yes, remote" unlocked 14 and left those 5 unexplained).
+    # One reason covers both because it is the operative one for both.
+    boards = "worldwide boards and other countries' own job boards"
     state = constraints.reach.state
     if state == "unknown":
-        return "worldwide boards, since you have not said whether you would work remotely"
+        return f"{boards}, since you have not said whether you would work remotely"
     if state == "declined":
-        return "worldwide boards, since you preferred not to say whether you would work remotely"
-    return "worldwide boards, since your reach does not include remote work"
+        return f"{boards}, since you preferred not to say whether you would work remotely"
+    return f"{boards}, since your reach does not include remote work"
 
 
 def _why_no_location(constraints: CandidateConstraints) -> str:
@@ -1773,10 +1780,21 @@ def measure_reach_selection() -> dict[str, Any]:
             for name, chosen in selected.items()
             if name not in opens_foreign
         ),
-        # `worldwide_boards_selected_without_remote_reach` is deliberately NOT
-        # here: the flood half already writes that key, and a second source
-        # writing it would shadow the first in the shared record rather than
-        # corroborate it — `measure_flood_and_reach` refuses the overlap.
+        # The fail-open mirror of the key below, and it has to be written here
+        # rather than deferred to the flood half (second reader, F1). That half
+        # writes `worldwide_boards_selected_without_remote_reach` over a
+        # population of **one** reach — `packages_for(unknown, …)` — and the
+        # unstated reach is the one case every widening of `reaches_worldwide`
+        # leaves alone, so two separate one-line widenings handed all of
+        # `GLOBAL` to a `commute`-only candidate and left this record
+        # byte-identical to the head. A different name, because
+        # `measure_flood_and_reach` refuses a key both halves write: these are
+        # two populations, not one measurement corroborated twice.
+        "worldwide_boards_selected_by_a_reach_naming_no_remote_work": sum(
+            len(chosen_names & {worldwide})
+            for name, chosen_names in selected.items()
+            if name not in opens_worldwide
+        ),
         "home_boards_missing_from_any_reach": sum(
             1 for chosen in selected.values() if home not in chosen
         ),

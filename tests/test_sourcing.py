@@ -441,9 +441,9 @@ def test_an_unstated_reach_is_the_narrow_one_even_carrying_modes() -> None:
     `Reach`'s own validator refuses modes on any state but `stated`, which is
     why deleting either guard leaves the suite green — the shape it defends
     against cannot be built through the constructor. It can be built through
-    `model_construct`, which this repo documents in five places as the way
-    validation is bypassed, so the guard is not decoration and this is what says
-    so (second reader, F6). An unstated reach is the narrow one.
+    `model_construct`, which this repo names elsewhere as the way validation is
+    bypassed, so the guard is not decoration and this is what says so (second
+    reader, F6). An unstated reach is the narrow one.
     """
     for state in ("unknown", "declined"):
         reach = Reach.model_construct(state=state, modes=("remote", "cross_border_remote_employer"))
@@ -496,6 +496,46 @@ def test_a_board_withheld_by_reach_is_named_as_withheld(store: ProfileStore) -> 
     )
     assert set(run.unreached) == withheld, sorted(withheld ^ set(run.unreached))
     assert "abroad" in run.unreached_because, run.unreached_because
+
+
+def test_the_caption_names_every_kind_of_board_it_withholds(store: ProfileStore) -> None:
+    """A reason for one bucket, printed over a withheld set that spans two.
+
+    `packages_for` nests the buckets, so a reach that does not reach worldwide
+    never reaches the foreign one either and both are withheld together. The
+    summary said "worldwide boards" over all of them, which miscaptions the
+    national boards in the set — measured by the second reader on a real
+    profile as 5 of 19, and the candidate who answers "yes, remote" then
+    unlocks 14 and is left with 5 nobody has explained (F3).
+
+    The expectation is derived from the withheld packages' own `country`, not
+    from the sentence: a bucket added later joins `kinds` without anyone
+    remembering to name it here, and the caption has to grow to match.
+    """
+    constraints = _spain().model_copy(update={"reach": Reach(state="stated", modes=("commute",))})
+    asked = {p.name for p in packages_for(constraints, _CONNECTORS)}
+    withheld = [p for p in installed_packages(_CONNECTORS) if p.usable and p.name not in asked]
+    kinds = {"worldwide" if p.country == GLOBAL else "other countries'" for p in withheld}
+    assert len(kinds) == 2, (
+        f"the withheld set spans only {sorted(kinds)}, so this pins nothing — "
+        "it needs a reach that withholds both a GLOBAL board and a national one"
+    )
+
+    run = source(
+        store,
+        constraints,
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert set(run.unreached) == {p.name for p in withheld}
+    for kind in sorted(kinds):
+        assert kind in run.unreached_because, (
+            f"{len(withheld)} withheld boards include {kind!r} ones, and the summary "
+            f"says only {run.unreached_because!r}"
+        )
 
 
 def test_foreign_boards_come_after_the_country_s_own_and_the_worldwide_ones() -> None:
