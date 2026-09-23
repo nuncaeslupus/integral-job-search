@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest import mock
+from urllib.parse import urlparse
 
 import pytest
 import yaml
@@ -543,7 +544,7 @@ def test_a_reserved_tld_is_refused_on_a_serving_host_too(tmp_path: Path) -> None
     assert connector_hosts(tmp_path) == {}
 
 
-def test_every_declared_serving_host_is_observed_in_its_own_packages_capture() -> None:
+def test_every_declared_serving_host_is_one_this_packages_own_parser_produces() -> None:
     """The closed rule behind `serves_from`, and the one that deletes a guess.
 
     `job-boards.eu.greenhouse.io` was declared on `greenhouse_en` for a whole
@@ -552,51 +553,45 @@ def test_every_declared_serving_host_is_observed_in_its_own_packages_capture() -
     back in by hand after the derivation was removed, and no test could tell it
     from the three hosts that were real.
 
-    So a declared host must be one this package has been SEEN serving from: it
-    appears in a capture committed under the package's own directory. That is
-    the artefact the connector contract already requires, it cannot be satisfied
-    by writing more YAML, and it refuses the eu host by construction. Note this
-    is not "it appears in `robots-adjudications.yaml`" — `job-boards.greenhouse.io`
-    is corroborated by its capture and by no row, so that rule would delete a
-    host that is real.
+    So a declared host must be a host this package is **observed producing**: run
+    the package's own parser over its own committed list capture and read the
+    hostname off each `detail_url`. That is the property `serves_from` states,
+    the one `check_stimulus` consumes it as, and it cannot be satisfied by
+    writing more YAML.
+
+    The rule this replaces was `host in capture` — a substring scan over every
+    committed byte of the package. It caught the eu host and admitted **1061**
+    other strings (second reader, round 3), among them `www.prefect.io` and
+    `github.com` (third-party hosts linked from inside advert bodies), and
+    `rippling.com` and `greenhouse.io` (apex domains passing as tails of the
+    real host — the single most likely wrong guess). Declaring `www.prefect.io`
+    on `ashby_en` left the suite green and made
+    `https://www.prefect.io/careers/anything` an acceptable reaction stimulus.
+    An enumeration has no last element; this is the derivation instead.
+
+    Not "it appears in `robots-adjudications.yaml`" either — that was round 2's
+    proposal, and `job-boards.greenhouse.io` is corroborated by its parser and
+    by no row, so that rule would delete a host that is real.
     """
-    declared = {
-        package.name: yaml.safe_load((package / CONNECTOR_FILENAME).read_text(encoding="utf-8"))
-        for package in sorted(CONNECTORS_DIR.iterdir())
-        if (package / CONNECTOR_FILENAME).exists()
-    }
-    serving = {
-        name: tuple(body.get("serves_from") or ()) for name, body in declared.items() if body
-    }
-    assert [name for name, hosts in serving.items() if hosts], "no package declares a serving host"
+    from integral.connectors import connector_packages, load_connector, parse_list_page
 
-    for name, hosts in serving.items():
-        captures = [
-            capture.read_text(encoding="utf-8", errors="replace")
-            for capture in sorted((CONNECTORS_DIR / name).rglob("*"))
-            if capture.is_file() and capture.suffix in {".html", ".json", ".txt"}
-        ]
-        for host in hosts:
-            assert any(host in capture for capture in captures), (
-                f"{name} declares it serves adverts from {host!r}, and no capture committed "
-                "under its own directory has ever seen it do that"
-            )
+    declaring = [
+        (package, load_connector(package))
+        for package in connector_packages(CONNECTORS_DIR)
+        if load_connector(package).serves_from
+    ]
+    assert declaring, "no package declares a serving host — this rule is vacuous"
 
-
-def test_the_two_host_grammars_agree_on_every_declared_host() -> None:
-    """`connectors` and `reaction_elicit` spell the same grammar twice.
-
-    They must: `reaction_elicit` may not import `integral.connectors` (the
-    `corpus_scope` bound), and the questions differ — one validates a bare host
-    a package declares, the other extracts one from a url. Two copies drift, so
-    the agreement is pinned rather than trusted: every host the strict model
-    accepts must be the host `_hostname` reads back out of a url naming it.
-    """
-    from integral.connectors import load_connectors
-
-    declared = [host for connector in load_connectors() for host in connector.serves_from]
-    assert declared, "no package declares a serving host — the agreement is vacuous"
-    assert all(_hostname(f"https://{host}/ad") == host for host in declared)
+    for package, connector in declaring:
+        capture = package / "fixture" / "list.html"
+        rows = parse_list_page(connector, capture.read_text(encoding="utf-8"))
+        assert rows, f"{connector.site}: its own list capture parses to no rows"
+        produced = {urlparse(row.get("detail_url") or "").hostname for row in rows}
+        missing = set(connector.serves_from) - produced
+        assert not missing, (
+            f"{connector.site} declares it serves adverts from {sorted(missing)}, and its own "
+            f"parser over its own capture produces adverts on {sorted(h for h in produced if h)}"
+        )
 
 
 def test_a_refusal_raised_by_a_different_rule_does_not_count_as_this_one() -> None:

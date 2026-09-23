@@ -3208,8 +3208,9 @@ def decode_body(raw: bytes | str, charset: str = "utf-8") -> str:
 #: RFC 1123 §2.1 labels, two or more of them. Spelled here rather than imported
 #: from `reaction_elicit`, which answers the neighbouring question (what host does
 #: this URL name) and may not import this module at all — `corpus_scope` bounds what
-#: it reaches. `test_reaction_elicit` pins the two against each other over every
-#: shipped declaration, so they cannot drift apart unnoticed.
+#: it reaches. `test_connectors` pins the two against each other at every
+#: boundary of the label rule — derived from the grammar, since the shipped
+#: declarations all sit far from it and agreed under two real drifts.
 _LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
 _SERVED_HOST_RE: Final = re.compile(rf"{_LABEL}(?:\.{_LABEL})+")
 

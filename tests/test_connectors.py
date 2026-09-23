@@ -164,6 +164,53 @@ def test_a_connector_missing_a_required_field_is_rejected_at_load() -> None:
         parse_connector(body)
 
 
+def test_the_two_host_grammars_agree_at_every_boundary_of_the_label_rule() -> None:
+    """`connectors` and `reaction_elicit` spell RFC 1123 §2.1 twice, on purpose.
+
+    They must: `reaction_elicit` may not import this module (the `corpus_scope`
+    bound), and the questions differ — one validates a bare host a package
+    declares, the other extracts one from a url. Two copies drift, so the
+    agreement is pinned rather than trusted.
+
+    **Derived from the grammar, not from the shipped tree.** The check this
+    replaces asserted the agreement over `load_connectors()`'s four declared
+    hosts, every one of them well formed and nowhere near either boundary — so
+    the branch the invariant is about was never reached. Second reader, round 3:
+    admitting `_` in this module's labels, and admitting a trailing hyphen in
+    `reaction_elicit`'s, each put the two grammars in genuine disagreement and
+    left that test green. One case per boundary of the rule closes it; a longer
+    list of real hosts never would.
+    """
+    from integral.reaction_elicit import _hostname
+
+    for spelling in (
+        "jobs.lever.co",  # the control: a host both must accept
+        "a.co",  # shortest legal label either side of the dot
+        "jobs-1.lever.co",  # an interior hyphen is legal
+        "jobs_1.lever.co",  # an underscore is not a letter, digit or hyphen
+        "-jobs.lever.co",  # a label may not begin with a hyphen
+        "jobs-.lever.co",  # …nor end with one
+        "jobs..lever.co",  # an empty label
+        "jobs",  # one label is not a hostname
+        "jobs.lever.co.",  # the rooted spelling of the same host
+        "JOBS.LEVER.CO",  # a host is compared lowercased, never lowercased for you
+        ".lever.co",  # an empty leading label
+    ):
+        try:
+            parse_connector(VALID + f"serves_from: [{spelling}]\n")
+            model_accepts = True
+        except ConnectorError:
+            model_accepts = False
+        # `_hostname` answers a different question, so agreement is that the
+        # host it reads back out of a url naming this string is this string —
+        # any other answer is a repair, and a repair is a host nobody declared.
+        reads_back = _hostname(f"https://{spelling}/ad") == spelling
+        assert model_accepts == reads_back, (
+            f"{spelling!r}: the strict model says {model_accepts} and `_hostname` says "
+            f"{reads_back} — the two copies of RFC 1123 §2.1 have drifted apart"
+        )
+
+
 def test_a_serves_from_entry_that_is_not_already_a_hostname_is_rejected() -> None:
     """#558. A declared serving host is validated, never repaired.
 
