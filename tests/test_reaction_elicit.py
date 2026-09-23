@@ -14,9 +14,12 @@ text — it never asks the selector what it did.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest import mock
 
 import pytest
+import yaml
 
+from integral import reaction_elicit
 from integral.harness import LabelledAd, Split
 from integral.identity import ProfileStore, create_profile
 from integral.offers import Offer, compute_offer_id, load_offer
@@ -29,12 +32,14 @@ from integral.reaction_elicit import (
     PERMITTED_LIVE_SOURCES,
     SOURCE_HOSTS,
     ElicitationError,
-    _site_domain,
+    _hostname,
     check_stimulus,
     collect_stimuli,
+    connector_hosts,
     corpus_stimuli,
     evaluation_offer_ids,
     measure,
+    permitted_live_sources,
     stimulus_from_ad,
 )
 
@@ -181,7 +186,12 @@ def test_the_recorded_measurement_reports_no_overlap() -> None:
     assert probed["elicitation_eval_overlap"] == 0
     # The planted-reaction scenario proves the number above can be non-zero.
     assert probed["overlap_detected_when_planted"] == 1
-    assert probed["scenarios"] >= 6
+    # Named, never counted: `probe_elicitation` records no scenario count, so
+    # what is asserted here is that the probe still ran the cases the module's
+    # guards exist for. A `>= 6` over a length would be satisfied by six
+    # scenarios aimed at one rule.
+    assert {"blocked_board", "rewritten_text", "no_url", "no_fetched_at"} <= set(probed["refusals"])
+    assert "board_advert_on_its_list_host" in probed["acceptances"]
 
 
 # --- the live path -----------------------------------------------------------
@@ -249,62 +259,198 @@ def test_a_url_that_disagrees_with_its_source_is_refused() -> None:
     # added tomorrow is reactable without anyone editing a list.
     assert frozenset(SOURCE_HOSTS) - BLOCKED_SOURCES == PERMITTED_LIVE_SOURCES
     assert all(SOURCE_HOSTS[source] for source in PERMITTED_LIVE_SOURCES)
+    assert all(_hostname(f"https://{host}") == host for h in SOURCE_HOSTS.values() for host in h)
 
 
 def test_an_ats_advert_is_not_served_from_the_host_the_connector_lists_from() -> None:
-    """One label of slack, because an ATS lists and serves from different hosts.
+    """An ATS lists from one host and serves adverts from another — declared.
 
-    `connectors/ashby/connector.yaml` lists from `api.ashbyhq.com`; the advert
-    url that comes back in that payload is on `jobs.ashbyhq.com`. Requiring
-    host equality refused every ATS advert there is — which is half of #558 —
-    so the check compares the site domain, one label of slack and no more.
+    `connectors/ashby_en` lists from `api.ashbyhq.com`; the advert urls its
+    payload returns are on `jobs.ashbyhq.com`. Host equality therefore refused
+    every ATS advert there is, which was the other half of #558.
+
+    The serving host is read from the package's `serves_from`, never inferred
+    from the list host's domain. The measured reason is below.
     """
-    assert _site_domain("api.ashbyhq.com") == "ashbyhq.com"
-    assert _site_domain("job-boards.eu.greenhouse.io") == "eu.greenhouse.io"
-    assert _site_domain("remotive.com") == "remotive.com"
-
     check_stimulus(_live_offer(source="ashby", url="https://jobs.ashbyhq.com/acme/1"))
-    check_stimulus(_live_offer(url="https://jobs.remotive.com/ad/1"))
+    check_stimulus(
+        _live_offer(source="greenhouse", url="https://job-boards.greenhouse.io/acme/jobs/1")
+    )
+    check_stimulus(
+        _live_offer(source="greenhouse", url="https://job-boards.eu.greenhouse.io/acme/jobs/1")
+    )
+    check_stimulus(_live_offer(source="lever", url="https://jobs.lever.co/acme/1"))
 
-    # A host that merely *ends with* the source's name is somebody else's.
+    # A board that serves from its own list host declares no `serves_from`, and
+    # a subdomain of it is then somebody else's: no slack is extended to anyone.
+    with pytest.raises(ElicitationError, match="disagree"):
+        check_stimulus(_live_offer(url="https://jobs.remotive.com/ad/1"))
     with pytest.raises(ElicitationError, match="disagree"):
         check_stimulus(_live_offer(url="https://remotive.com.evil.test/ad"))
 
 
-def test_the_slack_is_one_label_and_stops_there() -> None:
-    """The ceiling, and the harm it would do, pinned rather than asserted.
+def test_a_sibling_of_the_list_host_that_the_ledger_refuses_is_not_admitted() -> None:
+    """Why `serves_from` is declared rather than derived. Fail-open, measured.
 
-    This is not a public-suffix lookup. A list host of exactly three labels
-    whose last two are themselves a public suffix reduces to that suffix and
-    would admit every sibling under it — **fail-open**, and the one direction
-    that matters. `jobsacuk` lists from `www.jobs.ac.uk`, so it keeps
-    `jobs.ac.uk`; the same board listed one label shorter would keep `ac.uk`.
+    The first version of this fix compared the *site domain* — one label of
+    slack off the list host — which reads as generous and is not. Greenhouse
+    lists from `boards-api.greenhouse.io`, so one label of slack admits every
+    host under `greenhouse.io`, and `connectors/ruled-out.yaml` refuses one of
+    them by name: `boards.greenhouse.io`, *"the `*` group disallows the
+    embedded job-board path"*, checked 2026-08-30.
 
-    What is checked here is the harm rather than the shape: no two shipped
-    connectors may reduce to the same domain, and none may reduce to a suffix
-    of another's. Either would let one board's advert clear under a different
-    board's `source`, which is the whole of what this comparison prevents — and
-    it is what an over-reduced host does first.
+    So the slack handed a candidate an advert from a host this repository is
+    refused on, under a `source` that is permitted. Found by a second reader on
+    #564, and the reason the rule is now a declaration: `boards.greenhouse.io`
+    is refused here because **nobody declared it**, not because anybody
+    remembered to exclude it.
+
+    The check is closed rather than enumerated: no host any package declares
+    may be one `ruled-out.yaml` files under `robots_refused`. A board ruled out
+    tomorrow is caught without this test being edited.
     """
-    assert _site_domain("www.jobs.ac.uk") == "jobs.ac.uk"
-    assert _site_domain("jobs.ac.uk") == "ac.uk"
+    with pytest.raises(ElicitationError, match="disagree"):
+        check_stimulus(
+            _live_offer(source="greenhouse", url="https://boards.greenhouse.io/acme/jobs/1")
+        )
 
-    domains = sorted(_site_domain(host) for host in SOURCE_HOSTS.values())
-    assert len(set(domains)) == len(domains)
-    for domain in domains:
-        assert not [other for other in domains if other != domain and other.endswith(f".{domain}")]
+    ledger = yaml.safe_load((CONNECTORS_DIR / "ruled-out.yaml").read_text(encoding="utf-8"))
+    # The two groups that mean *we are refused* — what robots said, and what we
+    # decided. The rest of the ledger records boards we cannot parse, which is
+    # not a permission and would refuse a host for the wrong reason.
+    refused = {
+        str(row["site"]).lower()
+        for group in ("robots_refused", "policy_refused")
+        for row in ledger.get(group) or []
+        if isinstance(row, dict) and row.get("site")
+    }
+    assert "boards.greenhouse.io" in refused, "the ledger entry this test stands on has moved"
+    declared = {host for hosts in SOURCE_HOSTS.values() for host in hosts}
+    assert not (declared & refused)
 
 
-def test_every_shipped_connector_is_a_board_the_candidate_can_react_on() -> None:
+def test_a_host_is_validated_never_repaired() -> None:
+    """A url that must be *repaired* into a hostname is refused, not repaired.
+
+    Every case below was accepted or refused wrongly by reading `netloc`, which
+    is not a host — it carries userinfo and a port, and is whatever text sat
+    between the slashes. The two fail-open ones end with a permitted host's
+    spelling and are not that host; the two fail-closed ones are real adverts
+    from real boards (`usajobs_en` serves `…usajobs.gov:443/job/…`, which is
+    why `sourcing._origin` exists).
+    """
+    # fail-open: neither of these is `remotive.com`, and both used to pass.
+    for forged in (
+        "https://evil.test\\.remotive.com/ad",
+        "https://.remotive.com/ad",
+        "https://remotive.com@evil.test/ad",
+        "https://remotive.com_evil.test/ad",
+    ):
+        with pytest.raises(ElicitationError, match="disagree"):
+            check_stimulus(_live_offer(url=forged))
+
+    # fail-closed: the same host, spelled two ways a board actually serves.
+    check_stimulus(_live_offer(url="https://remotive.com:443/ad/1"))
+    check_stimulus(_live_offer(url="https://remotive.com./ad/1"))
+
+    assert _hostname("https://REMOTIVE.com/ad") == "remotive.com"
+    assert _hostname("https://remotive.com@evil.test/ad") == "evil.test"
+    assert _hostname("not a url") is None
+    assert _hostname("https://localhost/ad") is None  # single label, no site
+
+
+def test_every_shipped_connector_is_a_board_the_candidate_can_react_on(tmp_path: Path) -> None:
     """#558: the permitted set is derived from `connectors/`, never pinned.
 
     The defect was a hand-written map of four boards that had drifted from the
-    packages three separate ways at once — a key no offer carries, a board with
-    no package, and a refusal on a ruling the package's own header retracts. A
-    literal cannot be kept in step with a directory, so the check is that the
-    directory *is* the source: every shipped connector answers for a board, and
-    only a board we are refused is missing from the permitted set.
+    packages three separate ways at once — a key no offer carries
+    (`manfred`, where every offer says `getmanfred`), a board with no package
+    (`feinaactiva`), and a refusal on a ruling the package's own header
+    retracts (`tecnoempleo`). A literal cannot be kept in step with a
+    directory, so the directory *is* the source.
+
+    The derivation is exercised over a **constructed** directory as well as the
+    shipped one, because every assertion about the shipped packages alone is
+    satisfied by whatever the shipped packages happen to be: the blocked-source
+    subtraction removes nothing today (no refused board has a package), and a
+    test that only compares constants to each other cannot disagree with them.
     """
-    packages = list(CONNECTORS_DIR.glob(f"*/{CONNECTOR_FILENAME}"))
+    packages = sorted(CONNECTORS_DIR.glob(f"*/{CONNECTOR_FILENAME}"))
     assert packages, "no connector packages found — the derivation would be vacuous"
-    assert len(SOURCE_HOSTS) == len(packages)
+    assert PERMITTED_LIVE_SOURCES, "no board is reactable — the derivation is inverted"
+
+    def _package(name: str, site: str, host: str, **extra: object) -> None:
+        directory = tmp_path / name
+        directory.mkdir()
+        body: dict[str, object] = {
+            "site": site,
+            "list": {"url_pattern": f"https://{host}/jobs?page={{page}}"},
+        }
+        body.update(extra)
+        (directory / CONNECTOR_FILENAME).write_text(yaml.safe_dump(body), encoding="utf-8")
+
+    _package("board_en", "board", "www.board.example.org")
+    _package("ats_en", "ats", "api.ats.example.org", serves_from=["jobs.ats.example.org"])
+    _package("worked_es", "worked", "www.worked.test")  # RFC 2606, resolves nowhere
+    _package("nolist_en", "nolist", "")
+    (tmp_path / "noname_en").mkdir()
+    (tmp_path / "noname_en" / CONNECTOR_FILENAME).write_text(
+        yaml.safe_dump({"list": {"url_pattern": "https://www.noname.example.org/jobs"}}),
+        encoding="utf-8",
+    )
+
+    built = connector_hosts(tmp_path)
+    assert built == {
+        "board": frozenset({"www.board.example.org"}),
+        "ats": frozenset({"api.ats.example.org", "jobs.ats.example.org"}),
+    }
+    # A blocked board keeps its package and loses its permission — the
+    # subtraction is exercised against a board that HAS one, which no shipped
+    # package does, so reverting it here goes red where the shipped set cannot.
+    assert frozenset(built) - BLOCKED_SOURCES == frozenset({"board", "ats"})
+    assert frozenset(built) - frozenset({"ats"}) == frozenset({"board"})
+
+    # `examplejobs` is the shipped instance of the reserved-TLD rule.
+    assert "examplejobs" not in SOURCE_HOSTS
+    assert (CONNECTORS_DIR / "examplejobs_es" / CONNECTOR_FILENAME).exists()
+    assert len(SOURCE_HOSTS) == len(packages) - 1
+
+
+def test_a_blocked_board_is_refused_even_when_it_ships_a_connector() -> None:
+    """`BLOCKED_SOURCES` must refuse a board that is otherwise fully derivable.
+
+    No refused board ships a package today, so subtracting the blocked set from
+    the shipped one removes nothing and every assertion over the shipped set
+    stays true with the subtraction deleted. The refusal is therefore pinned
+    where it can fail: against a source that IS in `SOURCE_HOSTS`, with the
+    blocked set standing in for the day somebody writes remoteok a connector.
+    """
+    assert BLOCKED_SOURCES, "nothing is refused — the guard cannot be exercised"
+    for board in BLOCKED_SOURCES:
+        with pytest.raises(ElicitationError, match="robots"):
+            check_stimulus(_live_offer(source=board, url="https://remotive.com/ad/1"))
+
+    # …and it is checked BEFORE the permitted set, so a board that acquires a
+    # package tomorrow is refused by this line rather than admitted by that one.
+    patched = dict(SOURCE_HOSTS)
+    patched["remoteok"] = frozenset({"remoteok.com"})
+    with (
+        mock.patch.object(reaction_elicit, "SOURCE_HOSTS", patched),
+        mock.patch.object(reaction_elicit, "PERMITTED_LIVE_SOURCES", frozenset(patched)),
+        pytest.raises(ElicitationError, match="robots"),
+    ):
+        check_stimulus(_live_offer(source="remoteok", url="https://remoteok.com/ad/1"))
+
+
+def test_a_board_we_are_refused_on_is_never_permitted_even_once_it_ships_a_connector() -> None:
+    """The subtraction, over the tree where it can fail.
+
+    No board in `BLOCKED_SOURCES` ships a connector today, so over the shipped
+    map `frozenset(SOURCE_HOSTS)` and `frozenset(SOURCE_HOSTS) - BLOCKED_SOURCES`
+    are the same set and a test over the module constant passes with the
+    subtraction deleted. Handing the function the map that does not exist yet is
+    the only place the rule is observable.
+    """
+    blocked = sorted(BLOCKED_SOURCES)[0]
+    hosts = {blocked: frozenset({"remoteok.com"}), "remotive": frozenset({"remotive.com"})}
+    assert permitted_live_sources(hosts) == frozenset({"remotive"})

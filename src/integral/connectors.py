@@ -3244,6 +3244,18 @@ class Connector(Strict):
     #: inferred (T75). An `{employer}` slot alone does not say it, because a job
     #: board's company page takes one too (#462 second reader, F1).
     source_kind: SourceKind | None = None
+    #: #558. Hosts this board serves its ADVERTS from, when an advert url does
+    #: not name the host the listing was fetched from. An ATS lists from
+    #: `api.ashbyhq.com` and returns advert urls on `jobs.ashbyhq.com`, so host
+    #: equality against the list host refuses every ATS advert there is.
+    #: `reaction_elicit.check_stimulus` matches an offer's url host against this
+    #: set plus the list host; an undeclared host reads as forgery and is
+    #: refused. Declared, never inferred (T75) — deriving it by allowing one
+    #: label of slack off the list host admits `boards.greenhouse.io`, which
+    #: `connectors/ruled-out.yaml` files under `robots_refused`. Whether robots
+    #: permits a given advert url is a separate question, answered per url at
+    #: fetch time by `sourcing._may_fetch`; this field is only about provenance.
+    serves_from: tuple[str, ...] = ()
     list: ListPage
     detail: DetailPage | None = None
 

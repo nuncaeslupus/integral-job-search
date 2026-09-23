@@ -19,6 +19,16 @@ last_verified: "2026-09-10"
 source_kind: employer
 auth: none
 
+# Advert urls come back on `job-boards[.eu].greenhouse.io`, not on the API
+# host the list is fetched from. Declared rather than inferred from the
+# list host's domain, because `boards.greenhouse.io` shares that domain and
+# `connectors/ruled-out.yaml` REFUSES it (`the * group disallows the
+# embedded job-board path`, checked 2026-08-30). Anything derived from the
+# registrable domain would have admitted a host this repository is refused.
+serves_from:
+  - job-boards.greenhouse.io
+  - job-boards.eu.greenhouse.io
+
 list:
   url_pattern: "https://boards-api.greenhouse.io/v1/boards/{employer}/jobs?content=true"
   pagination:
