@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from integral import sourcing
 from integral.candidate import (
     Aim,
     CandidateConstraints,
@@ -37,6 +38,7 @@ from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
     FETCH_LOG,
+    GLOBAL,
     OFFER_CEILING,
     BoardOutcome,
     Fetch,
@@ -49,6 +51,8 @@ from integral.sourcing import (
     measure_browser_route,
     measure_fixture,
     measure_flood,
+    measure_flood_and_reach,
+    measure_reach_selection,
     needs_browser,
     offers_without_a_recorded_fetch,
     packages_for,
@@ -351,6 +355,110 @@ def test_the_installed_global_boards_are_selected_after_the_country_s_own() -> N
     spanish = [p.name for p in packages_for(_spain(), _CONNECTORS)]
     assert names[: len(spanish)] == spanish
     assert "foorilla_en" in names[len(spanish) :], names
+
+
+# ---------------------------------------------------------------------------
+# #562 — a candidate who would work for an employer abroad is asked those boards
+
+
+def _cross_border_spain() -> CandidateConstraints:
+    return _spain().model_copy(
+        update={"reach": Reach(state="stated", modes=("cross_border_remote_employer",))}
+    )
+
+
+def _foreign_boards() -> set[str]:
+    """Every installed board of some country other than the candidate's.
+
+    Derived from the library rather than listed, so a connector added later is
+    covered without anyone remembering to add it here — the enumeration this
+    replaces would have gone on passing while a sixth foreign board sat
+    unreachable.
+    """
+    return {
+        p.name
+        for p in installed_packages(_CONNECTORS)
+        if p.usable and p.country not in ("ES", GLOBAL)
+    }
+
+
+def test_every_foreign_board_is_asked_of_a_cross_border_candidate() -> None:
+    selected = {p.name for p in packages_for(_cross_border_spain(), _CONNECTORS)}
+    foreign = _foreign_boards()
+    assert foreign, "no installed board is foreign to ES, so this pins nothing"
+    assert foreign <= selected, sorted(foreign - selected)
+
+
+@pytest.mark.parametrize(
+    "constraints",
+    [_spain(), _remote_spain()],
+    ids=["reach_unknown", "remote_only"],
+)
+def test_no_foreign_board_is_asked_without_cross_border_reach(
+    constraints: CandidateConstraints,
+) -> None:
+    """The direction that stops the fix being "ask everyone" wearing a gate.
+
+    `remote` alone is compatible with wanting an employer in one's own country,
+    so it opens the `GLOBAL` boards and no other country's national ones.
+    """
+    selected = {p.name for p in packages_for(constraints, _CONNECTORS)}
+    assert not (_foreign_boards() & selected), sorted(_foreign_boards() & selected)
+
+
+def test_foreign_boards_come_after_the_country_s_own_and_the_worldwide_ones() -> None:
+    names = [p.name for p in packages_for(_cross_border_spain(), _CONNECTORS)]
+    worldwide = [p.name for p in packages_for(_remote_spain(), _CONNECTORS)]
+    assert names[: len(worldwide)] == worldwide
+    assert _foreign_boards() <= set(names[len(worldwide) :]), names
+
+
+def test_the_reach_gate_counts_a_foreign_board_the_gate_would_not_ask(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The measurement's own mutation: with the third bucket shut, the number
+    it reports must move. A component that cannot move is not a check."""
+    monkeypatch.setattr(sourcing, "reaches_across_borders", lambda constraints: False)
+    measured = measure_reach_selection()
+    assert measured["foreign_boards_unreachable_to_a_cross_border_candidate"] == 1
+    assert measured["reach_selection_violations"] == 1
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_the_reach_gate_counts_a_foreign_board_asked_of_everyone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """And the opposite mutation: a gate that always says yes is not a gate."""
+    monkeypatch.setattr(sourcing, "reaches_across_borders", lambda constraints: True)
+    measured = measure_reach_selection()
+    assert measured["foreign_boards_selected_without_cross_border_reach"] == 1
+    assert measured["reach_selection_violations"] == 1
+
+
+def test_a_key_both_halves_of_the_record_measure_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dict merge would keep whichever was second and say nothing."""
+    monkeypatch.setattr(
+        sourcing,
+        "measure_reach_selection",
+        lambda: {"flood_violations": 7, "gate_status": "measured"},
+    )
+    with pytest.raises(ValueError, match="flood_violations"):
+        measure_flood_and_reach()
+
+
+def test_neither_half_of_the_record_can_be_green_while_the_other_is_unmeasured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sourcing,
+        "measure_reach_selection",
+        lambda: {"reach_selection_violations": 0, "gate_status": "unmeasured", "reasons": ["why"]},
+    )
+    merged = measure_flood_and_reach()
+    assert merged["gate_status"] == "unmeasured"
+    assert "why" in merged["reasons"]
 
 
 def _flood_run(store: ProfileStore, tmp_path: Path, page_count: int = 1) -> Any:
