@@ -164,7 +164,7 @@ def test_a_connector_missing_a_required_field_is_rejected_at_load() -> None:
         parse_connector(body)
 
 
-def test_the_two_host_grammars_agree_at_every_boundary_of_the_label_rule() -> None:
+def test_the_two_copies_of_the_label_rule_are_the_same_string() -> None:
     """`connectors` and `reaction_elicit` spell RFC 1123 §2.1 twice, on purpose.
 
     They must: `reaction_elicit` may not import this module (the `corpus_scope`
@@ -172,43 +172,111 @@ def test_the_two_host_grammars_agree_at_every_boundary_of_the_label_rule() -> No
     declares, the other extracts one from a url. Two copies drift, so the
     agreement is pinned rather than trusted.
 
-    **Derived from the grammar, not from the shipped tree.** The check this
-    replaces asserted the agreement over `load_connectors()`'s four declared
-    hosts, every one of them well formed and nowhere near either boundary — so
-    the branch the invariant is about was never reached. Second reader, round 3:
-    admitting `_` in this module's labels, and admitting a trailing hyphen in
-    `reaction_elicit`'s, each put the two grammars in genuine disagreement and
-    left that test green. One case per boundary of the rule closes it; a longer
-    list of real hosts never would.
+    **Equality, not a list of cases.** The check this replaces tried eleven
+    spellings chosen one per boundary of the character class, and a second
+    reader (round 4) named three one-sided drifts it left green: the
+    RFC-correct 63-octet cap applied to either copy, and §2.1's own "the
+    highest-level component label will be alphabetic" rule. Each is a boundary
+    nobody had thought to spell, which is what an enumeration is always one
+    short of. The alphabet is one string in both modules, so asserting the
+    string closes the axis — any edit to either copy fails here whether or not
+    anyone anticipated it.
+
+    This pins the **label**. The two grammars also *compose* labels into a
+    host, by different code, and that is the test below.
+    """
+    from integral.reaction_elicit import _LABEL_RE
+
+    assert _LABEL_RE.pattern == connectors._LABEL, (
+        "the two copies of RFC 1123 §2.1 have drifted: `connectors._LABEL` is "
+        f"{connectors._LABEL!r} and `reaction_elicit._LABEL_RE` is {_LABEL_RE.pattern!r}. "
+        "They may not import each other, so equality is the only thing keeping them one rule"
+    )
+
+
+def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() -> None:
+    """The **composition** half: same labels, two different ways of joining them.
+
+    `connectors` fullmatches one regex over the whole host
+    (`_LABEL(\\._LABEL)+`); `reaction_elicit._hostname` splits on `.`, counts
+    the labels and fullmatches each. Equal alphabets do not make those equal
+    grammars — the label count, the position within the host and any per-label
+    length cap all live here rather than in `_LABEL`, and the one-sided drift
+    that survived round 4's other mutation (§2.1's alphabetic top-level label,
+    which neither copy implements today) is a rule about a label's **position**,
+    so no assertion about the alphabet could ever have caught it.
+
+    **The population is generated from the grammar's own axes** — fill
+    character, label length across the 63-octet cap, hyphen at each position of
+    a label, the label's position within the host, and the number of labels —
+    rather than listed. A list has no last element; a product has every
+    combination of the axes it is built from, including the ones nobody
+    pictured.
+
+    One asymmetry is deliberate and therefore excluded: RFC 2606 §2's reserved
+    TLDs are refused by the declaration model and not by `_hostname`, because a
+    url naming `evil.test` still names that host and the question there is what
+    it names, not whether anyone may serve from it. No shape built from `a`,
+    `1`, `A` and `-` can spell one, so the product never reaches that rule.
     """
     from integral.reaction_elicit import _hostname
 
-    for spelling in (
-        "jobs.lever.co",  # the control: a host both must accept
-        "a.co",  # shortest legal label either side of the dot
-        "jobs-1.lever.co",  # an interior hyphen is legal
-        "jobs_1.lever.co",  # an underscore is not a letter, digit or hyphen
-        "-jobs.lever.co",  # a label may not begin with a hyphen
-        "jobs-.lever.co",  # …nor end with one
-        "jobs..lever.co",  # an empty label
-        "jobs",  # one label is not a hostname
-        "jobs.lever.co.",  # the rooted spelling of the same host
-        "JOBS.LEVER.CO",  # a host is compared lowercased, never lowercased for you
-        ".lever.co",  # an empty leading label
-    ):
+    control = "ab"
+    shapes = [
+        fill * length
+        # the three sides of the character class, at and across the 63-octet cap
+        # RFC 1123 §2.1 puts on a single label
+        for fill in ("a", "1", "A")
+        for length in (1, 2, 3, 62, 63, 64)
+    ]
+    shapes += [
+        # a hyphen is legal in a label's interior and nowhere else, and "interior"
+        # is a different position in a label of two, three and four
+        "".join("-" if index == position else "a" for index in range(length))
+        for length in (2, 3, 4)
+        for position in range(length)
+    ]
+    shapes += ["", "a_b"]  # the empty label, and one character outside the class
+
+    hosts = list(
+        dict.fromkeys(
+            [
+                ".".join(control if index != position else shape for index in range(count))
+                for shape in shapes
+                for count in (1, 2, 3)
+                for position in range(count)
+            ]
+            # two whole-host axes, which no label can reach: the rooted spelling,
+            # and a host that is nothing but a dot
+            + [f"{control}.{control}.", "."]
+        )
+    )
+
+    accepted = 0
+    for host in hosts:
         try:
-            parse_connector(VALID + f"serves_from: [{spelling}]\n")
+            parse_connector(VALID + f'serves_from: ["{host}"]\n')
             model_accepts = True
         except ConnectorError:
             model_accepts = False
         # `_hostname` answers a different question, so agreement is that the
         # host it reads back out of a url naming this string is this string —
         # any other answer is a repair, and a repair is a host nobody declared.
-        reads_back = _hostname(f"https://{spelling}/ad") == spelling
+        reads_back = _hostname(f"https://{host}/ad") == host
         assert model_accepts == reads_back, (
-            f"{spelling!r}: the strict model says {model_accepts} and `_hostname` says "
+            f"{host!r}: the strict model says {model_accepts} and `_hostname` says "
             f"{reads_back} — the two copies of RFC 1123 §2.1 have drifted apart"
         )
+        accepted += model_accepts
+
+    # Floors, because a generator that produced one shape, or only refusable
+    # ones, would agree about nothing and pass. Both directions have to be
+    # reached for the comparison above to have compared anything.
+    assert len(hosts) >= 150, f"only {len(hosts)} host shapes were compared"
+    assert accepted >= 40, f"only {accepted} of {len(hosts)} shapes were accepted by both"
+    assert len(hosts) - accepted >= 40, (
+        f"only {len(hosts) - accepted} of {len(hosts)} shapes were refused by both"
+    )
 
 
 def test_a_serves_from_entry_that_is_not_already_a_hostname_is_rejected() -> None:

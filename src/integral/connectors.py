@@ -3208,9 +3208,13 @@ def decode_body(raw: bytes | str, charset: str = "utf-8") -> str:
 #: RFC 1123 §2.1 labels, two or more of them. Spelled here rather than imported
 #: from `reaction_elicit`, which answers the neighbouring question (what host does
 #: this URL name) and may not import this module at all — `corpus_scope` bounds what
-#: it reaches. `test_connectors` pins the two against each other at every
-#: boundary of the label rule — derived from the grammar, since the shipped
-#: declarations all sit far from it and agreed under two real drifts.
+#: it reaches. `test_connectors` pins the two in two pieces, because they are two
+#: rules: the label alphabet is asserted **equal as a string** to
+#: `reaction_elicit._LABEL_RE.pattern`, and the compositions — a fullmatch here,
+#: a split-and-count there — are compared over a population generated from the
+#: grammar's axes. A list of boundary cases was round 4's finding: it left the
+#: 63-octet cap and §2.1's alphabetic top-level label drifting one-sidedly and
+#: green. The RFC 2606 reserved-TLD rule below is this module's alone, by design.
 _LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
 _SERVED_HOST_RE: Final = re.compile(rf"{_LABEL}(?:\.{_LABEL})+")
 

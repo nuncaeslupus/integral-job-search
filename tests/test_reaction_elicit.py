@@ -572,6 +572,14 @@ def test_every_declared_serving_host_is_one_this_packages_own_parser_produces() 
     Not "it appears in `robots-adjudications.yaml`" either — that was round 2's
     proposal, and `job-boards.greenhouse.io` is corroborated by its parser and
     by no row, so that rule would delete a host that is real.
+
+    **Its ceiling, stated: the capture is committed, so the derivation is only
+    as independent as the fixture.** Forging one `jobUrl` in a package's own
+    `fixture/list.html` satisfies this rule for any host — the suite stays green
+    and `check_stimulus` then accepts adverts from it. What the rule removes is
+    a host asserted in YAML alone; what it cannot remove is a host asserted in
+    two files at once. Closing that needs the capture checked against the live
+    board, which is `connector_health`'s question and not this one's.
     """
     from integral.connectors import connector_packages, load_connector, parse_list_page
 
