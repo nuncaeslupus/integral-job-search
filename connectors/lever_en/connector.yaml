@@ -29,6 +29,12 @@ last_verified: "2026-09-10"
 source_kind: employer
 auth: none
 
+# Advert urls are served from `jobs.lever.co` while the list comes from
+# `api.lever.co`; this package's adjudication row names that host, and the
+# fetch path adjudicates each advert url through `integral.robots`.
+serves_from:
+  - jobs.lever.co
+
 list:
   url_pattern: "https://api.lever.co/v0/postings/{employer}?mode=json"
   pagination:

@@ -3205,6 +3205,23 @@ def decode_body(raw: bytes | str, charset: str = "utf-8") -> str:
         ) from error
 
 
+#: RFC 1123 §2.1 labels, two or more of them. Spelled here rather than imported
+#: from `reaction_elicit`, which answers the neighbouring question (what host does
+#: this URL name) and may not import this module at all — `corpus_scope` bounds what
+#: it reaches. `test_connectors` pins the two in two pieces, because they are two
+#: rules: the label alphabet is asserted **equal as a string** to
+#: `reaction_elicit._LABEL_RE.pattern`, and the compositions — a fullmatch here,
+#: a split-and-count there — are compared over a population generated from the
+#: grammar's axes. A list of boundary cases was round 4's finding: it left the
+#: 63-octet cap and §2.1's alphabetic top-level label drifting one-sidedly and
+#: green. The RFC 2606 reserved-TLD rule below is this module's alone, by design.
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_SERVED_HOST_RE: Final = re.compile(rf"{_LABEL}(?:\.{_LABEL})+")
+
+#: RFC 2606 §2. Reserved for documentation and testing; nothing is served from one.
+RESERVED_TLDS: Final = frozenset({"test", "example", "invalid", "localhost"})
+
+
 class Connector(Strict):
     """One site's connector — `connectors/<site>_<locale>.yaml`.
 
@@ -3244,6 +3261,18 @@ class Connector(Strict):
     #: inferred (T75). An `{employer}` slot alone does not say it, because a job
     #: board's company page takes one too (#462 second reader, F1).
     source_kind: SourceKind | None = None
+    #: #558. Hosts this board serves its ADVERTS from, when an advert url does
+    #: not name the host the listing was fetched from. An ATS lists from
+    #: `api.ashbyhq.com` and returns advert urls on `jobs.ashbyhq.com`, so host
+    #: equality against the list host refuses every ATS advert there is.
+    #: `reaction_elicit.check_stimulus` matches an offer's url host against this
+    #: set plus the list host; an undeclared host reads as forgery and is
+    #: refused. Declared, never inferred (T75) — deriving it by allowing one
+    #: label of slack off the list host admits `boards.greenhouse.io`, which
+    #: `connectors/ruled-out.yaml` files under `robots_refused`. Whether robots
+    #: permits a given advert url is a separate question, answered per url at
+    #: fetch time by `sourcing._may_fetch`; this field is only about provenance.
+    serves_from: tuple[str, ...] = ()
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3262,6 +3291,34 @@ class Connector(Strict):
                 "a connector may not claim it"
             )
         return site
+
+    @field_validator("serves_from")
+    @classmethod
+    def _serves_from_are_already_hostnames(cls, hosts: tuple[str, ...]) -> tuple[str, ...]:
+        # A validator, never a repair — the `resolve_identity` rule. A declared
+        # host reaches `reaction_elicit.check_stimulus` as a member of the set an
+        # offer's url host is matched against, and that host arrives from
+        # `urlparse(...).hostname`: lowercased, port stripped, scheme gone. So
+        # anything that is not already in that spelling can never match, and the
+        # two ways to be wrong point opposite ways. `https://jobs.lever.co`
+        # silently matches nothing, which reads as "declared, still refused" and
+        # sends the next session looking in the wrong module. Repairing it — strip
+        # a scheme, drop a path, casefold — is the other direction and worse: what
+        # a repair welds onto the string is a host nobody declared, and the field's
+        # whole job is provenance. Refuse both here, where the file is loaded and
+        # the error names the connector.
+        for host in hosts:
+            if host != host.lower() or _SERVED_HOST_RE.fullmatch(host) is None:
+                raise ValueError(
+                    f"serves_from: {host!r} is not a hostname — declare the host exactly as "
+                    "an advert url spells it, lowercased and with no scheme, port or path"
+                )
+            if host.rsplit(".", 1)[-1] in RESERVED_TLDS:
+                raise ValueError(
+                    f"serves_from: {host!r} is under a reserved TLD (RFC 2606 §2) and resolves "
+                    "nowhere — no advert is served from it"
+                )
+        return hosts
 
     @model_validator(mode="after")
     def _something_produces_the_offer_text(self) -> Connector:
