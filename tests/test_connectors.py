@@ -230,15 +230,17 @@ def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() ->
     fills = ("a", "1", "A")  # the three sides of RFC 1123 §2.1's character class
     lengths = (1, 2, 3, 62, 63, 64)  # at and across the 63-octet cap on one label
     counts = (1, 2, 3)  # how many labels the host has
+    hyphen_lengths = (2, 3, 4)  # both ends, and an interior with two positions
     shapes = [fill * length for fill in fills for length in lengths]
     shapes += [
         # a hyphen is legal in a label's interior and nowhere else, and "interior"
         # is a different position in a label of two, three and four
         "".join("-" if index == position else "a" for index in range(length))
-        for length in (2, 3, 4)
+        for length in hyphen_lengths
         for position in range(length)
     ]
-    shapes += ["", "a_b"]  # the empty label, and one character outside the class
+    outside_the_class = "a_b"  # `_` is in neither §2.1's class nor §3.2.2's separator
+    shapes += ["", outside_the_class]  # the empty label, and that one
 
     hosts = list(
         dict.fromkeys(
@@ -305,6 +307,14 @@ def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() ->
         f"{fills} does not reach all three sides of the character class"
     )
     assert max(counts) >= 3, f"{counts} never puts a shape in a middle label"
+    assert min(hyphen_lengths) == 2 and max(hyphen_lengths) >= 4, (
+        f"{hyphen_lengths} does not reach both a label with no interior and one "
+        "whose interior has more than a single position"
+    )
+    assert outside_the_class in shapes and not outside_the_class.isalnum(), (
+        "no shape carries a character outside RFC 1123 §2.1's class, so the two "
+        "grammars are only ever compared over strings both of them admit"
+    )
 
 
 def test_a_url_that_would_have_to_be_repaired_into_a_host_names_none() -> None:
@@ -369,29 +379,86 @@ def test_a_url_that_would_have_to_be_repaired_into_a_host_names_none() -> None:
     # is outside the grammar wherever it sits, so a url carrying one names no
     # host — and a step that removed one to make the name fit would be the
     # repair this whole function refuses to perform.
-    delimiters = "@"  # §3.2's userinfo delimiter ENDS the host rather than
-    # corrupting it: `https://wewor@kremotely.com/ad` names `kremotely.com`,
-    # a different real host, which is a correct read and not a repair.
-    outside = 0
+    # Every graphic character carries an *expected verdict* rather than a skip:
+    # round 6's blocking finding was that the one exemption this axis granted
+    # (`@`, a correct read) was also the hole a mutation could widen, because a
+    # skipped character is a character nobody checks. There is no skip list
+    # below, so nothing can be added to one.
+    mid = positions[1]
+    tried = 0
     for code in range(0x21, 0x7F):
         character = chr(code)
-        if character.isalnum() or character in "-." or character in delimiters:
+        if character.isalnum() or character in "-.":
             continue
-        forged = f"https://{host[: positions[1]]}{character}{host[positions[1] :]}/ad"
-        read = _hostname(forged)
-        assert read is None, (
-            f"{character!r} inside the authority read back as {read!r}: the url "
-            "was repaired into a host rather than refused"
+        # §3.2 gives `@` one meaning inside an authority: it ENDS the userinfo
+        # and the host begins after it. `https://wewor@kremotely.com/ad` names
+        # `kremotely.com`, a different real host — a correct read of a valid
+        # url, not a repair of a broken one. Every other graphic character is
+        # outside RFC 1123 §2.1's label and §3.2.2's separator, so it names no
+        # host wherever it sits, and removing it to make the name fit would be
+        # the repair this whole function refuses to perform.
+        expected = host[mid:] if character == "@" else None
+        forged = f"https://{host[:mid]}{character}{host[mid:]}/ad"
+        assert _hostname(forged) == expected, (
+            f"{character!r} inside the authority read back as "
+            f"{_hostname(forged)!r}, not {expected!r}"
         )
-        outside += 1
-    assert outside >= 20, f"only {outside} graphic characters were tried"
+        tried += 1
+    assert tried >= 30, f"only {tried} of the 30 non-label graphic characters were tried"
 
-    # And the authority the answer is read back against is the whole authority,
-    # not the host alone. RFC 3986 §3.2.3 spells `port = *DIGIT`, so a port that
-    # is not digits is not an authority this url validly has — while `:443` is,
-    # and `usajobs_en` serves every advert with one.
+    # The userinfo position, which the axis above structurally cannot reach —
+    # and which is where round 6's live forgery lived. `\` is graphic ASCII, so
+    # the code-point rule admits it; WHATWG ends a special scheme's authority at
+    # it and `urlsplit` does not, so `https://evil.test\@remotive.com/ad` reads
+    # as `remotive.com` here while the candidate's browser goes to `evil.test`.
+    # The verdict is derived from RFC 3986 §3.2.1's production rather than from
+    # the character that was found: `userinfo = *( unreserved / pct-encoded /
+    # sub-delims / ":" )`, so a url whose userinfo is spelt inside that set is a
+    # valid url naming the host after the `@`, and one whose userinfo is not is
+    # no url at all. `%` is in the set only as `pct-encoded`, and a bare `%` is
+    # therefore outside it — which is why it is written out rather than listed.
+    userinfo = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    userinfo += "-._~" + "!$&'()*+,;=" + ":"
+    # `/`, `?` and `#` are the three characters that END the authority in RFC
+    # 3986 (§3.3, §3.4, §3.5) *and* in WHATWG alike, so the url plainly names
+    # `evil.test` and the rest is path, query or fragment. Reading it that way
+    # is not a forgery — the two grammars agree, the candidate's browser goes
+    # where this function says, and a host nobody permitted is refused a step
+    # later. `\` is the entire difference between the two lists, which is why
+    # it forges and these three do not.
+    terminators = "/?#"
+    forged_userinfo = 0
+    for code in range(0x21, 0x7F):
+        character = chr(code)
+        if character in terminators:
+            wanted = "evil.test"
+        elif character in userinfo:
+            wanted = host
+        else:
+            wanted = None
+        forged = f"https://evil.test{character}@{host}/ad"
+        assert _hostname(forged) == wanted, (
+            f"{character!r} in the userinfo read back as {_hostname(forged)!r}, "
+            f"not {wanted!r}: RFC 3986 §3.2.1 "
+            f"{'admits' if character in userinfo else 'does not admit'} it there"
+        )
+        assert len(terminators) == 3, "the shared terminator set is /?# and nothing else"
+        forged_userinfo += 1
+    assert forged_userinfo == 0x7F - 0x21, (
+        f"only {forged_userinfo} of the 94 graphic characters were tried in the userinfo position"
+    )
+    # A second `@` is not a userinfo either — §3.2.1 admits none — and it is the
+    # other spelling of the same forgery, since both `urlsplit` and WHATWG take
+    # the last one.
+    assert _hostname("https://evil.test@@weworkremotely.com/ad") is None
+
+    # And the authority is validated whole, not the host alone. RFC 3986 §3.2.3
+    # spells `port = *DIGIT`, so a port that is not digits is not an authority
+    # this url validly has — while `:443` is, and `usajobs_en` serves every
+    # advert with one.
     assert _hostname("https://weworkremotely.com:notaport/ad") is None
     assert _hostname("https://weworkremotely.com:443/ad") == host
+    assert _hostname("https://evil.test\\@weworkremotely.com:443/ad") is None
 
 
 def test_a_serves_from_entry_that_is_not_already_a_hostname_is_rejected() -> None:

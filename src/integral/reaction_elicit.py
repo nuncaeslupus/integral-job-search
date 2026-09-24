@@ -114,6 +114,24 @@ CONNECTOR_FILENAME = "connector.yaml"
 #: reading `nuncaeslupus (OWNER)` as somebody other than `nuncaeslupus`.
 _LABEL_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?")
 
+#: RFC 3986 §3.2's authority, written as the productions spell it rather than as
+#: a list of characters to refuse: `[ userinfo "@" ] host [ ":" port ]`, with
+#: `userinfo` = §2.3 `unreserved` / §2.1 `pct-encoded` / §2.2 `sub-delims` / ":",
+#: `host` = `reg-name` (the same set without ":"), and §3.2.3's `port = *DIGIT`.
+#: An *alphabet* is what a list of found characters cannot be: `\` is graphic
+#: US-ASCII, so `%x21-7E` admits it, and it is in no production here — which is
+#: exactly the disagreement that forges a host. WHATWG ends a special scheme's
+#: authority at `/ ? # \`; `urlsplit` ends it at `/ ? #`; so
+#: `https://evil.test\@remotive.com/ad` is `remotive.com` to this process and
+#: `evil.test` to the candidate's browser, and the candidate is the one who
+#: clicks (second reader, round 6). Deriving the set closes over the other
+#: eleven graphic characters outside §3.2 at the same time.
+_AUTHORITY_RE = re.compile(
+    r"(?:(?:[A-Za-z0-9\-._~!$&'()*+,;=:]|%[0-9A-Fa-f]{2})*@)?"
+    r"(?:[A-Za-z0-9\-._~!$&'()*+,;=]|%[0-9A-Fa-f]{2})*"
+    r"(?::[0-9]*)?"
+)
+
 #: RFC 2606 §2 reserves these for documentation and testing, so a host under one
 #: of them resolves nowhere and the package listing from it is a worked example
 #: rather than a board anyone can be shown an advert from. Derived from the RFC
@@ -151,18 +169,32 @@ def _hostname(url: str) -> str | None:
     rule over the characters covers every repair at once — including the ones
     nobody has thought of, which a list of the three found here would not.
 
-    The last check reads the **returned** host back against the url's own
-    authority, and it sits at the return rather than at the parse on purpose: a
-    check placed after `urlparse` validates a value that every later line is
-    still free to rewrite, so it certifies the input to the repair instead of
-    the output. Two identities are the only slack it grants, both spelt by the
-    RFCs rather than by this module — §3.2.2 makes the host case-insensitive,
-    and RFC 1034 §3.1 makes one trailing dot the same name.
+    The graphic range is a **proxy** for §3.2's grammar and not that grammar,
+    which is the distance round 6 walked through: twelve graphic characters sit
+    between `%x21-7E` and the authority productions, and nine of them clear as
+    a permitted host when they are put in the userinfo. `\\` is the one that
+    forges, because WHATWG ends a special scheme's authority at it and
+    `urlsplit` does not — `https://evil.test\\@remotive.com/ad` reads
+    `remotive.com` here and sends the candidate's browser to `evil.test`. So
+    the authority itself is validated against `_AUTHORITY_RE`, derived from the
+    productions; the round-5 check that read the returned host back against
+    `netloc` is **gone rather than kept beside it**, because over 4,050
+    label-valid authorities it never once answered differently — a guard that
+    cannot fire is the defect CLAUDE.md names, not a second opinion.
+
+    Reading `parsed.netloc` is reading the input and not the repair's answer:
+    the one thing `urlparse` removes from an authority is TAB, CR and LF, and
+    the code-point rule above has already refused every url carrying one.
+    Two identities are the only slack granted below, both spelt by the RFCs
+    rather than by this module — §3.2.2 makes the host case-insensitive, and
+    RFC 1034 §3.1 makes one trailing dot the same name.
     """
     if any(not ("\x21" <= character <= "\x7e") for character in url):
         return None
     try:
         parsed = urlparse(url)
+        if not _AUTHORITY_RE.fullmatch(parsed.netloc):
+            return None
         host = parsed.hostname
     except ValueError:
         return None
@@ -176,10 +208,6 @@ def _hostname(url: str) -> str | None:
         host = host[:-1]
     labels = host.split(".")
     if len(labels) < 2 or any(not _LABEL_RE.fullmatch(label) for label in labels):
-        return None
-    if not re.fullmatch(
-        rf"{re.escape(host)}\.?(?::\d*)?", parsed.netloc.lower().rpartition("@")[2]
-    ):
         return None
     return host
 
