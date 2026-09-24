@@ -374,3 +374,30 @@ def test_unplaced_is_not_spent_on_an_advert_that_states_its_region(store: Profil
 
     assert annotation.kept is True
     assert location.verdict == "satisfied"
+
+
+def test_a_refused_offer_still_reports_the_field_it_could_not_read(store: ProfileStore) -> None:
+    """The reading the filter's own fixtures cannot see.
+
+    `filter_hard_constraints` keeping both records is pinned in
+    `test_candidate_attributes.py`. The *symptom* that motivated it lives
+    here: `annotate()` telling the candidate "nothing in this advert conflicts
+    with the stated location" about an advert with no location. Reverting the
+    filter fix left every test in this module green while restoring exactly
+    that sentence, because the only unplaced case here was the one where
+    nothing else refused the offer — the single case the fix does not change.
+
+    So this is the refused-*and*-unreadable offer, asserted where a reader
+    would look for it. Per CLAUDE.md, an accepted finding becomes a fixture in
+    the gate the finding was about, and the denominator has to rise where the
+    hole was rather than somewhere adjacent.
+    """
+    facts = _kept_facts("refused-and-unplaceable").model_copy(
+        update={"delivery": "onsite", "region": None, "salary_min": 1000, "salary_max": 2000}
+    )
+    annotation = annotate(facts, fixture_constraints(), EvidenceLog(store).revision())
+    verdicts = {reading.field: reading.verdict for reading in annotation.readings}
+
+    assert annotation.kept is False
+    assert verdicts["salary"] == "violated"
+    assert verdicts["location"] == "unplaced"

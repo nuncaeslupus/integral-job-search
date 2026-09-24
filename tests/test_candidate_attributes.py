@@ -516,8 +516,14 @@ def test_a_stated_commute_radius_reaches_the_hard_constraint_filter() -> None:
 def test_a_commute_radius_without_accepting_onsite_is_refused() -> None:
     """The contradiction is refused where it is written, not left in the file
     looking answered: a candidate who will not work on site at all has no
-    travel radius, and the filter would read the bool first and never reach
-    the regions."""
+    travel radius.
+
+    The justification used to be "the filter would read the bool first and
+    never reach the regions". Since #550 it reads the regions first, so that
+    is exactly backwards — and the filter now re-checks the bool inside the
+    radius branch rather than trusting this validator, because
+    `model_copy(update=...)` skips it. This stays the first line of defence;
+    it is no longer the only one."""
     with pytest.raises(ValidationError, match="commutable_regions"):
         Location(
             state="stated",
@@ -757,8 +763,13 @@ def test_a_vacancy_abroad_is_not_reachable_for_being_in_an_authorised_country() 
 
     result = filter_hard_constraints(_eu_commuter(), [paris])
 
-    assert result.outcome_for("offer-paris") == "removed"
-    assert [r.field for r in result.removed] == ["location"]
+    # Withheld rather than refused, and the distinction is honest rather than
+    # cosmetic: "Île-de-France" is not in the radius, but a radius of bare
+    # subdivision names cannot be said to exclude a foreign one either. What
+    # matters, and what #550 asks for, is that it is not presented.
+    assert result.surviving == ()
+    assert result.outcome_for("offer-paris") == "unplaced"
+    assert [r.field for r in result.unplaced] == ["location"]
 
 
 def test_a_vacancy_abroad_that_states_no_region_is_withheld_like_any_other() -> None:
@@ -776,19 +787,112 @@ def test_a_vacancy_abroad_that_states_no_region_is_withheld_like_any_other() -> 
     assert [r.field for r in result.unplaced] == ["location"]
 
 
-def test_a_region_inside_the_radius_survives_even_across_a_border() -> None:
-    """The control, and the reason this is a region test rather than a border test.
+def test_a_matching_region_name_in_another_country_is_not_a_commute() -> None:
+    """A radius of bare subdivision names cannot reach across a border.
 
-    A cross-border commute is a real answer a real candidate gives. Refusing
-    on the border instead of comparing across it would trade #550's fail-open
-    for a fail-closed one, and #547 is the measurement of what that costs.
+    This test replaces one that asserted the opposite, and the replaced
+    version is worth recording because it was the defect wearing the fix's
+    clothes. It read:
+
+        near = _offer("offer-perpignan", country="FR", region="Barcelonès")
+        assert result.surviving == ("offer-perpignan",)
+
+    presented as a cross-border commute. But *Barcelonès is a comarca in
+    Spain* — a French vacancy carrying that region name is a homonym or a
+    mislabel, never a French place. So the control asserted that a name
+    collision clears as a daily commute, and any country-aware fix would have
+    had to break a green gate to land.
+
+    The collision is not exotic: Córdoba (ES/AR), Santiago (ES/CL), Valencia
+    (ES/PH), Limburg (NL/BE). Neither `Location.commutable_regions` nor
+    `OfferFacts.region` carries a country, so across a border the comparison
+    is a string coincidence rather than a fact about travel — and before #550
+    this was harmless only because the country test short-circuited first.
     """
-    near = _offer("offer-perpignan", country="FR", delivery="onsite", region="Barcelonès")
+    homonym = _offer("offer-cordoba-ar", country="AR", delivery="onsite", region="Córdoba")
+    spain = _commuter().model_copy(
+        update={
+            "location": Location(
+                state="stated",
+                country="ES",
+                accepts_onsite_in_country=True,
+                commutable_regions=("Córdoba",),
+            ),
+            "work_authorisation": WorkAuthorisation(
+                state="stated", authorised_countries=("ES", "AR")
+            ),
+        }
+    )
 
-    result = filter_hard_constraints(_eu_commuter(), [near])
+    result = filter_hard_constraints(spain, [homonym])
 
-    assert result.surviving == ("offer-perpignan",)
-    assert result.outcome_for("offer-perpignan") == "surviving"
+    assert result.surviving == ()
+    assert result.outcome_for("offer-cordoba-ar") == "unplaced"
+
+
+def test_a_radius_is_still_compared_inside_the_candidates_own_country() -> None:
+    """The control the homonym test needs: withholding must not have eaten the compare.
+
+    A branch that returned `Uncomparable` for every on-site offer would pass
+    the test above and decide nothing.
+    """
+    near = _offer("offer-near", country="ES", delivery="onsite", region="Barcelonès")
+    far = _offer("offer-far", country="ES", delivery="onsite", region="Madrid")
+
+    result = filter_hard_constraints(_commuter(), [near, far])
+
+    assert result.surviving == ("offer-near",)
+    assert result.outcome_for("offer-far") == "removed"
+
+
+def test_a_refused_offer_outranks_a_duplicate_of_itself_that_survived() -> None:
+    """`outcome_for` checks `surviving` last, and this is the case that needs it.
+
+    For distinct ids the three buckets are disjoint and the order cannot
+    matter. Nothing documents that `offer_id`s must be unique and nothing
+    enforces it, so the order is what decides a caller that passed the same id
+    twice — and checking `surviving` first answered "surviving" for an offer
+    this very result had refused.
+    """
+    survives = _offer("dup", delivery="onsite", region="Barcelonès")
+    refused = _offer("dup", delivery="onsite", region="Madrid")
+
+    result = filter_hard_constraints(_commuter(), [survives, refused])
+
+    assert "dup" in result.surviving
+    assert [r.field for r in result.removed] == ["location"]
+    assert result.outcome_for("dup") == "removed"
+
+
+def test_an_offer_the_filter_never_saw_has_no_outcome() -> None:
+    """Answering `unplaced` for an unmeasured offer invents a bucket membership."""
+    result = filter_hard_constraints(_commuter(), [_offer("offer-real", delivery="remote")])
+
+    assert result.outcome_for("offer-real") == "surviving"
+    with pytest.raises(CandidateError, match="not in this result"):
+        result.outcome_for("offer-never-measured")
+
+
+def test_a_radius_beside_a_refusal_to_work_onsite_still_refuses_if_it_is_built() -> None:
+    """The validator is the guard; this is the pin behind it.
+
+    `Location` refuses at validation time to hold a radius beside a refusal to
+    work on site, so inside the radius branch that bool is True on every path
+    that exists today. But `model_copy(update=...)` skips validators and is
+    the idiom used throughout this module, so "true by construction" was one
+    careless line from being false — and dropping the re-check was a mutation
+    that survived the whole gate.
+    """
+    bypassed = Location(state="stated", country="ES", accepts_onsite_in_country=False).model_copy(
+        update={"commutable_regions": ("Barcelonès",)}
+    )
+    constraints = _commuter().model_copy(update={"location": bypassed})
+    onsite = _offer("offer-onsite", delivery="onsite", region="Barcelonès")
+
+    result = filter_hard_constraints(constraints, [onsite])
+
+    assert result.surviving == ()
+    assert [r.field for r in result.removed] == ["location"]
 
 
 def test_a_candidate_with_no_radius_still_ignores_another_country() -> None:
@@ -799,8 +903,10 @@ def test_a_candidate_with_no_radius_still_ignores_another_country() -> None:
     """
     plain = _permissive().model_copy(
         update={
-            # …and authorised there, or `work_authorisation` refuses it first
-            # and this test measures that field instead of the one it names.
+            # …and authorised there, or `work_authorisation` also refuses it
+            # and `removed` carries two fields instead of the one this test
+            # names. Both buckets record per field, so nothing is "first" any
+            # more except inside `outcome_for`.
             "work_authorisation": WorkAuthorisation(
                 state="stated", authorised_countries=("ES", "FR")
             )
