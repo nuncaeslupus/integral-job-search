@@ -537,10 +537,42 @@ class Removal:
 
 
 @dataclass(frozen=True)
+class Uncomparable:
+    """A stated field the advert gives nothing to compare against.
+
+    The third answer a checker can give. A `str` says the offer *breaks* the
+    constraint; `None` says it meets it; this says the question cannot be put
+    to this advert at all — the candidate stated the field, and the advert is
+    silent on the very fact it would be compared with.
+
+    That is not the same as the candidate having said nothing, which
+    `filter_hard_constraints` already handles by skipping the field. Here the
+    candidate *did* answer, and the advert did not.
+
+    #547 measured what the missing third answer costs: nineteen Barcelona
+    adverts whose list rows carry no location were read as though they stated
+    one, and T201 measured the other direction on a live candidate who cannot
+    relocate — 45 Madrid vacancies presented as reachable.
+    """
+
+    reason: str
+
+
+@dataclass(frozen=True)
 class HardFilterResult:
     surviving: tuple[str, ...]
     removed: tuple[Removal, ...]
     outstanding_fields: tuple[str, ...]
+    #: Offers that no stated constraint rejected and that no stated constraint
+    #: could clear — withheld **on the absence** (#547) rather than resolved in
+    #: either direction, the same rule `liveness.presentable` already applies.
+    #:
+    #: Deliberately not folded into `removed`: the advert did not say anything
+    #: wrong, it said nothing at all. Deliberately not folded into `surviving`
+    #: either, which is the fail-open this bucket exists to close. It carries
+    #: no default, so every construction site has to say what it holds rather
+    #: than inherit an empty bucket by silence.
+    unplaced: tuple[Removal, ...]
 
 
 def _violates_languages(field_value: Languages, offer: OfferFacts) -> str | None:
@@ -552,22 +584,30 @@ def _violates_languages(field_value: Languages, offer: OfferFacts) -> str | None
     return None
 
 
-def _violates_location(field_value: Location, offer: OfferFacts) -> str | None:
+def _violates_location(field_value: Location, offer: OfferFacts) -> str | Uncomparable | None:
     if offer.delivery == "remote" or offer.requires_relocation:
         return None  # remote needs no presence; a real relocation is Relocation's check
     if offer.country != field_value.country:
         return None  # a different country without relocation is not this field's job
     if not field_value.accepts_onsite_in_country:
         return "requires on-site presence in the candidate's own country, which was declined"
-    if (
-        field_value.commutable_regions
-        and offer.region is not None
-        and offer.region not in field_value.commutable_regions
-    ):
-        return (
-            f"is on site in {offer.region}, outside the area the candidate can travel "
-            f"to and from in a day ({', '.join(field_value.commutable_regions)})"
-        )
+    if field_value.commutable_regions:
+        travels = ", ".join(field_value.commutable_regions)
+        if offer.region is None:
+            # The offer needs presence somewhere in the candidate's country and
+            # the advert never says where. Falling through to `return None`
+            # here is what presented 45 Madrid vacancies to a candidate who
+            # commutes in Barcelona (T201): "the board is in the right country"
+            # is a work-authorisation test being used as a reach test.
+            return Uncomparable(
+                "requires presence but states no region, so it cannot be compared against "
+                f"the area the candidate can travel to and from in a day ({travels})"
+            )
+        if offer.region not in field_value.commutable_regions:
+            return (
+                f"is on site in {offer.region}, outside the area the candidate can travel "
+                f"to and from in a day ({travels})"
+            )
     return None
 
 
@@ -686,7 +726,7 @@ def _violates_reach(field_value: Reach, offer: OfferFacts) -> str | None:
 # One checker per pinned field, in the same order as `FIELD_MODELS`. A checker
 # is only ever called with a field whose `state` is `stated` — see
 # `filter_hard_constraints` — so none of them branch on `state` themselves.
-_CHECKS: dict[str, Callable[[Any, OfferFacts], str | None]] = {
+_CHECKS: dict[str, Callable[[Any, OfferFacts], str | Uncomparable | None]] = {
     "languages": _violates_languages,
     "location": _violates_location,
     "relocation": _violates_relocation,
@@ -717,26 +757,48 @@ def filter_hard_constraints(
     claim to check the offer against. Skipping is not the same as passing
     silently: `outstanding_fields` names what T27 still owes, separately from
     which offers survived, so "unknown" never gets read downstream as "fine".
+
+    The offer side has the mirror of that unknown, and it gets the mirror of
+    that treatment. An advert silent on the fact a stated constraint would be
+    compared with is neither rejected nor cleared: it lands in `unplaced`
+    (#547), so the three outcomes are *refused*, *cleared*, and *could not be
+    decided* rather than a two-way split that has to guess. Guessing is not
+    neutral here — guessing "cleared" is what presented a candidate who cannot
+    relocate with 45 vacancies in another city (T201).
     """
     stated = {
         name: value for name, value in constraints.as_dict().items() if value.state == "stated"
     }
     removed: list[Removal] = []
+    unplaced: list[Removal] = []
     surviving: list[str] = []
     for offer in offers:
-        reasons = [
-            Removal(offer.offer_id, name, reason)
-            for name, value in stated.items()
-            if (reason := _CHECKS[name](value, offer)) is not None
+        verdicts = [(name, _CHECKS[name](value, offer)) for name, value in stated.items()]
+        refused = [
+            Removal(offer.offer_id, name, verdict)
+            for name, verdict in verdicts
+            if isinstance(verdict, str)
         ]
-        if reasons:
-            removed.extend(reasons)
+        withheld = [
+            Removal(offer.offer_id, name, verdict.reason)
+            for name, verdict in verdicts
+            if isinstance(verdict, Uncomparable)
+        ]
+        if refused:
+            # A definite refusal outranks an absent comparison: an offer that
+            # breaks the salary floor is refused on that, whatever else the
+            # advert also failed to say. Only an offer with nothing against it
+            # *and* something unreadable is withheld.
+            removed.extend(refused)
+        elif withheld:
+            unplaced.extend(withheld)
         else:
             surviving.append(offer.offer_id)
     return HardFilterResult(
         surviving=tuple(surviving),
         removed=tuple(removed),
         outstanding_fields=constraints.outstanding(),
+        unplaced=tuple(unplaced),
     )
 
 
@@ -913,9 +975,14 @@ def probe_hard_filter() -> dict[str, Any]:
             )
         else:
             reason = removed_by_offer.get(case.offer.offer_id)
+            # `in surviving`, never `not in removed`. Those were the same
+            # predicate while the filter had two buckets and stopped being the
+            # same the moment it had three: an offer withheld into `unplaced`
+            # is not removed and is not cleared either, so the old spelling
+            # would have scored a withheld offer as a pass.
             check(
-                not was_removed,
-                f"{case.name}: an offer that satisfies this constraint was removed anyway "
+                case.offer.offer_id in result.surviving,
+                f"{case.name}: an offer that satisfies this constraint did not survive "
                 f"({reason.field if reason else ''}: {reason.reason if reason else ''})",
             )
 
@@ -960,6 +1027,63 @@ def probe_hard_filter() -> dict[str, Any]:
         remote_offer.offer_id not in reach_result.surviving,
         "reach: a remote offer was not removed for a candidate whose search does not "
         "reach remote work",
+    )
+
+    # #547 / T201: an advert that requires presence and never says where is
+    # withheld, not cleared and not refused. All four shapes are checked in one
+    # batch, because the bug was that three of them collapsed onto one answer.
+    commuter = _baseline_constraints().model_copy(
+        update={
+            "location": Location(
+                state="stated",
+                country="ES",
+                accepts_onsite_in_country=True,
+                commutable_regions=("Barcelonès",),
+            )
+        }
+    )
+    onsite_here = _good_offer("offer-region-commutable").model_copy(
+        update={"delivery": "onsite", "region": "Barcelonès"}
+    )
+    onsite_far = _good_offer("offer-region-distant").model_copy(
+        update={"delivery": "onsite", "region": "Madrid"}
+    )
+    onsite_silent = _good_offer("offer-region-absent").model_copy(
+        update={"delivery": "onsite", "region": None}
+    )
+    remote_silent = _good_offer("offer-remote-region-absent").model_copy(
+        update={"delivery": "remote", "region": None}
+    )
+    reach_result = filter_hard_constraints(
+        commuter, [onsite_here, onsite_far, onsite_silent, remote_silent]
+    )
+    withheld = {removal.offer_id for removal in reach_result.unplaced}
+    check(
+        onsite_here.offer_id in reach_result.surviving,
+        "an on-site offer inside a commutable region did not survive",
+    )
+    check(
+        onsite_far.offer_id in {removal.offer_id for removal in reach_result.removed},
+        "an on-site offer outside every commutable region was not removed",
+    )
+    check(
+        onsite_silent.offer_id not in reach_result.surviving,
+        "an on-site offer that states no region was presented as reachable — the "
+        "fail-open #547 and T201 both measured",
+    )
+    check(
+        onsite_silent.offer_id in withheld,
+        "an on-site offer that states no region was not withheld into `unplaced`",
+    )
+    check(
+        onsite_silent.offer_id not in {removal.offer_id for removal in reach_result.removed},
+        "an on-site offer was rejected for an absent location field — withhold on the "
+        "absence, never reject on it (#547)",
+    )
+    check(
+        remote_silent.offer_id in reach_result.surviving,
+        "a remote offer was withheld for stating no region, which it has no reason to "
+        "state — remote needs no presence to compare",
     )
 
     # The named test: an unstated attribute must neither pass nor veto. A
@@ -1030,9 +1154,10 @@ def probe_hard_filter() -> dict[str, Any]:
 
 #: A floor, never the count of the day (T100), on `probe_hard_filter`'s own running
 #: `checks` tally rather than a collection this module lists — the scripted scenario
-#: run *is* the fixture. Raised to what the probe carries — 19, zero slack — because
+#: run *is* the fixture. Raised to what the probe carries — zero slack — because
 #: 10 had drifted nine checks under with no margin argued for the gap (T159).
-MINIMUM_CASES = 19
+#: 19 -> 25 when the `unplaced` bucket (#547, T201) brought six checks with it.
+MINIMUM_CASES = 25
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:

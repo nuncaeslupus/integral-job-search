@@ -325,3 +325,44 @@ def test_every_bucket_of_the_filter_reaches_the_annotation(
             f"an offer in `{bucket}` is not kept, yet every stated field still "
             f'reads "satisfied" — `annotate()` does not consult that bucket'
         )
+
+
+def test_an_unplaceable_offer_reads_unplaced_rather_than_satisfied(store: ProfileStore) -> None:
+    """The reading says the advert did not say, not that it said nothing wrong.
+
+    `kept=False` beside a `"satisfied"` location reading is the contradiction
+    the invariant above forbids, and `"satisfied"` is also the wrong sentence
+    on its own terms: the filter did not clear this advert, it failed to place
+    it. The verdict is a fourth literal rather than `"unknown"` because the
+    two name different silent parties and owe different next steps — `unknown`
+    is a question for the candidate, `unplaced` is a gap in the advert.
+    """
+    facts = _kept_facts("unplaceable").model_copy(update={"delivery": "onsite", "region": None})
+    constraints = fixture_constraints()
+    assert constraints.location.commutable_regions, "the fixture must state a radius to compare"
+
+    annotation = annotate(facts, constraints, EvidenceLog(store).revision())
+    location = next(r for r in annotation.readings if r.field == "location")
+
+    assert annotation.kept is False
+    assert location.verdict == "unplaced"
+    assert "states no region" in location.because
+    # Not a violation: the advert broke nothing, and reporting it as a breach
+    # would be the over-rejection #547 measured, moved one layer up.
+    assert [r.field for r in annotation.readings if r.verdict == "violated"] == []
+
+
+def test_unplaced_is_not_spent_on_an_advert_that_states_its_region(store: ProfileStore) -> None:
+    """The control: the new verdict must not have swallowed the comparison.
+
+    A `_read_field` that returned `"unplaced"` for every on-site advert would
+    pass the test above and mean nothing.
+    """
+    region = fixture_constraints().location.commutable_regions[0]
+    facts = _kept_facts("placed").model_copy(update={"delivery": "onsite", "region": region})
+
+    annotation = annotate(facts, fixture_constraints(), EvidenceLog(store).revision())
+    location = next(r for r in annotation.readings if r.field == "location")
+
+    assert annotation.kept is True
+    assert location.verdict == "satisfied"

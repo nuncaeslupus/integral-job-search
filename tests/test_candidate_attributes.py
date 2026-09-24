@@ -493,9 +493,20 @@ def test_a_stated_commute_radius_reaches_the_hard_constraint_filter() -> None:
 
     # An ad that does not say where the work is cannot be shown to violate the
     # radius — an ad-side unknown never vetoes, exactly as `payroll_countries`
-    # does not.
+    # does not. That premise is unchanged and still asserted below: the offer
+    # is not in `removed`.
+    #
+    # What changed (#547, T201) is the other half of the old assertion. This
+    # block used to read `.surviving == ("onsite-somewhere",)`, because with
+    # two buckets "did not veto" and "was presented to the candidate" were the
+    # same sentence. They are not the same sentence, and treating them as one
+    # is what put 45 Madrid vacancies in front of a Barcelona commuter. An
+    # unknown that cannot veto also cannot clear: it is withheld.
     unsaid = _offer("onsite-somewhere", delivery="onsite")
-    assert filter_hard_constraints(constraints, [unsaid]).surviving == ("onsite-somewhere",)
+    unsaid_result = filter_hard_constraints(constraints, [unsaid])
+    assert unsaid_result.removed == ()
+    assert unsaid_result.surviving == ()
+    assert [r.offer_id for r in unsaid_result.unplaced] == ["onsite-somewhere"]
 
 
 def test_a_commute_radius_without_accepting_onsite_is_refused() -> None:
@@ -608,3 +619,98 @@ def test_a_stated_aim_with_no_terms_is_refused() -> None:
 def test_an_unknown_aim_may_not_smuggle_terms() -> None:
     with pytest.raises(ValidationError):
         Aim(state="unknown", terms=("python",))
+
+
+# --- the third bucket: withheld on the absence, never resolved by guess ------
+#
+# #547 and T201 are the two halves of one defect. A candidate who commutes in
+# one region is shown adverts that require presence and never say where: the
+# filter had two buckets, so an offer it could not place had to be pushed into
+# one of them. Pushed into `surviving` it reaches the candidate as reachable
+# (T201 measured 45 Madrid vacancies for a Barcelona commuter); pushed into
+# `removed` it discards the strongest on-target material in the run (#547
+# measured nineteen Barcelona adverts). `unplaced` is the answer that is
+# neither guess.
+
+
+def _commuter() -> CandidateConstraints:
+    """`_permissive()`, but the candidate commutes rather than travels anywhere."""
+    return _permissive().model_copy(
+        update={
+            "location": Location(
+                state="stated",
+                country="ES",
+                accepts_onsite_in_country=True,
+                commutable_regions=("Barcelonès",),
+            )
+        }
+    )
+
+
+def test_an_advert_that_states_no_region_is_withheld_not_presented() -> None:
+    """The T201 half: an offer needing presence, silent on where, is not reachable."""
+    silent = _offer("offer-silent", delivery="onsite", region=None)
+
+    result = filter_hard_constraints(_commuter(), [silent])
+
+    assert result.surviving == ()
+    assert [(r.offer_id, r.field) for r in result.unplaced] == [("offer-silent", "location")]
+
+
+def test_an_advert_that_states_no_region_is_not_rejected_either() -> None:
+    """The #547 half: withhold on the absence, never reject on it.
+
+    Rejecting is what a two-bucket filter does when the comparison it needs is
+    missing and it still has to answer, and it is the more expensive mistake —
+    the adverts with no location row were the candidate's own city.
+    """
+    silent = _offer("offer-silent", delivery="onsite", region=None)
+
+    result = filter_hard_constraints(_commuter(), [silent])
+
+    assert result.removed == ()
+
+
+def test_a_stated_region_is_still_decided_in_both_directions() -> None:
+    """The control: `unplaced` must not have swallowed the comparison itself.
+
+    A bucket that absorbed every on-site offer would satisfy both tests above
+    and answer nothing, so the two offers the advert *does* place are checked
+    here — one inside the commutable region, one outside.
+    """
+    near = _offer("offer-near", delivery="onsite", region="Barcelonès")
+    far = _offer("offer-far", delivery="onsite", region="Madrid")
+
+    result = filter_hard_constraints(_commuter(), [near, far])
+
+    assert result.surviving == ("offer-near",)
+    assert [(r.offer_id, r.field) for r in result.removed] == [("offer-far", "location")]
+    assert result.unplaced == ()
+
+
+def test_a_remote_advert_is_never_withheld_for_stating_no_region() -> None:
+    """Remote needs no presence, so it has no region to state and none to compare."""
+    remote = _offer("offer-remote", delivery="remote", region=None)
+
+    result = filter_hard_constraints(_commuter(), [remote])
+
+    assert result.surviving == ("offer-remote",)
+    assert result.unplaced == ()
+
+
+def test_a_refusal_outranks_an_absent_comparison() -> None:
+    """An offer both underpaid and unplaceable is refused, not withheld.
+
+    Withholding is for an offer with nothing against it that cannot be
+    cleared. This one has something against it, and reporting it as merely
+    undecided would hide a decided answer behind an undecided one.
+    """
+    underpaid_and_silent = _offer(
+        "offer-both", delivery="onsite", region=None, salary_min=1000, salary_max=2000
+    )
+
+    result = filter_hard_constraints(_commuter(), [underpaid_and_silent])
+
+    assert result.surviving == ()
+    assert result.unplaced == ()
+    assert [r.field for r in result.removed] == ["salary"]
