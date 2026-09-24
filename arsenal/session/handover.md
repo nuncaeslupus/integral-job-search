@@ -1,5 +1,51 @@
 # Session handover
 
+## 00005. Two PRs open under a reader round each, T201 gated green, and the candidate called the loop too slow
+
+**The candidate's three asks from the live round are all in flight.** Reactions on every
+board (#558 → PR **#564**), foreign boards for a cross-border candidate (#562 → PR **#565**,
+companion #541), topic exclusions not applied (#561, not started).
+
+- **#564** — head `53c30db30b0a6f594dbf1eb4d899bff08e1b13b8`. Round 6 found a **live
+  fail-open**: `https://evil.test\@remotive.com/ad` read as `remotive.com`, because
+  `_hostname`'s graphic-range check stood in for the authority grammar. Fixed by deriving
+  `_AUTHORITY_RE` from RFC 3986 §3.2's own productions, which closes all twelve
+  out-of-grammar graphics and the second-`@` spelling at once. Round 5's read-back is
+  **deleted**, not kept beside it — over 4,050 label-valid authorities it never once
+  disagreed, and a guard that cannot fire is the defect, not a second opinion. Ten
+  mutations, no survivors. `verified_gate.sh` **PASS**, block on the PR. **Round 7 reader
+  was still running when the machine went down** — re-dispatch it; nothing else is
+  outstanding, so a CLEAR round means merge.
+- **#565** — head `7cb12b3da4d8e71872181949f455744322b86998`. Round 2 verdict is **BLOCK**
+  (comment 5805150880). Round 1's F1/F3/F5 are confirmed fixed and pinned. Two new:
+  **N1 (blocking)** `p.usable` is unpinned in *every* bucket — deleting it from `domestic`
+  or from the new `foreign` comprehension leaves `T167.json` byte-identical and 162 tests
+  green; the real library then admits `examplejobs_es` (ES 7→8 boards, US 26→27) and sends
+  it real HTTP. Remedy is a closed rule, not a per-bucket assertion: install one unusable
+  board in `measure_reach_selection`'s temp directory and sum
+  `unusable_boards_selected` over all 16 reaches. **N2** the caption test pins ⊇ only, and
+  `_why_not_worldwide` already misstates over a GLOBAL-only library. **#565 also waits on
+  T201/#550** by the candidate's own choice.
+- **T201 / #550** (`t-145d832e`) — the implementer's work is staged in `../ijs-550` and its
+  `make host-gate` finished **EXIT=0** (`evidence: no drift`, 194 terminal tasks). It was
+  never committed: `open_task_pr.sh` from that worktree is the next command.
+- **#554** is **CONFLICTING** — so it has *no* CI run, not a red one — and its reader
+  returned BLOCK. It also weakens T202's Gate cell in `status/plan.md`; revert that before
+  it merges.
+- Filed but not imported as task files: **#566** (cross-currency salary never compared),
+  **#567** (`relocate` reaches no foreign board). **#559** (1,281 of 1,314 offers carry
+  `fetched_at: null`) is what keeps #564's win at 3 offers instead of 1,279.
+
+**The candidate's process feedback, recorded because it is about how this repo works rather
+than about one PR:** he expected a PR to come back validated in seconds and finds the
+second-reader loop too slow. It is not wrong — round 6 on #564 took ~20 minutes of reader
+plus a mutation table. What the loop bought on those same two PRs: one live authority
+forgery and one board that would have been fetched despite being unusable, both behind a
+green gate. The lever that costs nothing is **scope**: a reader on a diff a prior round
+already cleared should be asked for the narrow check (CLAUDE.md already says so), and a
+docs-only diff is exempt outright.
+
+
 ## 00004. T194 / #520 merged, nine reader rounds, and the cost of that loop filed upstream
 
 **Verified live via `gh` after the merge, not carried from memory.**
