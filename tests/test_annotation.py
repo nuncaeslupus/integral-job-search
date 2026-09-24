@@ -13,14 +13,19 @@ bytes `model_request` would put on the wire for the candidate's own strings.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast, get_args, get_type_hints
 
 import pytest
 from pydantic import ValidationError
 
+import integral.annotation as annotation_module
 from integral.annotation import (
     EGRESS_SAMPLE,
+    Annotation,
     annotate,
     egress_leaks,
     fixture_constraints,
@@ -29,7 +34,7 @@ from integral.annotation import (
     stated_strings,
     write_annotation,
 )
-from integral.candidate import OfferFacts
+from integral.candidate import CandidateConstraints, HardFilterResult, OfferFacts
 from integral.dimensions import load_dimensions
 from integral.extraction import OfferExtraction
 from integral.identity import ProfileStore, create_profile
@@ -162,3 +167,161 @@ def test_the_gate_measures_real_adverts() -> None:
     # zero leaks, and the denominator is half of what this number means.
     assert measured["outbound_payloads_scanned"] == EGRESS_SAMPLE
     assert measured["profile_strings_planted"] > 0
+
+
+# ---------------------------------------------------------------------------
+# `kept` and the readings are one statement about an offer, not two
+#
+# `annotate()` derives `kept` from `HardFilterResult.surviving` and the
+# per-field readings from `HardFilterResult.removed`. Those are two different
+# buckets, so an offer that is in neither leaves the two halves describing
+# different offers: `kept=False` beside a full set of readings that all say
+# "satisfied". Nothing pinned that agreement until these two tests.
+
+
+def _kept_facts(offer_id: str) -> OfferFacts:
+    """An offer `fixture_constraints()` keeps.
+
+    Remote, so the stated location has nothing to compare against, and paying
+    over the stated floor of 42000 EUR.
+    """
+    return OfferFacts(
+        offer_id=offer_id,
+        country="ES",
+        delivery="remote",
+        salary_stated=True,
+        salary_min=50000,
+        salary_max=60000,
+        salary_currency="EUR",
+    )
+
+
+def _unsatisfied_stated(annotation: Annotation, constraints: CandidateConstraints) -> list[str]:
+    """The **stated** fields this annotation does not report as satisfied.
+
+    Restricted to stated fields on purpose. `unknown` is what a field the
+    candidate never answered reads, and `filter_hard_constraints` skips those
+    entirely — so an `unknown` reading can never be the reason an offer was
+    dropped, and counting it as one would let a contradiction hide behind the
+    six fields `fixture_constraints()` leaves unanswered. That is not
+    hypothetical: it is what this helper was written to fix, after the twin
+    below reported green over a deliberately added fourth bucket.
+
+    Any verdict but `satisfied` counts, rather than `violated` alone, so a
+    literal added later (T201's `unplaced`) explains a drop without this test
+    having to learn its name.
+    """
+    stated = {name for name, value in constraints.as_dict().items() if value.state == "stated"}
+    return [
+        reading.field
+        for reading in annotation.readings
+        if reading.field in stated and reading.verdict != "satisfied"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("facts", "expect_kept"),
+    [(_kept_facts("kept-offer"), True), (_facts("dropped-offer"), False)],
+    ids=["kept", "dropped"],
+)
+def test_kept_and_the_readings_never_disagree(
+    store: ProfileStore, facts: OfferFacts, expect_kept: bool
+) -> None:
+    """A dropped offer must name a field that dropped it, and a kept one none."""
+    constraints = fixture_constraints()
+    annotation = annotate(facts, constraints, EvidenceLog(store).revision())
+    unsatisfied = _unsatisfied_stated(annotation, constraints)
+
+    assert annotation.kept is expect_kept
+    if expect_kept:
+        assert unsatisfied == [], f"kept, yet these stated fields did not pass: {unsatisfied}"
+    else:
+        assert unsatisfied != [], "not kept, yet every stated field reads satisfied"
+
+
+# `outstanding_fields` names constraint fields the candidate has not answered,
+# never offers, so it is the one bucket the twin below leaves alone. It is
+# excluded **by name** rather than by type — `surviving` is a `tuple[str, ...]`
+# too, so a type test could not tell them apart — which means any bucket added
+# later is treated as offer-bearing by default. That is the fail-safe
+# direction, and the whole point of deriving the list instead of writing it:
+# a new bucket is varied without anyone remembering to come back here.
+_NOT_A_BUCKET_OF_OFFERS = frozenset({"outstanding_fields"})
+
+
+def _bucket_holding(name: str, offer_id: str, violated_field: str) -> tuple[Any, ...]:
+    """One bucket's value, carrying `offer_id` and nothing else.
+
+    Handles the two element shapes `HardFilterResult` uses — a bare offer id,
+    and a dataclass carrying one — so a future bucket of either shape needs no
+    change here.
+    """
+    element = get_args(get_type_hints(HardFilterResult)[name])[0]
+    if element is str:
+        return (offer_id,)
+    if dataclasses.is_dataclass(element):
+        # `is_dataclass` narrows to `DataclassInstance`, which mypy will not
+        # call; the twin is constructing the type, not copying an instance.
+        build = cast("Callable[..., Any]", element)
+        return (
+            build(
+                **{
+                    member.name: offer_id
+                    if member.name == "offer_id"
+                    # A real bucket entry names a real constraint field; a
+                    # placeholder here would produce no reading and make the
+                    # assertion below fail for the wrong reason.
+                    else violated_field
+                    if member.name == "field"
+                    else f"a synthetic {member.name}"
+                    for member in dataclasses.fields(element)
+                }
+            ),
+        )
+    raise AssertionError(f"`{name}` holds {element!r}, which this twin cannot build")
+
+
+def test_every_bucket_of_the_filter_reaches_the_annotation(
+    store: ProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An offer in a bucket `annotate()` does not read makes it contradict itself.
+
+    Derived from `dataclasses.fields(HardFilterResult)` rather than from the
+    buckets that exist today, so T201's proposed `unplaced` — an offer whose
+    location cannot be compared because the advert states no region — is varied
+    here the day it lands. `annotate()` reads `surviving` and `removed` only,
+    so such an offer would fall out `kept=False` with every field still reading
+    "satisfied": exactly what the test above forbids, and invisible without
+    this one, because a bucket nothing constructs is a bucket nothing tests.
+    """
+    constraints = fixture_constraints()
+    stated = [name for name, value in constraints.as_dict().items() if value.state == "stated"]
+    assert stated, "the twin needs a stated field for a bucket entry to name"
+    facts = _kept_facts("bucketed-offer")
+
+    buckets = [
+        field.name
+        for field in dataclasses.fields(HardFilterResult)
+        if field.name not in _NOT_A_BUCKET_OF_OFFERS
+    ]
+    assert len(buckets) >= 2, f"the twin is varying almost nothing: {buckets}"
+
+    for bucket in buckets:
+        result = HardFilterResult(
+            **{
+                **{field.name: () for field in dataclasses.fields(HardFilterResult)},
+                bucket: _bucket_holding(bucket, facts.offer_id, stated[0]),
+            }
+        )
+        monkeypatch.setattr(annotation_module, "filter_hard_constraints", lambda *_, _r=result: _r)
+        produced = annotate(facts, constraints, EvidenceLog(store).revision())
+
+        if bucket == "surviving":
+            assert produced.kept is True, "an offer in `surviving` is not kept"
+            continue
+
+        assert produced.kept is False, f"an offer only in `{bucket}` was kept"
+        assert _unsatisfied_stated(produced, constraints) != [], (
+            f"an offer in `{bucket}` is not kept, yet every stated field still "
+            f'reads "satisfied" — `annotate()` does not consult that bucket'
+        )
