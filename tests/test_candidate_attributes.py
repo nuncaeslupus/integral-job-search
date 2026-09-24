@@ -492,9 +492,13 @@ def test_a_stated_commute_radius_reaches_the_hard_constraint_filter() -> None:
     assert filter_hard_constraints(constraints, [remote_sevilla]).surviving == ("remote-sevilla",)
 
     # An ad that does not say where the work is cannot be shown to violate the
-    # radius — an ad-side unknown never vetoes, exactly as `payroll_countries`
-    # does not. That premise is unchanged and still asserted below: the offer
-    # is not in `removed`.
+    # radius — an ad-side unknown never vetoes. That premise is unchanged and
+    # still asserted below: the offer is not in `removed`.
+    #
+    # The "exactly as `payroll_countries` does not" that used to end that
+    # sentence is gone, because it is no longer true of this field and saying
+    # so was the claim, not the decoration: `payroll_countries` still *clears*
+    # on an absent value where `region` now withholds.
     #
     # What changed (#547, T201) is the other half of the old assertion. This
     # block used to read `.surviving == ("onsite-somewhere",)`, because with
@@ -698,12 +702,23 @@ def test_a_remote_advert_is_never_withheld_for_stating_no_region() -> None:
     assert result.unplaced == ()
 
 
-def test_a_refusal_outranks_an_absent_comparison() -> None:
-    """An offer both underpaid and unplaceable is refused, not withheld.
+def test_a_refusal_outranks_an_absent_comparison_without_discarding_it() -> None:
+    """An offer both underpaid and unplaceable is refused — and still records why.
 
-    Withholding is for an offer with nothing against it that cannot be
-    cleared. This one has something against it, and reporting it as merely
-    undecided would hide a decided answer behind an undecided one.
+    Two separate claims, and the first version of this test asserted the first
+    while pinning the opposite of the second (`unplaced == ()`).
+
+    *Refused, not withheld* is about the offer: it has something against it,
+    and reporting a decided answer as undecided would hide it. `outcome_for`
+    is where that precedence is written down.
+
+    *The absent comparison is still recorded* is about the field, and dropping
+    it is not a tidier way of saying the same thing. `annotate()` builds each
+    field's reading from these records, so a discarded `Uncomparable` becomes
+    a location reading of "satisfied" — "nothing in this advert conflicts with
+    the stated location", said about an advert with no location. That is the
+    guess this whole bucket exists to delete, moved one layer up into the
+    sentence the candidate reads.
     """
     underpaid_and_silent = _offer(
         "offer-both", delivery="onsite", region=None, salary_min=1000, salary_max=2000
@@ -712,5 +727,88 @@ def test_a_refusal_outranks_an_absent_comparison() -> None:
     result = filter_hard_constraints(_commuter(), [underpaid_and_silent])
 
     assert result.surviving == ()
-    assert result.unplaced == ()
+    assert result.outcome_for("offer-both") == "removed"
     assert [r.field for r in result.removed] == ["salary"]
+    assert [r.field for r in result.unplaced] == ["location"]
+
+
+def _eu_commuter() -> CandidateConstraints:
+    """`_commuter()`, authorised in France as well — an ordinary EU citizen."""
+    return _commuter().model_copy(
+        update={
+            "work_authorisation": WorkAuthorisation(
+                state="stated", authorised_countries=("ES", "FR")
+            )
+        }
+    )
+
+
+def test_a_vacancy_abroad_is_not_reachable_for_being_in_an_authorised_country() -> None:
+    """#550's own sentence: country is a necessary condition, not a sufficient one.
+
+    The country test used to short-circuit before the radius was consulted, so
+    an on-site vacancy 1000 km away cleared `location` outright and no other
+    field owned it — `_violates_relocation` returns early because
+    `requires_relocation` defaults to `False`, and work authorisation passes
+    for any citizen of the bloc. T201's own candidate was masked from this
+    only by being authorised in Spain alone.
+    """
+    paris = _offer("offer-paris", country="FR", delivery="onsite", region="Île-de-France")
+
+    result = filter_hard_constraints(_eu_commuter(), [paris])
+
+    assert result.outcome_for("offer-paris") == "removed"
+    assert [r.field for r in result.removed] == ["location"]
+
+
+def test_a_vacancy_abroad_that_states_no_region_is_withheld_like_any_other() -> None:
+    """The same shape this whole change fixes, one border away.
+
+    It reached a different answer from its domestic twin for no reason the
+    candidate would recognise, which is how a fix comes to cover one case of
+    two.
+    """
+    silent = _offer("offer-abroad-silent", country="FR", delivery="onsite", region=None)
+
+    result = filter_hard_constraints(_eu_commuter(), [silent])
+
+    assert result.outcome_for("offer-abroad-silent") == "unplaced"
+    assert [r.field for r in result.unplaced] == ["location"]
+
+
+def test_a_region_inside_the_radius_survives_even_across_a_border() -> None:
+    """The control, and the reason this is a region test rather than a border test.
+
+    A cross-border commute is a real answer a real candidate gives. Refusing
+    on the border instead of comparing across it would trade #550's fail-open
+    for a fail-closed one, and #547 is the measurement of what that costs.
+    """
+    near = _offer("offer-perpignan", country="FR", delivery="onsite", region="Barcelonès")
+
+    result = filter_hard_constraints(_eu_commuter(), [near])
+
+    assert result.surviving == ("offer-perpignan",)
+    assert result.outcome_for("offer-perpignan") == "surviving"
+
+
+def test_a_candidate_with_no_radius_still_ignores_another_country() -> None:
+    """Unchanged for everyone else: the new ordering is inside the radius branch.
+
+    A candidate who stated no `commutable_regions` has no place test to apply,
+    so a foreign on-site offer is still not `location`'s business.
+    """
+    plain = _permissive().model_copy(
+        update={
+            # …and authorised there, or `work_authorisation` refuses it first
+            # and this test measures that field instead of the one it names.
+            "work_authorisation": WorkAuthorisation(
+                state="stated", authorised_countries=("ES", "FR")
+            )
+        }
+    )
+    assert plain.location.commutable_regions == ()
+    abroad = _offer("offer-abroad", country="FR", delivery="onsite", region="Île-de-France")
+
+    result = filter_hard_constraints(plain, [abroad])
+
+    assert result.surviving == ("offer-abroad",)

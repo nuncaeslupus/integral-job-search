@@ -210,13 +210,21 @@ def _unsatisfied_stated(annotation: Annotation, constraints: CandidateConstraint
     Any verdict but `satisfied` counts, rather than `violated` alone, so a
     literal added later (T201's `unplaced`) explains a drop without this test
     having to learn its name.
+
+    A **missing** reading fails outright rather than counting as unsatisfied.
+    Filtering `reading.field in stated` judges the readings that happen to
+    exist, which is a proxy for the property and not the property: a field
+    `annotate()` stopped emitting would pass every check below by not being
+    there, and the dropped case would pass for the wrong reason. Raised as a
+    finding by CodeRabbit on this PR, and it is the same shape as the defect
+    these tests exist to catch — a check defeated by the absence of the thing
+    it reads, one level up.
     """
     stated = {name for name, value in constraints.as_dict().items() if value.state == "stated"}
-    return [
-        reading.field
-        for reading in annotation.readings
-        if reading.field in stated and reading.verdict != "satisfied"
-    ]
+    read = {reading.field: reading.verdict for reading in annotation.readings}
+    missing = sorted(stated - set(read))
+    assert not missing, f"the annotation carries no reading at all for stated field(s): {missing}"
+    return [field for field in sorted(stated) if read[field] != "satisfied"]
 
 
 @pytest.mark.parametrize(
