@@ -47,6 +47,14 @@ In this step that sounds like:
 
 - Never infer an offer status from silence — `screened_out` and `shortlisted` are recorded from what the candidate actually said.
 - Never work down the list item by item asking for an opinion on each — that is a survey, not following.
+- **A topic, sector or kind of company they rule out in words is recorded the moment they say it** — "no me interesa la banca", "ya tuve bastante de fintechs", "nada de comprar y vender" — as well as being kept as their reason. `rule_out` screens out one advert and the reason explains it; the exclusion is what stops the next search and the next list from showing it again. Run it with the Spanish, English and Catalan forms as `--term` (the tool matches plurals and endings itself, not other words or languages), and say it back in one line:
+
+  ```bash
+  uv run python -m integral.sourcing_exclusions record --handle <handle> \
+      --about sector:fintech --words "ya tuve bastante de fintechs" --term "tecnología financiera" --term "tecnologia financera"
+  ```
+
+  Offers already stored on that topic are withheld by `partition` from the next list, with the count and reason in `withheld_line` — a fresh search is not needed for them to go.
 
 ## Recording a decision — one route, and it keeps the words
 

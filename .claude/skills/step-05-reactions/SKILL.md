@@ -32,6 +32,14 @@ If the runtime (`integral.step_runtime.offered`) is not offering `reactions` for
 - Mix whole adverts with fragments — the interesting reactions are often to one part.
 - Vary the question; the same prompt fifteen times reads as a form.
 - Capture their words verbatim and extract afterwards — never ask them to categorise their own reaction.
+- **A topic, sector or kind of company they rule out in words is recorded the moment they say it** — "no me interesa la banca", "ya tuve bastante de fintechs", "nada de comprar y vender" — as well as being kept as the reaction. The reaction explains; the exclusion is what stops the next search and the next list from showing it again. Run it with the Spanish, English and Catalan forms as `--term` (the tool matches plurals and endings itself, not other words or languages), and say it back in one line:
+
+  ```bash
+  uv run python -m integral.sourcing_exclusions record --handle <handle> \
+      --about sector:fintech --words "ya tuve bastante de fintechs" --term "tecnología financiera" --term "tecnologia financera"
+  ```
+
+  Stimuli enter the store as ordinary offers, so **show only what `partition(store, stored_ids)` returns** (`integral.presentation_log`, as in step 9) — it withholds any advert on a topic already ruled out, and `withheld_line` says how many, rather than letting a shorter set look like a thin market.
 
 **Keep the reactions unguarded, and say so.** The value is in the aside, not the rating:
 what it reminded them of, the last place that talked like this, the thing they do in their

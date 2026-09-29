@@ -80,6 +80,7 @@ from integral.lifecycle import (
 )
 from integral.offers import Offer, SourceKind, compute_offer_id
 from integral.robots import Robots, RobotsError
+from integral.sourcing_exclusions import Exclusion, candidate_of, load_exclusions, ruled_out_by
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -247,6 +248,13 @@ class BoardOutcome:
     #: of every `_unrealized_rows` bucket, a board whose every row landed
     #: here still satisfied `items > _unrealized_rows(o)` with `added == 0`.
     refused_rows: int = 0
+    #: T203. Rows built into an offer and then left out because the candidate
+    #: had ruled their topic out — counted apart from `dropped` (nothing was
+    #: wrong with the row) and from `off_aim` (which is about the phrases).
+    excluded: int = 0
+    #: One entry per row counted in `excluded`: the advert and every `about`
+    #: it tripped, so the candidate can be told what was left out and why.
+    excluded_because: tuple[str, ...] = ()
     #: T144. On an ATS host each request is a different employer's board, so
     #: one employer's failure is that employer's, never the host's: the others
     #: are still read, and the failures are named here rather than ending the
@@ -310,6 +318,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "detail_needed",
         "detail_fetched",
         "employers_failed",
+        "excluded_because",
         "source_kind",
     }
 )
@@ -599,6 +608,11 @@ class Run:
                     f"  FILTERED {outcome.connector}: {outcome.off_aim} of {outcome.items} "
                     "row(s) matched none of your phrases"
                 )
+            if outcome.excluded:
+                lines.append(
+                    f"  EXCLUDED {outcome.connector}: {outcome.excluded} of {outcome.items} "
+                    "row(s) are on a topic you ruled out — " + "; ".join(outcome.excluded_because)
+                )
             if outcome.unopened:
                 lines.append(
                     f"  UNOPENED {outcome.connector}: {outcome.unopened} row(s) needed the "
@@ -863,6 +877,10 @@ def source(
     if run.unreached:
         run.unreached_because = _why_unreached(constraints, withheld)
     phrases = aim.terms[:PHRASE_CEILING]
+    # T203. Read here, by the act of searching, and not handed in: the module
+    # that applies them was correct and tested for as long as nothing on this
+    # path called it, and a parameter a caller must remember is the same gap.
+    exclusions = load_exclusions(store)
     # T174: shared by every board and phrase, so a host's refusal is its
     # answer for the rest of the run rather than for one request.
     refused_origins: dict[str, str] = {}
@@ -898,6 +916,7 @@ def source(
                     room=room,
                     browser=browser,
                     refused_origins=refused_origins,
+                    exclusions=exclusions,
                 )
             )
     return run
@@ -1032,6 +1051,7 @@ def _one_board(
     room: int = OFFER_CEILING,
     browser: Fetch | None = None,
     refused_origins: dict[str, str] | None = None,
+    exclusions: Sequence[Exclusion] = (),
 ) -> BoardOutcome:
     """One board, asked `query` if it searches, else narrowed to `phrases`.
 
@@ -1080,6 +1100,8 @@ def _one_board(
     unopened = 0
     over_ceiling = 0
     refused_rows = 0
+    excluded = 0
+    excluded_because: list[str] = []
     drop_reason: str | None = None
     stale = False
     refused: str | None = None
@@ -1114,6 +1136,8 @@ def _one_board(
             unopened=unopened,
             over_ceiling=over_ceiling,
             refused_rows=refused_rows,
+            excluded=excluded,
+            excluded_because=tuple(excluded_because),
             employers_failed=tuple(failed),
             source_kind=source_kind_of(connector),
             skipped=skipped,
@@ -1245,6 +1269,13 @@ def _one_board(
             if offer is None:
                 dropped += 1
                 drop_reason = drop_reason or why
+                continue
+            ruled_out = ruled_out_by(candidate_of(offer), exclusions)
+            if ruled_out:
+                # T203. Left out **and said**: the count and the reason ride
+                # on the outcome, so it is on the page the candidate reads.
+                excluded += 1
+                excluded_because.append(f"{offer.title or offer.id} ({', '.join(ruled_out)})")
                 continue
             collected.append(offer.id)
             outcome = collect_offer(store, offer, at=at)

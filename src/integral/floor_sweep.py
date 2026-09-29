@@ -3243,7 +3243,10 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: across three candidates (`reach._cases`). Measured with
 #: `uv run python -m integral.floor_sweep` against this branch. Still zero
 #: slack.
-MINIMUM_FLOORS_SWEPT = 86
+#: **89 with T203**, whose `exclusion_live_round` module declares three floors
+#: (`MINIMUM_EXCLUDED_SERVED`, `MINIMUM_UNEXCLUDED_SERVED`,
+#: `MINIMUM_EXCLUSIONS_TRIPPED`). Still zero slack.
+MINIMUM_FLOORS_SWEPT = 89
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3676,7 +3679,9 @@ def measure_marker_restatement_clearance() -> dict[str, Any]:
 #: `MINIMUM_FLOORS_SWEPT` above, and this battery mutates it the same as any
 #: other swept floor not already a finding. Measured with
 #: `measure_prose_clearance()` against this branch.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 83
+#: **86 with T203**: `exclusion_live_round`'s three floors each carry their own
+#: comment block and marker, so each is one more scenario. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 86
 
 
 def measure_prose_clearance() -> dict[str, Any]:

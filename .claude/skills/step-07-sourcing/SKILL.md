@@ -30,6 +30,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `sourcing` for 
 
 - Mostly automatic, with one conversational duty: establish how far the search can travel, at the moment it becomes relevant — remote, commuting distance, relocation, and cross-border employment (employed or contracting, paid where, taxed where).
 - Reach beyond the obvious portals to boards specialised in the candidate's field, and go to employers directly where the field has obvious ones.
+- **Topics the candidate ruled out are applied by `source()` itself** (`search/exclusions.json`, recorded in step 2 or whenever they say it). Adverts left out that way are counted and named in the run's `EXCLUDED` line — say so to the candidate ("12 left out on the banking topic they ruled out") rather than letting a smaller list look like a thinner market. A topic they rule out during this step is recorded first (`uv run python -m integral.sourcing_exclusions record …` with `--term` forms in Spanish, English and Catalan, see step 2), then the search is re-run.
 - **Deduplication is by similarity, not by hash** — the same job at two boards is rarely byte-identical.
 - Where a source needs a login, drive the candidate's **own browser session** rather than storing credentials — nothing to leak, nothing to rotate.
 
