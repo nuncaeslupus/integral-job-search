@@ -505,11 +505,14 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
+import hashlib
 import json
 import re
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -2953,7 +2956,41 @@ def _classify_floor(
     return None, UnpinnableFloor(module=module.stem, name=name, lineno=lineno), None, True, False
 
 
+#: T198: one analysis of a given tree per process. `measure` costs ~13s over the
+#: live tree and the gate's callers (`_main` alone reaches it three times) ask
+#: the same question of the same bytes. The key is the tree's *content* -- every
+#: `src_dir/*.py` byte plus every committed `status/evidence/*.json` byte, which
+#: `_committed_evidence_population` reads -- never a path or a bare `lru_cache`,
+#: so any edit to either input is a miss and re-analyses.
+_ANALYSES: dict[tuple[str, str], dict[str, Any]] = {}
+
+
+def _content_digest(src_dir: Path) -> str:
+    digest = hashlib.sha256()
+    for root in (src_dir, _REPO_ROOT / "status" / "evidence"):
+        for path in sorted(root.glob("*.py" if root == src_dir else "*.json")):
+            digest.update(path.name.encode() + b"\0" + path.read_bytes() + b"\0")
+        digest.update(b"\1")
+    return digest.hexdigest()
+
+
+def _analysed_once(
+    name: str, src_dir: Path, analyse: Callable[[], dict[str, Any]]
+) -> dict[str, Any]:
+    """`analyse()`'s result, computed once per (`name`, tree content); each caller
+    gets its own deep copy so mutating a result cannot poison the next one."""
+    key = (name, _content_digest(src_dir))
+    if key not in _ANALYSES:
+        _ANALYSES[key] = analyse()
+    return copy.deepcopy(_ANALYSES[key])
+
+
 def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
+    """T159's gate, memoised on the tree's content (see `_ANALYSES`)."""
+    return _analysed_once("measure", src_dir, lambda: _analyse(src_dir))
+
+
+def _analyse(src_dir: Path) -> dict[str, Any]:
     """T159's gate: floors that do not refuse the first deletion of their population."""
     findings: list[FloorFinding] = []
     unpinnable: list[UnpinnableFloor] = []
@@ -3596,6 +3633,12 @@ def _apply_marker_restatement_mutation(
 
 
 def measure_marker_restatement_clearance() -> dict[str, Any]:
+    return _analysed_once(
+        "measure_marker_restatement_clearance", _SRC_DIR, _measure_marker_restatement_clearance
+    )
+
+
+def _measure_marker_restatement_clearance() -> dict[str, Any]:
     """R3-1/R3-2 (round 4): how many of the real tree's *unpinnable* floors
     still read compliant after retyping their own marker to match a lowered
     value, rather than stripping it to plain prose.
@@ -3685,6 +3728,10 @@ MINIMUM_PROSE_MUTATION_SCENARIOS = 86
 
 
 def measure_prose_clearance() -> dict[str, Any]:
+    return _analysed_once("measure_prose_clearance", _SRC_DIR, _measure_prose_clearance)
+
+
+def _measure_prose_clearance() -> dict[str, Any]:
     """T163's gate: how many of the real tree's floors still read compliant
     after the report's own realistic mutation — every floor `measure()`
     classifies in scope, its value lowered to `0` and its comment replaced
