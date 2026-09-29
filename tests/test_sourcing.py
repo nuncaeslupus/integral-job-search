@@ -537,6 +537,32 @@ def test_the_caption_names_every_kind_of_board_it_withholds(store: ProfileStore)
             f"says only {run.unreached_because!r}"
         )
 
+    # The other direction, and it is the one that was live: ⊇ alone is
+    # satisfied by a caption that names every kind always, which then tells a
+    # candidate their worldwide boards were withheld when all fourteen were
+    # asked (second reader, N2). Same derivation, over a reach that withholds
+    # exactly one kind, so the two assertions together are equality.
+    remote_only = _spain().model_copy(update={"reach": Reach(state="stated", modes=("remote",))})
+    asked = {p.name for p in packages_for(remote_only, _CONNECTORS)}
+    withheld = [p for p in installed_packages(_CONNECTORS) if p.usable and p.name not in asked]
+    one_kind = {"worldwide" if p.country == GLOBAL else "other countries'" for p in withheld}
+    assert one_kind == {"other countries'"}, (
+        f"this half needs a reach withholding exactly one kind; it withholds {sorted(one_kind)}"
+    )
+    run = source(
+        store,
+        remote_only,
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    for absent in kinds - one_kind:
+        assert absent not in run.unreached_because, (
+            f"no {absent!r} board was withheld, and the summary says {run.unreached_because!r}"
+        )
+
 
 def test_foreign_boards_come_after_the_country_s_own_and_the_worldwide_ones() -> None:
     names = [p.name for p in packages_for(_cross_border_spain(), _CONNECTORS)]
@@ -772,6 +798,12 @@ def test_why_worldwide_boards_were_left_out_follows_the_reach_state(
         robots=_robots(),
     )
     assert says in run.summary(), run.summary()
+    # This library is one `GLOBAL` board and nothing else, so a caption naming
+    # "other countries' own job boards" names boards that do not exist and were
+    # not withheld (second reader, N2). Read from the directory, not assumed.
+    installed = installed_packages(tmp_path / "connectors")
+    assert {p.country for p in installed} == {GLOBAL}, installed
+    assert "other countries'" not in run.unreached_because, run.unreached_because
 
 
 @pytest.mark.parametrize("failure", ["error", "refused", "robots"])

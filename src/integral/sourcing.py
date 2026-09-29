@@ -702,7 +702,7 @@ def reaches_across_borders(constraints: CandidateConstraints) -> bool:
     return reach.state == "stated" and "cross_border_remote_employer" in reach.modes
 
 
-def _why_not_worldwide(constraints: CandidateConstraints) -> str:
+def _why_not_worldwide(constraints: CandidateConstraints, withheld: Sequence[Package]) -> str:
     """Why worldwide boards were left out, without claiming an answer nobody gave.
 
     "Does not include remote work" is true only of a stated reach. An unknown
@@ -714,8 +714,20 @@ def _why_not_worldwide(constraints: CandidateConstraints) -> str:
     # withheld set spans the two and naming only the first miscaptions the
     # national boards in it (second reader, F3 — 5 of 19 for a real profile,
     # and answering "yes, remote" unlocked 14 and left those 5 unexplained).
-    # One reason covers both because it is the operative one for both.
-    boards = "worldwide boards and other countries' own job boards"
+    # One reason covers both because it is the operative one for both — but
+    # only the kinds actually withheld are named. A constant prefix said
+    # "and other countries' own job boards" to a candidate over a library that
+    # holds none, naming boards that do not exist and were not withheld
+    # (second reader, N2). Derived from the withheld set, so a library with one
+    # kind in it cannot be miscaptioned and a bucket added later needs no
+    # branch here.
+    home = constraints.location.country
+    kinds = []
+    if any(p.country == GLOBAL for p in withheld):
+        kinds.append("worldwide boards")
+    if any(p.country not in (GLOBAL, home) for p in withheld):
+        kinds.append("other countries' own job boards")
+    boards = " and ".join(kinds) or "boards outside your own country"
     state = constraints.reach.state
     if state == "unknown":
         return f"{boards}, since you have not said whether you would work remotely"
@@ -735,7 +747,7 @@ def _why_no_location(constraints: CandidateConstraints) -> str:
     return "every installed board, since you have not said where you are"
 
 
-def _why_unreached(constraints: CandidateConstraints) -> str:
+def _why_unreached(constraints: CandidateConstraints, withheld: Sequence[Package]) -> str:
     """Why the boards `packages_for` left out were left out, narrowest first.
 
     A cascade rather than a branch beside the selection: the set of withheld
@@ -747,7 +759,7 @@ def _why_unreached(constraints: CandidateConstraints) -> str:
     if location.state != "stated" or not location.country:
         return _why_no_location(constraints)
     if not reaches_worldwide(constraints):
-        return _why_not_worldwide(constraints)
+        return _why_not_worldwide(constraints, withheld)
     if not reaches_across_borders(constraints):
         return (
             "other countries' own job boards, since you have not said you would work "
@@ -846,11 +858,10 @@ def source(
     # summary is the only place the candidate learns those boards exist. A
     # difference cannot be one bucket behind, whatever `packages_for` grows next.
     asked = {p.name for p in packages_for(constraints, directory)}
-    run.unreached = tuple(
-        p.name for p in installed_packages(directory) if p.usable and p.name not in asked
-    )
+    withheld = [p for p in installed_packages(directory) if p.usable and p.name not in asked]
+    run.unreached = tuple(p.name for p in withheld)
     if run.unreached:
-        run.unreached_because = _why_unreached(constraints)
+        run.unreached_because = _why_unreached(constraints, withheld)
     phrases = aim.terms[:PHRASE_CEILING]
     # T174: shared by every board and phrase, so a host's refusal is its
     # answer for the rest of the run rather than for one request.
@@ -1747,6 +1758,19 @@ def measure_reach_selection() -> dict[str, Any]:
                 f"site: {site}.integral.local\ncountry: {country}\nlanguage: en\n",
                 encoding="utf-8",
             )
+            # One unusable board per bucket, so `p.usable` is pinned in every
+            # bucket rather than in the one somebody remembered (second reader,
+            # N1). Every board this directory installed was usable, so deleting
+            # `p.usable` from any comprehension in `packages_for` left this
+            # record byte-identical while the real library admitted a reserved
+            # example domain and fetched it. A reserved `.test` site is the
+            # runtime's own definition of unusable — see `is_example_site` —
+            # so this does not restate the rule it is testing.
+            flood_board(directory, f"{site}-unusable", 1)
+            (directory / f"{site}-unusable_en" / "meta.yaml").write_text(
+                f"site: {site}-unusable.test\ncountry: {country}\nlanguage: en\n",
+                encoding="utf-8",
+            )
         chosen = {
             name: [p.name for p in packages_for(constraints, directory)]
             for name, constraints in reaches.items()
@@ -1754,6 +1778,7 @@ def measure_reach_selection() -> dict[str, Any]:
     selected = {name: set(names) for name, names in chosen.items()}
 
     home, worldwide, foreign = ("home_en", "worldwide_en", "foreign_en")
+    unusable = {f"{site}-unusable_en" for site in countries}
     # The rule each combination is held to, stated from the mode names. Any
     # stated reach naming remote work of either kind opens `GLOBAL`; only
     # naming an employer abroad opens another country's own boards; an
@@ -1809,6 +1834,10 @@ def measure_reach_selection() -> dict[str, Any]:
         "boards_selected_more_than_once": sum(
             len(names) - len(set(names)) for names in chosen.values()
         ),
+        # Summed over every reach and every bucket, so it counts whichever
+        # comprehension loses the check — including one added later, which is
+        # why this is one component rather than an assertion per bucket.
+        "unusable_boards_selected": sum(len(names & unusable) for names in selected.values()),
     }
     measured: dict[str, Any] = {
         "reach_selection_violations": sum(components.values()),
