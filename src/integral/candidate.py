@@ -1039,8 +1039,8 @@ class _Case:
 #: rule's text before it read the code — Unicode §3.13 D145 for `inside`, then
 #: `Mn` removal for `maybe` — each verdict computed from the Unicode data rather
 #: than by running `_radius_match`. `habo_habo_collision` is why `maybe` exists:
-#: Habo and Håbo are two Swedish municipalities. The last three rows were added
-#: after it: one pins D145's inner NFD, two answer the second reader on #579.
+#: Habo and Håbo are two Swedish municipalities. The last four rows were added
+#: after it: one pins D145's inner NFD, three answer the second reader on #579.
 REGION_SPELLINGS: tuple[
     tuple[str, tuple[str, ...], str, Literal["inside", "maybe", "outside"], str], ...
 ] = (
@@ -1191,6 +1191,13 @@ REGION_SPELLINGS: tuple[
         "\u20dd",
         "inside",
         "1 only Mn is blank; an Me mark is a character, caseless equal to itself",
+    ),
+    (
+        "spacing_mark_is_not_blank",
+        ("\u093e",),
+        "\u093e",
+        "inside",
+        "1 only Mn is blank; an Mc mark is a character, caseless equal to itself",
     ),
 )
 
@@ -1486,12 +1493,12 @@ def probe_hard_filter() -> dict[str, Any]:
     )
 
     # T205: one subdivision, many spellings. Each row is a radius, a region and
-    # the verdict `_radius_match`'s rule gives; the rows were derived from that
-    # rule by a second session, not from the code. Every row is put to both
-    # sites that read the radius, for a candidate who will not move. At home
-    # `inside` survives, `maybe` is withheld and `outside` is removed. Abroad
-    # anything the radius may name is a homonym and withheld, and `outside` is
-    # relocation's refusal.
+    # the verdict `_radius_match`'s rule gives, derived from that rule rather
+    # than from the code (see `REGION_SPELLINGS` for who wrote which). Every
+    # row is put to both sites that read the radius, for a candidate who will
+    # not move. At home `inside` survives, `maybe` is withheld and `outside` is
+    # removed. Abroad anything the radius may name is a homonym and withheld,
+    # and `outside` is relocation's refusal.
     expected = {
         "inside": ["surviving", "unplaced"],
         "maybe": ["unplaced", "unplaced"],
@@ -1700,8 +1707,8 @@ def probe_hard_filter() -> dict[str, Any]:
 #: -> 32 for #570's second reader, N6: relocation refusing a foreign on-site
 #: vacancy outside a commute radius for a candidate who will not move.
 #: -> 88 for T205's `REGION_SPELLINGS`, one check per spelling row; -> 90 for
-#: #579's second reader, F1 and F2.
-MINIMUM_CASES = 90
+#: #579's second reader, F1 and F2; -> 91 for its round 2, N1.
+MINIMUM_CASES = 91
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
