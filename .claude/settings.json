@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "bash claude-arsenal/bin/statusline_capture.sh"
+    "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/statusline_capture.sh"
   },
   "hooks": {
     "PreToolUse": [
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash claude-arsenal/bin/check_skill_workshop_loaded.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/check_skill_workshop_loaded.sh"
           }
         ],
         "matcher": "Edit|Write|MultiEdit|Bash"
@@ -39,10 +39,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash claude-arsenal/bin/mark_skill_workshop_loaded.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/mark_skill_workshop_loaded.sh"
           }
         ],
         "matcher": "Skill"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/reader_hook.sh"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit"
       }
     ],
     "UserPromptSubmit": [
@@ -50,7 +59,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash claude-arsenal/bin/mark_skill_workshop_loaded_from_prompt.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/mark_skill_workshop_loaded_from_prompt.sh"
           }
         ]
       }
