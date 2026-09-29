@@ -13,8 +13,10 @@ is the separate, complementary check that today's actual tree is clean.
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -4035,6 +4037,28 @@ def test_a_cached_analysis_still_sees_a_changed_tree(
     assert len(calls) == 2
     assert second["floors_that_do_not_refuse_the_first_deletion"] == 1
     assert second != first
+
+
+def test_a_byte_identical_copy_does_not_share_the_live_trees_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_analyse` depends on the path (`_THIS_FILE` identity), not only the bytes."""
+    calls = _count_analyses(monkeypatch)
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(floor_sweep._SRC_DIR, copy_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    floor_sweep.measure(copy_dir)
+    floor_sweep.measure()
+    assert [c.resolve() for c in calls] == [copy_dir.resolve(), floor_sweep._SRC_DIR]
+
+
+def test_a_returned_analysis_is_a_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _count_analyses(monkeypatch)
+    _write(tmp_path, _COMPLIANT_TREE)
+    first = floor_sweep.measure(tmp_path)
+    pristine = copy.deepcopy(first)
+    first["floors_that_do_not_refuse_the_first_deletion"] = 99
+    first["poison"] = True
+    assert floor_sweep.measure(tmp_path) == pristine
 
 
 def test_every_live_tree_caller_reaches_the_cache() -> None:

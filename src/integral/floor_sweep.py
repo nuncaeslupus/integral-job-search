@@ -2958,11 +2958,12 @@ def _classify_floor(
 
 #: T198: one analysis of a given tree per process. `measure` costs ~13s over the
 #: live tree and the gate's callers (`_main` alone reaches it three times) ask
-#: the same question of the same bytes. The key is the tree's *content* -- every
+#: the same question of the same bytes. The key is the tree's *content* and the
+#: paths `_analyse` compares against (see `_analysed_once`) -- every
 #: `src_dir/*.py` byte plus every committed `status/evidence/*.json` byte, which
 #: `_committed_evidence_population` reads -- never a path or a bare `lru_cache`,
 #: so any edit to either input is a miss and re-analyses.
-_ANALYSES: dict[tuple[str, str], dict[str, Any]] = {}
+_ANALYSES: dict[tuple[str, ...], dict[str, Any]] = {}
 
 
 def _content_digest(src_dir: Path) -> str:
@@ -2979,7 +2980,10 @@ def _analysed_once(
 ) -> dict[str, Any]:
     """`analyse()`'s result, computed once per (`name`, tree content); each caller
     gets its own deep copy so mutating a result cannot poison the next one."""
-    key = (name, _content_digest(src_dir))
+    # `_analyse` also compares each module's *path* to `_THIS_FILE` and reads
+    # evidence under `_REPO_ROOT`, so a byte-identical copy of the tree at another
+    # path is a different question and must not share the live tree's entry.
+    key = (name, str(src_dir.resolve()), str(_THIS_FILE), str(_REPO_ROOT), _content_digest(src_dir))
     if key not in _ANALYSES:
         _ANALYSES[key] = analyse()
     return copy.deepcopy(_ANALYSES[key])
