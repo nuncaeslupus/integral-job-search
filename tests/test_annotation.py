@@ -433,3 +433,33 @@ def test_relocation_is_not_read_satisfied_over_a_move_it_can_refuse(
     assert verdicts["relocation"] == "violated"
     assert verdicts["location"] == "unplaced"
     assert not annotation.kept
+
+
+@pytest.mark.parametrize("region", [None, "Barcelona"])
+@pytest.mark.parametrize(("willingness", "expected"), [("no", "unplaced"), ("yes", "satisfied")])
+def test_relocation_is_read_only_where_the_radius_decides_the_move(
+    region: str | None, willingness: Literal["no", "yes"], expected: str
+) -> None:
+    """#574's reader, F3: a Polish vacancy with no region, or with a region
+    named like a radius entry. Whether the job means moving is undecided, so
+    "will not relocate" cannot be read as satisfied. "Will move to Poland" is
+    satisfied whichever way it goes, and must not be withheld for it."""
+    constraints = CandidateConstraints(
+        location=Location(
+            state="stated",
+            country="ES",
+            accepts_onsite_in_country=True,
+            commutable_regions=("Barcelona",),
+        ),
+        relocation=Relocation(
+            state="stated",
+            willingness=willingness,
+            destinations=("PL",) if willingness == "yes" else (),
+        ),
+    )
+    offer = OfferFacts(offer_id="abroad", country="PL", delivery="onsite", region=region)
+    annotation = annotate(offer, constraints, ProfileRevision(rows=1, sha256="a" * 64))
+    verdicts = {reading.field: reading.verdict for reading in annotation.readings}
+    assert verdicts["relocation"] == expected
+    assert verdicts["location"] == "unplaced"
+    assert not annotation.kept
