@@ -240,8 +240,8 @@
     {
       "module": "candidate",
       "name": "MINIMUM_CASES",
-      "line": 1408,
-      "population": 31
+      "line": 1453,
+      "population": 32
     },
     {
       "module": "connectors",
@@ -282,19 +282,19 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3352,
+      "line": 3354,
       "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3379,
+      "line": 3381,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3245,
+      "line": 3246,
       "population": 86
     },
     {

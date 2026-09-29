@@ -17,7 +17,7 @@ import dataclasses
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast, get_args, get_type_hints
+from typing import Any, Literal, cast, get_args, get_type_hints
 
 import pytest
 from pydantic import ValidationError
@@ -34,7 +34,13 @@ from integral.annotation import (
     stated_strings,
     write_annotation,
 )
-from integral.candidate import CandidateConstraints, HardFilterResult, OfferFacts
+from integral.candidate import (
+    CandidateConstraints,
+    HardFilterResult,
+    Location,
+    OfferFacts,
+    Relocation,
+)
 from integral.dimensions import load_dimensions
 from integral.extraction import OfferExtraction
 from integral.identity import ProfileStore, create_profile
@@ -401,3 +407,29 @@ def test_a_refused_offer_still_reports_the_field_it_could_not_read(store: Profil
     assert annotation.kept is False
     assert verdicts["salary"] == "violated"
     assert verdicts["location"] == "unplaced"
+
+
+@pytest.mark.parametrize("delivery", ["onsite", "hybrid"])
+def test_relocation_is_not_read_satisfied_over_a_move_it_can_refuse(
+    delivery: Literal["onsite", "hybrid"],
+) -> None:
+    """#570's second reader, N6: a candidate with a commute radius who will not
+    relocate, and an on-site vacancy in Kraków. The radius names no Polish
+    place under any reading, so the job means moving and `relocation` refuses
+    it — it used to read "nothing in this advert conflicts" while the offer sat
+    in `unplaced` on `location` alone."""
+    constraints = CandidateConstraints(
+        location=Location(
+            state="stated",
+            country="ES",
+            accepts_onsite_in_country=True,
+            commutable_regions=("Barcelona",),
+        ),
+        relocation=Relocation(state="stated", willingness="no"),
+    )
+    krakow = OfferFacts(offer_id="krakow", country="PL", delivery=delivery, region="Kraków")
+    annotation = annotate(krakow, constraints, ProfileRevision(rows=1, sha256="a" * 64))
+    verdicts = {reading.field: reading.verdict for reading in annotation.readings}
+    assert verdicts["relocation"] == "violated"
+    assert verdicts["location"] == "unplaced"
+    assert not annotation.kept
