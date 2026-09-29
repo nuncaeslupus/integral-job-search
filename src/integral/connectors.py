@@ -184,8 +184,11 @@ ALLOWED_OFFER_FIELDS = frozenset(
         # reads that phrase is `salary_recovery.band_in_text`, which this module
         # cannot call (`salary_recovery` imports `_as_float` from here), so
         # `sourcing._offer_from` reads it on the way in and hands `build_offer`
-        # the four values. Declaring it alongside `salary_min` is refused there:
-        # two readings of one band are two answers.
+        # the four values. Declaring it alongside `salary_min` is unsupported
+        # and is NOT checked at load: `_with_stated_band` guards on the
+        # *extracted* fields, so on a row where the mapped band fields extract
+        # nothing the phrase would be read for that row alone, and on a row
+        # where they extract it is ignored. No connector declares both.
         "salary_text",
     }
 )
@@ -1163,6 +1166,13 @@ _CURRENCIES: dict[str, str] = {
     # occurrences to one. `bulk_filter` never compares a band against a floor
     # in another currency, so nothing downstream reads BRL as anything else.
     "R$": "BRL",
+    # T200 second-reader round. `foorilla_en`'s cards print `INR 3000K-5000K` on
+    # thirteen rows, and because the code was absent the audit's own detector —
+    # derived from this table — could not see that those cards publish money, so
+    # a wildcard verdict passed over a figure in a currency nothing could name.
+    # The bounded-token guards above apply unchanged.
+    "INR": "INR",
+    "RON": "RON",
 }
 
 #: A currency token, bounded by ASCII letters on both sides. Substring matching
@@ -3242,6 +3252,23 @@ def decode_body(raw: bytes | str, charset: str = "utf-8") -> str:
         ) from error
 
 
+#: RFC 1123 §2.1 labels, two or more of them. Spelled here rather than imported
+#: from `reaction_elicit`, which answers the neighbouring question (what host does
+#: this URL name) and may not import this module at all — `corpus_scope` bounds what
+#: it reaches. `test_connectors` pins the two in two pieces, because they are two
+#: rules: the label alphabet is asserted **equal as a string** to
+#: `reaction_elicit._LABEL_RE.pattern`, and the compositions — a fullmatch here,
+#: a split-and-count there — are compared over a population generated from the
+#: grammar's axes. A list of boundary cases was round 4's finding: it left the
+#: 63-octet cap and §2.1's alphabetic top-level label drifting one-sidedly and
+#: green. The RFC 2606 reserved-TLD rule below is this module's alone, by design.
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_SERVED_HOST_RE: Final = re.compile(rf"{_LABEL}(?:\.{_LABEL})+")
+
+#: RFC 2606 §2. Reserved for documentation and testing; nothing is served from one.
+RESERVED_TLDS: Final = frozenset({"test", "example", "invalid", "localhost"})
+
+
 class Connector(Strict):
     """One site's connector — `connectors/<site>_<locale>.yaml`.
 
@@ -3281,6 +3308,18 @@ class Connector(Strict):
     #: inferred (T75). An `{employer}` slot alone does not say it, because a job
     #: board's company page takes one too (#462 second reader, F1).
     source_kind: SourceKind | None = None
+    #: #558. Hosts this board serves its ADVERTS from, when an advert url does
+    #: not name the host the listing was fetched from. An ATS lists from
+    #: `api.ashbyhq.com` and returns advert urls on `jobs.ashbyhq.com`, so host
+    #: equality against the list host refuses every ATS advert there is.
+    #: `reaction_elicit.check_stimulus` matches an offer's url host against this
+    #: set plus the list host; an undeclared host reads as forgery and is
+    #: refused. Declared, never inferred (T75) — deriving it by allowing one
+    #: label of slack off the list host admits `boards.greenhouse.io`, which
+    #: `connectors/ruled-out.yaml` files under `robots_refused`. Whether robots
+    #: permits a given advert url is a separate question, answered per url at
+    #: fetch time by `sourcing._may_fetch`; this field is only about provenance.
+    serves_from: tuple[str, ...] = ()
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3299,6 +3338,34 @@ class Connector(Strict):
                 "a connector may not claim it"
             )
         return site
+
+    @field_validator("serves_from")
+    @classmethod
+    def _serves_from_are_already_hostnames(cls, hosts: tuple[str, ...]) -> tuple[str, ...]:
+        # A validator, never a repair — the `resolve_identity` rule. A declared
+        # host reaches `reaction_elicit.check_stimulus` as a member of the set an
+        # offer's url host is matched against, and that host arrives from
+        # `urlparse(...).hostname`: lowercased, port stripped, scheme gone. So
+        # anything that is not already in that spelling can never match, and the
+        # two ways to be wrong point opposite ways. `https://jobs.lever.co`
+        # silently matches nothing, which reads as "declared, still refused" and
+        # sends the next session looking in the wrong module. Repairing it — strip
+        # a scheme, drop a path, casefold — is the other direction and worse: what
+        # a repair welds onto the string is a host nobody declared, and the field's
+        # whole job is provenance. Refuse both here, where the file is loaded and
+        # the error names the connector.
+        for host in hosts:
+            if host != host.lower() or _SERVED_HOST_RE.fullmatch(host) is None:
+                raise ValueError(
+                    f"serves_from: {host!r} is not a hostname — declare the host exactly as "
+                    "an advert url spells it, lowercased and with no scheme, port or path"
+                )
+            if host.rsplit(".", 1)[-1] in RESERVED_TLDS:
+                raise ValueError(
+                    f"serves_from: {host!r} is under a reserved TLD (RFC 2606 §2) and resolves "
+                    "nowhere — no advert is served from it"
+                )
+        return hosts
 
     @model_validator(mode="after")
     def _something_produces_the_offer_text(self) -> Connector:
@@ -3889,6 +3956,23 @@ def _declares(connector: Connector, field: str) -> bool:
     return False
 
 
+def _outside_annual_bound(period: str | None, *figures: float | None) -> bool:
+    """A band with no period is bounded as annual — the rule `salary_recovery`
+    already applies to a recovered band (`_band_defect`), now on the connector
+    route too. `Salary(period=None)` is unlabelled on the card and uncomparable
+    to a floor (`bulk_filter._below_pay_floor` skips it), so `9 € - 13 €` or
+    `105 - 115 PLN` with the `/ h` left unread would be shown as the employer's
+    own annual-looking number with its unit deleted. A connector whose board
+    states the period declares `salary_period` and is unaffected.
+    """
+    if period is not None:
+        return False
+    from integral.salary_recovery import _BOUNDS  # late: salary_recovery imports this module
+
+    low, high = _BOUNDS["year"]
+    return any(figure is not None and not low <= figure <= high for figure in figures)
+
+
 def build_offer(
     connector: Connector,
     *,
@@ -3954,12 +4038,15 @@ def build_offer(
         # that declares no currency field at all is unaffected — `usajobs_en`
         # maps `MinimumRange` and no currency, and keeps reading it. (This
         # sentence named `ticjob_es` and `nofluffjobs_en` until T200 measured
-        # it: neither maps a band at all, so the guard was being documented by
-        # two connectors it could never reach. `usajobs_en` is the only package
-        # in the library actually in that position.)
+        # it. It named the wrong pair: `ticjob_es` maps no band, and
+        # `nofluffjobs_en` maps one now and declares its currency, so neither
+        # is in that position. `usajobs_en` is the only package in the library
+        # that is.)
         if not _present(currency) and _declares(connector, "salary_currency"):
             pass  # a stated, unreadable currency — no salary at all
-        elif minimum is not None or maximum is not None:
+        elif (minimum is not None or maximum is not None) and not _outside_annual_bound(
+            period, minimum, maximum
+        ):
             salary = Salary(
                 min=minimum,
                 max=maximum,

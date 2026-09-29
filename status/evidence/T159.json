@@ -63,6 +63,21 @@
       "line": 71
     },
     {
+      "module": "exclusion_live_round",
+      "name": "MINIMUM_EXCLUDED_SERVED",
+      "line": 83
+    },
+    {
+      "module": "exclusion_live_round",
+      "name": "MINIMUM_EXCLUSIONS_TRIPPED",
+      "line": 95
+    },
+    {
+      "module": "exclusion_live_round",
+      "name": "MINIMUM_UNEXCLUDED_SERVED",
+      "line": 88
+    },
+    {
       "module": "extraction",
       "name": "_CONFIRMING_MATCHES_FOR_BIPOLAR",
       "line": 155
@@ -195,12 +210,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 118
+      "line": 119
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 109
+      "line": 110
     },
     {
       "module": "spec_consistency",
@@ -240,13 +255,13 @@
     {
       "module": "candidate",
       "name": "MINIMUM_CASES",
-      "line": 1035,
-      "population": 19
+      "line": 1827,
+      "population": 95
     },
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4608,
+      "line": 4695,
       "population": 15
     },
     {
@@ -282,20 +297,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3343,
-      "population": 42
+      "line": 3357,
+      "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3370,
-      "population": 30
+      "line": 3384,
+      "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3241,
-      "population": 85
+      "line": 3249,
+      "population": 89
     },
     {
       "module": "freshness",
@@ -326,6 +341,12 @@
       "name": "MINIMUM_CHECKS",
       "line": 709,
       "population": 36
+    },
+    {
+      "module": "reach",
+      "name": "MINIMUM_FIXTURES",
+      "line": 144,
+      "population": 10
     },
     {
       "module": "retraction",
@@ -423,8 +444,8 @@
     "connector_exchange.LEAK_NEEDLE_MINIMUM",
     "connector_health.MAX_PROBE_ATTEMPTS",
     "connector_policy.ADJUDICATIONS_AT_LEAST",
+    "connector_salary_audit.MINIMUM_DISTINCT_SALARY_ROWS_READ",
     "connector_salary_audit.MINIMUM_PACKAGES_MEASURED",
-    "connector_salary_audit.MINIMUM_SALARY_ROWS_READ",
     "connector_salary_audit._WINDOW",
     "connector_transport.MINIMUM_CREDENTIAL_CASES",
     "connector_transport.MINIMUM_GET_PACKAGES",
@@ -452,6 +473,8 @@
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
+    "exclusion_live_round._CONTROL_CAP",
+    "exclusion_live_round._PER_EXCLUSION",
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS",
@@ -503,6 +526,7 @@
     "sourcing._FLOOD_PAGES",
     "sourcing._FLOOD_PAGE_ROWS",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",
+    "sourcing_exclusions._MIN_STEM",
     "step_gates.UNCERTIFIABLE",
     "step_gates.VOCABULARY_SILENT",
     "step_specs.MIN_FIELD_WORDS",
@@ -518,6 +542,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 85,
+  "floors_swept_at_least": 89,
   "floors_arithmetically_checked_at_least": 36
 }

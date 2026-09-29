@@ -1,5 +1,159 @@
 # Session handover
 
+## 00009. #579 merged (F4 from #574): commute-radius region names compared caselessly
+
+- **#579 MERGED** as `74d1399a` (T205 / #576, task `t-d09fef7c`). The rule has three outcomes:
+  - `inside`: equal under Unicode's canonical caseless match (D145, `NFD(casefold(NFD(x)))`).
+  - `maybe`: equal only once nonspacing (`Mn`) marks are dropped (Habo/Håbo are two different
+    municipalities). Withheld as `Uncomparable` at home and `unplaced` abroad.
+  - `outside`: anything else, including a name made only of `Mn` marks and whitespace.
+
+  Exonyms (Gerona/Girona) remain out of scope, because the repo has no gazetteer.
+  `REGION_SPELLINGS` has 59 rows written by a second session from the rule. `MINIMUM_CASES` is 95.
+  Of 13 one-edit mutants, 12 are killed. The outer NFD survives as a documented equivalent mutant.
+- Reader rounds 1-3 were CLEAR, and their findings were pinned as rows: F1 casefold-before-strip,
+  F2 and N1 Mn-only blank. F3 (`str.strip` removes U+001C-U+001F) was skipped as fail-closed.
+  Round 4, on the merge with #578, was CLEAR: 36 relocation/reach combinations derived, no fail-open.
+  verified_gate PASS on `fc5e49d4` (5336 passed). CI green. `review_reader check` exits 2
+  (shared login). `gh pr merge` went through this time.
+- 00006's open items are unchanged.
+
+
+## 00008. #578 merged (F3 from #574): relocation and reach no longer report a guess as cleared
+
+- **#578 MERGED** as `8d18cf7a` (T206 / #577, task `t-a89c7d6e`). Where a commute radius
+  cannot place a foreign on-site offer (no region, or a homonym region), `_read_either_way`
+  asks relocation and reach both as a stay and as a move. If the two agree, the verdict is
+  reported. If they disagree, it reads `unplaced`, as `location` already did.
+  Refusing both ways means `removed`; when the two reasons differ, the reason names both modes.
+  A candidate who would move to PL still has an unflagged Kraków vacancy withheld by location.
+  That is consistent with #550's Madrid rule and is now written in the `Location` docstring.
+  `MINIMUM_CASES` is 36.
+- Reader round 1 BLOCK on `a77a5721`, no fail-open. F1: a refusal both readings agree on
+  had no fixture. F2: the reason named only the guessed mode. Both were fixed in `5232631d`.
+  Round 2 CLEAR. The M6 mutant `verdict == moving` survives and is equivalent (the reader
+  checked by reasoning). verified_gate PASS on `5232631d` and on merged `main`
+  (`8d18cf7a`: 5336 passed). CI green. `review_reader check` exits 2 because the author and
+  the reader share one login; it is recorded as unsatisfiable on the PR.
+- F4 (region names compared as exact strings) is still running in its own session
+  (`t-d09fef7c`). 00006's open items are unchanged.
+
+
+## 00007. #574 merged (N6, N7 from #570); two follow-ups running in their own sessions
+
+- **#574 MERGED** as `7274c991` (T204 / #572, task `t-58f7aa91`). A commute-radius
+  candidate who will not relocate now has a foreign on-site or hybrid offer `removed` by
+  relocation (and reach) when the offer names a region the radius does not. A bare name
+  cannot put that region inside the radius under either reading. A foreign offer
+  with no region, or with a homonym region, stays `unplaced`. T24's abroad-distant fixture
+  now expects `removed`. N7's `floor_sweep.py` prose is corrected. Reader round 1 CLEAR on `ecf09ebb`
+  (F1 hybrid unpinned, answered by `3352030b`); round 2 CLEAR on `3352030b`;
+  verified_gate PASS on that head; CI green. Merged by hand: the auto-mode classifier
+  refuses `gh pr merge` while `review_reader check` exits 2 (markers under the author's
+  login, as on #570) - expect the same on every PR until readers post as another identity.
+- **Reader findings that predate #574, now running as separate sessions:**
+  - **F3** - a foreign offer with no region or a homonym region still annotates
+    relocation "satisfied" (the offer is withheld, but the note reports a guess as cleared).
+  - **F4** - region names are compared as exact strings (`kraków`/`Krakow` or an exonym miss
+    the radius). This is fail-closed, and #574 widened it to foreign offers.
+- Everything under 00006 (#571 BLOCKED, #554, #541, #566/#567/#559) is unchanged by this
+  session.
+
+
+## 00006. #564, #570 and #565 merged; #571 (topic exclusions) BLOCKED on three fail-opens
+
+**The candidate's three asks from the live round now stand at two merged, one blocked.**
+
+- **#564 MERGED** (#558, reactions on every board).
+- **#570 MERGED** as `ee69fadf` (T201 / #550: an on-site offer needs remote or a
+  commutable reach). Follow-ups **N6** (a radius candidate with relocation "no" sees a
+  foreign on-site offer as `unplaced` while the relocation note says satisfied) and **N7**
+  (stale "four shapes" prose in `floor_sweep.py` near the `MINIMUM_FLOORS_SWEPT` block)
+  were spun off; `../ijs-n6` holds task `t-58f7aa91` for N6 - check whether that session
+  is still live before touching it.
+- **#565 MERGED** as `cf4dc6af` (#562, foreign boards for a cross-border candidate), after
+  five reader rounds; round 5 CLEAR on `5b8be7d5`, verified_gate PASS, CI green. **#541**
+  (OFFER_CEILING global, worldwide boards never asked) is still OPEN - confirm whether
+  #565 settled it before closing it.
+- **#571 BLOCKED** - T203 / #561 (topics the candidate ruled out still served). Head
+  `2a58c734`, which merges main (census floors regenerated: `MINIMUM_FLOORS_SWEPT` 89,
+  `MINIMUM_PROSE_MUTATION_SCENARIOS` 86, T85 115). No verified_gate block for that head:
+  the run was stopped once the reader blocked. Reader report: comment 5890598725.
+  - **F1 high** - offers already in the store are never re-filtered; round 2 printed
+    `EXCLUDED 2` and presentation still showed both. #561's own case is the stored 35.
+    Step-5 stimuli have the same gap.
+  - **F2 high** - whole-word exact matching: `banca` misses bancario/bancaria/banco,
+    `fintech` misses `fintechs`; 13 corpus adverts saying bancari* and 2 Catalan
+    `ciberseguretat` pass even the fixture rows. The implementer's "bancaria must not
+    match banca" is the opposite of what the candidate asked.
+  - **F3 high** - nothing turns the candidate's recorded statements (evidence rows) into
+    exclusion rows; only the step-02/07 skills mention recording, not steps 5/10 where
+    such statements are heard. As merged, nothing would change for the candidate who
+    filed #561.
+  - **F4 medium** - the employer is never matched; a bank's advert that never names the
+    topic is served. **F5 low** - the live gate pins the wiring, not the matcher, and its
+    docstring claims all 8 fixture rows trip where 7 do.
+  - Sound: `source()` is `_one_board`'s only caller, a corrupt exclusions file fails
+    closed, removals are reported.
+  - Next: one implementer round on F1-F3 (F2 wants a closed rule - stem/prefix matching
+    derived from the stated word, ES/EN/CA alike - not more fixture words), then a scoped
+    re-read. Worktree `../ijs-t203`.
+- **#554** (T200) unchanged: reader BLOCK F1-F4 (F1: foorilla's `"*"` wildcard should be
+  satisfiable only by detail-side money), needs a rebase, and must revert its weakening
+  of T202's Gate cell in `status/plan.md`. Worktree `../ijs-t-06b341fa`.
+- Still unfiled as task files: **#566**, **#567**; **#559** still caps #564's win.
+
+A recurring hazard this session, twice: two branches each adding floors write the same
+census value and git merges it silently (`MINIMUM_FLOORS_*`, T85). Regenerate after every
+merge of main; never pick a side.
+
+
+## 00005. Two PRs open under a reader round each, T201 gated green, and the candidate called the loop too slow
+
+**The candidate's three asks from the live round are all in flight.** Reactions on every
+board (#558 → PR **#564**), foreign boards for a cross-border candidate (#562 → PR **#565**,
+companion #541), topic exclusions not applied (#561, not started).
+
+- **#564** — head `53c30db30b0a6f594dbf1eb4d899bff08e1b13b8`. Round 6 found a **live
+  fail-open**: `https://evil.test\@remotive.com/ad` read as `remotive.com`, because
+  `_hostname`'s graphic-range check stood in for the authority grammar. Fixed by deriving
+  `_AUTHORITY_RE` from RFC 3986 §3.2's own productions, which closes all twelve
+  out-of-grammar graphics and the second-`@` spelling at once. Round 5's read-back is
+  **deleted**, not kept beside it — over 4,050 label-valid authorities it never once
+  disagreed, and a guard that cannot fire is the defect, not a second opinion. Ten
+  mutations, no survivors. `verified_gate.sh` **PASS**, block on the PR. **Round 7 reader
+  was still running when the machine went down** — re-dispatch it; nothing else is
+  outstanding, so a CLEAR round means merge.
+- **#565** — head `7cb12b3da4d8e71872181949f455744322b86998`. Round 2 verdict is **BLOCK**
+  (comment 5805150880). Round 1's F1/F3/F5 are confirmed fixed and pinned. Two new:
+  **N1 (blocking)** `p.usable` is unpinned in *every* bucket — deleting it from `domestic`
+  or from the new `foreign` comprehension leaves `T167.json` byte-identical and 162 tests
+  green; the real library then admits `examplejobs_es` (ES 7→8 boards, US 26→27) and sends
+  it real HTTP. Remedy is a closed rule, not a per-bucket assertion: install one unusable
+  board in `measure_reach_selection`'s temp directory and sum
+  `unusable_boards_selected` over all 16 reaches. **N2** the caption test pins ⊇ only, and
+  `_why_not_worldwide` already misstates over a GLOBAL-only library. **#565 also waits on
+  T201/#550** by the candidate's own choice.
+- **T201 / #550** (`t-145d832e`) — the implementer's work is staged in `../ijs-550` and its
+  `make host-gate` finished **EXIT=0** (`evidence: no drift`, 194 terminal tasks). It was
+  never committed: `open_task_pr.sh` from that worktree is the next command.
+- **#554** is **CONFLICTING** — so it has *no* CI run, not a red one — and its reader
+  returned BLOCK. It also weakens T202's Gate cell in `status/plan.md`; revert that before
+  it merges.
+- Filed but not imported as task files: **#566** (cross-currency salary never compared),
+  **#567** (`relocate` reaches no foreign board). **#559** (1,281 of 1,314 offers carry
+  `fetched_at: null`) is what keeps #564's win at 3 offers instead of 1,279.
+
+**The candidate's process feedback, recorded because it is about how this repo works rather
+than about one PR:** he expected a PR to come back validated in seconds and finds the
+second-reader loop too slow. It is not wrong — round 6 on #564 took ~20 minutes of reader
+plus a mutation table. What the loop bought on those same two PRs: one live authority
+forgery and one board that would have been fetched despite being unusable, both behind a
+green gate. The lever that costs nothing is **scope**: a reader on a diff a prior round
+already cleared should be asked for the narrow check (CLAUDE.md already says so), and a
+docs-only diff is exempt outright.
+
+
 ## 00004. T194 / #520 merged, nine reader rounds, and the cost of that loop filed upstream
 
 **Verified live via `gh` after the merge, not carried from memory.**

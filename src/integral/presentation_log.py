@@ -53,6 +53,7 @@ from integral.feedback import DecisionResult, record_decision
 from integral.identity import ProfileStore
 from integral.lifecycle import LifecycleRecord, load_lifecycle_offer
 from integral.offers import Offer
+from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T139.json"
@@ -196,10 +197,16 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     """
     show: list[str] = []
     held: list[Withheld] = []
+    # T203. Read here, at the one place every list the candidate reads passes
+    # through: an offer stored *before* they ruled its topic out is not touched
+    # by `source()`, and would otherwise be shown with the exclusion on file.
+    exclusions = load_exclusions(store)
     for offer_id in offer_ids:
         loaded = _loaded(store, offer_id)
         if loaded is not None and loaded[0].status in ("screened_out", "rejected"):
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
+        elif loaded is not None and (topics := ruled_out_by(candidate_of(loaded[0]), exclusions)):
+            held.append(Withheld(offer_id, f"es de un tema que descartaste ({', '.join(topics)})"))
         else:
             show.append(offer_id)
     return show, held

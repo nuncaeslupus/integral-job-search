@@ -9,14 +9,16 @@ a failed run into a run that looks empty.
 
 from __future__ import annotations
 
+import itertools
 import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
+from integral import sourcing
 from integral.candidate import (
     Aim,
     CandidateConstraints,
@@ -37,11 +39,13 @@ from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.sourcing import (
     FETCH_LOG,
+    GLOBAL,
     OFFER_CEILING,
     BoardOutcome,
     Fetch,
     Response,
     Run,
+    _why_not_worldwide,
     browser_urls,
     flood_board,
     from_captures,
@@ -49,6 +53,8 @@ from integral.sourcing import (
     measure_browser_route,
     measure_fixture,
     measure_flood,
+    measure_flood_and_reach,
+    measure_reach_selection,
     needs_browser,
     offers_without_a_recorded_fetch,
     packages_for,
@@ -353,6 +359,334 @@ def test_the_installed_global_boards_are_selected_after_the_country_s_own() -> N
     assert "foorilla_en" in names[len(spanish) :], names
 
 
+# ---------------------------------------------------------------------------
+# #562 — a candidate who would work for an employer abroad is asked those boards
+
+
+def _cross_border_spain() -> CandidateConstraints:
+    return _spain().model_copy(
+        update={"reach": Reach(state="stated", modes=("cross_border_remote_employer",))}
+    )
+
+
+def _foreign_boards() -> set[str]:
+    """Every installed board of some country other than the candidate's.
+
+    Derived from the library rather than listed, so a connector added later is
+    covered without anyone remembering to add it here — the enumeration this
+    replaces would have gone on passing while a sixth foreign board sat
+    unreachable.
+    """
+    return {
+        p.name
+        for p in installed_packages(_CONNECTORS)
+        if p.usable and p.country not in ("ES", GLOBAL)
+    }
+
+
+def test_which_buckets_a_reach_opens_is_decided_by_one_rule_over_every_reach() -> None:
+    """#562's selection rule, over **every** combination of modes there are.
+
+    The two fixtures this replaces were `("cross_border_remote_employer",)` and
+    `("remote",)` — single-mode tuples, and so was every reach the record built.
+    `ReachMode` has four members and the rule is about one mode being *present
+    in a set*, so a set of two was the one shape nothing constructed. A second
+    reader (F1/F2) drifted it both ways behind a green suite and a clean record:
+    letting `commute` open the foreign boards (fail-open — every foreign board
+    fetched for a reach that authorises none), and letting a candidate who says
+    `remote` *and* cross-border lose them (fail-closed — and that tuple is the
+    one in #562's own Measured block).
+
+    So the axis is `get_args(ReachMode)` rather than a list of tuples: all
+    fifteen non-empty combinations, and a fifth mode added later is varied here
+    without anyone remembering to.
+    """
+    domestic = {p.name for p in installed_packages(_CONNECTORS) if p.usable and p.country == "ES"}
+    worldwide = {
+        p.name for p in installed_packages(_CONNECTORS) if p.usable and p.country == GLOBAL
+    }
+    foreign = _foreign_boards()
+    assert domestic and worldwide and foreign, "a bucket is empty, so this pins nothing"
+
+    modes = get_args(ReachMode)
+    combinations = [
+        combination
+        for size in range(1, len(modes) + 1)
+        for combination in itertools.combinations(modes, size)
+    ]
+    for combination in combinations:
+        constraints = _spain().model_copy(
+            update={"reach": Reach(state="stated", modes=combination)}
+        )
+        selected = {p.name for p in packages_for(constraints, _CONNECTORS)}
+        # Derived from the definitions, not from what the code does: `remote`
+        # and `cross_border_remote_employer` are the two modes that leave the
+        # country at all, and only the second names an employer abroad.
+        opens_worldwide = bool({"remote", "cross_border_remote_employer"} & set(combination))
+        opens_foreign = "cross_border_remote_employer" in combination
+        assert domestic <= selected, (combination, sorted(domestic - selected))
+        assert (worldwide <= selected) is opens_worldwide, (
+            combination,
+            sorted(worldwide & selected),
+        )
+        assert bool(foreign & selected) is opens_foreign, (
+            combination,
+            sorted(foreign & selected),
+        )
+        assert not (worldwide & selected) or opens_worldwide, combination
+
+
+def test_an_unstated_reach_is_the_narrow_one_even_carrying_modes() -> None:
+    """The `state == "stated"` guard on both reach predicates, pinned directly.
+
+    `Reach`'s own validator refuses modes on any state but `stated`, which is
+    why deleting either guard leaves the suite green — the shape it defends
+    against cannot be built through the constructor. It can be built through
+    `model_construct`, which this repo names elsewhere as the way validation is
+    bypassed, so the guard is not decoration and this is what says so (second
+    reader, F6). An unstated reach is the narrow one.
+    """
+    for state in ("unknown", "declined"):
+        reach = Reach.model_construct(state=state, modes=("remote", "cross_border_remote_employer"))
+        constraints = _spain().model_copy(update={"reach": reach})
+        assert not sourcing.reaches_worldwide(constraints), state
+        assert not sourcing.reaches_across_borders(constraints), state
+
+
+def test_no_board_is_asked_twice_whatever_the_reach() -> None:
+    """A board selected twice is the same board fetched twice.
+
+    `source` iterates `packages_for`'s answer once per element and each element
+    spends `OFFER_CEILING` room and issues real requests. Writing the foreign
+    bucket as `p.country != wanted` — one character from the shipped one —
+    duplicates every `GLOBAL` package, and both the record (a set of names) and
+    the order tests (a prefix comparison) read that as clean (second reader, F3).
+    """
+    modes = get_args(ReachMode)
+    for size in range(1, len(modes) + 1):
+        for combination in itertools.combinations(modes, size):
+            constraints = _spain().model_copy(
+                update={"reach": Reach(state="stated", modes=combination)}
+            )
+            names = [p.name for p in packages_for(constraints, _CONNECTORS)]
+            duplicated = sorted({n for n in names if names.count(n) > 1})
+            assert not duplicated, (combination, duplicated)
+
+
+def test_a_board_withheld_by_reach_is_named_as_withheld(store: ProfileStore) -> None:
+    """T167's own contract, which #562's third bucket did not inherit.
+
+    "The summary names what was left out, so a quiet run is not read as a quiet
+    world" — and until this, a `remote` reach withheld five installed boards and
+    reported `unreached == ()` (second reader, F4). The summary is the only
+    place the candidate learns those boards exist, which is the conversation
+    that gets them to state `cross_border_remote_employer` in the first place.
+    """
+    asked = {p.name for p in packages_for(_remote_spain(), _CONNECTORS)}
+    withheld = {p.name for p in installed_packages(_CONNECTORS) if p.usable and p.name not in asked}
+    assert withheld >= _foreign_boards(), sorted(_foreign_boards() - withheld)
+
+    run = source(
+        store,
+        _remote_spain(),
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert set(run.unreached) == withheld, sorted(withheld ^ set(run.unreached))
+    assert "abroad" in run.unreached_because, run.unreached_because
+
+
+def test_the_caption_names_every_kind_of_board_it_withholds(store: ProfileStore) -> None:
+    """A reason for one bucket, printed over a withheld set that spans two.
+
+    `packages_for` nests the buckets, so a reach that does not reach worldwide
+    never reaches the foreign one either and both are withheld together. The
+    summary said "worldwide boards" over all of them, which miscaptions the
+    national boards in the set — measured by the second reader on a real
+    profile as 5 of 19, and the candidate who answers "yes, remote" then
+    unlocks 14 and is left with 5 nobody has explained (F3).
+
+    The expectation is derived from the withheld packages' own `country`, not
+    from the sentence: a bucket added later joins `kinds` without anyone
+    remembering to name it here, and the caption has to grow to match.
+    """
+    constraints = _spain().model_copy(update={"reach": Reach(state="stated", modes=("commute",))})
+    asked = {p.name for p in packages_for(constraints, _CONNECTORS)}
+    withheld = [p for p in installed_packages(_CONNECTORS) if p.usable and p.name not in asked]
+    kinds = {"worldwide" if p.country == GLOBAL else "other countries'" for p in withheld}
+    assert len(kinds) == 2, (
+        f"the withheld set spans only {sorted(kinds)}, so this pins nothing — "
+        "it needs a reach that withholds both a GLOBAL board and a national one"
+    )
+
+    run = source(
+        store,
+        constraints,
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    assert set(run.unreached) == {p.name for p in withheld}
+    for kind in sorted(kinds):
+        assert kind in run.unreached_because, (
+            f"{len(withheld)} withheld boards include {kind!r} ones, and the summary "
+            f"says only {run.unreached_because!r}"
+        )
+
+    # The other direction, and it is the one that was live: ⊇ alone is
+    # satisfied by a caption that names every kind always, which then tells a
+    # candidate their worldwide boards were withheld when all fourteen were
+    # asked (second reader, N2). Same derivation, over a reach that withholds
+    # exactly one kind, so the two assertions together are equality.
+    remote_only = _spain().model_copy(update={"reach": Reach(state="stated", modes=("remote",))})
+    asked = {p.name for p in packages_for(remote_only, _CONNECTORS)}
+    withheld = [p for p in installed_packages(_CONNECTORS) if p.usable and p.name not in asked]
+    one_kind = {"worldwide" if p.country == GLOBAL else "other countries'" for p in withheld}
+    assert one_kind == {"other countries'"}, (
+        f"this half needs a reach withholding exactly one kind; it withholds {sorted(one_kind)}"
+    )
+    run = source(
+        store,
+        remote_only,
+        Aim(state="stated", terms=("python",)),
+        fetch=lambda request: Response(200, ""),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    for absent in kinds - one_kind:
+        assert absent not in run.unreached_because, (
+            f"no {absent!r} board was withheld, and the summary says {run.unreached_because!r}"
+        )
+
+
+@pytest.mark.parametrize("countries", [(GLOBAL,), ("ES", "US")], ids=["global-only", "national"])
+def test_the_caption_names_a_kind_exactly_when_it_was_withheld(
+    tmp_path: Path, countries: tuple[str, ...]
+) -> None:
+    """Round 3, R3-2: the `remote` half above runs the cross-border branch, a
+    fixed sentence, so a caption naming "worldwide" unconditionally passed every
+    caption test. Two one-kind libraries under a `commute` reach, each kind held
+    to named ⇔ withheld, read from the withheld packages' own `country`."""
+    directory = tmp_path / "connectors"
+    for country in countries:
+        site = country.lower()
+        flood_board(directory, site, 1)
+        (directory / f"{site}_en" / "meta.yaml").write_text(
+            f"site: {site}.integral.local\ncountry: {country}\nlanguage: en\n", encoding="utf-8"
+        )
+    constraints = _spain().model_copy(update={"reach": Reach(state="stated", modes=("commute",))})
+    asked = {p.name for p in packages_for(constraints, directory)}
+    withheld = [p for p in installed_packages(directory) if p.usable and p.name not in asked]
+    assert withheld, "a library this reach withholds nothing from pins nothing"
+    caption = _why_not_worldwide(constraints, withheld)
+    kinds = {
+        "worldwide boards": any(p.country == GLOBAL for p in withheld),
+        "other countries' own job boards": any(p.country not in (GLOBAL, "ES") for p in withheld),
+    }
+    for kind, was_withheld in kinds.items():
+        assert (kind in caption) == was_withheld, (kind, was_withheld, caption)
+
+
+def test_foreign_boards_come_after_the_country_s_own_and_the_worldwide_ones() -> None:
+    names = [p.name for p in packages_for(_cross_border_spain(), _CONNECTORS)]
+    worldwide = [p.name for p in packages_for(_remote_spain(), _CONNECTORS)]
+    assert names[: len(worldwide)] == worldwide
+    assert _foreign_boards() <= set(names[len(worldwide) :]), names
+
+
+def _reach_axis() -> tuple[int, int]:
+    """How many of the record's reaches open the foreign bucket, and how many
+    can *observe* it being opened wrongly — spelled from `ReachMode` here as it
+    is in the record, so neither side is a constant the other can drift away
+    from.
+
+    The two numbers are not complements, and the reason is `packages_for`'s
+    shape: the foreign bucket sits inside the worldwide one, so a reach that
+    does not reach worldwide at all returns before the third bucket is
+    consulted and cannot see a mutation there. Only a reach that opens
+    worldwide and not foreign is in a position to be handed a foreign board it
+    did not ask for.
+    """
+    combinations = [
+        combination
+        for size in range(1, len(get_args(ReachMode)) + 1)
+        for combination in itertools.combinations(get_args(ReachMode), size)
+    ]
+    opens = sum("cross_border_remote_employer" in c for c in combinations)
+    observes = sum("cross_border_remote_employer" not in c and "remote" in c for c in combinations)
+    return opens, observes
+
+
+def test_the_reach_gate_counts_a_foreign_board_the_gate_would_not_ask(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The measurement's own mutation: with the third bucket shut, the number
+    it reports must move. A component that cannot move is not a check."""
+    monkeypatch.setattr(sourcing, "reaches_across_borders", lambda constraints: False)
+    opens, _ = _reach_axis()
+    measured = measure_reach_selection()
+    assert measured["foreign_boards_unreachable_to_a_cross_border_candidate"] == opens
+    assert measured["reach_selection_violations"] == opens
+    assert measured["gate_status"] == "unmeasured"
+
+
+def test_the_reach_gate_counts_a_foreign_board_asked_of_everyone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """And the opposite mutation: a gate that always says yes is not a gate."""
+    monkeypatch.setattr(sourcing, "reaches_across_borders", lambda constraints: True)
+    _, withholds = _reach_axis()
+    measured = measure_reach_selection()
+    assert measured["foreign_boards_selected_without_cross_border_reach"] == withholds
+    assert measured["reach_selection_violations"] == withholds
+
+
+def test_the_record_is_unmeasured_when_the_library_holds_no_unusable_twin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 4, R4-1: the guard R3-1 added had no test, so deleting it changed
+    nothing. With the reserved `.test` site no longer unusable, the library
+    holds no twin, `unusable_boards_selected` has no population, and the record
+    must say so rather than read a clean zero. The reason text is asserted
+    because the widest-reach guard fires in the same state."""
+    monkeypatch.setattr("integral.connector_coverage.is_example_site", lambda site: False)
+    measured = measure_reach_selection()
+    assert measured["gate_status"] == "unmeasured"
+    assert any("unusable boards for []" in reason for reason in measured["reasons"]), measured
+
+
+def test_a_key_both_halves_of_the_record_measure_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dict merge would keep whichever was second and say nothing."""
+    monkeypatch.setattr(
+        sourcing,
+        "measure_reach_selection",
+        lambda: {"flood_violations": 7, "gate_status": "measured"},
+    )
+    with pytest.raises(ValueError, match="flood_violations"):
+        measure_flood_and_reach()
+
+
+def test_neither_half_of_the_record_can_be_green_while_the_other_is_unmeasured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sourcing,
+        "measure_reach_selection",
+        lambda: {"reach_selection_violations": 0, "gate_status": "unmeasured", "reasons": ["why"]},
+    )
+    merged = measure_flood_and_reach()
+    assert merged["gate_status"] == "unmeasured"
+    assert "why" in merged["reasons"]
+
+
 def _flood_run(store: ProfileStore, tmp_path: Path, page_count: int = 1) -> Any:
     """One constructed worldwide board. Returns the run, the matching and
     off-aim advert texts of the pages actually served, and the URLs asked."""
@@ -507,6 +841,12 @@ def test_why_worldwide_boards_were_left_out_follows_the_reach_state(
         robots=_robots(),
     )
     assert says in run.summary(), run.summary()
+    # This library is one `GLOBAL` board and nothing else, so a caption naming
+    # "other countries' own job boards" names boards that do not exist and were
+    # not withheld (second reader, N2). Read from the directory, not assumed.
+    installed = installed_packages(tmp_path / "connectors")
+    assert {p.country for p in installed} == {GLOBAL}, installed
+    assert "other countries'" not in run.unreached_because, run.unreached_because
 
 
 @pytest.mark.parametrize("failure", ["error", "refused", "robots"])
@@ -1134,14 +1474,15 @@ def test_the_unrealized_row_fields_are_derived_not_hand_listed() -> None:
     assert set(result) == {f.name for f in dc_fields(Sample)} - {"kept_out", "also_kept_out"}
 
 
-def test_the_board_outcome_unrealized_row_fields_are_todays_five_terms() -> None:
+def test_the_board_outcome_unrealized_row_fields_are_todays_six_terms() -> None:
     """Pins what `_UNREALIZED_ROW_FIELDS` resolves to today — `dropped`,
-    `off_aim`, `unopened`, `over_ceiling`, `refused_rows` — so a change to
+    `off_aim`, `unopened`, `over_ceiling`, `refused_rows`, `excluded` — so a change to
     `BoardOutcome` or to the exclusion set it is derived against is visible
     here, not only in `employer_boards`'s or `rows_not_accounted_for`'s
     behaviour. `refused_rows` (T174, #466 review round 1 F6) is the fifth: a
     row whose advert host had already refused before it was read, counted in
-    none of the original four."""
+    none of the original four. `excluded` (T203) is the sixth: a row built into
+    an offer and left out because its topic was ruled out."""
     from integral.sourcing import _UNREALIZED_ROW_FIELDS
 
     assert set(_UNREALIZED_ROW_FIELDS) == {
@@ -1150,11 +1491,12 @@ def test_the_board_outcome_unrealized_row_fields_are_todays_five_terms() -> None
         "unopened",
         "over_ceiling",
         "refused_rows",
+        "excluded",
     }
 
 
 @pytest.mark.parametrize(
-    "bucket", ["dropped", "off_aim", "unopened", "over_ceiling", "refused_rows"]
+    "bucket", ["dropped", "off_aim", "unopened", "over_ceiling", "refused_rows", "excluded"]
 )
 def test_employer_boards_excludes_a_board_whose_rows_are_all_one_bucket(bucket: str) -> None:
     """Round 6, F2: T172's partition (`items > dropped+off_aim+unopened+

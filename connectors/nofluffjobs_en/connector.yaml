@@ -84,16 +84,18 @@ list:
     # band inside `text` and claims nothing.
     #
     # KNOWN CEILING — no period, and both readable rows are hourly. The grammar
-    # has no vocabulary for a period and this board prints it as free text after
-    # the band, so the `Salary` carries none. Nothing reads a periodless band as
-    # annual today: `presentation` prints the figures with no "/year" suffix
-    # (`presentation.py:232`), and `bulk_filter._below_pay_floor` returns `None`
-    # unless the band's period equals the floor's, so a floor never measures it.
-    # `pay_dominance.comparable_band` compares on currency alone and would rank
-    # an hourly PLN band against a monthly one as if they were the same money —
-    # no production code builds a `PayBand` from an `Offer` yet, so that is a
-    # hazard for whoever wires it rather than a live defect, named here so it is
-    # found by reading rather than by a candidate.
+    # has no `take` that cuts a period out of free text and `h` is not a word
+    # `normalize_period`'s closed table accepts, so this connector cannot
+    # declare `salary_period`. A band with no period is bounded as annual on
+    # every route (`build_offer`, as `salary_recovery._band_defect` does for a
+    # recovered one), and `105 – 115` / `35 – 43` fall outside it: these two
+    # rows are REFUSED, with the reason written in `fixture/salary.json`, and
+    # they read again the day a period `take` exists. They used to read with
+    # `period=None`, which `bulk_filter._below_pay_floor` skips and
+    # `presentation` prints with no unit — an hourly wage shown as a bare
+    # number. The other hazard stands for whoever wires it: `pay_dominance`
+    # compares on currency alone, so a periodless band that did get through
+    # would rank an hourly PLN band against a monthly one.
     salary_min:
       css: "nfj-posting-item-salary"
       take: range_low

@@ -1,0 +1,14 @@
+{
+  "stated_exclusions_not_applied_to_a_live_round": 0,
+  "unexcluded_offers_removed": 0,
+  "removals_not_reported": 0,
+  "exclusions_never_tripped": 0,
+  "excluded_offers_served_at_least": 20,
+  "unexcluded_offers_served_at_least": 20,
+  "exclusions_tripped_at_least": 6,
+  "gate_status": "measured",
+  "failures": [],
+  "never_tripped": [],
+  "not_applied": [],
+  "unexcluded_removed": []
+}

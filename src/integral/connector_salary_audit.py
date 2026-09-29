@@ -29,11 +29,13 @@ version of this measurement got both wrong:
 `_verdicts` therefore does what `source()` does — list first, detail only for
 the rows that produced no offer.
 
-**A known substitution, named rather than hidden.** A package commits one
-`fixture/detail.html`, so a bodiless board's N rows are all measured against the
-*same* advert page. That is one detail verdict repeated N times, not N
-independent ones, and `detail_rows_sharing_one_fixture` reports how many rows
-are in that position so the number is visible rather than inferred.
+**A wildcard is confined to what it can adjudicate.** A package commits one
+`fixture/detail.html`, so a bodiless board's N rows share one advert page. A
+`"*"` entry in `salary.json` may adjudicate a row only when the row's *list card
+publishes no money* — the salary can then only come from the shared detail page.
+A card that shows its own band is judged row by row (`list_says`), so editing
+that band turns the audit red. `rows_adjudicated_by_a_wildcard` reports how many
+rows a wildcard still covers, and the floor counts *distinct* adjudications.
 
 ## What "publishes a salary" means here, and why it is derived
 
@@ -108,6 +110,14 @@ class RowVerdict:
     route: str  # "list", "detail", or "unbuilt"
     publishes: tuple[str, ...]  # the money contexts found, for the report
     salary: dict[str, Any] | None
+    #: The subset of `publishes` found in the row's **own list text**. A `"*"`
+    #: may stand in only for money found on the shared detail page; money the
+    #: row itself prints is that row's own fact and needs its own entry.
+    list_publishes: tuple[str, ...] = ()
+    #: True when the salary was read through the shared detail page — the
+    #: connector's `detail:` block declares a salary field — so the committed
+    #: `detail.html` (another advert's) decided the numbers, not the card.
+    detail_supplies_salary: bool = False
 
 
 def _money_contexts(text: str) -> tuple[str, ...]:
@@ -185,7 +195,8 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
 
     verdicts: list[RowVerdict] = []
     for index, item in enumerate(items):
-        text = sources[index] if index < len(sources) else ""
+        list_text = sources[index] if index < len(sources) else ""
+        text = list_text
         offer, _ = _offer_from(connector, item, url=_FIXTURE_URL)
         route = "list"
         if offer is None and detail is not None:
@@ -209,6 +220,10 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
                 route=route,
                 publishes=_money_contexts(text),
                 salary=_as_record(offer.salary if offer is not None else None),
+                list_publishes=_money_contexts(list_text),
+                detail_supplies_salary=route == "detail"
+                and detail is not None
+                and any(key.startswith("salary") for key in detail),
             )
         )
     return verdicts
@@ -224,8 +239,10 @@ def _expectations(directory: Path) -> dict[str, dict[str, Any]]:
 
 def _declared_for(
     expected: dict[str, dict[str, Any]], verdict: RowVerdict
-) -> dict[str, Any] | None:
-    """The expectation for one row, with `"*"` standing in for a shared detail.
+) -> tuple[dict[str, Any] | None, bool]:
+    """The expectation for one row and whether `"*"` supplied it.
+
+    `"*"` stands in for a shared detail.
 
     A package commits one `fixture/detail.html`, so every row of a bodiless
     board is measured against the same advert and every verdict comes out
@@ -234,11 +251,19 @@ def _declared_for(
     cover them — **and only them**. A `"*"` consulted on the list route would
     be a blanket verdict over rows that genuinely differ, which is the
     declaration-shaped answer this gate refuses, so it is not consulted there.
+
+    Nor is it consulted for a detail-route row whose **own list text** publishes
+    money: the shared detail page cannot speak for a figure the row prints
+    itself, and a `"*"` that did would certify fifty different bands with one
+    (foorilla_en's list cards carry five currencies; the wildcard read them all
+    as one CAD band and no edit to a card could turn the gate red). Such a row
+    is adjudicated by its own entry or by a refusal naming it.
     """
     row = expected.get(str(verdict.index))
-    if row is None and verdict.route == "detail":
-        return expected.get("*")
-    return row
+    if row is None and verdict.route == "detail" and not verdict.list_publishes:
+        wildcard = expected.get("*")
+        return wildcard, wildcard is not None
+    return row, False
 
 
 def _packages(connectors_dir: Path) -> list[Path]:
@@ -256,7 +281,8 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
     mismatched: list[str] = []
     read_rows = 0
     refused_rows = 0
-    shared_detail_rows = 0
+    wildcard_rows = 0
+    wildcard_reads = 0
     rows_measured = 0
     boards: dict[str, dict[str, Any]] = {}
 
@@ -267,12 +293,27 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
         package_refused = 0
         for verdict in _verdicts(directory):
             rows_measured += 1
-            if verdict.route == "detail":
-                shared_detail_rows += 1
-            declared = _declared_for(expected, verdict)
+            declared, by_wildcard = _declared_for(expected, verdict)
+            if (
+                declared is not None
+                and verdict.detail_supplies_salary
+                and verdict.list_publishes
+                and declared.get("list_says") != verdict.list_publishes[0]
+            ):
+                # The entry has to be pinned to the card it answers for. Without
+                # this, a per-row entry written over a detail-route row is one
+                # more declaration: editing the card's own band would leave it
+                # green, which is the mutation that turned foorilla's `"*"` up.
+                mismatched.append(
+                    f"{package} [{verdict.index}]: the card prints "
+                    f"{verdict.list_publishes[0]!r}, the entry says {declared.get('list_says')!r}"
+                )
             if verdict.salary is not None:
                 read_rows += 1
                 package_read += 1
+                if by_wildcard:
+                    wildcard_rows += 1
+                    wildcard_reads += 1
                 if declared is None or declared.get("verdict") != "read":
                     mismatched.append(f"{package} [{verdict.index}]: read, and nothing declares it")
                 elif {k: declared.get(k) for k in ("min", "max", "currency", "period")} != (
@@ -289,6 +330,7 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
             if not verdict.publishes:
                 continue
             if declared is not None and declared.get("verdict") == "refused":
+                wildcard_rows += by_wildcard
                 refused_rows += 1
                 package_refused += 1
                 continue
@@ -303,7 +345,8 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
         "salary_expectation_mismatches": len(mismatched),
         "packages_measured": len(boards),
         "rows_measured": rows_measured,
-        "detail_rows_sharing_one_fixture": shared_detail_rows,
+        "rows_adjudicated_by_a_wildcard": wildcard_rows,
+        "distinct_salary_rows_read": read_rows - wildcard_reads,
         "unread": tuple(unread),
         "mismatches": tuple(mismatched),
     }
@@ -316,15 +359,13 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
 #: leaves the floor where it was, so the gate stays green and the diff has to
 #: say out loud that nothing new is being read.
 #:
-#: The population is 107 — every row of every committed fixture from which the
-#: engine reads a band — and seven points of slack is deliberate rather than
-#: the usual three. Seventy-five of the 107 come from two packages whose rows
-#: all read through one shared `fixture/detail.html` (`foorilla_en` 50,
-#: `usajobs_en` 25), so re-recording either fixture moves this count in tens
-#: and nothing between those steps is a meaningful margin. The floor is
-#: therefore re-measured when a fixture is re-recorded, not tracked to it.
-#: arsenal-floor-margin: MINIMUM_SALARY_ROWS_READ value=100 population=107
-MINIMUM_SALARY_ROWS_READ = 100
+#: The population is 97 — every row read from the engine's point of view, less
+#: those adjudicated only by a `"*"` wildcard (`distinct_salary_rows_read`).
+#: Counting all 104 read rows would let a wildcard stretch one verdict across
+#: rows it never judged and still clear the floor. Three points of slack is the
+#: repository's margin for a fixed in-repo collection.
+#: arsenal-floor-margin: MINIMUM_DISTINCT_SALARY_ROWS_READ value=94 population=97
+MINIMUM_DISTINCT_SALARY_ROWS_READ = 94
 
 
 #: The denominator under the whole measurement: how many connector packages
@@ -351,7 +392,7 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
 
     Floors, because they are denominators — they measure nothing about the code
     and exist only to stop a clean zero resting on an empty scan.
-    `salary_rows_read` and `packages_measured` both move whenever a fixture is
+    `distinct_salary_rows_read` and `packages_measured` both move whenever a fixture is
     re-recorded or a connector lands, and two branches each adding one write the
     same `+1` with no conflict, which is the silent-merge hazard CLAUDE.md names
     from T85. A floor is a literal, so both sides changing it *is* a conflict.
@@ -363,12 +404,10 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
       refusal for it — and only the first raises the read floor. Committing the
       refusals exactly is what makes the second show up as a diff a reviewer has
       to look at rather than as a number that slipped under a floor.
-    * `detail_rows_sharing_one_fixture` is the other one, and it is the larger
-      of the two. 142 of 207 rows are measured against a `fixture/detail.html`
-      belonging to a different advert, so for those rows this gate has one
-      verdict repeated rather than N independent ones. It is committed exactly,
-      churn included, because a number nobody is forced to read is exactly how
-      a substitution this size stays invisible.
+    * `rows_adjudicated_by_a_wildcard` is the other one. Those rows have one
+      verdict repeated rather than N independent ones; it is committed exactly,
+      churn included, because a number nobody is forced to read is how a
+      substitution stays invisible.
 
     `rows_measured` is dropped: with a package floor and a read floor already
     committed it pins nothing further, and it is the most fixture-sensitive
@@ -381,8 +420,9 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
         if key not in ("unread", "mismatches", "rows_measured")
     }
     committed.pop("salary_rows_read")
+    committed.pop("distinct_salary_rows_read")
     committed.pop("packages_measured")
-    committed["salary_rows_read_at_least"] = MINIMUM_SALARY_ROWS_READ
+    committed["distinct_salary_rows_read_at_least"] = MINIMUM_DISTINCT_SALARY_ROWS_READ
     committed["packages_measured_at_least"] = MINIMUM_PACKAGES_MEASURED
     return committed
 

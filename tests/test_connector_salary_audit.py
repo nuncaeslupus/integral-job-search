@@ -15,8 +15,8 @@ import pytest
 
 from integral import connector_salary_audit
 from integral.connector_salary_audit import (
+    MINIMUM_DISTINCT_SALARY_ROWS_READ,
     MINIMUM_PACKAGES_MEASURED,
-    MINIMUM_SALARY_ROWS_READ,
     RowVerdict,
     _declared_for,
     _money_contexts,
@@ -29,8 +29,12 @@ from integral.connectors import _CURRENCIES
 _CONNECTORS = Path(__file__).resolve().parents[1] / "connectors"
 
 
-def _verdict(index: int = 0, route: str = "list") -> RowVerdict:
-    return RowVerdict(index=index, route=route, publishes=(), salary=None)
+def _verdict(
+    index: int = 0, route: str = "list", list_publishes: tuple[str, ...] = ()
+) -> RowVerdict:
+    return RowVerdict(
+        index=index, route=route, publishes=(), salary=None, list_publishes=list_publishes
+    )
 
 
 # --- the money detector is derived from the currency table, not listed here ---
@@ -67,7 +71,14 @@ def test_one_figure_named_many_times_is_one_published_salary() -> None:
 
 def test_the_wildcard_stands_in_for_a_shared_detail_fixture() -> None:
     expected = {"*": {"verdict": "read", "min": 1.0}}
-    assert _declared_for(expected, _verdict(route="detail")) == expected["*"]
+    assert _declared_for(expected, _verdict(route="detail")) == (expected["*"], True)
+
+
+def test_the_wildcard_never_adjudicates_a_row_whose_card_publishes_money() -> None:
+    """The card's band is list-side text; a detail fixture says nothing about it."""
+    expected = {"*": {"verdict": "read"}}
+    verdict = _verdict(route="detail", list_publishes=("150000",))
+    assert _declared_for(expected, verdict) == (None, False)
 
 
 def test_the_wildcard_is_never_consulted_for_a_list_row() -> None:
@@ -76,12 +87,12 @@ def test_the_wildcard_is_never_consulted_for_a_list_row() -> None:
     declaration-shaped answer this gate exists to refuse. Rows on the list route
     are adjudicated one at a time or not at all."""
     expected = {"*": {"verdict": "refused", "why": "everything"}}
-    assert _declared_for(expected, _verdict(route="list")) is None
+    assert _declared_for(expected, _verdict(route="list")) == (None, False)
 
 
 def test_a_row_of_its_own_outranks_the_wildcard() -> None:
     expected = {"*": {"verdict": "read"}, "4": {"verdict": "refused", "why": "this one"}}
-    assert _declared_for(expected, _verdict(index=4, route="detail")) == expected["4"]
+    assert _declared_for(expected, _verdict(index=4, route="detail")) == (expected["4"], False)
 
 
 # --- the live tree ---
@@ -95,15 +106,16 @@ def test_the_committed_fixtures_have_no_unread_salary() -> None:
 
 def test_the_floors_sit_under_the_live_populations() -> None:
     measured = measure()
-    assert measured["salary_rows_read"] >= MINIMUM_SALARY_ROWS_READ
+    assert measured["distinct_salary_rows_read"] >= MINIMUM_DISTINCT_SALARY_ROWS_READ
     assert measured["packages_measured"] >= MINIMUM_PACKAGES_MEASURED
 
 
 def test_the_record_commits_the_floors_and_not_the_censuses() -> None:
     committed = record(measure())
-    assert committed["salary_rows_read_at_least"] == MINIMUM_SALARY_ROWS_READ
+    assert committed["distinct_salary_rows_read_at_least"] == MINIMUM_DISTINCT_SALARY_ROWS_READ
     assert committed["packages_measured_at_least"] == MINIMUM_PACKAGES_MEASURED
     assert "salary_rows_read" not in committed
+    assert "distinct_salary_rows_read" not in committed
     assert "packages_measured" not in committed
     assert "rows_measured" not in committed
 
@@ -205,6 +217,31 @@ def test_a_dead_money_detector_is_caught_by_the_refusal_count(
     assert blinded["boards_that_publish_a_salary_we_do_not_read"] == 0
     assert blinded["salary_expectation_mismatches"] == 0
     assert blinded["salary_rows_read"] == live["salary_rows_read"]
+    assert blinded["distinct_salary_rows_read"] >= live["distinct_salary_rows_read"]
     assert blinded["packages_measured"] == live["packages_measured"]
     assert blinded["salary_rows_refused"] == 0 < live["salary_rows_refused"]
     assert record(blinded) != record(live)
+
+
+def test_editing_a_list_card_band_turns_the_audit_red(tmp_path: Path) -> None:
+    """`foorilla_en`'s cards publish their own band; the shared detail page does
+    not. A card edited to say a different band must fail its row's `list_says`,
+    which a `"*"` over the shared detail fixture could never notice."""
+    import shutil
+
+    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
+    fixture = tmp_path / "connectors" / "foorilla_en" / "fixture"
+    data = json.loads((fixture / "salary.json").read_text(encoding="utf-8"))
+    assert "150K-190K" in data["rows"]["0"]["list_says"]
+    band = "CAD 150K-190K"
+    html = (fixture / "list.html").read_text(encoding="utf-8")
+    assert band in html
+    (fixture / "list.html").write_text(html.replace(band, "1 USD - 2 USD", 1), encoding="utf-8")
+
+    measured = measure(tmp_path / "connectors")
+    assert any("foorilla_en [0]" in entry for entry in measured["mismatches"])
+
+
+def test_the_wildcard_covers_only_rows_whose_card_publishes_nothing() -> None:
+    measured = measure(_CONNECTORS)
+    assert measured["rows_adjudicated_by_a_wildcard"] == 7

@@ -11,17 +11,51 @@
     "plain_http",
     "rewritten_text",
     "unchecked_board",
-    "url_host_disagrees_with_source"
+    "url_host_disagrees_with_source",
+    "url_host_has_an_empty_leading_label",
+    "url_host_is_a_backslash_away_from_the_source",
+    "url_host_is_a_ledger_refused_sibling_of_the_list_host",
+    "url_host_is_an_undeclared_subdomain",
+    "url_host_merely_suffixed_with_the_source",
+    "worked_example_package_is_not_a_live_board"
   ],
-  "scenarios": 11,
+  "acceptances": [
+    "ats_advert_on_a_declared_serving_host",
+    "ats_advert_on_a_declared_serving_host_greenhouse",
+    "ats_advert_on_a_declared_serving_host_lever",
+    "ats_advert_on_a_declared_serving_host_rippling",
+    "board_advert_carrying_an_explicit_default_port",
+    "board_advert_on_its_list_host"
+  ],
   "permitted_live_sources": [
-    "feinaactiva",
-    "manfred",
+    "arbeitnow",
+    "ashby",
+    "builtin",
+    "foorilla",
+    "getmanfred",
+    "greenhouse",
+    "himalayas",
+    "infojobs",
+    "jobfluent",
+    "jobsacuk",
+    "justjoin",
+    "landingjobs",
+    "lever",
+    "nofluffjobs",
+    "pythonorg",
     "remotive",
-    "weworkremotely"
+    "rippling",
+    "talent",
+    "tecnoempleo",
+    "ticjob",
+    "trabajos",
+    "usajobs",
+    "wellfound",
+    "weworkremotely",
+    "workable",
+    "workingnomads"
   ],
   "blocked_sources": [
-    "remoteok",
-    "tecnoempleo"
+    "remoteok"
   ]
 }

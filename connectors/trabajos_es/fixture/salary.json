@@ -30,11 +30,8 @@
       "why": "\"22.000 €\" is a single figure, refused for the same reason as row 17: one number is not a band, and nothing in the advert says whether it is a floor, a ceiling or a fixed offer. Written out rather than cross-referenced because a refusal that points at another refusal is one edit away from pointing at nothing, and each row is adjudicated on its own advert."
     },
     "29": {
-      "verdict": "read",
-      "min": 9.0,
-      "max": 13.0,
-      "currency": "EUR",
-      "period": null
+      "verdict": "refused",
+      "why": "The card prints `9 € - 13 €` beside `Autonomo Freelance` and states no period at all, so the unit of these two figures is unknown. A band with no period is bounded as annual, 9-13 is outside `salary_recovery._BOUNDS['year']`, and `build_offer` refuses it on the connector route as the recovery route does: an unlabelled 9-13 shown as a wage, with its unit deleted, is worse than none."
     }
   }
 }

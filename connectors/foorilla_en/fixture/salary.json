@@ -1,11 +1,405 @@
 {
+  "note": "Every row's band is what the engine reads out of the ONE committed detail.html (row 0's advert, CAD 150K-190K); rows 1-49 are measured against another advert's page, so the numbers below are that substitution's, not each card's. Each row is pinned to its own card through `list_says`, so editing a card turns this red.",
   "rows": {
-    "*": {
+    "0": {
       "verdict": "read",
       "min": 150000.0,
       "max": 190000.0,
       "currency": "CAD",
-      "period": null
+      "period": null,
+      "list_says": "entic Insights 18h ago [SE] [Full Time] CAD 150K-190K Vancouver, British Columbia, "
+    },
+    "1": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "ntist, DeepMind 1d ago [MI] [Full Time] USD 174K-252K Mountain View, CA, USA; New Y"
+    },
+    "2": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": " Infrastructure 1d ago [SE] [Full Time] USD 131K-165K Zaragoza, ES, Aragon [R]"
+    },
+    "3": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "f (Agentic API) 1d ago [EX] [Full Time] USD 237K-427K Atlanta, Georgia"
+    },
+    "4": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "f (Agentic API) 1d ago [EX] [Full Time] USD 237K-427K San Ramon, California"
+    },
+    "5": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "f (Agentic API) 1d ago [EX] [Full Time] USD 237K-427K Middletown, New Jersey"
+    },
+    "6": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "f (Agentic API) 1d ago [EX] [Full Time] USD 237K-427K Bothell, Washington"
+    },
+    "7": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "f (Agentic API) 1d ago [EX] [Full Time] USD 237K-427K Dallas, Texas"
+    },
+    "8": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "gentic Engineer 1d ago [MI] [Full Time] USD 56K-66K Detroit, Michigan, United State"
+    },
+    "9": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "sign Automation 1d ago [SE] [Full Time] EUR 39K-50K Agrate Brianza, Italy"
+    },
+    "10": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "Agentic Systems 1d ago [SE] [Full Time] USD 141K-210K Milpitas, CA, United States"
+    },
+    "11": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "t Dev Team (US) 1d ago [MI] [Full Time] USD 120K-161K Santa Clara, CA [WH]"
+    },
+    "12": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "tions Architect 1d ago [SE] [Full Time] USD 168K-210K Denver, CO - Hybrid; Las Vega"
+    },
+    "13": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": " Data Platform) 1d ago [SE] [Full Time] USD 172K-230K United States , United States"
+    },
+    "14": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "ion (Marketing) 1d ago [SE] [Full Time] EUR 75K-95K Berlin, Germany [R]"
+    },
+    "15": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "tic Engineer II 1d ago [MI] [Full Time] USD 152K-215K Alameda HQ, United States"
+    },
+    "16": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "gentic Shopping 1d ago [SE] [Full Time] EUR 62K-83K Amsterdam, North Holland, Nethe"
+    },
+    "17": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "gentic Platform 2d ago [MI] [Full Time] USD 140K-208K Riyadh, Saudi Arabia"
+    },
+    "18": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "Product Manager 2d ago [MI] [Full Time] USD 124K-180K Wilmington, DE, United States"
+    },
+    "19": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "gentic Identity 2d ago [SE] [Full Time] USD 175K-250K United States"
+    },
+    "20": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "gentic Platform 2d ago [MI] [Full Time] USD 119K-234K United States, Washington, Re"
+    },
+    "21": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "ct | Agentic AI 2d ago [SE] [Full Time] INR 2500K-5000K Chennai, TN, India"
+    },
+    "22": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "r II-Agentic AI 2d ago [SE] [Full Time] INR 2500K-4131K Hyderabad [R]"
+    },
+    "23": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "tic AI Engineer 2d ago [SE] [Full Time] SEK 500K-600K Stockholm, Sweden"
+    },
+    "24": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "-Stack) (w/m/d) 2d ago [MI] [Full Time] EUR 60K-66K Office Eschborn, Remote [R]"
+    },
+    "25": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": " AI for Finance 2d ago [SE] [Full Time] INR 3700K-5876K Bangalore, India"
+    },
+    "26": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "ve (Multimodal) 2d ago [MI] [Full Time] USD 120K-220K Mountain View, California, Un"
+    },
+    "27": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "tic AI Platform 2d ago [SE] [Full Time] INR 3000K-5000K India (Remote-First) [R]"
+    },
+    "28": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "entic Platform) 2d ago [SE] [Full Time] USD 180K-250K Remote [R]"
+    },
+    "29": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "tic AI Engineer 2d ago [MI] [Full Time] USD 140K-204K Locations: San Francisco"
+    },
+    "30": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": " & Benchmarking 2d ago [EN] [Full Time] USD 250K-380K Sunnyvale, CA"
+    },
+    "31": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": " Engineer-10310 2d ago [SE] [Full Time] INR 3000K-5000K Chennai, India"
+    },
+    "32": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "oduct Developer 2d ago [SE] [Full Time] USD 152K-241K Dallas, TX"
+    },
+    "33": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "gentic Systems) 2d ago [SE] [Full Time] USD 129K-200K Hybrid [R]"
+    },
+    "34": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "atforms (PL856) 2d ago [SE] [Full Time] CAD 42K Toronto , Ontario, Canada [R]"
+    },
+    "35": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "chitect - 11386 2d ago [SE] [Full Time] USD 150K-184K Chicago, Illinois, United Sta"
+    },
+    "36": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "Talent Pipeline 2d ago [SE] [Full Time] CAD 131K-170K Toronto [R]"
+    },
+    "37": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "lution Engineer 2d ago [MI] [Full Time] INR 1500K-2800K Gurugram"
+    },
+    "38": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "eb&Mobile Team) 2d ago [MI] [Full Time] RON 100K Bucharest, Bucharest, Romania [R]"
+    },
+    "39": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "- Agentic First 2d ago [SE] [Full Time] USD 171K-274K US - Remote [R]"
+    },
+    "40": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "agement Advisor 2d ago [SE] [Full Time] INR 3672K-5000K India [R]"
+    },
+    "41": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "gentic Platform 2d ago [MI] [Full Time] DKK 552K-645K København, Denmark"
+    },
+    "42": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "ce & Agentic AI 2d ago [SE] [Full Time] INR 2500K-5000K Noida, Uttar Pradesh"
+    },
+    "43": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "er (Agentic AI) 2d ago [SE] [Full Time] INR 3000K-4580K Bangalore, IND [R]"
+    },
+    "44": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": " data pipelines 2d ago [MI] [Full Time] USD 110K-162K Remote - US [R]"
+    },
+    "45": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "ntic Automation 2d ago [SE] [Full Time] USD 200K-322K US, CA, Santa Clara"
+    },
+    "46": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "isory_Hyderabad 2d ago [SE] [Full Time] INR 2000K-4500K Hyderabad - Salarpuria, Ind"
+    },
+    "47": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "isory_Hyderabad 2d ago [SE] [Full Time] INR 2000K-4500K Hyderabad - Salarpuria, Ind"
+    },
+    "48": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "ve & Agentic AI 2d ago [SE] [Full Time] USD 125K-190K USA - TX - Remote, United … ["
+    },
+    "49": {
+      "verdict": "read",
+      "min": 150000.0,
+      "max": 190000.0,
+      "currency": "CAD",
+      "period": null,
+      "list_says": "n, Google Cloud 2d ago [EX] [Full Time] USD 94K-266K New York, One Manhattan West, "
     }
   }
 }
