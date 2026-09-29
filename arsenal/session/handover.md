@@ -1,5 +1,74 @@
 # Session handover
 
+## 00007. #574 merged (N6, N7 from #570); two follow-ups running in their own sessions
+
+- **#574 MERGED** as `7274c991` (T204 / #572, task `t-58f7aa91`). A commute-radius
+  candidate who will not relocate now has a foreign on-site or hybrid offer `removed` by
+  relocation (and reach) when the offer names a region the radius does not. A bare name
+  cannot put that region inside the radius under either reading. A foreign offer
+  with no region, or with a homonym region, stays `unplaced`. T24's abroad-distant fixture
+  now expects `removed`. N7's `floor_sweep.py` prose is corrected. Reader round 1 CLEAR on `ecf09ebb`
+  (F1 hybrid unpinned, answered by `3352030b`); round 2 CLEAR on `3352030b`;
+  verified_gate PASS on that head; CI green. Merged by hand: the auto-mode classifier
+  refuses `gh pr merge` while `review_reader check` exits 2 (markers under the author's
+  login, as on #570) - expect the same on every PR until readers post as another identity.
+- **Reader findings that predate #574, now running as separate sessions:**
+  - **F3** - a foreign offer with no region or a homonym region still annotates
+    relocation "satisfied" (the offer is withheld, but the note reports a guess as cleared).
+  - **F4** - region names are compared as exact strings (`kraków`/`Krakow` or an exonym miss
+    the radius). This is fail-closed, and #574 widened it to foreign offers.
+- Everything under 00006 (#571 BLOCKED, #554, #541, #566/#567/#559) is unchanged by this
+  session.
+
+
+## 00006. #564, #570 and #565 merged; #571 (topic exclusions) BLOCKED on three fail-opens
+
+**The candidate's three asks from the live round now stand at two merged, one blocked.**
+
+- **#564 MERGED** (#558, reactions on every board).
+- **#570 MERGED** as `ee69fadf` (T201 / #550: an on-site offer needs remote or a
+  commutable reach). Follow-ups **N6** (a radius candidate with relocation "no" sees a
+  foreign on-site offer as `unplaced` while the relocation note says satisfied) and **N7**
+  (stale "four shapes" prose in `floor_sweep.py` near the `MINIMUM_FLOORS_SWEPT` block)
+  were spun off; `../ijs-n6` holds task `t-58f7aa91` for N6 - check whether that session
+  is still live before touching it.
+- **#565 MERGED** as `cf4dc6af` (#562, foreign boards for a cross-border candidate), after
+  five reader rounds; round 5 CLEAR on `5b8be7d5`, verified_gate PASS, CI green. **#541**
+  (OFFER_CEILING global, worldwide boards never asked) is still OPEN - confirm whether
+  #565 settled it before closing it.
+- **#571 BLOCKED** - T203 / #561 (topics the candidate ruled out still served). Head
+  `2a58c734`, which merges main (census floors regenerated: `MINIMUM_FLOORS_SWEPT` 89,
+  `MINIMUM_PROSE_MUTATION_SCENARIOS` 86, T85 115). No verified_gate block for that head:
+  the run was stopped once the reader blocked. Reader report: comment 5890598725.
+  - **F1 high** - offers already in the store are never re-filtered; round 2 printed
+    `EXCLUDED 2` and presentation still showed both. #561's own case is the stored 35.
+    Step-5 stimuli have the same gap.
+  - **F2 high** - whole-word exact matching: `banca` misses bancario/bancaria/banco,
+    `fintech` misses `fintechs`; 13 corpus adverts saying bancari* and 2 Catalan
+    `ciberseguretat` pass even the fixture rows. The implementer's "bancaria must not
+    match banca" is the opposite of what the candidate asked.
+  - **F3 high** - nothing turns the candidate's recorded statements (evidence rows) into
+    exclusion rows; only the step-02/07 skills mention recording, not steps 5/10 where
+    such statements are heard. As merged, nothing would change for the candidate who
+    filed #561.
+  - **F4 medium** - the employer is never matched; a bank's advert that never names the
+    topic is served. **F5 low** - the live gate pins the wiring, not the matcher, and its
+    docstring claims all 8 fixture rows trip where 7 do.
+  - Sound: `source()` is `_one_board`'s only caller, a corrupt exclusions file fails
+    closed, removals are reported.
+  - Next: one implementer round on F1-F3 (F2 wants a closed rule - stem/prefix matching
+    derived from the stated word, ES/EN/CA alike - not more fixture words), then a scoped
+    re-read. Worktree `../ijs-t203`.
+- **#554** (T200) unchanged: reader BLOCK F1-F4 (F1: foorilla's `"*"` wildcard should be
+  satisfiable only by detail-side money), needs a rebase, and must revert its weakening
+  of T202's Gate cell in `status/plan.md`. Worktree `../ijs-t-06b341fa`.
+- Still unfiled as task files: **#566**, **#567**; **#559** still caps #564's win.
+
+A recurring hazard this session, twice: two branches each adding floors write the same
+census value and git merges it silently (`MINIMUM_FLOORS_*`, T85). Regenerate after every
+merge of main; never pick a side.
+
+
 ## 00005. Two PRs open under a reader round each, T201 gated green, and the candidate called the loop too slow
 
 **The candidate's three asks from the live round are all in flight.** Reactions on every

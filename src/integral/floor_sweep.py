@@ -3239,9 +3239,10 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: `uv run python -m integral.floor_sweep` against the merged tree rather than
 #: picked from either side. Still zero slack.
 #: **86 since T201** (issue #550), whose new `reach.MINIMUM_FIXTURES` joined
-#: the population — one more literal floor pinning the reach fixture set at
-#: exactly four shapes. Measured with `uv run python -m integral.floor_sweep`
-#: against this branch. Still zero slack.
+#: the population — one more floor pinning the reach fixture set, ten shapes
+#: across three candidates (`reach._cases`). Measured with
+#: `uv run python -m integral.floor_sweep` against this branch. Still zero
+#: slack.
 #: **89 with T203**, whose `exclusion_live_round` module declares three floors
 #: (`MINIMUM_EXCLUDED_SERVED`, `MINIMUM_UNEXCLUDED_SERVED`,
 #: `MINIMUM_EXCLUSIONS_TRIPPED`). Still zero slack.
@@ -3346,11 +3347,12 @@ MINIMUM_FLOORS_SWEPT = 89
 #: predates — until this merge gives them one (see `markup_text.py`); neither
 #: counts toward `arithmetically_checked`, being dynamic. Still four points
 #: of slack.
-#: **43 since T201** (issue #550): `reach.MINIMUM_FIXTURES` is a literal-
-#: population floor (checked against `len(in_range)`, a dict literal in
-#: source), so it joins this count directly rather than through a committed
-#: evidence file. Measured with `uv run python -m integral.floor_sweep`
-#: against this branch. Still seven points of slack.
+#: **43 since T201** (issue #550): `reach.MINIMUM_FIXTURES` is an
+#: evidence-pinned floor — checked against `fixtures_checked` in the committed
+#: `status/evidence/T201.json`, the running count `reach.probe_reach` makes
+#: over `reach._cases` — so it joins this count through that file. Measured
+#: with `uv run python -m integral.floor_sweep` against this branch. Still
+#: seven points of slack.
 #: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=43
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
