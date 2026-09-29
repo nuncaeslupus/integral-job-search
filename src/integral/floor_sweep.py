@@ -3376,7 +3376,7 @@ MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 #: marker is needed here either. Never the count of the day (T100): raise it
 #: deliberately when a round changes how many floors resolve through
 #: committed evidence, the same discipline as its two siblings.
-MINIMUM_FLOORS_EVIDENCE_PINNED = 30
+MINIMUM_FLOORS_EVIDENCE_PINNED = 31
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:

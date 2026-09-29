@@ -240,7 +240,7 @@
     {
       "module": "candidate",
       "name": "MINIMUM_CASES",
-      "line": 1380,
+      "line": 1408,
       "population": 31
     },
     {
@@ -289,7 +289,7 @@
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
       "line": 3379,
-      "population": 30
+      "population": 31
     },
     {
       "module": "floor_sweep",
@@ -326,6 +326,12 @@
       "name": "MINIMUM_CHECKS",
       "line": 709,
       "population": 36
+    },
+    {
+      "module": "reach",
+      "name": "MINIMUM_FIXTURES",
+      "line": 144,
+      "population": 10
     },
     {
       "module": "retraction",
