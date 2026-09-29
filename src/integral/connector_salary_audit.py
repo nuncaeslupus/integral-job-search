@@ -63,6 +63,7 @@ from integral.connectors import (
     _CURRENCIES,
     Connector,
     _json_documents,
+    _take,
     compile_path,
     compile_selector,
     dig_container,
@@ -71,6 +72,9 @@ from integral.connectors import (
     parse_html,
     parse_list_page,
     select_all,
+)
+from integral.connectors import (
+    _CURRENCY_TOKEN as _CONNECTOR_CURRENCY_TOKEN,
 )
 from integral.salary_recovery import _WAGE_NOUN
 from integral.sourcing import _offer_from
@@ -102,6 +106,38 @@ _CURRENCY_TOKEN = re.compile(
 )
 
 
+#: The slice of a card that states a band: two figures joined by a dash, each
+#: optionally led by a currency token and trailed by a `K`/`M`. It only *cuts the
+#: text out*; what the figures and the currency are is decided by the connector
+#: engine's own `_take` vocabulary (`range_low`, `range_high`, `currency`), so the
+#: audit reads money the way a connector's `take:` does and owns no parser.
+_CUR = _CONNECTOR_CURRENCY_TOKEN.pattern
+_BAND_SLICE = re.compile(
+    rf"(?:{_CUR})?\s*\d[\d.,]*\s*[KM]?\s*[-\u2013\u2014]\s*(?:{_CUR})?\s*\d[\d.,]*\s*[KM]?"
+)
+
+
+def card_band(text: str) -> tuple[float, float, str] | None:
+    """`(min, max, currency)` the card's own text publishes, or `None`.
+
+    `None` when the card states no two-figure band with a resolvable currency,
+    or states two different ones: the audit then has nothing to hold a declared
+    read against, and says nothing rather than guess.
+    """
+    flat = " ".join(text.split()).upper()
+    found = set()
+    for match in _BAND_SLICE.finditer(flat):
+        chunk = match.group(0)
+        low, high, currency = (
+            _take("range_low", chunk),
+            _take("range_high", chunk),
+            _take("currency", chunk),
+        )
+        if low is not None and high is not None and currency is not None:
+            found.add((float(low), float(high), currency))
+    return found.pop() if len(found) == 1 else None
+
+
 @dataclass(frozen=True)
 class RowVerdict:
     """One fixture row, measured."""
@@ -118,6 +154,11 @@ class RowVerdict:
     #: connector's `detail:` block declares a salary field — so the committed
     #: `detail.html` (another advert's) decided the numbers, not the card.
     detail_supplies_salary: bool = False
+    #: What the row's own card publishes, by `card_band` — `None` when it states
+    #: no band. A declared read is held against this, never against the engine's
+    #: read alone: an entry that copies the code's output agrees with the code by
+    #: construction, and only the card can say the code is wrong.
+    card: tuple[float, float, str] | None = None
 
 
 def _money_contexts(text: str) -> tuple[str, ...]:
@@ -221,6 +262,7 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
                 publishes=_money_contexts(text),
                 salary=_as_record(offer.salary if offer is not None else None),
                 list_publishes=_money_contexts(list_text),
+                card=card_band(list_text),
                 detail_supplies_salary=route == "detail"
                 and detail is not None
                 and any(key.startswith("salary") for key in detail),
@@ -266,6 +308,19 @@ def _declared_for(
     return row, False
 
 
+def _declared_band(declared: dict[str, Any]) -> tuple[Any, Any, Any]:
+    return (declared.get("min"), declared.get("max"), declared.get("currency"))
+
+
+def _as_band(salary: dict[str, Any] | None) -> tuple[Any, Any, Any] | None:
+    return None if salary is None else _declared_band(salary)
+
+
+def _verdict_key(package: str, declared: dict[str, Any]) -> tuple[Any, ...]:
+    """One adjudication: what a package's entry says is read, period included."""
+    return (package, *_declared_band(declared), declared.get("period"))
+
+
 def _packages(connectors_dir: Path) -> list[Path]:
     return sorted(
         directory
@@ -282,7 +337,8 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
     read_rows = 0
     refused_rows = 0
     wildcard_rows = 0
-    wildcard_reads = 0
+    substituted_rows = 0
+    distinct_verdicts: set[tuple[Any, ...]] = set()
     rows_measured = 0
     boards: dict[str, dict[str, Any]] = {}
 
@@ -308,12 +364,46 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                     f"{package} [{verdict.index}]: the card prints "
                     f"{verdict.list_publishes[0]!r}, the entry says {declared.get('list_says')!r}"
                 )
+            if (
+                verdict.route == "detail"
+                and verdict.detail_supplies_salary
+                and verdict.list_publishes
+            ):
+                # The salary came through the ONE committed `detail.html`, which
+                # belongs to another advert, so the engine's read says nothing
+                # about this row. Its own card does: the declared read has to be
+                # the card's band (`card_band`, cut out of the card and read by
+                # the connector engine's own `_take`), and a card whose money
+                # is not a band the engine can name has to be refused.
+                if verdict.card is None:
+                    if declared is not None and declared.get("verdict") == "refused":
+                        refused_rows += 1
+                        package_refused += 1
+                    else:
+                        unread.append(f"{package} [{verdict.index}]: {verdict.list_publishes[0]}")
+                    continue
+                if declared is None or declared.get("verdict") != "read":
+                    mismatched.append(
+                        f"{package} [{verdict.index}]: the card publishes {verdict.card}, "
+                        "and nothing declares a read of it"
+                    )
+                    continue
+                read_rows += 1
+                package_read += 1
+                if _declared_band(declared) != verdict.card:
+                    mismatched.append(
+                        f"{package} [{verdict.index}]: the card publishes {verdict.card}, "
+                        f"the entry declares {_declared_band(declared)}"
+                    )
+                elif _as_band(verdict.salary) != verdict.card:
+                    substituted_rows += 1
+                distinct_verdicts.add(_verdict_key(package, declared))
+                continue
             if verdict.salary is not None:
                 read_rows += 1
                 package_read += 1
                 if by_wildcard:
                     wildcard_rows += 1
-                    wildcard_reads += 1
                 if declared is None or declared.get("verdict") != "read":
                     mismatched.append(f"{package} [{verdict.index}]: read, and nothing declares it")
                 elif {k: declared.get(k) for k in ("min", "max", "currency", "period")} != (
@@ -322,6 +412,13 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                     mismatched.append(
                         f"{package} [{verdict.index}]: expected {declared}, read {verdict.salary}"
                     )
+                elif verdict.card is not None and _declared_band(declared) != verdict.card:
+                    mismatched.append(
+                        f"{package} [{verdict.index}]: the card publishes {verdict.card}, "
+                        f"the entry declares {_declared_band(declared)}"
+                    )
+                if declared is not None and declared.get("verdict") == "read":
+                    distinct_verdicts.add(_verdict_key(package, declared))
                 continue
             if declared is not None and declared.get("verdict") == "read":
                 mismatched.append(
@@ -346,7 +443,8 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
         "packages_measured": len(boards),
         "rows_measured": rows_measured,
         "rows_adjudicated_by_a_wildcard": wildcard_rows,
-        "distinct_salary_rows_read": read_rows - wildcard_reads,
+        "rows_read_through_a_substituted_detail": substituted_rows,
+        "distinct_salary_verdicts_read": len(distinct_verdicts),
         "unread": tuple(unread),
         "mismatches": tuple(mismatched),
     }
@@ -359,13 +457,14 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
 #: leaves the floor where it was, so the gate stays green and the diff has to
 #: say out loud that nothing new is being read.
 #:
-#: The population is 97 — every row read from the engine's point of view, less
-#: those adjudicated only by a `"*"` wildcard (`distinct_salary_rows_read`).
-#: Counting all 104 read rows would let a wildcard stretch one verdict across
-#: rows it never judged and still clear the floor. Three points of slack is the
-#: repository's margin for a fixed in-repo collection.
-#: arsenal-floor-margin: MINIMUM_DISTINCT_SALARY_ROWS_READ value=94 population=97
-MINIMUM_DISTINCT_SALARY_ROWS_READ = 94
+#: The population is 78 — the number of *distinct verdicts* read, each one a
+#: `(package, min, max, currency, period)` tuple out of the committed entries.
+#: It is not a row count: rows minus wildcard rows still counts fifty identical
+#: entries as fifty, and reverting to a plain row count left every test green
+#: (second-reader round 2, R2). Three points of slack is the repository's margin
+#: for a fixed in-repo collection.
+#: arsenal-floor-margin: MINIMUM_DISTINCT_SALARY_VERDICTS_READ value=75 population=78
+MINIMUM_DISTINCT_SALARY_VERDICTS_READ = 75
 
 
 #: The denominator under the whole measurement: how many connector packages
@@ -387,12 +486,12 @@ MINIMUM_PACKAGES_MEASURED = 24
 def record(measured: dict[str, Any]) -> dict[str, Any]:
     """What is committed, out of what was measured.
 
-    Two of the six keys are **floors** and two are **exact**, and which is which
+    Two of the keys are **floors** and the rest are **exact**, and which is which
     is the argued part rather than a house style applied evenly.
 
     Floors, because they are denominators — they measure nothing about the code
     and exist only to stop a clean zero resting on an empty scan.
-    `distinct_salary_rows_read` and `packages_measured` both move whenever a fixture is
+    `distinct_salary_verdicts_read` and `packages_measured` both move whenever a fixture is
     re-recorded or a connector lands, and two branches each adding one write the
     same `+1` with no conflict, which is the silent-merge hazard CLAUDE.md names
     from T85. A floor is a literal, so both sides changing it *is* a conflict.
@@ -409,6 +508,12 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
       churn included, because a number nobody is forced to read is how a
       substitution stays invisible.
 
+    * `rows_read_through_a_substituted_detail` is the third: rows whose salary the
+      engine read from the one shared `detail.html` (another advert's), so the
+      engine's read is not evidence about them and only the card's own band is.
+      Exact for the same reason — a number nobody is forced to read is how a
+      substitution stays invisible.
+
     `rows_measured` is dropped: with a package floor and a read floor already
     committed it pins nothing further, and it is the most fixture-sensitive
     number here. `unread` and `mismatches` are dropped too — they name rows, so
@@ -420,9 +525,9 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
         if key not in ("unread", "mismatches", "rows_measured")
     }
     committed.pop("salary_rows_read")
-    committed.pop("distinct_salary_rows_read")
+    committed.pop("distinct_salary_verdicts_read")
     committed.pop("packages_measured")
-    committed["distinct_salary_rows_read_at_least"] = MINIMUM_DISTINCT_SALARY_ROWS_READ
+    committed["distinct_salary_verdicts_read_at_least"] = MINIMUM_DISTINCT_SALARY_VERDICTS_READ
     committed["packages_measured_at_least"] = MINIMUM_PACKAGES_MEASURED
     return committed
 

@@ -444,7 +444,7 @@
     "connector_exchange.LEAK_NEEDLE_MINIMUM",
     "connector_health.MAX_PROBE_ATTEMPTS",
     "connector_policy.ADJUDICATIONS_AT_LEAST",
-    "connector_salary_audit.MINIMUM_DISTINCT_SALARY_ROWS_READ",
+    "connector_salary_audit.MINIMUM_DISTINCT_SALARY_VERDICTS_READ",
     "connector_salary_audit.MINIMUM_PACKAGES_MEASURED",
     "connector_salary_audit._WINDOW",
     "connector_transport.MINIMUM_CREDENTIAL_CASES",

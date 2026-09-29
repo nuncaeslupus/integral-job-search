@@ -15,12 +15,13 @@ import pytest
 
 from integral import connector_salary_audit
 from integral.connector_salary_audit import (
-    MINIMUM_DISTINCT_SALARY_ROWS_READ,
+    MINIMUM_DISTINCT_SALARY_VERDICTS_READ,
     MINIMUM_PACKAGES_MEASURED,
     RowVerdict,
     _declared_for,
     _money_contexts,
     _packages,
+    card_band,
     measure,
     record,
 )
@@ -106,16 +107,18 @@ def test_the_committed_fixtures_have_no_unread_salary() -> None:
 
 def test_the_floors_sit_under_the_live_populations() -> None:
     measured = measure()
-    assert measured["distinct_salary_rows_read"] >= MINIMUM_DISTINCT_SALARY_ROWS_READ
+    assert measured["distinct_salary_verdicts_read"] >= MINIMUM_DISTINCT_SALARY_VERDICTS_READ
     assert measured["packages_measured"] >= MINIMUM_PACKAGES_MEASURED
 
 
 def test_the_record_commits_the_floors_and_not_the_censuses() -> None:
     committed = record(measure())
-    assert committed["distinct_salary_rows_read_at_least"] == MINIMUM_DISTINCT_SALARY_ROWS_READ
+    assert (
+        committed["distinct_salary_verdicts_read_at_least"] == MINIMUM_DISTINCT_SALARY_VERDICTS_READ
+    )
     assert committed["packages_measured_at_least"] == MINIMUM_PACKAGES_MEASURED
     assert "salary_rows_read" not in committed
-    assert "distinct_salary_rows_read" not in committed
+    assert "distinct_salary_verdicts_read" not in committed
     assert "packages_measured" not in committed
     assert "rows_measured" not in committed
 
@@ -215,9 +218,10 @@ def test_a_dead_money_detector_is_caught_by_the_refusal_count(
     blinded = measure(_CONNECTORS)
 
     assert blinded["boards_that_publish_a_salary_we_do_not_read"] == 0
-    assert blinded["salary_expectation_mismatches"] == 0
-    assert blinded["salary_rows_read"] == live["salary_rows_read"]
-    assert blinded["distinct_salary_rows_read"] >= live["distinct_salary_rows_read"]
+    # Not asserted: `salary_expectation_mismatches`. Blinded, the shared-detail
+    # rows fall back to the engine's read, which is not their card's band.
+    assert blinded["salary_rows_read"] >= live["salary_rows_read"]
+    assert blinded["distinct_salary_verdicts_read"] >= live["distinct_salary_verdicts_read"]
     assert blinded["packages_measured"] == live["packages_measured"]
     assert blinded["salary_rows_refused"] == 0 < live["salary_rows_refused"]
     assert record(blinded) != record(live)
@@ -245,3 +249,124 @@ def test_editing_a_list_card_band_turns_the_audit_red(tmp_path: Path) -> None:
 def test_the_wildcard_covers_only_rows_whose_card_publishes_nothing() -> None:
     measured = measure(_CONNECTORS)
     assert measured["rows_adjudicated_by_a_wildcard"] == 7
+
+
+def _copy_connectors(tmp_path: Path) -> Path:
+    import shutil
+
+    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
+    return tmp_path / "connectors"
+
+
+def test_distinct_verdicts_are_counted_as_tuples_not_rows() -> None:
+    """R2. The key is the number of distinct `(package, min, max, currency,
+    period)` verdicts, recomputed here straight from the committed entries. A
+    key reverted to a row count (`read_rows`, or rows minus wildcard rows)
+    equals 102 or 95 where this is 78, so it cannot pass."""
+    measured = measure(_CONNECTORS)
+    tuples = set()
+    for path in _CONNECTORS.glob("*/fixture/salary.json"):
+        for entry in json.loads(path.read_text(encoding="utf-8"))["rows"].values():
+            if entry["verdict"] == "read":
+                tuples.add(
+                    (path.parts[-3], entry["min"], entry["max"], entry["currency"], entry["period"])
+                )
+    assert measured["distinct_salary_verdicts_read"] == len(tuples)
+    assert measured["distinct_salary_verdicts_read"] < measured["salary_rows_read"]
+
+
+def test_the_record_commits_the_distinct_verdict_floor() -> None:
+    committed = record(measure(_CONNECTORS))
+    assert committed["distinct_salary_verdicts_read_at_least"] == (
+        MINIMUM_DISTINCT_SALARY_VERDICTS_READ
+    )
+    assert "rows_read_through_a_substituted_detail" in committed
+
+
+@pytest.mark.parametrize(
+    ("text", "band"),
+    [
+        ("[SE] CAD 150K-190K Vancouver", (150000.0, 190000.0, "CAD")),
+        ("Full-time $70k \u2013 $76k \u2022 No equity", (70000.0, 76000.0, "USD")),
+        ("[SE] CAD 42K Toronto", None),  # one figure is not a band
+        ("USD 1K-2K or EUR 3K-4K", None),  # two different bands: nothing said
+        ("10 - 20 employees", None),  # no currency, not money
+    ],
+)
+def test_card_band_reads_the_card_with_the_engines_own_take(
+    text: str, band: tuple[float, float, str] | None
+) -> None:
+    assert card_band(text) == band
+
+
+def test_an_entry_copied_from_the_engines_read_over_a_different_card_is_a_mismatch(
+    tmp_path: Path,
+) -> None:
+    """R1, the exact defect: an entry whose `list_says` matches its card but
+    whose money is another advert's. Row 1's card says USD 174K-252K; declaring
+    the shared page's CAD 150K-190K beside it must be red."""
+    directory = _copy_connectors(tmp_path)
+    path = directory / "foorilla_en" / "fixture" / "salary.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    row = data["rows"]["1"]
+    assert (row["min"], row["currency"]) == (174000.0, "USD")
+    row.update(min=150000.0, max=190000.0, currency="CAD")
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    mismatches = measure(directory)["mismatches"]
+    assert any("foorilla_en [1]" in entry for entry in mismatches), mismatches
+
+
+def test_a_single_figure_card_cannot_be_declared_read(tmp_path: Path) -> None:
+    directory = _copy_connectors(tmp_path)
+    path = directory / "foorilla_en" / "fixture" / "salary.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    row = data["rows"]["34"]
+    assert row["verdict"] == "refused"
+    data["rows"]["34"] = {
+        "verdict": "read",
+        "min": 150000.0,
+        "max": 190000.0,
+        "currency": "CAD",
+        "period": None,
+        "list_says": row["list_says"],
+    }
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    measured = measure(directory)
+    assert measured["boards_that_publish_a_salary_we_do_not_read"] == 1
+
+
+def test_a_connector_reverted_to_the_top_of_a_band_cannot_be_certified_by_a_copy(
+    tmp_path: Path,
+) -> None:
+    """wellfound_en row 0's card says $70k-$76k. Strip the connector's list
+    salary fields and the engine goes back to recovering `Salary: $76,000` from
+    the body, 76000 with no minimum. An entry that copies that read agrees with
+    the engine, so only the card can call it wrong — and it must."""
+    import re
+
+    directory = _copy_connectors(tmp_path)
+    yaml_path = directory / "wellfound_en" / "connector.yaml"
+    text = yaml_path.read_text(encoding="utf-8")
+    stripped = re.sub(
+        r"    salary_(min|max|currency):\n      css: \"span\.pl-1\.text-xs\"\n"
+        r"      take: \"[a-z_]+\"\n",
+        "",
+        text,
+    )
+    assert stripped != text
+    yaml_path.write_text(stripped, encoding="utf-8")
+    path = directory / "wellfound_en" / "fixture" / "salary.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["rows"]["0"].update(min=76000.0, max=None, period="year")
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    mismatches = measure(directory)["mismatches"]
+    assert any("wellfound_en [0]" in entry and "card publishes" in entry for entry in mismatches)
+
+
+def test_foorillas_rows_are_counted_as_read_through_a_substituted_detail() -> None:
+    """47 of foorilla's 48 banded cards disagree with the one shared advert page
+    (row 0's own card is the 48th); wellfound, which reads its card, adds none."""
+    assert measure(_CONNECTORS)["rows_read_through_a_substituted_detail"] == 47
