@@ -17,7 +17,7 @@ import dataclasses
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast, get_args, get_type_hints
+from typing import Any, Literal, cast, get_args, get_type_hints
 
 import pytest
 from pydantic import ValidationError
@@ -409,7 +409,10 @@ def test_a_refused_offer_still_reports_the_field_it_could_not_read(store: Profil
     assert verdicts["location"] == "unplaced"
 
 
-def test_relocation_is_not_read_satisfied_over_a_move_it_can_refuse() -> None:
+@pytest.mark.parametrize("delivery", ["onsite", "hybrid"])
+def test_relocation_is_not_read_satisfied_over_a_move_it_can_refuse(
+    delivery: Literal["onsite", "hybrid"],
+) -> None:
     """#570's second reader, N6: a candidate with a commute radius who will not
     relocate, and an on-site vacancy in Kraków. The radius names no Polish
     place under any reading, so the job means moving and `relocation` refuses
@@ -424,7 +427,7 @@ def test_relocation_is_not_read_satisfied_over_a_move_it_can_refuse() -> None:
         ),
         relocation=Relocation(state="stated", willingness="no"),
     )
-    krakow = OfferFacts(offer_id="krakow", country="PL", delivery="onsite", region="Kraków")
+    krakow = OfferFacts(offer_id="krakow", country="PL", delivery=delivery, region="Kraków")
     annotation = annotate(krakow, constraints, ProfileRevision(rows=1, sha256="a" * 64))
     verdicts = {reading.field: reading.verdict for reading in annotation.readings}
     assert verdicts["relocation"] == "violated"

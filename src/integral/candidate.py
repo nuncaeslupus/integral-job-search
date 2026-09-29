@@ -831,9 +831,9 @@ def _required_reach_mode(offer: OfferFacts, home_country: str | None = None) -> 
     absent — `home_country` (the candidate's stated `Location.country`) is
     what makes "commute" mean something: on-site work in a country other than
     the candidate's own always needs relocation, whatever the ad claims,
-    because there is no commuting across a border. `home_country=None` (the
-    candidate never stated a location) falls back to trusting the ad's flag
-    alone, same as before — nothing to compare against.
+    because there is no commuting across a border. `home_country=None` (no
+    location stated, or a commute radius that cannot decide this offer — see
+    `filter_hard_constraints`) falls back to trusting the ad's flag alone.
     """
     if offer.delivery == "remote" and not offer.requires_relocation:
         return "cross_border_remote_employer" if offer.foreign_employer else "remote"
@@ -1335,14 +1335,19 @@ def probe_hard_filter() -> dict[str, Any]:
         ),
         relocation=Relocation(state="stated", willingness="no"),
     )
-    krakow = _good_offer("offer-abroad-krakow").model_copy(
-        update={"delivery": "onsite", "country": "PL", "region": "Kraków"}
-    )
-    stays_put_result = filter_hard_constraints(stays_put, [krakow])
+    # Hybrid too: it needs presence as much as on-site does (#574's reader, F1).
+    krakow = [
+        _good_offer(f"offer-abroad-krakow-{delivery}").model_copy(
+            update={"delivery": delivery, "country": "PL", "region": "Kraków"}
+        )
+        for delivery in ("onsite", "hybrid")
+    ]
+    stays_put_result = filter_hard_constraints(stays_put, krakow)
     check(
-        [removal.field for removal in stays_put_result.removed] == ["relocation"],
-        "relocation did not refuse an on-site vacancy abroad, outside the radius, for a "
-        "candidate who will not relocate",
+        [(removal.offer_id, removal.field) for removal in stays_put_result.removed]
+        == [(offer.offer_id, "relocation") for offer in krakow],
+        "relocation did not refuse an on-site or hybrid vacancy abroad, outside the "
+        "radius, for a candidate who will not relocate",
     )
 
     # An offer both refused and unreadable records both, and resolves to the
