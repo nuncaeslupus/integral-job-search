@@ -1,5 +1,25 @@
 # Session handover
 
+## 00008. #578 merged (F3 from #574): relocation and reach no longer report a guess as cleared
+
+- **#578 MERGED** as `8d18cf7a` (T206 / #577, task `t-a89c7d6e`). Where a commute radius
+  cannot place a foreign on-site offer (no region, or a homonym region), `_read_either_way`
+  asks relocation and reach both as a stay and as a move. If the two agree, the verdict is
+  reported. If they disagree, it reads `unplaced`, as `location` already did.
+  Refusing both ways means `removed`; when the two reasons differ, the reason names both modes.
+  A candidate who would move to PL still has an unflagged Kraków vacancy withheld by location.
+  That is consistent with #550's Madrid rule and is now written in the `Location` docstring.
+  `MINIMUM_CASES` is 36.
+- Reader round 1 BLOCK on `a77a5721`, no fail-open. F1: a refusal both readings agree on
+  had no fixture. F2: the reason named only the guessed mode. Both were fixed in `5232631d`.
+  Round 2 CLEAR. The M6 mutant `verdict == moving` survives and is equivalent (the reader
+  checked by reasoning). verified_gate PASS on `5232631d` and on merged `main`
+  (`8d18cf7a`: 5336 passed). CI green. `review_reader check` exits 2 because the author and
+  the reader share one login; it is recorded as unsatisfiable on the PR.
+- F4 (region names compared as exact strings) is still running in its own session
+  (`t-d09fef7c`). 00006's open items are unchanged.
+
+
 ## 00007. #574 merged (N6, N7 from #570); two follow-ups running in their own sessions
 
 - **#574 MERGED** as `7274c991` (T204 / #572, task `t-58f7aa91`). A commute-radius
