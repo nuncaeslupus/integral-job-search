@@ -884,6 +884,9 @@ def _read_either_way(
     if home_country is not None or location is None:
         return verdict
     moving = check(value, offer, location.country)
+    if verdict is not None and moving is not None and verdict != moving:
+        # Refused either way, for different reasons: name both, not the guess.
+        return f"{verdict}; if it means moving, {moving}"
     if (verdict is None) == (moving is None):
         return verdict
     where = f"in {offer.region}, {offer.country}" if offer.region else f"in {offer.country}"
@@ -1433,6 +1436,32 @@ def probe_hard_filter() -> dict[str, Any]:
         == {(offer.offer_id, "location") for offer in unplaceable},
         "relocation or reach was withheld where both readings of the radius agree",
     )
+    # #578's reader, F1 and F2: agreeing on a refusal is decided too, and the
+    # reason names both readings rather than the guessed one.
+    remote_only = filter_hard_constraints(
+        stays_put.model_copy(update={"reach": Reach(state="stated", modes=("remote",))}),
+        unplaceable,
+    )
+    check(
+        {(removal.offer_id, removal.field) for removal in remote_only.removed}
+        == {(offer.offer_id, "reach") for offer in unplaceable}
+        and all(
+            "'commute'" in removal.reason and "'relocate'" in removal.reason
+            for removal in remote_only.removed
+        ),
+        "reach withheld, or named only the guessed mode for, a vacancy both readings "
+        "of the radius refuse",
+    )
+    flagged = unplaceable[0].model_copy(
+        update={"offer_id": "offer-abroad-unplaceable-flagged", "requires_relocation": True}
+    )
+    flagged_result = filter_hard_constraints(stays_put, [flagged])
+    check(
+        [(removal.offer_id, removal.field) for removal in flagged_result.removed]
+        == [(flagged.offer_id, "relocation")]
+        and all(removal.field != "relocation" for removal in flagged_result.unplaced),
+        "relocation withheld a vacancy flagged as a move, which both readings refuse",
+    )
 
     # An offer both refused and unreadable records both, and resolves to the
     # refusal. Dropping the unreadable half is what let `annotate` report a
@@ -1536,7 +1565,9 @@ def probe_hard_filter() -> dict[str, Any]:
 #: vacancy outside a commute radius for a candidate who will not move.
 #: -> 34 for #574's reader, F3: relocation and reach withheld where the radius
 #: cannot decide the move, and not withheld where both readings agree.
-MINIMUM_CASES = 34
+#: -> 36 for #578's reader, F1: a refusal both readings agree on is removed, not
+#: withheld, and names both modes when they differ.
+MINIMUM_CASES = 36
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
