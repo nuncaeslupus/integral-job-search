@@ -1765,20 +1765,28 @@ def measure_reach_selection() -> dict[str, Any]:
             # record byte-identical while the real library admitted a reserved
             # example domain and fetched it. A reserved `.test` site is the
             # runtime's own definition of unusable — see `is_example_site` —
-            # so this does not restate the rule it is testing.
-            flood_board(directory, f"{site}-unusable", 1)
-            (directory / f"{site}-unusable_en" / "meta.yaml").write_text(
-                f"site: {site}-unusable.test\ncountry: {country}\nlanguage: en\n",
+            # so this does not restate the rule it is testing. An underscore,
+            # not a hyphen: a hyphenated name fails `load_connector`'s own name
+            # check, which made the twin unusable for a second reason and left
+            # `.test` doing nothing (second reader, round 3).
+            flood_board(directory, f"{site}_unusable", 1)
+            (directory / f"{site}_unusable_en" / "meta.yaml").write_text(
+                f"site: {site}_unusable.test\ncountry: {country}\nlanguage: en\n",
                 encoding="utf-8",
             )
         chosen = {
             name: [p.name for p in packages_for(constraints, directory)]
             for name, constraints in reaches.items()
         }
+        # Read back from the library, never from what this loop meant to write:
+        # with the install deleted, `unusable` was still three names and the
+        # component summed over boards that did not exist (round 3, R3-1).
+        library = installed_packages(directory)
+    unusable = {p.name for p in library if not p.usable}
+    unusable_per_bucket = sorted(str(p.country) for p in library if not p.usable)
     selected = {name: set(names) for name, names in chosen.items()}
 
     home, worldwide, foreign = ("home_en", "worldwide_en", "foreign_en")
-    unusable = {f"{site}-unusable_en" for site in countries}
     # The rule each combination is held to, stated from the mode names. Any
     # stated reach naming remote work of either kind opens `GLOBAL`; only
     # naming an employer abroad opens another country's own boards; an
@@ -1857,6 +1865,13 @@ def measure_reach_selection() -> dict[str, Any]:
             f"{sorted(selected[widest])} rather than one board per bucket, "
             "so every component below counted over an empty population"
         ]
+    if unusable_per_bucket != sorted(countries.values()):
+        measured["gate_status"] = "unmeasured"
+        measured.setdefault("reasons", []).append(
+            f"the library holds unusable boards for {unusable_per_bucket} rather than "
+            "exactly one per bucket, so `unusable_boards_selected` counted over a "
+            "population that does not pin `p.usable` in every bucket"
+        )
     return measured
 
 

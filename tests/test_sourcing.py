@@ -45,6 +45,7 @@ from integral.sourcing import (
     Fetch,
     Response,
     Run,
+    _why_not_worldwide,
     browser_urls,
     flood_board,
     from_captures,
@@ -562,6 +563,34 @@ def test_the_caption_names_every_kind_of_board_it_withholds(store: ProfileStore)
         assert absent not in run.unreached_because, (
             f"no {absent!r} board was withheld, and the summary says {run.unreached_because!r}"
         )
+
+
+@pytest.mark.parametrize("countries", [(GLOBAL,), ("ES", "US")], ids=["global-only", "national"])
+def test_the_caption_names_a_kind_exactly_when_it_was_withheld(
+    tmp_path: Path, countries: tuple[str, ...]
+) -> None:
+    """Round 3, R3-2: the `remote` half above runs the cross-border branch, a
+    fixed sentence, so a caption naming "worldwide" unconditionally passed every
+    caption test. Two one-kind libraries under a `commute` reach, each kind held
+    to named ⇔ withheld, read from the withheld packages' own `country`."""
+    directory = tmp_path / "connectors"
+    for country in countries:
+        site = country.lower()
+        flood_board(directory, site, 1)
+        (directory / f"{site}_en" / "meta.yaml").write_text(
+            f"site: {site}.integral.local\ncountry: {country}\nlanguage: en\n", encoding="utf-8"
+        )
+    constraints = _spain().model_copy(update={"reach": Reach(state="stated", modes=("commute",))})
+    asked = {p.name for p in packages_for(constraints, directory)}
+    withheld = [p for p in installed_packages(directory) if p.usable and p.name not in asked]
+    assert withheld, "a library this reach withholds nothing from pins nothing"
+    caption = _why_not_worldwide(constraints, withheld)
+    kinds = {
+        "worldwide boards": any(p.country == GLOBAL for p in withheld),
+        "other countries' own job boards": any(p.country not in (GLOBAL, "ES") for p in withheld),
+    }
+    for kind, was_withheld in kinds.items():
+        assert (kind in caption) == was_withheld, (kind, was_withheld, caption)
 
 
 def test_foreign_boards_come_after_the_country_s_own_and_the_worldwide_ones() -> None:
