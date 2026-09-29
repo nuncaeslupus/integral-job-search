@@ -3238,10 +3238,14 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: instance of the same collision; measured with
 #: `uv run python -m integral.floor_sweep` against the merged tree rather than
 #: picked from either side. Still zero slack.
-#: **88 with T203**, whose `exclusion_live_round` module declares three floors
+#: **86 since T201** (issue #550), whose new `reach.MINIMUM_FIXTURES` joined
+#: the population — one more literal floor pinning the reach fixture set at
+#: exactly four shapes. Measured with `uv run python -m integral.floor_sweep`
+#: against this branch. Still zero slack.
+#: **89 with T203**, whose `exclusion_live_round` module declares three floors
 #: (`MINIMUM_EXCLUDED_SERVED`, `MINIMUM_UNEXCLUDED_SERVED`,
 #: `MINIMUM_EXCLUSIONS_TRIPPED`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 88
+MINIMUM_FLOORS_SWEPT = 89
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3342,7 +3346,12 @@ MINIMUM_FLOORS_SWEPT = 88
 #: predates — until this merge gives them one (see `markup_text.py`); neither
 #: counts toward `arithmetically_checked`, being dynamic. Still four points
 #: of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=42
+#: **43 since T201** (issue #550): `reach.MINIMUM_FIXTURES` is a literal-
+#: population floor (checked against `len(in_range)`, a dict literal in
+#: source), so it joins this count directly rather than through a committed
+#: evidence file. Measured with `uv run python -m integral.floor_sweep`
+#: against this branch. Still seven points of slack.
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=43
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -3370,7 +3379,7 @@ MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 #: marker is needed here either. Never the count of the day (T100): raise it
 #: deliberately when a round changes how many floors resolve through
 #: committed evidence, the same discipline as its two siblings.
-MINIMUM_FLOORS_EVIDENCE_PINNED = 30
+MINIMUM_FLOORS_EVIDENCE_PINNED = 31
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:
@@ -3664,9 +3673,13 @@ def measure_marker_restatement_clearance() -> dict[str, Any]:
 #: corrupting — true the moment this merge gave them a marker and pulled them
 #: out of `silent_margin`, so they joined this battery's scope for the first
 #: time; splitting the block, not loosening the refusal, is the fix.
-#: **85 with T203**: `exclusion_live_round`'s three floors each carry their own
+#: **83 since T201** (issue #550): `reach.MINIMUM_FIXTURES` joined
+#: `MINIMUM_FLOORS_SWEPT` above, and this battery mutates it the same as any
+#: other swept floor not already a finding. Measured with
+#: `measure_prose_clearance()` against this branch.
+#: **86 with T203**: `exclusion_live_round`'s three floors each carry their own
 #: comment block and marker, so each is one more scenario. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 85
+MINIMUM_PROSE_MUTATION_SCENARIOS = 86
 
 
 def measure_prose_clearance() -> dict[str, Any]:

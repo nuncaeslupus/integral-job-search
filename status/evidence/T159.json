@@ -255,7 +255,7 @@
     {
       "module": "candidate",
       "name": "MINIMUM_CASES",
-      "line": 1348,
+      "line": 1408,
       "population": 31
     },
     {
@@ -297,20 +297,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3346,
-      "population": 42
+      "line": 3355,
+      "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3373,
-      "population": 30
+      "line": 3382,
+      "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3244,
-      "population": 88
+      "line": 3248,
+      "population": 89
     },
     {
       "module": "freshness",
@@ -341,6 +341,12 @@
       "name": "MINIMUM_CHECKS",
       "line": 709,
       "population": 36
+    },
+    {
+      "module": "reach",
+      "name": "MINIMUM_FIXTURES",
+      "line": 144,
+      "population": 10
     },
     {
       "module": "retraction",
@@ -532,6 +538,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 88,
+  "floors_swept_at_least": 89,
   "floors_arithmetically_checked_at_least": 36
 }
