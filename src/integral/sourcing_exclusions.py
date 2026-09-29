@@ -270,10 +270,20 @@ _ABSTRACT_SUFFIXES = ("tario", "taria", "tarios", "tarias", "tari", "taris", "ta
 _MIN_STEM = 4
 #: Where a stem's own last letters change between its forms, so an ending
 #: alone cannot reach the other: `cryptocurrency`/`cryptocurrencies` (EN y/i),
-#: `construcció`/`construccions` (CA and ES o/on, folded), `banca`/`banques`
-#: (CA c/qu). Each pair is applied in **both** directions to every stem, so
-#: the candidate's singular finds the advert's plural and the reverse.
-STEM_ALTERNATIONS: tuple[tuple[str, str], ...] = (("y", "i"), ("o", "on"), ("c", "qu"))
+#: `construcció`/`construccions` (CA and ES o/on, folded), and the closed
+#: spelling rule for a consonant before e/i — CA c/qu (`banca`/`banques`),
+#: g/gu (`botiga`/`botigues`), j/g (`granja`/`granges`), ES z/c
+#: (`cruz`/`cruces`); ç and gü need no pair, `_fold` already strips them.
+#: Each pair is applied in **both** directions to every stem, so the
+#: candidate's singular finds the advert's plural and the reverse.
+STEM_ALTERNATIONS: tuple[tuple[str, str], ...] = (
+    ("y", "i"),
+    ("o", "on"),
+    ("c", "qu"),
+    ("g", "gu"),
+    ("j", "g"),
+    ("z", "c"),
+)
 
 
 def _stems(needle: str) -> tuple[tuple[str, ...], tuple[str, ...]]:

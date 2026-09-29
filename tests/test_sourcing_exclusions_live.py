@@ -227,20 +227,25 @@ def test_the_three_languages_are_treated_the_same(language: str) -> None:
         assert _says("fintech", f"fintech{ending}"), (language, ending)
 
 
-_ALTERNATION_ROOTS = {("y", "i"): "cryptocurrenc", ("o", "on"): "construcci", ("c", "qu"): "ban"}
+_ALTERNATION_EXAMPLES = {
+    ("y", "i"): ("cryptocurrency", "cryptocurrencies"),
+    ("o", "on"): ("construcció", "construccions"),
+    ("c", "qu"): ("banca", "banques"),
+    ("g", "gu"): ("botiga", "botigues"),
+    ("j", "g"): ("granja", "granges"),
+    ("z", "c"): ("cruz", "cruces"),
+}
 
 
-def test_every_stem_alternation_has_a_root_and_none_is_dropped() -> None:
+def test_every_stem_alternation_has_an_example_and_none_is_dropped() -> None:
     """An emptied table would skip the case below rather than fail it."""
-    assert set(se.STEM_ALTERNATIONS) == set(_ALTERNATION_ROOTS)
+    assert set(se.STEM_ALTERNATIONS) == set(_ALTERNATION_EXAMPLES)
 
 
 @pytest.mark.parametrize("pair", se.STEM_ALTERNATIONS)
 def test_every_stem_alternation_is_matched_in_both_directions(pair: tuple[str, str]) -> None:
-    """Derived from `STEM_ALTERNATIONS`: a pair without a root here fails, not skips."""
-    root = _ALTERNATION_ROOTS[pair]
-    a, b = pair
-    singular, plural = f"{root}{a}{'a' if a == 'c' else ''}", f"{root}{b}es"
+    """Derived from `STEM_ALTERNATIONS`: a pair without an example fails, not skips."""
+    singular, plural = _ALTERNATION_EXAMPLES[pair]
     assert _says(singular, f"the {plural} sector"), (singular, plural)
     assert _says(plural, f"the {singular} sector"), (plural, singular)
 
@@ -255,6 +260,9 @@ def test_every_stem_alternation_is_matched_in_both_directions(pair: tuple[str, s
         ("inversió", "fons d'inversions"),
         ("banca", "Grup de banques catalanes"),
         ("banques", "treballem per a la banca"),
+        ("droga", "prevenció de drogues"),
+        ("drogues", "la droga"),
+        ("construcción", "sector de construcciones"),
     ],
 )
 def test_a_plural_that_changes_the_stem_is_the_same_topic(value: str, text: str) -> None:
