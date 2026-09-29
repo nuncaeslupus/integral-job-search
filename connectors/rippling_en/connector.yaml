@@ -22,6 +22,15 @@ last_verified: "2026-09-10"
 source_kind: employer
 auth: none
 
+# Advert pages come from `ats.rippling.com`, not from the API host the list
+# is fetched from. Named by this package's own row in
+# `connectors/robots-adjudications.yaml` (checked 2026-09-10): that file is
+# one `*` group disallowing `/internal/`, the repo matcher refuses
+# `/internal/x` there and admits `/rippling/jobs/<uuid>`, and every detail
+# url is adjudicated again at fetch time by `sourcing._may_fetch`.
+serves_from:
+  - ats.rippling.com
+
 list:
   url_pattern: "https://api.rippling.com/platform/api/ats/v1/board/{employer}/jobs"
   pagination:
