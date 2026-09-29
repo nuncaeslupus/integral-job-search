@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import json
 import sys
+import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -637,6 +638,45 @@ def _violates_languages(field_value: Languages, offer: OfferFacts) -> str | None
     return None
 
 
+def _caseless(name: str) -> str:
+    # Unicode's canonical caseless form (§3.13, D145): `KRAKÓW`, `kraków` and a
+    # decomposed `Krako\u0301w` are one string to it, and nothing else merges.
+    # ponytail: the outer NFD changes no input under the current Unicode data (a
+    # mark after U+0345 has ccc >= 240, so casefolding it to a starter reorders
+    # nothing); it is kept so the code is D145 verbatim, not for a fixture.
+    return unicodedata.normalize("NFD", unicodedata.normalize("NFD", name).casefold())
+
+
+def _unmarked(key: str) -> str:
+    return "".join(ch for ch in key if unicodedata.category(ch) != "Mn")
+
+
+def _radius_match(region: str, radius: Sequence[str]) -> Literal["inside", "maybe", "outside"]:
+    """Where a region name falls against a radius of subdivision names (T205).
+
+    `inside` is a canonical caseless match. `maybe` is a match only once the
+    nonspacing marks are dropped: `Krakow` for `Kraków`, or an English board's
+    `Malaga` for a radius's `Málaga` — and also `Habo` for `Håbo`, which are two
+    Swedish municipalities. A dropped accent is sometimes an ASCII rendering
+    and sometimes a different place, and nothing here can say which, so the
+    offer is withheld rather than cleared (a wrong merge presents a job outside
+    the radius) or refused (a wrong split loses one inside it). A name with
+    nothing but marks or whitespace in it names no place and matches nothing.
+
+    ponytail: letters with no decomposition keep their identity (`Łódź` is not
+    even `maybe` `Lodz`), and exonyms (`Gerona`/`Girona`, `Perpignan`/
+    `Perpinyà`) do not meet: both are refused, fail-closed. A gazetteer is the
+    upgrade path for both, and would turn most `maybe` into `inside`.
+    """
+    key = _caseless(region)
+    if not _unmarked(key).strip():
+        return "outside"
+    keys = {_caseless(entry) for entry in radius}
+    if key in keys:
+        return "inside"
+    return "maybe" if _unmarked(key) in {_unmarked(k) for k in keys} else "outside"
+
+
 def _violates_location(field_value: Location, offer: OfferFacts) -> str | Uncomparable | None:
     if offer.delivery == "remote" or offer.requires_relocation:
         return None  # remote needs no presence; a real relocation is Relocation's check
@@ -694,7 +734,14 @@ def _violates_location(field_value: Location, offer: OfferFacts) -> str | Uncomp
                 "requires presence but states no region, so it cannot be compared against "
                 f"the area the candidate can travel to and from in a day ({travels})"
             )
-        if offer.region not in field_value.commutable_regions:
+        match = _radius_match(offer.region, field_value.commutable_regions)
+        if match == "maybe":
+            return Uncomparable(
+                f"is on site in {offer.region}, which names a place in the area the "
+                f"candidate can travel to and from in a day ({travels}) only once accents "
+                "are ignored — another place can be spelled that way"
+            )
+        if match == "outside":
             return (
                 f"is on site in {offer.region}, outside the area the candidate can travel "
                 f"to and from in a day ({travels})"
@@ -917,14 +964,18 @@ def filter_hard_constraints(
         # that job means moving and `relocation` / `reach` can say so (#570's
         # second reader, N6: `relocation: no` read "satisfied" over a Kraków
         # vacancy it could refuse). A foreign offer with no region, or whose
-        # region's name is in the radius, is undecidable across the border and
-        # stays with `_violates_location`'s `unplaced` (#550).
+        # region's name may be in the radius (`_radius_match` not `outside`,
+        # T205), is undecidable across the border and stays with
+        # `_violates_location`'s `unplaced` (#550).
         home_country = (
             location.country
             if location is not None
             and (
                 not location.commutable_regions
-                or (offer.region is not None and offer.region not in location.commutable_regions)
+                or (
+                    offer.region is not None
+                    and _radius_match(offer.region, location.commutable_regions) == "outside"
+                )
             )
             else None
         )
@@ -980,6 +1031,152 @@ class _Case:
     name: str
     offer: OfferFacts
     must_be_removed: bool
+
+
+#: T205's spelling fixtures for `_radius_match`: (name, radius, offer region,
+#: verdict, the rule's deciding clause). Written by a second session from the
+#: rule's text before it read the code — Unicode §3.13 D145 for `inside`, then
+#: `Mn` removal for `maybe` — each verdict computed from the Unicode data rather
+#: than by running `_radius_match`. `habo_habo_collision` is why `maybe` exists:
+#: Habo and Håbo are two Swedish municipalities.
+REGION_SPELLINGS: tuple[
+    tuple[str, tuple[str, ...], str, Literal["inside", "maybe", "outside"], str], ...
+] = (
+    ("krakow_unaccented", ("Krak\u00f3w",), "Krakow", "maybe", "3 equal only after Mn removal"),
+    ("krakow_upper", ("Krak\u00f3w",), "KRAK\u00d3W", "inside", "2 caseless equal"),
+    ("krakow_decomposed", ("Krak\u00f3w",), "Krako\u0301w", "inside", "2 caseless equal"),
+    ("malaga_acc_radius", ("M\u00e1laga",), "Malaga", "maybe", "3 equal only after Mn removal"),
+    ("malaga_acc_offer", ("Malaga",), "M\u00e1laga", "maybe", "3 equal only after Mn removal"),
+    (
+        "coruna_upper_tilde",
+        ("A Coruna",),
+        "A CORU\u00d1A",
+        "maybe",
+        "3 equal only after Mn removal",
+    ),
+    ("guimar_diaeresis", ("G\u00fc\u00edmar",), "GUIMAR", "maybe", "3 equal only after Mn removal"),
+    ("tarrega_ca", ("T\u00e0rrega",), "Tarrega", "maybe", "3 equal only after Mn removal"),
+    (
+        "barcelones_grave",
+        ("Barcelon\u00e8s",),
+        "Barcelones",
+        "maybe",
+        "3 equal only after Mn removal",
+    ),
+    (
+        "hanoi_stacked_order",
+        ("H\u00e0 N\u1ed9i",),
+        "Ha\u0300 No\u0302\u0323i",
+        "inside",
+        "2 caseless equal",
+    ),
+    (
+        "hanoi_stacked_swapped",
+        ("Ha Noi",),
+        "Ha\u0300 No\u0323\u0302i",
+        "maybe",
+        "3 equal only after Mn removal",
+    ),
+    ("giessen_sharp_s", ("Gie\u00dfen",), "GIESSEN", "inside", "2 caseless equal"),
+    ("giessen_capital_sharp_s", ("Giessen",), "GIE\u1e9eEN", "inside", "2 caseless equal"),
+    ("istanbul_dotted_I", ("istanbul",), "\u0130stanbul", "maybe", "3 equal only after Mn removal"),
+    ("izmir_dotless_i", ("Izmir",), "\u0131zmir", "outside", "4 no match"),
+    (
+        "kos_final_sigma",
+        ("\u039a\u03c9\u03c2",),
+        "\u039a\u03a9\u03a3",
+        "inside",
+        "2 caseless equal",
+    ),
+    (
+        "athina_tonos_upper",
+        ("\u0391\u03b8\u03ae\u03bd\u03b1",),
+        "\u0391\u0398\u0397\u039d\u0391",
+        "maybe",
+        "3 equal only after Mn removal",
+    ),
+    ("fi_ligature_casefold", ("Finnmark",), "\ufb01nnmark", "inside", "2 caseless equal"),
+    ("ij_ligature_not_casefold", ("IJmuiden",), "\u0132muiden", "outside", "4 no match"),
+    ("kelvin_sign_canonical", ("Krak\u00f3w",), "\u212arak\u00f3w", "inside", "2 caseless equal"),
+    (
+        "fullwidth",
+        ("Barcelona",),
+        "\uff22\uff41\uff52\uff43\uff45\uff4c\uff4f\uff4e\uff41",
+        "outside",
+        "4 no match",
+    ),
+    ("superscript_two", ("Barcelona2",), "Barcelona\u00b2", "outside", "4 no match"),
+    ("trailing_space", ("Barcelona",), "Barcelona ", "outside", "4 no match"),
+    ("nbsp", ("Castilla La Mancha",), "Castilla\u00a0La Mancha", "outside", "4 no match"),
+    ("hyphen_vs_space", ("Castilla-La Mancha",), "Castilla La Mancha", "outside", "4 no match"),
+    ("apostrophe_curly", ("Val d'Aran",), "Val d\u2019Aran", "outside", "4 no match"),
+    ("middle_dot_ca", ("Paral\u00b7lel",), "Paral.lel", "outside", "4 no match"),
+    ("zwsp_cf", ("Barcelona",), "Barce\u200blona", "outside", "4 no match"),
+    ("cgj_mn", ("Barcelona",), "Barce\u034flona", "maybe", "3 equal only after Mn removal"),
+    (
+        "variation_selector_mn",
+        ("Barcelona",),
+        "Barcelona\ufe0f",
+        "maybe",
+        "3 equal only after Mn removal",
+    ),
+    ("enclosing_mark_me", ("A",), "A\u20dd", "outside", "4 no match"),
+    ("spacing_mark_mc", ("\u092a",), "\u092a\u093e", "outside", "4 no match"),
+    ("prefix_not_substring", ("Barcelon\u00e8s",), "Barcelona", "outside", "4 no match"),
+    ("empty_vs_empty", ("",), "", "outside", "1 only Mn/whitespace"),
+    ("mn_only_vs_mn_only", ("\u0301",), "\u0300", "outside", "1 only Mn/whitespace"),
+    ("mn_only_vs_empty", ("",), "\u0301", "outside", "1 only Mn/whitespace"),
+    ("whitespace_only_vs_whitespace_only", (" ",), " ", "outside", "1 only Mn/whitespace"),
+    ("lodz_ceiling", ("\u0141\u00f3d\u017a",), "Lodz", "outside", "4 no match"),
+    ("tromso_ceiling", ("Troms\u00f8",), "Tromso", "outside", "4 no match"),
+    ("tromso_overlay_vs_precomposed", ("Troms\u00f8",), "Tromso\u0338", "outside", "4 no match"),
+    (
+        "tromso_overlay_vs_plain",
+        ("Tromso",),
+        "Tromso\u0338",
+        "maybe",
+        "3 equal only after Mn removal",
+    ),
+    ("gerona_exonym", ("Girona",), "Gerona", "outside", "4 no match"),
+    ("multi_radius_hit", ("Barcelona", "Girona"), "GIRONA", "inside", "2 caseless equal"),
+    ("multi_radius_empty_entry", ("", "Barcelona"), "", "outside", "1 only Mn/whitespace"),
+    ("habo_habo_collision", ("Habo",), "H\u00e5bo", "maybe", "3 equal only after Mn removal"),
+    ("ws_plus_mn_only", ("Barcelona",), " \u0301 ", "outside", "1 only Mn/whitespace"),
+    ("ideographic_space_only", ("\u3000",), "\u3000", "outside", "1 only Mn/whitespace"),
+    ("nbsp_only", ("\u00a0",), "\u00a0", "outside", "1 only Mn/whitespace"),
+    ("zwsp_only_not_strip_ws", ("\u200b",), "\u200b", "inside", "2 caseless equal"),
+    (
+        "hanoi_stacked_swapped_vs_precomposed",
+        ("H\u00e0 N\u1ed9i",),
+        "Ha\u0300 No\u0323\u0302i",
+        "inside",
+        "2 caseless equal",
+    ),
+    (
+        "same_ccc_marks_order_differs",
+        ("Pa\u0301\u0300",),
+        "Pa\u0300\u0301",
+        "maybe",
+        "3 equal only after Mn removal",
+    ),
+    (
+        "istanbul_dotted_I_vs_i_dot",
+        ("i\u0307stanbul",),
+        "\u0130stanbul",
+        "inside",
+        "2 caseless equal",
+    ),
+    ("habo_both_in_radius", ("Habo", "H\u00e5bo"), "Habo", "inside", "2 caseless equal"),
+    ("habo_upper_ring", ("Habo",), "H\u00c5BO", "maybe", "3 equal only after Mn removal"),
+    ("angstrom_sign_canonical", ("\u00c5re",), "\u212bre", "inside", "2 caseless equal"),
+    (
+        "ypogegrammeni_typed_before_acute",
+        ("\u03b1\u0301\u0345",),
+        "\u03b1\u0345\u0301",
+        "inside",
+        "2 caseless equal: D145's inner NFD puts ccc 230 before 240 ahead of casefold",
+    ),
+)
 
 
 def _baseline_constraints() -> CandidateConstraints:
@@ -1272,6 +1469,42 @@ def probe_hard_filter() -> dict[str, Any]:
         "the four reach shapes did not resolve to one outcome each",
     )
 
+    # T205: one subdivision, many spellings. Each row is a radius, a region and
+    # the verdict `_radius_match`'s rule gives; the rows were derived from that
+    # rule by a second session, not from the code. Every row is put to both
+    # sites that read the radius, for a candidate who will not move. At home
+    # `inside` survives, `maybe` is withheld and `outside` is removed. Abroad
+    # anything the radius may name is a homonym and withheld, and `outside` is
+    # relocation's refusal.
+    expected = {
+        "inside": ["surviving", "unplaced"],
+        "maybe": ["unplaced", "unplaced"],
+        "outside": ["removed", "removed"],
+    }
+    for name, radius, region, verdict, _clause in REGION_SPELLINGS:
+        spelled = CandidateConstraints(
+            location=Location(
+                state="stated",
+                country="ES",
+                accepts_onsite_in_country=True,
+                commutable_regions=radius,
+            ),
+            relocation=Relocation(state="stated", willingness="no"),
+        )
+        home, abroad = (
+            _good_offer(f"offer-spelling-{name}-{country}").model_copy(
+                update={"delivery": "onsite", "country": country, "region": region}
+            )
+            for country in ("ES", "PL")
+        )
+        result = filter_hard_constraints(spelled, [home, abroad])
+        check(
+            [result.outcome_for(home.offer_id), result.outcome_for(abroad.offer_id)]
+            == expected[verdict],
+            f"region spelling {name}: {region!r} against {radius!r} is {verdict!r} the "
+            "radius, and did not resolve that way at home and abroad",
+        )
+
     # #550 reaches across a border in both directions, and the country test
     # must not answer either. A vacancy in an authorised country is not
     # reachable for being in it, and a region genuinely inside the radius is
@@ -1450,7 +1683,8 @@ def probe_hard_filter() -> dict[str, Any]:
 #: refused-and-unreadable offer whose withheld record was being discarded.
 #: -> 32 for #570's second reader, N6: relocation refusing a foreign on-site
 #: vacancy outside a commute radius for a candidate who will not move.
-MINIMUM_CASES = 32
+#: -> 88 for T205's `REGION_SPELLINGS`, one check per spelling row.
+MINIMUM_CASES = 88
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
