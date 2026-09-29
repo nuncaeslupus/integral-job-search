@@ -1,5 +1,26 @@
 # Session handover
 
+## 00007. #574 merged (N6, N7 from #570); two follow-ups running in their own sessions
+
+- **#574 MERGED** as `7274c991` (T204 / #572, task `t-58f7aa91`). A commute-radius
+  candidate who will not relocate now has a foreign on-site or hybrid offer `removed` by
+  relocation (and reach) when the offer names a region the radius does not. A bare name
+  cannot put that region inside the radius under either reading. A foreign offer
+  with no region, or with a homonym region, stays `unplaced`. T24's abroad-distant fixture
+  now expects `removed`. N7's `floor_sweep.py` prose is corrected. Reader round 1 CLEAR on `ecf09ebb`
+  (F1 hybrid unpinned, answered by `3352030b`); round 2 CLEAR on `3352030b`;
+  verified_gate PASS on that head; CI green. Merged by hand: the auto-mode classifier
+  refuses `gh pr merge` while `review_reader check` exits 2 (markers under the author's
+  login, as on #570) - expect the same on every PR until readers post as another identity.
+- **Reader findings that predate #574, now running as separate sessions:**
+  - **F3** - a foreign offer with no region or a homonym region still annotates
+    relocation "satisfied" (the offer is withheld, but the note reports a guess as cleared).
+  - **F4** - region names are compared as exact strings (`kraków`/`Krakow` or an exonym miss
+    the radius). This is fail-closed, and #574 widened it to foreign offers.
+- Everything under 00006 (#571 BLOCKED, #554, #541, #566/#567/#559) is unchanged by this
+  session.
+
+
 ## 00006. #564, #570 and #565 merged; #571 (topic exclusions) BLOCKED on three fail-opens
 
 **The candidate's three asks from the live round now stand at two merged, one blocked.**
