@@ -1,5 +1,24 @@
 # Session handover
 
+## 00009. #579 merged (F4 from #574): commute-radius region names compared caselessly
+
+- **#579 MERGED** as `74d1399a` (T205 / #576, task `t-d09fef7c`). The rule has three outcomes:
+  - `inside`: equal under Unicode's canonical caseless match (D145, `NFD(casefold(NFD(x)))`).
+  - `maybe`: equal only once nonspacing (`Mn`) marks are dropped (Habo/Håbo are two different
+    municipalities). Withheld as `Uncomparable` at home and `unplaced` abroad.
+  - `outside`: anything else, including a name made only of `Mn` marks and whitespace.
+
+  Exonyms (Gerona/Girona) remain out of scope, because the repo has no gazetteer.
+  `REGION_SPELLINGS` has 59 rows written by a second session from the rule. `MINIMUM_CASES` is 95.
+  Of 13 one-edit mutants, 12 are killed. The outer NFD survives as a documented equivalent mutant.
+- Reader rounds 1-3 were CLEAR, and their findings were pinned as rows: F1 casefold-before-strip,
+  F2 and N1 Mn-only blank. F3 (`str.strip` removes U+001C-U+001F) was skipped as fail-closed.
+  Round 4, on the merge with #578, was CLEAR: 36 relocation/reach combinations derived, no fail-open.
+  verified_gate PASS on `fc5e49d4` (5336 passed). CI green. `review_reader check` exits 2
+  (shared login). `gh pr merge` went through this time.
+- 00006's open items are unchanged.
+
+
 ## 00008. #578 merged (F3 from #574): relocation and reach no longer report a guess as cleared
 
 - **#578 MERGED** as `8d18cf7a` (T206 / #577, task `t-a89c7d6e`). Where a commute radius
