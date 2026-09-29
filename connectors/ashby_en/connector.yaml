@@ -18,6 +18,16 @@ last_verified: "2026-09-10"
 source_kind: employer
 auth: none
 
+# The advert urls this API returns are on `jobs.ashbyhq.com`, never on the
+# host the list is fetched from — an ATS lists and serves from different
+# hosts. `reaction_elicit.check_stimulus` will refuse an advert whose host
+# is not declared here, so this is a declaration and not documentation:
+# every host named below is one whose robots were adjudicated per URL at
+# fetch time by `sourcing._may_fetch`, as this package's adjudication row
+# in `connectors/robots-adjudications.yaml` says.
+serves_from:
+  - jobs.ashbyhq.com
+
 list:
   url_pattern: "https://api.ashbyhq.com/posting-api/job-board/{employer}"
   pagination:

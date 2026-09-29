@@ -164,6 +164,339 @@ def test_a_connector_missing_a_required_field_is_rejected_at_load() -> None:
         parse_connector(body)
 
 
+def test_the_two_copies_of_the_label_rule_are_the_same_string() -> None:
+    """`connectors` and `reaction_elicit` spell RFC 1123 §2.1 twice, on purpose.
+
+    They must: `reaction_elicit` may not import this module (the `corpus_scope`
+    bound), and the questions differ — one validates a bare host a package
+    declares, the other extracts one from a url. Two copies drift, so the
+    agreement is pinned rather than trusted.
+
+    **Equality, not a list of cases.** The check this replaces tried eleven
+    spellings chosen one per boundary of the character class, and a second
+    reader (round 4) named three one-sided drifts it left green: the
+    RFC-correct 63-octet cap applied to either copy, and §2.1's own "the
+    highest-level component label will be alphabetic" rule. Each is a boundary
+    nobody had thought to spell, which is what an enumeration is always one
+    short of. The alphabet is one string in both modules, so asserting the
+    string closes the axis — any edit to either copy fails here whether or not
+    anyone anticipated it.
+
+    This pins the **label**. The two grammars also *compose* labels into a
+    host, by different code, and that is the test below.
+    """
+    from integral.reaction_elicit import _LABEL_RE
+
+    assert _LABEL_RE.pattern == connectors._LABEL, (
+        "the two copies of RFC 1123 §2.1 have drifted: `connectors._LABEL` is "
+        f"{connectors._LABEL!r} and `reaction_elicit._LABEL_RE` is {_LABEL_RE.pattern!r}. "
+        "They may not import each other, so equality is the only thing keeping them one rule"
+    )
+
+
+def test_the_two_host_grammars_agree_over_every_shape_the_label_rule_admits() -> None:
+    """The **composition** half: same labels, two different ways of joining them.
+
+    `connectors` fullmatches one regex over the whole host
+    (`_LABEL(\\._LABEL)+`); `reaction_elicit._hostname` splits on `.`, counts
+    the labels and fullmatches each. Equal alphabets do not make those equal
+    grammars — the label count, the position within the host and any per-label
+    length cap all live here rather than in `_LABEL`, and the one-sided drift
+    that survived round 4's other mutation (§2.1's alphabetic top-level label,
+    which neither copy implements today) is a rule about a label's **position**,
+    so no assertion about the alphabet could ever have caught it.
+
+    **The population is generated from the grammar's own axes** — fill
+    character, label length across the 63-octet cap, hyphen at each position of
+    a label, the label's position within the host, and the number of labels —
+    rather than listed. A list has no last element; a product has every
+    combination of the axes it is built from, including the ones nobody
+    pictured.
+
+    One asymmetry is deliberate and therefore excluded: RFC 2606 §2's reserved
+    TLDs are refused by the declaration model and not by `_hostname`, because a
+    url naming `evil.test` still names that host and the question there is what
+    it names, not whether anyone may serve from it. No shape built from `a`,
+    `1`, `A` and `-` can spell one, so the product never reaches that rule.
+    """
+    from integral.reaction_elicit import _hostname
+
+    control = "ab"
+    # The axes are named rather than inlined so the floors below can be put on
+    # *them*. A floor counting hosts is satisfied by 150 copies of one shape,
+    # and deleting the single integer `64` from `lengths` left all three of the
+    # old floors green while a composition-side 63-octet cap survived (second
+    # reader, C3). A floor has to assert the boundary, not the volume.
+    fills = ("a", "1", "A")  # the three sides of RFC 1123 §2.1's character class
+    lengths = (1, 2, 3, 62, 63, 64)  # at and across the 63-octet cap on one label
+    counts = (1, 2, 3)  # how many labels the host has
+    hyphen_lengths = (2, 3, 4)  # both ends, and an interior with two positions
+    shapes = [fill * length for fill in fills for length in lengths]
+    shapes += [
+        # a hyphen is legal in a label's interior and nowhere else, and "interior"
+        # is a different position in a label of two, three and four
+        "".join("-" if index == position else "a" for index in range(length))
+        for length in hyphen_lengths
+        for position in range(length)
+    ]
+    outside_the_class = "a_b"  # `_` is in neither §2.1's class nor §3.2.2's separator
+    shapes += ["", outside_the_class]  # the empty label, and that one
+
+    hosts = list(
+        dict.fromkeys(
+            [
+                ".".join(control if index != position else shape for index in range(count))
+                for shape in shapes
+                for count in counts
+                for position in range(count)
+            ]
+            # two whole-host axes, which no label can reach: the rooted spelling,
+            # and a host that is nothing but a dot
+            + [f"{control}.{control}.", "."]
+        )
+    )
+
+    accepted = 0
+    for host in hosts:
+        try:
+            parse_connector(VALID + f'serves_from: ["{host}"]\n')
+            model_accepts = True
+        except ConnectorError:
+            model_accepts = False
+        # `_hostname` answers a different question, so agreement is that the
+        # host it reads back out of a url naming this string is this string —
+        # any other answer is a repair, and a repair is a host nobody declared.
+        #
+        # `== host` alone collapses two different answers into one `False`: a
+        # refusal, and a *repair into some other host*. 31 of the shapes below
+        # were already the second, scored as agreement, so the predicate could
+        # not have seen the round-5 defect even handed the exploit directly
+        # (second reader, R2). A repair is therefore its own assertion.
+        read = _hostname(f"https://{host}/ad")
+        # Exactly two transformations are the spec's rather than repairs, and
+        # both are identities: RFC 3986 §3.2.2 makes the host case-insensitive,
+        # and RFC 1034 §3.1 makes a single trailing dot the same name written
+        # absolutely. Either returns the host it was given. Anything else
+        # returns a different host, which is what a forged url is for.
+        same_host = host.lower().removesuffix(".")
+        assert read in (same_host, None), (
+            f"{host!r}: `_hostname` repaired it into {read!r} rather than refusing it — "
+            "a url that has to be repaired to name a host names somebody else's"
+        )
+        reads_back = read == host
+        assert model_accepts == reads_back, (
+            f"{host!r}: the strict model says {model_accepts} and `_hostname` says "
+            f"{reads_back} — the two copies of RFC 1123 §2.1 have drifted apart"
+        )
+        accepted += model_accepts
+
+    # Floors, because a generator that produced one shape, or only refusable
+    # ones, would agree about nothing and pass. Both directions have to be
+    # reached for the comparison above to have compared anything.
+    assert len(hosts) >= 150, f"only {len(hosts)} host shapes were compared"
+    assert accepted >= 40, f"only {accepted} of {len(hosts)} shapes were accepted by both"
+    assert len(hosts) - accepted >= 40, (
+        f"only {len(hosts) - accepted} of {len(hosts)} shapes were refused by both"
+    )
+    # …and the same again on the axes, which the three counts above cannot see.
+    # Each says the boundary that axis exists to cross was crossed.
+    assert min(lengths) == 1 and max(lengths) > 63, (
+        f"{lengths} does not cross RFC 1123 §2.1's 63-octet cap in both directions"
+    )
+    assert {"a", "1", "A"} <= {fill for fill in fills}, (
+        f"{fills} does not reach all three sides of the character class"
+    )
+    assert max(counts) >= 3, f"{counts} never puts a shape in a middle label"
+    assert min(hyphen_lengths) == 2 and max(hyphen_lengths) >= 4, (
+        f"{hyphen_lengths} does not reach both a label with no interior and one "
+        "whose interior has more than a single position"
+    )
+    assert outside_the_class in shapes and not outside_the_class.isalnum(), (
+        "no shape carries a character outside RFC 1123 §2.1's class, so the two "
+        "grammars are only ever compared over strings both of them admit"
+    )
+
+
+def test_a_url_that_would_have_to_be_repaired_into_a_host_names_none() -> None:
+    """`_hostname` promises a validator; `urlparse` hands it a repair.
+
+    Round 5's live finding. `urlparse` does not refuse an authority it cannot
+    parse — it *mends* one: it deletes TAB, CR and LF from it outright, and it
+    case-folds past ASCII, so U+212A KELVIN SIGN arrives as `k`. Both
+    `https://wewor<U+212A>remotely.com/ad` and the same url with a TAB in the
+    middle came back as `weworkremotely.com`, a permitted board, and cleared
+    the whole check — a forged `jobUrl` reading as somebody else's host, which
+    is the single failure this function exists to stop. Validating the *output*
+    of a repair validates the repair's answer and never the input.
+
+    The population is the **rule**, not the three characters that were found:
+    RFC 3986 §2 puts a URI wholly inside US-ASCII and §3.2.2's `reg-name`
+    admits no whitespace and no control, so every code point outside
+    `%x21-7E` is excluded by the spec and must name nothing wherever it
+    appears. C0 and space are taken whole rather than sampled; DEL and the
+    whole of Latin-1 above ASCII follow the same rule; and four code points
+    that NFKC- or case-fold *into* ASCII are named separately because those are
+    the ones a repair turns into a permitted host rather than into an error.
+    """
+    from integral.reaction_elicit import _hostname
+
+    excluded = (
+        [chr(code) for code in range(0x00, 0x21)]  # every C0 control, and space
+        + [chr(0x7F)]  # DEL
+        + [chr(code) for code in range(0x80, 0x100)]  # all of Latin-1 above ASCII
+        # …and the folding ones, which are the dangerous half: each of these
+        # becomes an ASCII character a permitted host is spelt with.
+        + ["\u212a", "\u2024", "\uff4d", "\u00a0"]
+    )
+    host = "weworkremotely.com"
+    positions = (0, len(host) // 2, len(host))
+
+    refused = 0
+    for character in excluded:
+        for position in positions:
+            forged = f"https://{host[:position]}{character}{host[position:]}/ad"
+            read = _hostname(forged)
+            assert read is None, (
+                f"{character!r} at {position} in the authority read back as {read!r}: "
+                "the url was repaired into a host rather than refused"
+            )
+            refused += 1
+
+    # The clean spelling must still work, or the rule above is "refuse
+    # everything" wearing a fix's clothes — and so must the two legitimate
+    # normalisations, which are the host's own case-insensitivity (RFC 3986
+    # §3.2.2) and a port that is not part of the host.
+    assert _hostname(f"https://{host}/ad") == host
+    assert _hostname("https://WeWorkRemotely.com/ad") == host
+    assert _hostname("https://www.usajobs.gov:443/job/1") == "www.usajobs.gov"
+
+    assert refused >= 3 * (0x21 + 1 + 0x80), f"only {refused} forgeries were tried"
+    assert len(positions) >= 3, "a character was never placed inside the host"
+
+    # The same rule over the *inside* of the ASCII range, which the axis above
+    # cannot reach. RFC 1123 §2.1 spells a label with letters, digits and the
+    # hyphen; §3.2.2 makes the dot the separator. Every other graphic character
+    # is outside the grammar wherever it sits, so a url carrying one names no
+    # host — and a step that removed one to make the name fit would be the
+    # repair this whole function refuses to perform.
+    # Every graphic character carries an *expected verdict* rather than a skip:
+    # round 6's blocking finding was that the one exemption this axis granted
+    # (`@`, a correct read) was also the hole a mutation could widen, because a
+    # skipped character is a character nobody checks. There is no skip list
+    # below, so nothing can be added to one.
+    mid = positions[1]
+    tried = 0
+    for code in range(0x21, 0x7F):
+        character = chr(code)
+        if character.isalnum() or character in "-.":
+            continue
+        # §3.2 gives `@` one meaning inside an authority: it ENDS the userinfo
+        # and the host begins after it. `https://wewor@kremotely.com/ad` names
+        # `kremotely.com`, a different real host — a correct read of a valid
+        # url, not a repair of a broken one. Every other graphic character is
+        # outside RFC 1123 §2.1's label and §3.2.2's separator, so it names no
+        # host wherever it sits, and removing it to make the name fit would be
+        # the repair this whole function refuses to perform.
+        expected = host[mid:] if character == "@" else None
+        forged = f"https://{host[:mid]}{character}{host[mid:]}/ad"
+        assert _hostname(forged) == expected, (
+            f"{character!r} inside the authority read back as "
+            f"{_hostname(forged)!r}, not {expected!r}"
+        )
+        tried += 1
+    assert tried >= 30, f"only {tried} of the 30 non-label graphic characters were tried"
+
+    # The userinfo position, which the axis above structurally cannot reach —
+    # and which is where round 6's live forgery lived. `\` is graphic ASCII, so
+    # the code-point rule admits it; WHATWG ends a special scheme's authority at
+    # it and `urlsplit` does not, so `https://evil.test\@remotive.com/ad` reads
+    # as `remotive.com` here while the candidate's browser goes to `evil.test`.
+    # The verdict is derived from RFC 3986 §3.2.1's production rather than from
+    # the character that was found: `userinfo = *( unreserved / pct-encoded /
+    # sub-delims / ":" )`, so a url whose userinfo is spelt inside that set is a
+    # valid url naming the host after the `@`, and one whose userinfo is not is
+    # no url at all. `%` is in the set only as `pct-encoded`, and a bare `%` is
+    # therefore outside it — which is why it is written out rather than listed.
+    userinfo = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    userinfo += "-._~" + "!$&'()*+,;=" + ":"
+    # `/`, `?` and `#` are the three characters that END the authority in RFC
+    # 3986 (§3.3, §3.4, §3.5) *and* in WHATWG alike, so the url plainly names
+    # `evil.test` and the rest is path, query or fragment. Reading it that way
+    # is not a forgery — the two grammars agree, the candidate's browser goes
+    # where this function says, and a host nobody permitted is refused a step
+    # later. `\` is the entire difference between the two lists, which is why
+    # it forges and these three do not.
+    terminators = "/?#"
+    forged_userinfo = 0
+    for code in range(0x21, 0x7F):
+        character = chr(code)
+        if character in terminators:
+            wanted = "evil.test"
+        elif character in userinfo:
+            wanted = host
+        else:
+            wanted = None
+        forged = f"https://evil.test{character}@{host}/ad"
+        assert _hostname(forged) == wanted, (
+            f"{character!r} in the userinfo read back as {_hostname(forged)!r}, "
+            f"not {wanted!r}: RFC 3986 §3.2.1 "
+            f"{'admits' if character in userinfo else 'does not admit'} it there"
+        )
+        assert len(terminators) == 3, "the shared terminator set is /?# and nothing else"
+        forged_userinfo += 1
+    assert forged_userinfo == 0x7F - 0x21, (
+        f"only {forged_userinfo} of the 94 graphic characters were tried in the userinfo position"
+    )
+    # A second `@` is not a userinfo either — §3.2.1 admits none — and it is the
+    # other spelling of the same forgery, since both `urlsplit` and WHATWG take
+    # the last one.
+    assert _hostname("https://evil.test@@weworkremotely.com/ad") is None
+
+    # And the authority is validated whole, not the host alone. RFC 3986 §3.2.3
+    # spells `port = *DIGIT`, so a port that is not digits is not an authority
+    # this url validly has — while `:443` is, and `usajobs_en` serves every
+    # advert with one.
+    assert _hostname("https://weworkremotely.com:notaport/ad") is None
+    assert _hostname("https://weworkremotely.com:443/ad") == host
+    assert _hostname("https://evil.test\\@weworkremotely.com:443/ad") is None
+
+
+def test_a_serves_from_entry_that_is_not_already_a_hostname_is_rejected() -> None:
+    """#558. A declared serving host is validated, never repaired.
+
+    It is matched against `urlparse(url).hostname` — lowercased, no scheme, no
+    port, no path — so a declaration in any other spelling matches nothing, and
+    the failure is silent in the fail-*closed* direction that reads like a bug
+    in another module ("I declared it and the advert is still refused"). The
+    obvious remedy is to normalise it here, and that is the `resolve_identity`
+    trap: what a repair welds onto the string is a host nobody declared, and
+    provenance is the entire purpose of the field. So each spelling below is
+    refused where the file loads and the error names the connector.
+    """
+    for spelling in (
+        "https://jobs.lever.co",
+        "jobs.lever.co/acme",
+        "jobs.lever.co:443",
+        "JOBS.LEVER.CO",
+        "jobs",
+        "-jobs.lever.co",
+        "jobs..lever.co",
+        "jobs.lever.co.",
+    ):
+        with pytest.raises(ConnectorError, match="serves_from"):
+            parse_connector(VALID + f"serves_from: [{spelling}]\n")
+
+    # RFC 2606 §2 — reserved for documentation, resolves nowhere, so no advert
+    # was ever served from it. Checked here as well as in `reaction_elicit`,
+    # which reads the YAML directly and never builds this model.
+    with pytest.raises(ConnectorError, match="reserved TLD"):
+        parse_connector(VALID + "serves_from: [jobs.lever.example]\n")
+
+    assert parse_connector(VALID + "serves_from: [jobs.lever.co]\n").serves_from == (
+        "jobs.lever.co",
+    )
+
+
 def test_an_unknown_top_level_field_is_rejected_at_load() -> None:
     with pytest.raises(ConnectorError):
         parse_connector(VALID + "notes: some scraped internal id\n")
