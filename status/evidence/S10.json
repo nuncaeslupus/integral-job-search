@@ -2,11 +2,11 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 10447,
-  "skills_counted": 34,
-  "headroom_chars": 553,
+  "description_chars_total": 10534,
+  "skills_counted": 35,
+  "headroom_chars": 466,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 2447,
+  "overage_against_upstream_default": 2534,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -17,13 +17,13 @@
     },
     {
       "skill": "coverage-gaps",
-      "description_chars": 436,
-      "listing_chars": 453
+      "description_chars": 401,
+      "listing_chars": 418
     },
     {
       "skill": "dep-upgrade",
-      "description_chars": 399,
-      "listing_chars": 414
+      "description_chars": 386,
+      "listing_chars": 401
     },
     {
       "skill": "design",
@@ -34,6 +34,11 @@
       "skill": "execution",
       "description_chars": 219,
       "listing_chars": 232
+    },
+    {
+      "skill": "explore-idea",
+      "description_chars": 256,
+      "listing_chars": 272
     },
     {
       "skill": "gate-check",
@@ -67,8 +72,8 @@
     },
     {
       "skill": "pypi-release",
-      "description_chars": 341,
-      "listing_chars": 357
+      "description_chars": 326,
+      "listing_chars": 342
     },
     {
       "skill": "python-bootstrap",
@@ -97,8 +102,8 @@
     },
     {
       "skill": "session-end",
-      "description_chars": 462,
-      "listing_chars": 477
+      "description_chars": 340,
+      "listing_chars": 355
     },
     {
       "skill": "ship",

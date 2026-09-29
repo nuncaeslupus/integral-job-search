@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # open_task_pr.sh <task_id> <title> [<type>]
 # open_task_pr.sh <task_id> --title <title> [--type <type>] [--body-file <path>]
+# open_task_pr.sh <task_id> --preflight
 # open_task_pr.sh --help
 # Commit a worker's task changes on a feature branch cut from the host DEFAULT
 # branch (origin/main), push it, and open a PR that closes the task's issue.
@@ -11,6 +12,8 @@
 #   branch:<name>       — the branch was pushed but no PR backend exists here;
 #                         the orchestrator/operator opens the PR (github skill /
 #                         MCP). The branch ref is enough to do so.
+#   preflight:ok        — --preflight only: every check that can be made cheaply
+#                         passed. Nothing was branched, committed or pushed.
 #
 # Conventional Commits message: `<type>: <title>` (type defaults to feat). The
 # Co-Authored-By trailer is NEVER hardcoded — it is taken verbatim from
@@ -63,6 +66,7 @@ _usage() {
     cat <<'USAGE'
 usage: open_task_pr.sh <task_id> <title> [<type>]
        open_task_pr.sh <task_id> --title <title> [--type <type>] [--body-file <path>]
+       open_task_pr.sh <task_id> --preflight
 
   <task_id>            the queue task this PR completes (e.g. lo-cf3d)
   <title>              the PR/commit subject, WITHOUT the Conventional Commits type
@@ -75,6 +79,10 @@ Options:
                        The `Closes #<issue>` line, the acceptance-gate note and
                        the review receipt are still written by this script — a
                        body that dropped them would break task completion.
+  --preflight          run only the cheap half — the review receipt, the task
+                       gate, the issue handle, the archive, and `preflight-gate`
+                       if the repo declares one — then put the tree back and
+                       report. Opens no PR, cuts no branch, needs no <title>.
   -h, --help           print this and exit
 
 Env: ARSENAL_QUEUE_REMOTE, ARSENAL_COAUTHOR, ARSENAL_TASK_ISSUE,
@@ -93,6 +101,7 @@ TASK_ID=""
 TITLE=""
 TYPE=""
 BODY_FILE=""
+PREFLIGHT=""
 _positional=()
 
 # The count check above is not the invariant this comment claims. `--title
@@ -119,6 +128,7 @@ while [[ $# -gt 0 ]]; do
         --type=*)     _reject_optionlike --type "${1#--type=}" || exit 1; TYPE="${1#--type=}"; shift ;;
         --body-file)  [[ $# -ge 2 ]] || { echo "open_task_pr: --body-file needs a value" >&2; _usage >&2; exit 1; }; _reject_optionlike --body-file "$2" || exit 1; BODY_FILE="$2"; shift 2 ;;
         --body-file=*) _reject_optionlike --body-file "${1#--body-file=}" || exit 1; BODY_FILE="${1#--body-file=}"; shift ;;
+        --preflight)  PREFLIGHT=1; shift ;;
         --) shift; while [[ $# -gt 0 ]]; do _positional+=("$1"); shift; done ;;
         -*) echo "open_task_pr: unknown option: $1" >&2; _usage >&2; exit 1 ;;
         *) _positional+=("$1"); shift ;;
@@ -135,7 +145,11 @@ if [[ ${#_positional[@]} -gt 3 ]]; then
     _usage >&2; exit 1
 fi
 [[ -n "${TASK_ID}" ]] || { echo "open_task_pr.sh requires <task_id>" >&2; _usage >&2; exit 1; }
-[[ -n "${TITLE}" ]]   || { echo "open_task_pr.sh requires <title>" >&2; _usage >&2; exit 1; }
+# --preflight opens nothing, so there is no subject to require. Demanding one
+# for a question means the caller types a placeholder to get past it, and a
+# placeholder subject is what merged `tmp/pr.md: --body-file` (#352).
+[[ -n "${TITLE}" || -n "${PREFLIGHT}" ]] \
+    || { echo "open_task_pr.sh requires <title>" >&2; _usage >&2; exit 1; }
 if [[ -n "${BODY_FILE}" && ! -f "${BODY_FILE}" ]]; then
     echo "open_task_pr: --body-file ${BODY_FILE} does not exist" >&2; exit 1
 fi
@@ -178,10 +192,25 @@ cd "${_repo_root}" || {
 
 # End to end: task claimed -> PR open, gates and review included. Started only
 # after the root is resolved, because everything before it is argument parsing.
+# A preflight is its OWN event, not a short `task-pr`. Folding it in would drop
+# runs that deliberately stop before the expensive half into the p50/p95 of the
+# runs that do not, and the table would then report the loop getting faster
+# every time somebody asked it a question.
+_EVENT="task-pr"
+[[ -n "${PREFLIGHT}" ]] && _EVENT="preflight"
 command -v arsenal_timing_begin >/dev/null 2>&1 && {
-    arsenal_timing_begin task-pr "${TASK_ID}" "${TASK_ID}"
-    trap 'arsenal_timing_end $?' EXIT
+    arsenal_timing_begin "${_EVENT}" "${TASK_ID}" "${TASK_ID}"
+    trap '_rc=$?; arsenal_timing_phase "" "${_rc}"; arsenal_timing_end "${_rc}"' EXIT
 }
+# One `task-pr` row said the loop cost 13m26s and could not say which of the
+# eight steps below spent it — 13m25s of it sat in the parent with no internal
+# structure, and the only resolved boundary was the 2.2s task gate. So each step
+# closes the one before it. `_phase` is a no-op when the helper is not sourced,
+# and never fails: `arsenal_timing_phase` returns 0 on every path, but an
+# unsourced `command -v` returning 1 as this function's last status would make
+# the call site's exit code the metric's, not the step's.
+_phase() { command -v arsenal_timing_phase >/dev/null 2>&1 && arsenal_timing_phase "$@"; return 0; }
+_phase review
 
 # ---------------------------------------------------------------------------
 # Gates, before anything touches git.
@@ -317,6 +346,19 @@ if [[ -f "${BUNDLE_SCRIPTS}/arsenal_config.py" ]]; then
         _gate_fail "could not read host-gate from ${_repo_root}/${ARSENAL_HOME}/config.toml: ${host_gate}"
     fi
 fi
+# `preflight-gate` is the cheap counterpart, read only on the --preflight path.
+# Empty by default, and that default is the honest answer: nothing here can see
+# inside `make test`, so the only party that knows which slice of a host's gate
+# is cheap is the host. Declared, it runs over the same tree the host gate
+# measures — which is the whole reason it exists, because a preflight that
+# stopped before the archive could say nothing about that tree at all.
+preflight_gate=""
+if [[ -n "${PREFLIGHT}" && -f "${BUNDLE_SCRIPTS}/arsenal_config.py" ]]; then
+    if ! preflight_gate="$(python3 "${BUNDLE_SCRIPTS}/arsenal_config.py" \
+            --repo-root "${_repo_root}" --get preflight-gate 2>&1)"; then
+        _gate_fail "could not read preflight-gate from ${_repo_root}/${ARSENAL_HOME}/config.toml: ${preflight_gate}"
+    fi
+fi
 # The host gate is READ here and RUN after the archive, not here. It used to run
 # on both sides of the archive, and a host measurement over the repo's own files
 # under `${ARSENAL_HOME}/tasks/` cannot satisfy both: the archive moves a tracked
@@ -349,6 +391,7 @@ fi
 #    or reuses the host gate, which is written for the post-archive tree — is
 #    unsatisfiable here by construction, and the failure reads as the task's
 #    fault rather than the ordering's. See references/evidence-gates.md.
+_phase task-gate
 if [[ -f "${SCRIPT_DIR}/gate_run.sh" ]]; then
     # Gate chatter goes to stderr: this script's stdout is a contract that
     # callers parse (`branch:…`, the PR URL), and a `gate: passed` line in it
@@ -438,6 +481,7 @@ slug="$(export LC_ALL=C; printf '%s' "${TITLE}" | tr -d '\n\r' \
 [[ -z "${slug}" ]] && slug="task"
 BRANCH="arsenal/${TASK_ID}-${slug}"
 
+_phase fetch
 # Resolve the host default branch from the remote's published HEAD symref, then
 # fetch it so we branch off its real tip. NEVER fall back to the current HEAD:
 # the worker may run in the orchestrator's tree, and branching off it would drag the entire
@@ -578,6 +622,7 @@ _resolve_issue() {
     return 1
 }
 
+_phase issue
 ISSUE=""
 if ! ISSUE="$(_resolve_issue)" || [[ -z "${ISSUE}" ]]; then
     if [[ "${ARSENAL_ALLOW_UNLINKED_PR:-}" == "1" ]]; then
@@ -603,9 +648,15 @@ fi
 # on a refusal is that nothing was committed and the tree is as it was. Leaving
 # the caller on a branch they did not ask to be on is the same class of stray
 # side effect the archive rollback exists to prevent.
+_phase branch
 _ENTRY_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 current="${_ENTRY_BRANCH}"
-if [[ "${current}" != "${BRANCH}" ]]; then
+# --preflight cuts no branch. A branch left behind by a question is a side
+# effect the caller has to clean up before the real run can cut the same name,
+# and the archive below is undone in place on whatever branch they are on.
+if [[ -n "${PREFLIGHT}" ]]; then
+    :
+elif [[ "${current}" != "${BRANCH}" ]]; then
     if git rev-parse --verify --quiet "${BRANCH}" >/dev/null 2>&1; then
         git checkout "${BRANCH}" >/dev/null 2>&1 || { echo "open_task_pr: cannot switch to ${BRANCH}" >&2; exit 1; }
     elif ! git checkout -b "${BRANCH}" "${default_ref}" >/dev/null 2>&1; then
@@ -696,13 +747,18 @@ _archive_task_file() {
     # need undoing when the re-check below refuses — and a refusal that leaves
     # the task file moved contradicts this script's own "nothing has been
     # committed".
-    _ARCHIVED_BACKUP="$(mktemp -t "arsenal-task-${TASK_ID}-XXXXXX.md")"
-    cp "${live}" "${_ARCHIVED_BACKUP}" || { echo "open_task_pr: cannot back up ${live}" >&2; return 1; }
+    local backup
+    backup="$(mktemp -t "arsenal-task-${TASK_ID}-XXXXXX.md")"
+    cp "${live}" "${backup}" || { echo "open_task_pr: cannot back up ${live}" >&2; return 1; }
     _ARCHIVED_LIVE="${live}"
     _ARCHIVED_DEST="${dest}"
     # The index entry as it stands before the move — empty when the file is
     # untracked, which is itself the state to restore.
     _ARCHIVED_INDEX="$(git ls-files -s -- "${live}" 2>/dev/null || true)"
+    # Published LAST, because the signal trap tests exactly this variable to
+    # decide whether there is something to undo. Written first, a signal landing
+    # on the next line would send `_unarchive_task_file` at an empty live path.
+    _ARCHIVED_BACKUP="${backup}"
 
     mkdir -p "${hist_dir}" || { echo "open_task_pr: cannot create ${hist_dir}" >&2; return 1; }
     if ! git mv "${live}" "${dest}" 2>/dev/null; then
@@ -751,6 +807,24 @@ PY
     fi
     echo "open_task_pr: archived ${live} -> ${dest} (status: merged)" >&2
 }
+# From the archive until the commit the task file is in `tasks/_history/`
+# stamped `status: merged`, which `task_select.py` reads as finished work. Every
+# refusal below undoes it; a SIGNAL took none of those paths — Ctrl-C during the
+# host gate, the longest step in the run, left the task out of the queue with
+# nothing merged. One trap covers that, --preflight (which holds the tree
+# archived across the same window for the same reason), and the move itself: a
+# kill timed at the archive landed in the gap when the trap was armed after it,
+# and the backup already exists before `git mv` runs, so arming it here restores
+# from a half-done move too. `_unarchive_task_file` returns 0 while there is no
+# backup, so arming early costs nothing.
+# ponytail: INT and TERM only. SIGKILL cannot be trapped by anything, and the
+# byte-exact backup named in _unarchive_task_file's own failure message is the
+# way back from one. The trap disarms itself at the commit, which deletes the
+# backup.
+trap '_unarchive_task_file >&2; exit 130' INT
+trap '_unarchive_task_file >&2; exit 143' TERM
+
+_phase archive
 if ! _archive_task_file; then
     # The undo belongs here, not at each `return 1` inside the function. Two of
     # those fire after `git mv` has already succeeded — the stamp, and the
@@ -771,6 +845,59 @@ if ! _archive_task_file; then
     exit 1
 fi
 
+# --preflight: the cheap half of the run, and then stop.
+#
+# Everything above this line is what the real run does before it reaches its
+# expensive step, and none of it is expensive — the review receipt, the task
+# gate, the issue handle, the archive measured 305ms plus a 2.2s task gate on a
+# run whose host gate below was 13m25s. So a caller who only wants to know
+# whether the gates are RUNNABLE can have that answer for the price of the
+# cheap half, instead of learning it from a refusal thirteen minutes in.
+#
+# It refuses at the FIRST thing the real run would refuse at rather than
+# collecting every finding. Each refusal above already names its own cause and
+# its own fix; restating all of them in a report would be a second place to keep
+# those messages true. Fix what it names and re-run — it is cheap by
+# construction, which is the whole premise.
+#
+# What it cannot tell you is whether the host gate PASSES: running it is the
+# cost being avoided. `preflight-gate` is the host's own answer to that.
+if [[ -n "${PREFLIGHT}" ]]; then
+    _phase gate-check
+    _pf_rc=0
+    if [[ -n "${host_gate}" ]]; then
+        # Resolution only — this never runs the host gate. `command -v` on the
+        # first word catches the failure that actually happens (a gate naming a
+        # tool a fresh worktree never installed, which is what host-setup
+        # exists for) and is honest about the rest: nothing here parses shell,
+        # so a gate opening with a variable assignment or a `cd` is reported as
+        # unchecked rather than as broken.
+        _pf_first="${host_gate%%[[:space:]]*}"
+        if command -v "${_pf_first}" >/dev/null 2>&1; then
+            echo "open_task_pr: host gate '${host_gate}' — '${_pf_first}' resolves here; NOT run, that is the cost being avoided" >&2
+        else
+            echo "open_task_pr: host gate '${host_gate}' — '${_pf_first}' is not on PATH here. If the gate opens with a variable assignment or other shell syntax this check cannot see past it; otherwise the real run fails on it." >&2
+        fi
+    fi
+    if [[ -n "${preflight_gate}" ]]; then
+        echo "open_task_pr: running preflight gate over the tree the PR would commit: ${preflight_gate}" >&2
+        bash -c "${preflight_gate}" >&2 || _pf_rc=$?
+    fi
+    if _unarchive_task_file; then
+        [[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
+    else
+        echo "open_task_pr: preflight could not put the tree back — see above. The backup is at ${_ARCHIVED_BACKUP:-<none>}." >&2
+        _pf_rc=1
+    fi
+    if [[ "${_pf_rc}" -ne 0 ]]; then
+        echo "open_task_pr: preflight FAILED for ${TASK_ID} (exit ${_pf_rc}) — the real run would not have got past this. Nothing was branched, committed or pushed." >&2
+        exit 1
+    fi
+    echo "open_task_pr: preflight passed for ${TASK_ID} — the gates resolve and the archive completes. Nothing was branched, committed or pushed." >&2
+    echo "preflight:ok"
+    exit 0
+fi
+
 # The host gate runs HERE and nowhere else — once, over the final tree. It used
 # to run at the top as well, over a tree that did not yet contain the archive,
 # and then the archive moved a tracked file: the gate certified one tree and the
@@ -785,6 +912,7 @@ fi
 # and for a task worked from a payload elsewhere, and gating on it would leave
 # those two cases running no host gate at all — a skip, in the one check the
 # script says has deliberately no way to skip it.
+_phase host-gate
 if [[ -n "${host_gate}" ]]; then
     echo "open_task_pr: running host gate over the tree being committed: ${host_gate}" >&2
     if ! bash -c "${host_gate}" >&2; then
@@ -820,6 +948,7 @@ fi
 # file moved into `tasks/_history/` with `status: merged` — which the selector
 # reads as finished work — and `_unarchive_task_file` had nothing to restore
 # from. That is exactly what the rollback above exists to prevent.
+_phase commit
 git add -A
 
 # `Closes #<issue>` goes in the commit message as well as the PR body. The body
@@ -860,6 +989,7 @@ fi
 # The commit holds the archive now, so the backup has nothing left to protect.
 [[ -n "${_ARCHIVED_BACKUP}" ]] && rm -f "${_ARCHIVED_BACKUP}"
 
+_phase push
 # Push with exponential backoff (network-transient retry only).
 delay=1
 pushed=0
@@ -873,6 +1003,7 @@ if [[ "${pushed}" -ne 1 ]]; then
     exit 1
 fi
 
+_phase pr
 # The PR body. `Closes #<issue>` is the first line of the summary rather than a
 # trailer, because a squash merge that truncates the body still keeps the top.
 closes_line=""
