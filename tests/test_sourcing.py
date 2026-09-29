@@ -647,6 +647,20 @@ def test_the_reach_gate_counts_a_foreign_board_asked_of_everyone(
     assert measured["reach_selection_violations"] == withholds
 
 
+def test_the_record_is_unmeasured_when_the_library_holds_no_unusable_twin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Round 4, R4-1: the guard R3-1 added had no test, so deleting it changed
+    nothing. With the reserved `.test` site no longer unusable, the library
+    holds no twin, `unusable_boards_selected` has no population, and the record
+    must say so rather than read a clean zero. The reason text is asserted
+    because the widest-reach guard fires in the same state."""
+    monkeypatch.setattr("integral.connector_coverage.is_example_site", lambda site: False)
+    measured = measure_reach_selection()
+    assert measured["gate_status"] == "unmeasured"
+    assert any("unusable boards for []" in reason for reason in measured["reasons"]), measured
+
+
 def test_a_key_both_halves_of_the_record_measure_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
