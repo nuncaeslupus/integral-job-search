@@ -42,6 +42,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from integral.candidate import (
     FIELD_MODELS,
     CandidateConstraints,
+    ConstraintField,
     LanguageLevel,
     Languages,
     Location,
@@ -93,7 +94,16 @@ class Reading(Strict):
     # the candidate has not answered has made no claim for the offer to meet,
     # and reading that as a pass is how an unanswered question becomes a
     # silent yes downstream.
-    verdict: Literal["satisfied", "violated", "unknown"]
+    #
+    # `unplaced` is the mirror of it on the advert's side, and is a fourth
+    # member rather than a reuse of `unknown` because the two differ in who
+    # was silent and in what is owed next. `unknown` is "the candidate has not
+    # answered", and what clears it is asking them (T27 tracks it in
+    # `outstanding_fields`). `unplaced` is "the candidate answered and this
+    # advert does not say enough to compare" — nothing to ask the candidate,
+    # and the offer is withheld rather than shown. Folding it into `unknown`
+    # would send a reader looking for a question to put to the wrong party.
+    verdict: Literal["satisfied", "violated", "unknown", "unplaced"]
     because: str = Field(min_length=1)
 
 
@@ -104,6 +114,39 @@ class Annotation(Strict):
     profile_revision: dict[str, Any]
     kept: bool
     readings: list[Reading] = Field(default_factory=list)
+
+
+def _read_field(
+    name: str,
+    value: ConstraintField,
+    violated: dict[str, str],
+    unplaced: dict[str, str],
+) -> Reading:
+    """One field's reading, from the buckets `filter_hard_constraints` returned.
+
+    Every branch here is reached from a bucket rather than from a second
+    opinion about the offer: `annotate()` does not re-decide anything the
+    filter decided. The order is the filter's own precedence — a field that
+    refused the offer is reported as refusing it even if another field could
+    not be compared.
+    """
+    if value.state != "stated":
+        return Reading(
+            field=name,
+            verdict="unknown",
+            because=f"the candidate has not stated {name}"
+            if value.state == "unknown"
+            else f"the candidate declined to state {name}",
+        )
+    if name in violated:
+        return Reading(field=name, verdict="violated", because=violated[name])
+    if name in unplaced:
+        return Reading(field=name, verdict="unplaced", because=f"this advert {unplaced[name]}")
+    return Reading(
+        field=name,
+        verdict="satisfied",
+        because=f"nothing in this advert conflicts with the stated {name}",
+    )
 
 
 def annotate(
@@ -120,21 +163,9 @@ def annotate(
     """
     result = filter_hard_constraints(constraints, [facts])
     violated = {removal.field: removal.reason for removal in result.removed}
+    unplaced = {removal.field: removal.reason for removal in result.unplaced}
     readings = [
-        Reading(
-            field=name,
-            verdict="unknown"
-            if value.state != "stated"
-            else ("violated" if name in violated else "satisfied"),
-            because=violated.get(name)
-            or (
-                f"the candidate has not stated {name}"
-                if value.state == "unknown"
-                else f"the candidate declined to state {name}"
-                if value.state == "declined"
-                else f"nothing in this advert conflicts with the stated {name}"
-            ),
-        )
+        _read_field(name, value, violated, unplaced)
         for name, value in constraints.as_dict().items()
     ]
     return Annotation(
