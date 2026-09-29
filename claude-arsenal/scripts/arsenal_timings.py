@@ -48,6 +48,7 @@ EVENT_HELP = {
     "gate": "one gate_run.sh call (the whole ## Acceptance gate block)",
     "review-round": "one adversarial review round, emit -> verdict",
     "task-pr": "open_task_pr.sh end to end: gates, review, push, PR",
+    "preflight": "open_task_pr.sh --preflight: the cheap half, no PR opened",
     "merge-ready": "one merge_ready.sh check (not the whole wait)",
 }
 
@@ -127,6 +128,10 @@ def report(rows: list[Row]) -> None:
     for event, _ in order:
         if event in EVENT_HELP:
             print(f"  {event}: {EVENT_HELP[event]}")
+    # Without this line the table double-counts to a reader: a `task-pr` of
+    # 13m26s and a `task-pr:host-gate` of 13m25s are one 13m26s wait, not two.
+    if any(":" in e for e in by_event):
+        print("  a:b rows are phases INSIDE a, not time on top of it")
 
     # The multiplier. Only closed rounds are recorded, so this counts reviews
     # rather than attempts.

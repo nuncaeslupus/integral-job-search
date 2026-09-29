@@ -18,6 +18,95 @@ being a changelog nobody reads.
 
 Format: `## [X.Y.Z] - YYYY-MM-DD`, newest first, plain bullets below.
 
+## [4.24.0] - 2026-09-29
+
+- **`/init` now checks the newest release.** A plugin cache frozen at an old
+  version used to report "up to date" because init only compared the repo
+  against itself. It now prints `ARSENAL OUTDATED: this init is X, the latest
+  release is Y` with the update commands, and **refuses to set up a new repo**
+  from a stale plugin unless you pass `--allow-stale`. On an existing repo it
+  only warns. The lookup is one `git ls-remote`, cached for six hours; offline
+  it is skipped, and `ARSENAL_UPSTREAM_CHECK=0` turns it off.
+- **Hooks keep working from a subdirectory.** The skill-edit gate, its markers
+  and the statusLine are now registered as
+  `bash "${CLAUDE_PROJECT_DIR:-.}"/claude-arsenal/bin/…`. The old relative form
+  failed on every Bash call once the session `cd`'d into a subfolder. Re-running
+  `/init` (or the session-start `init.py --silent`) upgrades the entries in place.
+- **The skill-edit gate no longer blocks running a skill script** in the same
+  command as a heredoc that edits an unrelated file, such as editing a spec and
+  then running `validate_spec.py` on it. Writing to the script is still gated.
+- **Every spec and plan gets its annotatable reader.** A new hook installed by `/init` fires whenever a spec or plan is written, by `specify`, `design` or another plugin's planning skill, and tells the session the reader is stale and how to rebuild it. `ship` treats `claude-arsenal/scripts/reader_check.py branch` failing (a spec/plan changed without a reader built from its current text) as No-Go; add it to `host-gate` to run it on every PR.
+- **Specs and plans are revisioned.** Headers carry `**Revision**`, `**Status**` and `**Revision log**`; notes exports are named `<project>-<spec|plan>-notes-<date>-r<N>.md`. `validate_spec.py` / `validate_plan.py` fail on a named notes file that isn't committed, and `--require-approved` must pass before `design` plans from a spec or a plan is seeded into tasks.
+- `query_status.py` warns when a notes export for this project sits uncommitted in a Downloads folder (including localized and XDG ones).
+- `AGENTS.md` and the CLAUDE.md block now say `specify`/`design` take precedence over other plugins' planning skills and where specs/plans live. `/init` no longer creates the unused `arsenal/specs/` and `arsenal/plans/` folders (existing ones are left alone).
+- **Diagrams via drawspec.** Specs, plans and docs draw diagrams as fenced ```` ```drawspec ```` blocks (JSON describing what the diagram means); `create_reader.py` validates each and inlines it as SVG that follows the page's colours. A broken diagram fails the run and names the block. Documents without a drawspec fence don't need drawspec. `ARSENAL_DRAWSPEC` picks the command; otherwise `drawspec` on PATH, then `uvx --from git+https://github.com/nuncaeslupus/drawspec drawspec`. See `claude-arsenal/references/diagrams.md`.
+- **`/init` protects your default branch.** On first run it applies GitHub branch protection: PRs required, admins included, and only checks that actually report on your PRs made required (a review bot that skips is never required). Existing protection is left alone; the result is recorded as `branch-protection` in `arsenal/config.toml`; `--no-branch-protection` opts out. It fails soft (no `gh`, no login, a plan without protection) and prints the manual steps.
+- **`host-gate` and `merge-policy` are a deliberate choice.** `/init` prints `HOST-GATE UNSET` with a command suggested from your tooling and flags a `merge-policy` your CI can't satisfy; the session asks you. `host-gate = "none"` records "no gate" explicitly.
+- The session protocol now says every change goes through a PR, ad hoc requests included, not only claimed queue tasks.
+- `create_reader.py` names the reader of any document other than `spec.md` / `specification.md` / `plan.md` after the document (`<stem>-reader.html`, `<stem>-annotated.md`), so design docs sharing a `docs/**/specs/` folder no longer overwrite each other's reader.
+- **Local gates carry CI.** New `claude-arsenal/bin/fast_gate.sh`: `preflight-gate` (fast, scoped to changed files via `$ARSENAL_CHANGED_FILES`) for every review round; `--full` (`host-gate`) once before the PR and once before merge. Review rounds no longer re-run the full suite per push. `/init` asks for a `preflight-gate`, and for a private or CI-less repo recommends `merge-policy = "always"` with a real `host-gate` and `pre-pr-review = "required"` (advice only). See `references/ci-minutes.md`, which includes a once-per-PR CI trigger block.
+- **`arsenal-queue.yml` bills fewer minutes:** the keyword check skips drafts and runs on `ready_for_review`, a newer push cancels the older check, and every job has a timeout. `/init` leaves a modified installed workflow alone, so diff `.github/workflows/arsenal-queue.yml` against `claude-arsenal/workflows/arsenal-queue.yml` to pick this up.
+- New `usage_report.py --actions` estimates this month's billed Actions minutes per repo and workflow (needs `gh`).
+- **New `explore-idea` skill** (workflow section): talks a new or vague idea into shape before any spec exists — sizes it out loud (spike / bounded / architectural), asks one multiple-choice question at a time with pros, cons and a recommendation, drafts a research prompt instead of guessing, keeps a D-1…D-N decisions log, and hands off to `specify` only after an explicit yes. `AGENTS.md` routes idea work to it ahead of other plugins' brainstorming skills.
+- `specify` takes that decisions log as input and self-reviews the spec before the reader is generated: no placeholders, contradictions or ambiguous requirements, scope fits one plan, nothing from the conversation dropped. Several skill descriptions were shortened to stay in the listing budget; their triggers are unchanged.
+
+
+## [4.23.0] - 2026-09-23
+
+- **`open_task_pr.sh <task-id> --preflight` asks whether the run would refuse,
+  without paying for it.** It runs everything the real command does before its
+  expensive step — the review receipt, the task gate, the shared-checkout
+  guard, the issue handle, the archive — then puts the tree back and prints
+  `preflight:ok`. It opens no PR, cuts no branch, writes no commit, and needs
+  no `<title>`. On one measured run that was 305ms of archive plus a 2.2s task
+  gate against a `host-gate` of 13m25s below it, so a refusal that used to
+  arrive thirteen minutes in now arrives in seconds. It cannot tell you the
+  host gate *passes* — running it is the cost being avoided — so it checks only
+  that the gate's first word resolves on this machine, which is the failure a
+  fresh worktree actually hits, and reports that as a note rather than a
+  refusal.
+- **New `preflight-gate` key in `arsenal/config.toml`.** Empty by default. A
+  repo can name its own cheap check, run only under `--preflight` and on the
+  same side of the archive as `host-gate` — which is the only place a gate that
+  measures the repo's own task files can be checked at all. Name something that
+  takes seconds; anything worth minutes belongs in `host-gate`.
+- **A `Ctrl-C` during the host gate no longer strands the task file.** The
+  archive moves the task into `tasks/_history/` stamped `status: merged`, which
+  the selector reads as finished work. Every refusal undid that; a signal took
+  none of those paths, so an interrupt during the longest step in the run left
+  the task out of the queue with nothing merged. `open_task_pr.sh` now restores
+  it on `INT` and `TERM`, on the real path as well as under `--preflight`.
+- **Timing reports record `preflight` as its own event**, not as a short
+  `task-pr`, so runs that stop before the expensive half by design do not pull
+  down the p50 of the runs that open a PR.
+
+## [4.22.0] - 2026-09-23
+
+- **The timing report now says which part of a task-PR run cost the time.** A
+  consumer's measured `task-pr` was 13m26s with 13m25s of it in a single event
+  with no internal structure, so the report could say the loop was slow and not
+  which step — the question it exists to answer. `open_task_pr.sh` now records
+  ten phases (`review`, `task-gate`, `fetch`, `issue`, `branch`, `archive`,
+  `host-gate`, `commit`, `push`, `pr`) as `task-pr:<phase>` rows, and the phase
+  that was running when a refused run exits carries its exit code, so the table
+  says where the loop stops as well as that it did. Nothing changed in the TSV
+  schema and no new file is written.
+- **Your own Makefile can record its sub-targets into the same table.**
+  `host-gate` is the host's command and the bundle cannot know it is four make
+  targets, so `arsenal_timing_record <event>:<target> "" <ms> <rc>` is now a
+  documented entry point — `references/performance-tuning.md` § Phases has the
+  three-line recipe. A `host-gate:test` row then sits in the p50/p95 table
+  beside everything else, with no hand-instrumentation to redo next time.
+- `references/evidence-gates.md` gains the measurement behind a common evidence
+  sweep: one `python -m <module>` per module spent **6.22s** over five modules
+  against **2.16s** for the same five in one process, about two thirds of it
+  interpreter startup — and it scales with the module count, which parallelism
+  cannot reach.
+- `references/pre-pr-review.md` now says to scope the suite while mutating. One
+  test file per mutation, the full suite once at the end: against a
+  seven-minute suite, thirty mutations run full is three and a half hours to
+  learn what four minutes would have said.
+
 ## [4.21.2] - 2026-09-22
 
 - `arsenal_timings.py` and `references/performance-tuning.md` disagreed about

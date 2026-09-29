@@ -12,6 +12,7 @@ bin/check_update.sh
 bin/claim_review.sh
 bin/claim_task.sh
 bin/detect_surface.sh
+bin/fast_gate.sh
 bin/gate_run.sh
 bin/gate_target.py
 bin/github_channel.sh
@@ -21,6 +22,7 @@ bin/mark_skill_workshop_loaded_from_prompt.sh
 bin/merge_ready.sh
 bin/open_task_pr.sh
 bin/outline.sh
+bin/reader_hook.sh
 bin/rebase_stack.sh
 bin/record_isolation.sh
 bin/rescue_snapshot.sh
@@ -30,7 +32,9 @@ bin/workspace_list.sh
 bin/worktree_probe.sh
 references/annotatable-reader.md
 references/capability-map.md
+references/ci-minutes.md
 references/claiming-internals.md
+references/diagrams.md
 references/evidence-gates.md
 references/github-automation.md
 references/orchestrator-tick.md
@@ -43,6 +47,7 @@ references/worker-loop.md
 scripts/arsenal_config.py
 scripts/arsenal_migrate.py
 scripts/arsenal_timings.py
+scripts/branch_protection.py
 scripts/create_reader.py
 scripts/gate_evidence.py
 scripts/handle_sync.py
@@ -51,6 +56,7 @@ scripts/issue_import.py
 scripts/pr_audit.py
 scripts/query_status.py
 scripts/queue_hooks.py
+scripts/reader_check.py
 scripts/task_select.py
 scripts/usage_report.py
 sections.json

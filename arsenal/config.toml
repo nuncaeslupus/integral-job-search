@@ -124,6 +124,8 @@ queue-automation = true
 # commit somebody owes, not something for a worktree to fix on the way past.
 host-setup = "uv sync --extra dev --locked"
 
+branch-protection = "applied"
+
 [skills]
 extract = true
 python = true
