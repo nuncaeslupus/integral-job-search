@@ -511,6 +511,63 @@ def test_a_stated_commute_radius_reaches_the_hard_constraint_filter() -> None:
     assert unsaid_result.removed == ()
     assert unsaid_result.surviving == ()
     assert [r.offer_id for r in unsaid_result.unplaced] == ["onsite-somewhere"]
+    assert unsaid_result.unplaced[0].field == "location"
+
+
+# ---------------------------------------------------------------------------
+# T201/#550 — country is necessary for work authorisation, not sufficient for
+# reach: a Barcelona-commuting candidate is not "in range" of an on-site
+# advert 600km away just because it shares the candidate's own country's
+# neighbourhood, and is not in range of one outside it at all.
+
+
+def test_a_narrowed_commute_radius_still_admits_an_unnarrowed_onsite_offer() -> None:
+    """The withholding must not fire when nothing narrows
+    the field — same offer as the `unsaid` case above, but `commutable_regions`
+    empty means `accepts_onsite_in_country` governs alone, exactly as before."""
+    constraints = CandidateConstraints(
+        location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+    )
+    unsaid = _offer("onsite-somewhere", delivery="onsite")
+    result = filter_hard_constraints(constraints, [unsaid])
+    assert result.surviving == ("onsite-somewhere",)
+    assert result.unplaced == ()
+
+
+def test_a_foreign_onsite_advert_needs_relocate_reach_not_commute() -> None:
+    """The bug PR #565's review flagged as F5: an on-site advert in a
+    different country, with the ad's own `requires_relocation` left False (or
+    simply never set), must not clear the filter as "commute" range for a
+    candidate whose stated location is elsewhere. `_required_reach_mode` must
+    classify it as `relocate`, which the candidate's stated reach does not
+    include.
+    """
+    constraints = CandidateConstraints(
+        location=Location(state="stated", country="ES", accepts_onsite_in_country=True),
+        reach=Reach(state="stated", modes=("remote", "commute")),
+    )
+    krakow = _offer("krakow-onsite", country="PL", delivery="onsite", requires_relocation=False)
+    result = filter_hard_constraints(constraints, [krakow])
+    assert result.surviving == ()
+    assert result.unplaced == ()
+    assert [r.field for r in result.removed] == ["reach"]
+    assert "relocate" in result.removed[0].reason
+
+    # The mirror check: the same candidate, an on-site offer inside their own
+    # country, must still be presented — the fix must not turn into a blanket
+    # refusal of every on-site offer.
+    barcelona = _offer("barcelona-onsite", country="ES", delivery="onsite")
+    assert filter_hard_constraints(constraints, [barcelona]).surviving == ("barcelona-onsite",)
+
+
+def test_reach_falls_back_to_the_ad_flag_when_location_is_not_stated() -> None:
+    """No stated `location` means no home country to compare against — the
+    same "unknown must not veto" rule as everywhere else in this module, so a
+    foreign on-site advert with `requires_relocation=False` is still read as
+    `commute` range when nothing says where the candidate lives."""
+    constraints = CandidateConstraints(reach=Reach(state="stated", modes=("remote", "commute")))
+    krakow = _offer("krakow-onsite", country="PL", delivery="onsite", requires_relocation=False)
+    assert filter_hard_constraints(constraints, [krakow]).surviving == ("krakow-onsite",)
 
 
 def test_a_commute_radius_without_accepting_onsite_is_refused() -> None:
