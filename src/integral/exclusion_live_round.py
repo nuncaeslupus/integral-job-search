@@ -35,49 +35,67 @@ from typing import Any
 
 from integral.corpus_scope import DEFAULT_LABELLED_ADS
 from integral.identity import ProfileStore
-from integral.sourcing_exclusions import Candidate, Exclusion, record_exclusion, ruled_out_by
+from integral.sourcing_exclusions import (
+    Candidate,
+    Exclusion,
+    candidate_of,
+    record_exclusion,
+    ruled_out_by,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T203.json"
 
-#: What a candidate ruled out, in generic words — one row per wording, in the
-#: languages the boards' adverts are written in (the topic is the candidate's;
-#: the wording an advert uses for it is what the conversation records). Not a
-#: blocklist the tool owns: it is the fixture that stands in for one recorded
-#: statement, and each row must trip something in the corpus (asserted).
-LIVE_ROUND_EXCLUSIONS: tuple[tuple[str, str], ...] = (
-    ("sector:banca", "no me interesa la banca"),
-    ("sector:banking", "no banking, please"),
-    ("sector:fintech", "ya tuve bastante de fintechs"),
-    ("sector:e-commerce", "no me gusta el e-commerce"),
-    ("topic:comprar y vender", "no me gusta todo lo que sea comprar y vender"),
-    ("sector:defensa", "defensa no"),
-    ("sector:ciberseguridad", "no me interesa la ciberseguridad"),
-    ("sector:cybersecurity", "not cybersecurity"),
+#: What a candidate ruled out, in generic words: the `about`, what they said,
+#: and the other surface forms the recording session supplies in Spanish,
+#: English and Catalan (`Exclusion.terms`). Not a blocklist the tool owns: it is
+#: the fixture that stands in for one recorded statement, and **each row must
+#: trip something in the corpus** — asserted as `exclusions_never_tripped == 0`,
+#: so a row a broken matcher can no longer find turns the gate red.
+LIVE_ROUND_EXCLUSIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("sector:banca", "no me interesa la banca", ("banking", "bank", "bancari")),
+    ("sector:fintech", "ya tuve bastante de fintechs", ()),
+    (
+        "sector:e-commerce",
+        "no me gusta el e-commerce",
+        ("comercio electronico", "comerc electronic"),
+    ),
+    (
+        "topic:comprar y vender",
+        "no me gusta todo lo que sea comprar y vender",
+        ("compraventa", "buying and selling", "marketplace"),
+    ),
+    ("sector:defensa", "defensa no", ("defense", "defence")),
+    (
+        "sector:ciberseguridad",
+        "no me interesa la ciberseguridad",
+        ("cybersecurity", "ciberseguretat"),
+    ),
 )
 
 # Denominators, asserted so a zero over an empty population is `unmeasured`.
 # Each floor has its own comment: the sweep reads one marker per floor.
 
-#: Served adverts that trip an exclusion. 17 on the committed corpus today; the
+#: Served adverts that trip an exclusion. 28 on the committed corpus today; the
 #: floor sits below that so a corpus refresh is not a red gate while a scan that
 #: served almost nothing still is.
-#: arsenal-floor-margin: MINIMUM_EXCLUDED_SERVED value=15
-MINIMUM_EXCLUDED_SERVED = 15
+#: arsenal-floor-margin: MINIMUM_EXCLUDED_SERVED value=20
+MINIMUM_EXCLUDED_SERVED = 20
 
-#: Served adverts that trip none — 29 today (the cap serves at most 15 of them),
-#: among them adverts holding an exclusion's letters without its word
-#: ("bancaria" for "banca"), the word-boundary side of the same measurement.
+#: Served adverts that trip none — 25 today, the controls that must arrive, among
+#: them adverts holding a topic's letters without its word (`bancarrota`).
 #: arsenal-floor-margin: MINIMUM_UNEXCLUDED_SERVED value=20
 MINIMUM_UNEXCLUDED_SERVED = 20
 
-#: Distinct exclusions that tripped at least one served advert: all 8 today, so a
-#: fixture row that matches nothing would be a wording nobody exercised.
-#: arsenal-floor-margin: MINIMUM_EXCLUSIONS_TRIPPED value=5
-MINIMUM_EXCLUSIONS_TRIPPED = 5
+#: Distinct exclusions that tripped at least one served advert. A literal, not
+#: `len(LIVE_ROUND_EXCLUSIONS)`: a bound derived from what it bounds never
+#: fires. The exact claim, that **every** row trips, is the separate metric
+#: `exclusions_never_tripped`.
+#: arsenal-floor-margin: MINIMUM_EXCLUSIONS_TRIPPED value=6
+MINIMUM_EXCLUSIONS_TRIPPED = 6
 
-_SELECTED_CAP = 35
-_CONTROL_CAP = 15
+_PER_EXCLUSION = 8
+_CONTROL_CAP = 25
 _CORPUS_QUERY = "engineer"
 
 
@@ -94,7 +112,7 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
 
     Serves real adverts (`corpus/labelled/ads.jsonl`) through `sourcing.source`
     against exclusions recorded with `record_exclusion`, then reads the offer
-    store. Three counts, each aimed at one way the wiring fails:
+    store. Four counts, each aimed at one way the wiring fails:
 
     * `stated_exclusions_not_applied_to_a_live_round` — an offer that trips an
       exclusion is **in the store**. The call is missing, or the producer's
@@ -103,6 +121,9 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
       arrive. The remedy over-reaches into #552's over-rejection.
     * `removals_not_reported` — what was left out differs from what the
       outcomes say was left out. A silent removal is the resurfacing's mirror.
+    * `exclusions_never_tripped` — a fixture row that matched **no** advert the
+      corpus says it applies to. The matcher is broken for that row (a facet, a
+      hyphen, an ending) and the other rows keep the run green without it.
     """
     from integral.candidate import Aim, CandidateConstraints, Location, Reach
     from integral.connectors import ListRequest
@@ -112,18 +133,21 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
     from integral.sourcing import _FLOOD_CONNECTOR, GLOBAL, Response, source
 
     exclusions = tuple(
-        Exclusion(about=about, stated_at_cycle=1, words=words)
-        for about, words in LIVE_ROUND_EXCLUSIONS
+        Exclusion(about=about, stated_at_cycle=1, words=words, terms=terms)
+        for about, words, terms in LIVE_ROUND_EXCLUSIONS
     )
     ads = [json.loads(line) for line in corpus.read_text(encoding="utf-8").splitlines() if line]
-    needles = [_plainly(e.value) for e in exclusions]
 
-    def says_one(ad: dict[str, Any]) -> bool:
-        haystack = _plainly(f"{ad.get('title') or ''} {ad['text']}")
-        return any(needle in haystack for needle in needles)
+    def says(ad: dict[str, Any], exclusion: Exclusion) -> bool:
+        haystack = _plainly(f"{ad.get('title') or ''} {ad.get('company') or ''} {ad['text']}")
+        return any(_plainly(w) in haystack for w in (exclusion.value, *exclusion.terms))
 
-    served = [ad for ad in ads if says_one(ad)][:_SELECTED_CAP]
-    served += [ad for ad in ads if not says_one(ad)][:_CONTROL_CAP]
+    # Served **per exclusion**, so every row has adverts of its own: pooled, one
+    # frequent topic fills the cap and a row nothing serves goes unnoticed.
+    served: list[dict[str, Any]] = []
+    for exclusion in exclusions:
+        served += [ad for ad in ads if says(ad, exclusion) and ad not in served][:_PER_EXCLUSION]
+    served += [ad for ad in ads if not any(says(ad, e) for e in exclusions)][:_CONTROL_CAP]
 
     cards = "".join(
         f'<div class="job"><a href="/jobs/{html.escape(ad["id"])}">x</a>'
@@ -184,22 +208,25 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
 
     def tripped(ad: dict[str, Any]) -> tuple[str, ...]:
         return ruled_out_by(
-            Candidate(offer_id=ad["id"], title=ad.get("title"), text=ad["text"]), exclusions
+            Candidate(
+                offer_id=ad["id"],
+                title=ad.get("title"),
+                text=ad["text"],
+                employer=ad.get("company"),
+            ),
+            exclusions,
         )
 
     excluded_served = [url for url, ad in by_url.items() if tripped(ad)]
     unexcluded_served = [url for url in by_url if url not in excluded_served]
     not_applied = [
-        url
-        for url, offer in stored.items()
-        if ruled_out_by(
-            Candidate(offer_id=offer.id, title=offer.title, text=offer.text), exclusions
-        )
+        url for url, offer in stored.items() if ruled_out_by(candidate_of(offer), exclusions)
     ]
     removed_unexcluded = [url for url in unexcluded_served if url not in stored]
     reported = sum(outcome.excluded for outcome in run.outcomes)
     removed = len(by_url) - len(stored)
     tripped_abouts = {about for url in excluded_served for about in tripped(by_url[url])}
+    never_tripped = [e.about for e in exclusions if e.about not in tripped_abouts]
 
     failures: list[str] = []
     if len(excluded_served) < MINIMUM_EXCLUDED_SERVED:
@@ -212,11 +239,13 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
         "stated_exclusions_not_applied_to_a_live_round": len(not_applied),
         "unexcluded_offers_removed": len(removed_unexcluded),
         "removals_not_reported": abs(removed - reported),
+        "exclusions_never_tripped": len(never_tripped),
         "excluded_offers_served_at_least": MINIMUM_EXCLUDED_SERVED,
         "unexcluded_offers_served_at_least": MINIMUM_UNEXCLUDED_SERVED,
         "exclusions_tripped_at_least": MINIMUM_EXCLUSIONS_TRIPPED,
         "gate_status": "unmeasured" if failures else "measured",
         "failures": failures,
+        "never_tripped": never_tripped,
         "not_applied": not_applied,
         "unexcluded_removed": removed_unexcluded,
         "_observed": {
@@ -234,7 +263,7 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
 def _main(argv: list[str]) -> int:
     """`python -m integral.exclusion_live_round [path]` → `status/evidence/T203.json`.
 
-    Exit 0 measured and all three metrics zero, 1 a metric is not, 3 unmeasured.
+    Exit 0 measured and all four metrics zero, 1 a metric is not, 3 unmeasured.
     """
     measured = measure_live_round()
     committed = {k: v for k, v in measured.items() if not k.startswith("_")}
@@ -250,6 +279,7 @@ def _main(argv: list[str]) -> int:
         measured["stated_exclusions_not_applied_to_a_live_round"]
         or measured["unexcluded_offers_removed"]
         or measured["removals_not_reported"]
+        or measured["exclusions_never_tripped"]
     ):
         return 1
     if measured["gate_status"] == "unmeasured":

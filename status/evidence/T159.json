@@ -65,17 +65,17 @@
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_EXCLUDED_SERVED",
-      "line": 66
+      "line": 83
     },
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_EXCLUSIONS_TRIPPED",
-      "line": 77
+      "line": 95
     },
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_UNEXCLUDED_SERVED",
-      "line": 72
+      "line": 88
     },
     {
       "module": "extraction",
@@ -471,7 +471,7 @@
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
     "exclusion_live_round._CONTROL_CAP",
-    "exclusion_live_round._SELECTED_CAP",
+    "exclusion_live_round._PER_EXCLUSION",
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS",
@@ -523,6 +523,7 @@
     "sourcing._FLOOD_PAGES",
     "sourcing._FLOOD_PAGE_ROWS",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",
+    "sourcing_exclusions._MIN_STEM",
     "step_gates.UNCERTIFIABLE",
     "step_gates.VOCABULARY_SILENT",
     "step_specs.MIN_FIELD_WORDS",

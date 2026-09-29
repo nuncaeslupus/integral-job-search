@@ -37,10 +37,11 @@ A resolved handle. Runs whether or not Intake did; this step is required and Int
 
   ```bash
   uv run python -m integral.sourcing_exclusions record --handle <handle> \
-      --about sector:banking --words "no banking, please"
+      --about sector:banca --words "no banking, please" \
+      --term banking --term bank --term bancari
   ```
 
-  `--about` is `<facet>:<value>` (`sector:banking`, `topic:betting`); the value is the word an advert would use, so record one row per wording the boards use ("banca" and "banking" are two rows). Do this when they say it, not at the end of the step. Say it back in one line — "Noted, nothing on banking will reach you" — and never promise more than word matching does: an advert that only *alludes* to the topic, or that uses the word as a metaphor, is out of its reach.
+  `--about` is `<facet>:<value>` (`sector:banca`, `topic:betting`), the value in the candidate's own word. Adverts say it in the three languages the boards use, so **supply the Spanish, English and Catalan forms with a repeatable `--term`** ("banca" with `banking`, `bank`, `bancari`; "ciberseguridad" with `cybersecurity`, `ciberseguretat`). Plurals and endings are matched by the tool — `banca` already finds `bancario` and `bancos` — but another word or another language is not, and only a term supplies it. Do this when they say it, not at the end of the step. Say it back in one line — "Noted, nothing on banking will reach you" — and never promise more than word matching does: an advert that only *alludes* to the topic, or that uses the word as a metaphor, is out of its reach.
 - An unconfirmed claim stays `unknown`; unknown neither passes nor vetoes, and surfaces later as something still owed.
 
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.

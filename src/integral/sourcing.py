@@ -80,7 +80,7 @@ from integral.lifecycle import (
 )
 from integral.offers import Offer, SourceKind, compute_offer_id
 from integral.robots import Robots, RobotsError
-from integral.sourcing_exclusions import Candidate, Exclusion, load_exclusions, ruled_out_by
+from integral.sourcing_exclusions import Exclusion, candidate_of, load_exclusions, ruled_out_by
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -1270,9 +1270,7 @@ def _one_board(
                 dropped += 1
                 drop_reason = drop_reason or why
                 continue
-            ruled_out = ruled_out_by(
-                Candidate(offer_id=offer.id, title=offer.title, text=offer.text), exclusions
-            )
+            ruled_out = ruled_out_by(candidate_of(offer), exclusions)
             if ruled_out:
                 # T203. Left out **and said**: the count and the reason ride
                 # on the outcome, so it is on the page the candidate reads.

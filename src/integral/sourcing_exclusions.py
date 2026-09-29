@@ -45,6 +45,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from integral.identity import IdentityError, ProfileStore
+from integral.offers import Offer
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
@@ -79,6 +80,12 @@ class Exclusion(Strict):
     about: str
     stated_at_cycle: int = Field(ge=1)
     words: str
+    #: Other surface forms of the same topic, in Spanish, English and Catalan,
+    #: which the session recording it supplies ("banca", "banking", "bancari").
+    #: Serving code may not read the corpus's concept map (`corpus_scope`), so
+    #: the cross-language half of the topic is carried on the row instead.
+    #: Optional, so rows written before this field existed still load.
+    terms: tuple[str, ...] = ()
 
     @property
     def facet(self) -> str:
@@ -132,6 +139,19 @@ class Candidate(Strict):
     offer_id: str
     title: str | None = None
     text: str
+    #: The employer's name is part of what an advert says: "Banco Sabadell"
+    #: whose text never repeats the word is still a bank.
+    employer: str | None = None
+
+
+def candidate_of(offer: Offer) -> Candidate:
+    """The one place a stored `Offer` becomes what `matches` reads.
+
+    Every path by which an offer reaches the candidate — a sourced row, a
+    stored offer about to be presented, a reaction stimulus — goes through
+    this and `ruled_out_by`, so a field added to the check is added once.
+    """
+    return Candidate(offer_id=offer.id, title=offer.title, text=offer.text, employer=offer.company)
 
 
 class Presentation(Strict):
@@ -231,21 +251,75 @@ def _fold(text: str, join: str) -> str:
     return re.sub(_SEPARATORS, join, stripped)
 
 
+#: The endings a stated word may take and still be the same topic — the closed
+#: rule that replaces listing every wording. Each language declares its own
+#: plural, gender and adjective endings, and **all three are applied to every
+#: word**, because an advert's language is not the candidate's and the same
+#: topic arrives in any of them (ES/EN/CA are treated identically). Applied to
+#: the folded (accent-free, lowercase) stem, so "bancària" is `banc` + `aria`.
+#: A continuation outside this set is **not** the topic: `cloud` + `flare`.
+SUFFIXES: dict[str, tuple[str, ...]] = {
+    "es": ("s", "es", "a", "as", "o", "os", "e", "ario", "aria", "arios", "arias"),
+    "en": ("s", "es", "ed", "er", "ers", "ing", "ary", "ist", "ists"),
+    "ca": ("s", "es", "a", "as", "o", "os", "ari", "aris", "aria", "aries"),
+}
+#: Where the stem of an abstract noun stops, so the adjective built on it is
+#: reached too: `publicidad` -> `publici` + `tario` (`publicitario`).
+_ABSTRACT_ENDINGS = ("dad", "tat", "ty")
+_ABSTRACT_SUFFIXES = ("tario", "taria", "tarios", "tarias", "tari", "taris", "tary")
+_MIN_STEM = 4
+
+
+def _stems(needle: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The stems a folded word is matched by, and the endings each may take.
+
+    The word itself; the word without its plural `s`/`es` (the candidate says
+    "fintechs", the advert "FinTech"); that without its final vowel (`banca`
+    -> `banc`, so `banco`, `bancario`); and, for an abstract noun, the stem of
+    its adjective. A stem shorter than `_MIN_STEM` is never cut further, so a
+    three-letter value stays itself.
+    """
+    base = needle
+    for plural in ("es", "s"):
+        if base.endswith(plural) and len(base) - len(plural) >= _MIN_STEM:
+            base = base[: -len(plural)]
+            break
+    stems = {needle, base}
+    if base[-1:] in "aeo" and len(base) - 1 >= _MIN_STEM:
+        stems.add(base[:-1])
+    endings = {"", *(e for group in SUFFIXES.values() for e in group)}
+    abstract = [
+        base[: -len(a)] for a in _ABSTRACT_ENDINGS if base.endswith(a) and len(base) > len(a) + 3
+    ]
+    forms = tuple(sorted(stems, key=len, reverse=True))
+    suffixes = tuple(sorted(endings, key=len, reverse=True))
+    return (forms + tuple(abstract), suffixes + (_ABSTRACT_SUFFIXES if abstract else ()))
+
+
 def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     """Is this advert one the candidate ruled out?
 
-    Word-boundary matched, because `cloud` inside `Cloudflare` would start
-    deleting roles nobody ruled out — an exclusion that over-reaches is the
-    same loss of trust arriving from the other direction.
+    The stated value, and every `term` recorded beside it, is matched as a
+    **word plus a closed set of endings** (`SUFFIXES`), never as free text:
+    `banca` finds `bancario`, `bancos` and `bancari`, and `cloud` still does
+    not find `Cloudflare`, because `flare` is not an ending. Word-boundary
+    matched on the left as well, so the topic cannot start mid-word.
+
+    Title, text and employer are all read: an advert from "Banco Sabadell" is
+    on the banking topic whether or not its text says so.
     """
-    raw = f"{candidate.title or ''} {candidate.text}"
+    raw = f"{candidate.title or ''} {candidate.employer or ''} {candidate.text}"
     for join in ("", " "):
-        needle = _fold(exclusion.value, join)
-        if not needle.strip():
-            continue
-        pattern = rf"(?<![0-9a-z]){re.escape(needle)}(?![0-9a-z])"
-        if re.search(pattern, _fold(raw, join)):
-            return True
+        haystack = _fold(raw, join)
+        for surface in (exclusion.value, *exclusion.terms):
+            needle = _fold(surface, join).strip()
+            if not needle:
+                continue
+            stems, endings = _stems(needle)
+            body = "|".join(re.escape(x) for x in stems)
+            tail = "|".join(re.escape(x) for x in endings)
+            if re.search(rf"(?<![0-9a-z])(?:{body})(?:{tail})(?![0-9a-z])", haystack):
+                return True
     return False
 
 
@@ -477,7 +551,7 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
 
 
 def _record(argv: list[str]) -> int:
-    """`record --handle H --about facet:value --words "…" [--cycle N] [--root DIR]`."""
+    """`record --handle H --about facet:value --words "…" [--term T …] [--cycle N] [--root DIR]`."""
     import argparse
 
     from integral.identity import default_profiles_root
@@ -486,11 +560,19 @@ def _record(argv: list[str]) -> int:
     parser.add_argument("--handle", required=True)
     parser.add_argument("--about", required=True, help="<facet>:<value>, e.g. sector:banking")
     parser.add_argument("--words", required=True, help="what the candidate actually said")
+    parser.add_argument(
+        "--term",
+        action="append",
+        default=[],
+        help="another surface form of the topic (ES, EN or CA); repeat it for each",
+    )
     parser.add_argument("--cycle", type=int, default=1)
     parser.add_argument("--root", type=Path, default=None)
     args = parser.parse_args(argv)
     store = ProfileStore(args.root or default_profiles_root(), args.handle)
-    exclusion = Exclusion(about=args.about, stated_at_cycle=args.cycle, words=args.words)
+    exclusion = Exclusion(
+        about=args.about, stated_at_cycle=args.cycle, words=args.words, terms=tuple(args.term)
+    )
     path = record_exclusion(store, exclusion)
     print(f"recorded {exclusion.about} -> {path}")
     return 0

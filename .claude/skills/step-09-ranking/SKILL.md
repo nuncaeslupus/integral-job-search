@@ -60,6 +60,8 @@ show, held = partition(store, ranked_ids)      # never `show` alone
 present(store, show, at=now, phrase=phrase)
 ```
 
+`partition` also withholds any stored offer on a topic the candidate ruled out (`search/exclusions.json`), including offers stored before they said it.
+
 **Say the withheld count and the reason, every time.** `withheld_line(held)`
 puts it in the shape the owner asked for — *"4 descartadas porque «son de
 investigación»"*. A filter nobody is told about is indistinguishable from a
