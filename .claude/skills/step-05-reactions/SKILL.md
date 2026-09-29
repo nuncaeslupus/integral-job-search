@@ -36,7 +36,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `reactions` for
 
   ```bash
   uv run python -m integral.sourcing_exclusions record --handle <handle> \
-      --about sector:fintech --words "ya tuve bastante de fintechs" --term fintechs
+      --about sector:fintech --words "ya tuve bastante de fintechs" --term "tecnología financiera" --term "tecnologia financera"
   ```
 
   Stimuli enter the store as ordinary offers, so **show only what `partition(store, stored_ids)` returns** (`integral.presentation_log`, as in step 9) — it withholds any advert on a topic already ruled out, and `withheld_line` says how many, rather than letting a shorter set look like a thin market.

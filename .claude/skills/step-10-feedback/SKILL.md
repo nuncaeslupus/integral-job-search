@@ -51,7 +51,7 @@ In this step that sounds like:
 
   ```bash
   uv run python -m integral.sourcing_exclusions record --handle <handle> \
-      --about sector:fintech --words "ya tuve bastante de fintechs" --term fintechs
+      --about sector:fintech --words "ya tuve bastante de fintechs" --term "tecnología financiera" --term "tecnologia financera"
   ```
 
   Offers already stored on that topic are withheld by `partition` from the next list, with the count and reason in `withheld_line` — a fresh search is not needed for them to go.

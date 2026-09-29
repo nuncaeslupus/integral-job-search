@@ -227,6 +227,40 @@ def test_the_three_languages_are_treated_the_same(language: str) -> None:
         assert _says("fintech", f"fintech{ending}"), (language, ending)
 
 
+_ALTERNATION_ROOTS = {("y", "i"): "cryptocurrenc", ("o", "on"): "construcci", ("c", "qu"): "ban"}
+
+
+def test_every_stem_alternation_has_a_root_and_none_is_dropped() -> None:
+    """An emptied table would skip the case below rather than fail it."""
+    assert set(se.STEM_ALTERNATIONS) == set(_ALTERNATION_ROOTS)
+
+
+@pytest.mark.parametrize("pair", se.STEM_ALTERNATIONS)
+def test_every_stem_alternation_is_matched_in_both_directions(pair: tuple[str, str]) -> None:
+    """Derived from `STEM_ALTERNATIONS`: a pair without a root here fails, not skips."""
+    root = _ALTERNATION_ROOTS[pair]
+    a, b = pair
+    singular, plural = f"{root}{a}{'a' if a == 'c' else ''}", f"{root}{b}es"
+    assert _says(singular, f"the {plural} sector"), (singular, plural)
+    assert _says(plural, f"the {singular} sector"), (plural, singular)
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [
+        ("cryptocurrency", "Cryptocurrencies exchange"),
+        ("lottery", "state lotteries operator"),
+        ("pharmacy", "retail pharmacies"),
+        ("construcció", "empresa de construccions"),
+        ("inversió", "fons d'inversions"),
+        ("banca", "Grup de banques catalanes"),
+        ("banques", "treballem per a la banca"),
+    ],
+)
+def test_a_plural_that_changes_the_stem_is_the_same_topic(value: str, text: str) -> None:
+    assert _says(value, text)
+
+
 @pytest.mark.parametrize(
     ("value", "text"),
     [

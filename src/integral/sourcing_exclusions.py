@@ -268,6 +268,12 @@ SUFFIXES: dict[str, tuple[str, ...]] = {
 _ABSTRACT_ENDINGS = ("dad", "tat", "ty")
 _ABSTRACT_SUFFIXES = ("tario", "taria", "tarios", "tarias", "tari", "taris", "tary")
 _MIN_STEM = 4
+#: Where a stem's own last letters change between its forms, so an ending
+#: alone cannot reach the other: `cryptocurrency`/`cryptocurrencies` (EN y/i),
+#: `construcció`/`construccions` (CA and ES o/on, folded), `banca`/`banques`
+#: (CA c/qu). Each pair is applied in **both** directions to every stem, so
+#: the candidate's singular finds the advert's plural and the reverse.
+STEM_ALTERNATIONS: tuple[tuple[str, str], ...] = (("y", "i"), ("o", "on"), ("c", "qu"))
 
 
 def _stems(needle: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -287,6 +293,12 @@ def _stems(needle: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     stems = {needle, base}
     if base[-1:] in "aeo" and len(base) - 1 >= _MIN_STEM:
         stems.add(base[:-1])
+    for a, b in STEM_ALTERNATIONS:
+        for this, other in ((a, b), (b, a)):
+            for stem in tuple(stems):
+                root = stem[: -len(this)]
+                if stem.endswith(this) and len(root + other) >= _MIN_STEM:
+                    stems.add(root + other)
     endings = {"", *(e for group in SUFFIXES.values() for e in group)}
     abstract = [
         base[: -len(a)] for a in _ABSTRACT_ENDINGS if base.endswith(a) and len(base) > len(a) + 3
