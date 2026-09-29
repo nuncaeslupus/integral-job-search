@@ -255,8 +255,8 @@
     {
       "module": "candidate",
       "name": "MINIMUM_CASES",
-      "line": 1570,
-      "population": 36
+      "line": 1827,
+      "population": 95
     },
     {
       "module": "connectors",
