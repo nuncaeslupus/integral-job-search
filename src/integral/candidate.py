@@ -713,8 +713,8 @@ def _needs_relocation(offer: OfferFacts, home_country: str | None) -> bool:
     `requires_relocation` is self-reported and usually just absent. On-site or
     hybrid work in a country other than the candidate's own always needs a move,
     because there is no commuting across a border (#550). `home_country=None`
-    (no location stated, or a commute radius that decides instead) leaves the
-    advert's flag as the only evidence.
+    (no location stated, or a commute radius that cannot decide this offer —
+    see `filter_hard_constraints`) leaves the advert's flag as the only evidence.
 
     One rule for both `reach` and `relocation`: #570's second reader found the
     home-country test in `reach` alone, so a candidate who never stated a
@@ -905,17 +905,29 @@ def filter_hard_constraints(
     # whether an on-site offer is "commute" or "relocate" range depends on the
     # candidate's own country, which lives on `location`, not `reach` — see
     # `_required_reach_mode`. `None` (location not stated) preserves the old,
-    # ad-flag-only behaviour. A stated commute radius also passes `None`: the
-    # radius is then what decides reach, and `_violates_location` withholds a
-    # cross-border on-site offer as `unplaced` rather than letting the country
-    # alone refuse it (#550's border fixtures in `probe_hard_filter`).
-    home_country = (
-        location.country if location is not None and not location.commutable_regions else None
-    )
+    # ad-flag-only behaviour.
     removed: list[Removal] = []
     unplaced: list[Removal] = []
     surviving: list[str] = []
     for offer in offers:
+        # A stated commute radius passes `None` only where it cannot decide.
+        # A radius entry is a bare name, read either as a subdivision of the
+        # candidate's own country or as any place so named. A foreign region
+        # the radius does not name is outside it under both readings, so doing
+        # that job means moving and `relocation` / `reach` can say so (#570's
+        # second reader, N6: `relocation: no` read "satisfied" over a Kraków
+        # vacancy it could refuse). A foreign offer with no region, or whose
+        # region's name is in the radius, is undecidable across the border and
+        # stays with `_violates_location`'s `unplaced` (#550).
+        home_country = (
+            location.country
+            if location is not None
+            and (
+                not location.commutable_regions
+                or (offer.region is not None and offer.region not in location.commutable_regions)
+            )
+            else None
+        )
         verdicts = [
             (
                 name,
@@ -1290,11 +1302,15 @@ def probe_hard_filter() -> dict[str, Any]:
         }
     )
     border = filter_hard_constraints(border_candidate, [abroad_far, abroad_silent, abroad_homonym])
+    # `removed`, not merely "not surviving": Île-de-France is outside a radius
+    # of bare names under every reading of one, so the move is certain and the
+    # baseline's unconfirmed `conditional` relocation refuses it. The two below
+    # stay `unplaced` because no reading settles them — see
+    # `filter_hard_constraints` (#570's second reader, N6).
     check(
-        abroad_far.offer_id not in border.surviving,
-        "an on-site vacancy in another country was presented as reachable to a candidate "
-        "who commutes — country is a necessary condition being used as a sufficient one "
-        "(#550)",
+        border.outcome_for(abroad_far.offer_id) == "removed",
+        "an on-site vacancy abroad in a region the radius does not name was not refused by "
+        "relocation — a decided answer reported as undecided, or presented outright (#550)",
     )
     check(
         border.outcome_for(abroad_silent.offer_id) == "unplaced",
@@ -1305,6 +1321,28 @@ def probe_hard_filter() -> dict[str, Any]:
         border.outcome_for(abroad_homonym.offer_id) == "unplaced",
         "a subdivision name matching the radius cleared across a border — a radius of "
         "bare names is a string coincidence abroad, not a daily commute",
+    )
+
+    # N6's own candidate: a radius, no relocation, reach never stated — so
+    # `relocation` is the only field that can refuse the Kraków vacancy, and
+    # `annotate` read it as "satisfied" while the offer sat in `unplaced`.
+    stays_put = CandidateConstraints(
+        location=Location(
+            state="stated",
+            country="ES",
+            accepts_onsite_in_country=True,
+            commutable_regions=("Barcelona",),
+        ),
+        relocation=Relocation(state="stated", willingness="no"),
+    )
+    krakow = _good_offer("offer-abroad-krakow").model_copy(
+        update={"delivery": "onsite", "country": "PL", "region": "Kraków"}
+    )
+    stays_put_result = filter_hard_constraints(stays_put, [krakow])
+    check(
+        [removal.field for removal in stays_put_result.removed] == ["relocation"],
+        "relocation did not refuse an on-site vacancy abroad, outside the radius, for a "
+        "candidate who will not relocate",
     )
 
     # An offer both refused and unreadable records both, and resolves to the
@@ -1405,7 +1443,9 @@ def probe_hard_filter() -> dict[str, Any]:
 #: then -> 31 for the second reader's findings: the three-way partition, the
 #: cross-border shapes the country short-circuit used to answer, and the
 #: refused-and-unreadable offer whose withheld record was being discarded.
-MINIMUM_CASES = 31
+#: -> 32 for #570's second reader, N6: relocation refusing a foreign on-site
+#: vacancy outside a commute radius for a candidate who will not move.
+MINIMUM_CASES = 32
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
