@@ -521,7 +521,7 @@ def test_a_stated_commute_radius_reaches_the_hard_constraint_filter() -> None:
 # neighbourhood, and is not in range of one outside it at all.
 
 
-def test_a_narrowed_commute_radius_still_admits_an_unnarrowed_onsite_offer() -> None:
+def test_no_commute_radius_still_admits_an_onsite_offer_stating_no_region() -> None:
     """The withholding must not fire when nothing narrows
     the field — same offer as the `unsaid` case above, but `commutable_regions`
     empty means `accepts_onsite_in_country` governs alone, exactly as before."""
@@ -558,6 +558,24 @@ def test_a_foreign_onsite_advert_needs_relocate_reach_not_commute() -> None:
     # refusal of every on-site offer.
     barcelona = _offer("barcelona-onsite", country="ES", delivery="onsite")
     assert filter_hard_constraints(constraints, [barcelona]).surviving == ("barcelona-onsite",)
+
+
+def test_relocation_no_refuses_a_foreign_onsite_advert_without_the_ad_flag() -> None:
+    """#570's second reader, F2: with `reach` unstated, `relocation` is the only
+    check left, and it read the ad's own `requires_relocation` alone — so a
+    Kraków on-site advert that never set the flag reached a candidate living in
+    Spain who will not relocate. Both checks now share `_needs_relocation`."""
+    constraints = CandidateConstraints(
+        location=Location(state="stated", country="ES", accepts_onsite_in_country=True),
+        relocation=Relocation(state="stated", willingness="no"),
+    )
+    krakow = _offer("krakow-onsite", country="PL", delivery="onsite", requires_relocation=False)
+    result = filter_hard_constraints(constraints, [krakow])
+    assert result.surviving == ()
+    assert [r.field for r in result.removed] == ["relocation"]
+
+    madrid = _offer("madrid-onsite", country="ES", delivery="onsite")
+    assert filter_hard_constraints(constraints, [madrid]).surviving == ("madrid-onsite",)
 
 
 def test_reach_falls_back_to_the_ad_flag_when_location_is_not_stated() -> None:

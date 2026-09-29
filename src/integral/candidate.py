@@ -707,8 +707,28 @@ def _violates_location(field_value: Location, offer: OfferFacts) -> str | Uncomp
     return None
 
 
-def _violates_relocation(field_value: Relocation, offer: OfferFacts) -> str | None:
-    if offer.delivery == "remote" or not offer.requires_relocation:
+def _needs_relocation(offer: OfferFacts, home_country: str | None) -> bool:
+    """Whether doing this job means moving, whatever the advert's own flag says.
+
+    `requires_relocation` is self-reported and usually just absent. On-site or
+    hybrid work in a country other than the candidate's own always needs a move,
+    because there is no commuting across a border (#550). `home_country=None`
+    (no location stated, or a commute radius that decides instead) leaves the
+    advert's flag as the only evidence.
+
+    One rule for both `reach` and `relocation`: #570's second reader found the
+    home-country test in `reach` alone, so a candidate who never stated a
+    reach still had a foreign on-site advert cleared by `relocation`.
+    """
+    return offer.requires_relocation or (
+        offer.delivery != "remote" and home_country is not None and offer.country != home_country
+    )
+
+
+def _violates_relocation(
+    field_value: Relocation, offer: OfferFacts, home_country: str | None = None
+) -> str | None:
+    if offer.delivery == "remote" or not _needs_relocation(offer, home_country):
         return None
     if field_value.willingness == "no":
         return f"requires relocation to {offer.country}, candidate will not relocate"
@@ -817,7 +837,7 @@ def _required_reach_mode(offer: OfferFacts, home_country: str | None = None) -> 
     """
     if offer.delivery == "remote" and not offer.requires_relocation:
         return "cross_border_remote_employer" if offer.foreign_employer else "remote"
-    if offer.requires_relocation or (home_country is not None and offer.country != home_country):
+    if _needs_relocation(offer, home_country):
         return "relocate"
     return "commute"
 
@@ -885,8 +905,13 @@ def filter_hard_constraints(
     # whether an on-site offer is "commute" or "relocate" range depends on the
     # candidate's own country, which lives on `location`, not `reach` — see
     # `_required_reach_mode`. `None` (location not stated) preserves the old,
-    # ad-flag-only behaviour.
-    home_country = location.country if location is not None else None
+    # ad-flag-only behaviour. A stated commute radius also passes `None`: the
+    # radius is then what decides reach, and `_violates_location` withholds a
+    # cross-border on-site offer as `unplaced` rather than letting the country
+    # alone refuse it (#550's border fixtures in `probe_hard_filter`).
+    home_country = (
+        location.country if location is not None and not location.commutable_regions else None
+    )
     removed: list[Removal] = []
     unplaced: list[Removal] = []
     surviving: list[str] = []
@@ -894,10 +919,13 @@ def filter_hard_constraints(
         verdicts = [
             (
                 name,
-                # `reach` is the one check that needs more than its field's
-                # value, so it is called directly rather than through `_CHECKS`.
+                # `reach` and `relocation` need more than their field's value —
+                # the candidate's own country, via `_needs_relocation` — so they
+                # are called directly rather than through `_CHECKS`.
                 _violates_reach(cast(Reach, value), offer, home_country)
                 if name == "reach"
+                else _violates_relocation(cast(Relocation, value), offer, home_country)
+                if name == "relocation"
                 else _CHECKS[name](value, offer),
             )
             for name, value in stated.items()
