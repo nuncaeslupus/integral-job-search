@@ -210,12 +210,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 117
+      "line": 119
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 108
+      "line": 110
     },
     {
       "module": "spec_consistency",
@@ -261,7 +261,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4592,
+      "line": 4695,
       "population": 15
     },
     {
@@ -444,6 +444,9 @@
     "connector_exchange.LEAK_NEEDLE_MINIMUM",
     "connector_health.MAX_PROBE_ATTEMPTS",
     "connector_policy.ADJUDICATIONS_AT_LEAST",
+    "connector_salary_audit.MINIMUM_DISTINCT_SALARY_VERDICTS_READ",
+    "connector_salary_audit.MINIMUM_PACKAGES_MEASURED",
+    "connector_salary_audit._WINDOW",
     "connector_transport.MINIMUM_CREDENTIAL_CASES",
     "connector_transport.MINIMUM_GET_PACKAGES",
     "connector_transport.MINIMUM_LEDGER_ENTRIES",

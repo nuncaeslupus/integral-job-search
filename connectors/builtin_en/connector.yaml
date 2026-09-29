@@ -187,23 +187,33 @@ list:
     # value that is wrong for roughly half the rows.
     #
     # `salary_min` / `salary_max` / `salary_currency` / `salary_period`:
-    # Built In does publish a range on most cards, and it is genuinely
-    # valuable — which is exactly why it is left out. The range is ONE
-    # unsplittable string in ONE element: `45K-85K Annually`, `94K-176K
-    # Annually`, `27K-41K Hourly`. There are no separate min/max elements, no
-    # schema.org `JobPosting` microdata and no `application/ld+json` block on
-    # either the listing or any of the four detail pages fetched (grepped:
-    # zero `itemprop=` and zero `ld+json` on all of them).
+    # Built In does publish a range on every card here, and it is genuinely
+    # valuable — but it cannot be reached. The range is ONE string in ONE
+    # element, `45K-85K Annually` / `94K-176K Annually`, and that element is a
+    # `span.font-barlow.text-gray-04`: the same two classes the work mode, the
+    # location count and the seniority carry. Measured, per card, in document
+    # order:
     #
-    # `_as_float("45K-85K Annually")` returns `None` — it refuses anything that
-    # does not reduce to digits — while `build_offer` would still construct
-    # `Salary(min=None, max=None, stated=True)` the moment any `salary_*` key
-    # is present. That is an advert claiming a salary it never stated, and the
-    # ranking reads it. A wrong number is worse than an absent one, so nothing
-    # here is mapped. The `K` suffix could be expanded — but not by a selector,
-    # and this format runs no code (D-10). If it is ever wanted, it belongs in
-    # `build_offer`'s coercion, where every connector gets it and it can be
-    # tested; not smuggled in here.
+    #   ['Remote or Hybrid', '10 Locations', '45K-85K Annually', 'Junior', …]
+    #   ['Remote or Hybrid', '9 Locations',  '45K-85K Annually', 'Junior', …]
+    #   ['Remote or Hybrid', '6 Locations',  '94K-176K Annually', 'Senior level', …]
+    #
+    # The band is third every time, and first-match-wins would store "Remote or
+    # Hybrid" as the salary. This grammar has no combinators and no
+    # `:nth-child`, so there is no selector that says "the third one" — and the
+    # only thing distinguishing the band's element is a sibling icon
+    # (`i.fa-sack-dollar`), which is exactly what a combinator would be for.
+    # Nothing else carries the figures: no separate min/max elements, no
+    # schema.org `JobPosting` microdata and no `application/ld+json` block on
+    # either the listing or any of the four detail pages fetched (grepped: zero
+    # `itemprop=` and zero `ld+json` on all of them).
+    #
+    # Note what is NOT the reason, because it used to be written here and it is
+    # no longer true: `take: range_low` reads `45K-85K` perfectly well — `K` is
+    # in `_MAGNITUDE`, and `_numbers_in` returns [45000.0, 85000.0]. If this
+    # span were addressable the band would be read today. The blocker is the
+    # selector grammar, and the upgrade path is there rather than in a
+    # `salary_*` field this file could add now.
 
 # Declared because it was fetched and read on four different adverts from four
 # different employers, not because a detail page exists. All four returned 200

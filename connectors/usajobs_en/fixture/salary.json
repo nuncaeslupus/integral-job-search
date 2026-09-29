@@ -1,0 +1,179 @@
+{
+  "rows": {
+    "0": {
+      "verdict": "read",
+      "min": 143913.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "1": {
+      "verdict": "read",
+      "min": 108592.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "2": {
+      "verdict": "read",
+      "min": 85447.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "3": {
+      "verdict": "read",
+      "min": 102415.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "4": {
+      "verdict": "read",
+      "min": 70623.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "5": {
+      "verdict": "read",
+      "min": 70623.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "6": {
+      "verdict": "read",
+      "min": 74678.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "7": {
+      "verdict": "read",
+      "min": 70623.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "8": {
+      "verdict": "read",
+      "min": 50460.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "9": {
+      "verdict": "read",
+      "min": 102415.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "10": {
+      "verdict": "read",
+      "min": 127898.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "11": {
+      "verdict": "read",
+      "min": 70623.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "12": {
+      "verdict": "read",
+      "min": 70623.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "13": {
+      "verdict": "read",
+      "min": 89508.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "14": {
+      "verdict": "read",
+      "min": 102415.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "15": {
+      "verdict": "read",
+      "min": 105090.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "16": {
+      "verdict": "read",
+      "min": 143913.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "17": {
+      "verdict": "read",
+      "min": 169279.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "18": {
+      "verdict": "read",
+      "min": 74584.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "19": {
+      "verdict": "read",
+      "min": 121785.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "20": {
+      "verdict": "read",
+      "min": 74678.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "21": {
+      "verdict": "read",
+      "min": 85447.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "22": {
+      "verdict": "read",
+      "min": 102415.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "23": {
+      "verdict": "read",
+      "min": 105262.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    },
+    "24": {
+      "verdict": "read",
+      "min": 143913.0,
+      "max": null,
+      "currency": null,
+      "period": null
+    }
+  }
+}

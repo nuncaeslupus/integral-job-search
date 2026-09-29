@@ -1,0 +1,19 @@
+{
+  "rows": {
+    "*": {
+      "verdict": "read",
+      "min": 76000.0,
+      "max": null,
+      "currency": "USD",
+      "period": "year"
+    },
+    "0": {
+      "verdict": "read",
+      "min": 70000.0,
+      "max": 76000.0,
+      "currency": "USD",
+      "period": null,
+      "list_says": "10 Employees Python Developer Full-time $70k – $76k • No equity Onsite or remote "
+    }
+  }
+}

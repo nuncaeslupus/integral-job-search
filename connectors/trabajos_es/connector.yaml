@@ -76,6 +76,60 @@ list:
     text:
       css: "div.doextended"
 
+    # The band, when the card states one as a band. `span.salario` holds it
+    # alone — no label, no period, no other figure — so `take:` reads it
+    # directly and there is nothing for `band_in_text` to do here (it wants a
+    # pay cue, and `p.oi`, the only element that holds more than the figures,
+    # reads "17.139 € - 17.140 €De duracion determinadaMedia Jornada": a
+    # contract type and a working-hours label, neither of them a cue).
+    #
+    # Measured across this fixture's six cards that carry the span:
+    #
+    #   row  [9] "15.000 € - 25.000 €"   [29] "9 € - 13 €"            → read
+    #   row  [3] "17.139 € - 17.140 €"   [8]  "18.000 € - 19.000 €"   → read
+    #   row [17] "18.000 €"              [22] "22.000 €"              → refused
+    #
+    # **The middle pair is not lost, and the paragraph saying so was wrong.**
+    # It said `text` maps `div.doextended`, that 12 of the 40 cards write
+    # `div.do` instead, and that those rows therefore reach `build_offer` with
+    # no body and are dropped — taking two published bands with them. The first
+    # two clauses are true and the conclusion does not follow. `source()`
+    # fetches an advert's own page exactly when the list row could not build an
+    # offer by itself (`sourcing.py:1138`), so a bodiless card is not a dropped
+    # card: it is a card that reads its body from the detail page, where
+    # `div.subtitulo` supplies one. Rows [3] and [8] are two of those twelve,
+    # and both keep their band — measured 2026-09-22 through `_offer_from` on
+    # the route `source()` actually takes, which is how the error was found.
+    # The claim came from a probe that parsed every row list-only and reported
+    # a defect on the one kind of row that does not exist.
+    #
+    # Four of the six are therefore read, which is what T200's evidence counts.
+    # What the twelve `div.do` rows do cost is a *fetch* each, and `text` is
+    # still narrower than the card; that is a shape to improve, not a defect to
+    # subtract from the salary number.
+    #
+    # The last two are a single figure, and `_take`'s exactly-two rule refuses
+    # them by design: "One number is a single figure and not a band". Nothing
+    # here overrides that, and the card is the reason it should not be
+    # overridden — the same span carries "9 € - 13 €", which is an hourly rate,
+    # and the board prints no period on any of them. A range at least says the
+    # figures are the two ends of one thing; a lone "18.000 €" says only that
+    # some number was published, and this connector will not decide what it is.
+    #
+    # `period` therefore stays absent on every row: the board states none, so
+    # none is recorded. `bulk_filter` compares a floor only against a matching
+    # period, so a periodless band is never silently measured against a yearly
+    # floor; `presentation` prints the figures with no "/year" after them.
+    salary_min:
+      css: "span.salario"
+      take: range_low
+    salary_max:
+      css: "span.salario"
+      take: range_high
+    salary_currency:
+      css: "span.salario"
+      take: currency
+
 detail:
   fields:
     title:
