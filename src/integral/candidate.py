@@ -661,7 +661,8 @@ def _radius_match(region: str, radius: Sequence[str]) -> Literal["inside", "mayb
     and sometimes a different place, and nothing here can say which, so the
     offer is withheld rather than cleared (a wrong merge presents a job outside
     the radius) or refused (a wrong split loses one inside it). A name with
-    nothing but marks or whitespace in it names no place and matches nothing.
+    nothing but nonspacing (`Mn`) marks or whitespace in it names no place and
+    matches nothing; an enclosing or spacing mark is a character like any other.
 
     ponytail: letters with no decomposition keep their identity (`Łódź` is not
     even `maybe` `Lodz`), and exonyms (`Gerona`/`Girona`, `Perpignan`/
@@ -1038,7 +1039,8 @@ class _Case:
 #: rule's text before it read the code — Unicode §3.13 D145 for `inside`, then
 #: `Mn` removal for `maybe` — each verdict computed from the Unicode data rather
 #: than by running `_radius_match`. `habo_habo_collision` is why `maybe` exists:
-#: Habo and Håbo are two Swedish municipalities.
+#: Habo and Håbo are two Swedish municipalities. The last three rows were added
+#: after it: one pins D145's inner NFD, two answer the second reader on #579.
 REGION_SPELLINGS: tuple[
     tuple[str, tuple[str, ...], str, Literal["inside", "maybe", "outside"], str], ...
 ] = (
@@ -1175,6 +1177,20 @@ REGION_SPELLINGS: tuple[
         "\u03b1\u0345\u0301",
         "inside",
         "2 caseless equal: D145's inner NFD puts ccc 230 before 240 ahead of casefold",
+    ),
+    (
+        "ypogegrammeni_folds_before_marks_drop",
+        ("\u03b1",),
+        "\u1fb3",
+        "outside",
+        "3 casefold turns U+0345 into iota before Mn removal, so it is not dropped",
+    ),
+    (
+        "enclosing_mark_is_not_blank",
+        ("\u20dd",),
+        "\u20dd",
+        "inside",
+        "1 only Mn is blank; an Me mark is a character, caseless equal to itself",
     ),
 )
 
@@ -1683,8 +1699,9 @@ def probe_hard_filter() -> dict[str, Any]:
 #: refused-and-unreadable offer whose withheld record was being discarded.
 #: -> 32 for #570's second reader, N6: relocation refusing a foreign on-site
 #: vacancy outside a commute radius for a candidate who will not move.
-#: -> 88 for T205's `REGION_SPELLINGS`, one check per spelling row.
-MINIMUM_CASES = 88
+#: -> 88 for T205's `REGION_SPELLINGS`, one check per spelling row; -> 90 for
+#: #579's second reader, F1 and F2.
+MINIMUM_CASES = 90
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
