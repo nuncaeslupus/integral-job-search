@@ -63,6 +63,21 @@
       "line": 71
     },
     {
+      "module": "exclusion_live_round",
+      "name": "MINIMUM_EXCLUDED_SERVED",
+      "line": 66
+    },
+    {
+      "module": "exclusion_live_round",
+      "name": "MINIMUM_EXCLUSIONS_TRIPPED",
+      "line": 77
+    },
+    {
+      "module": "exclusion_live_round",
+      "name": "MINIMUM_UNEXCLUDED_SERVED",
+      "line": 72
+    },
+    {
       "module": "extraction",
       "name": "_CONFIRMING_MATCHES_FOR_BIPOLAR",
       "line": 155
@@ -195,12 +210,12 @@
     {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
-      "line": 116
+      "line": 117
     },
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 107
+      "line": 108
     },
     {
       "module": "spec_consistency",
@@ -282,20 +297,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3343,
+      "line": 3346,
       "population": 42
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3370,
+      "line": 3373,
       "population": 30
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3241,
-      "population": 85
+      "line": 3244,
+      "population": 88
     },
     {
       "module": "freshness",
@@ -449,6 +464,8 @@
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
+    "exclusion_live_round._CONTROL_CAP",
+    "exclusion_live_round._SELECTED_CAP",
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS",
@@ -515,6 +532,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 85,
+  "floors_swept_at_least": 88,
   "floors_arithmetically_checked_at_least": 36
 }

@@ -33,6 +33,14 @@ A resolved handle. Runs whether or not Intake did; this step is required and Int
 - **When commuting is in scope, ask how far — and record the places, not the feeling.** "I can move, but in the province of Barcelona, or at most Girona or Tarragona — I want to sleep at home each day" is not relocation and is not a plain yes to on-site work anywhere in the country. Ask which places they would travel to and back from within a day, and record them in `location.commutable_regions`; a radius left as a remark filters nothing, and the candidate goes on being shown jobs four hundred kilometres away (D-20). A radius only makes sense alongside accepting on-site work — someone who will not go in at all has no travel limit to state.
 - **Employment mode is a status or a preference, never a menu of arrangements.** The two modes that can be recorded are payroll employment and genuine self-employment (`employed`, `contracting`). Ask which one they are on now, or which one they would rather be on — "are you set up as autónomo?", or "would you consider going autónomo, or would you rather be on payroll?" — and record the answer against those two.
 - Ask about the things that quietly rule out whole employers — sectors, causes, employer kinds, countries — using the prepared list of *usual suspects* as material to draw from, never a checklist to read aloud.
+- **A topic they rule out in words is recorded the moment they say it, in their own words** — "no banking", "nothing to do with betting", "I am done with buying-and-selling companies". It is not a constraint field: it is an exclusion, kept beside the aim, and every later search leaves out any advert whose title or text says it. Record each one on its own, with what they actually said:
+
+  ```bash
+  uv run python -m integral.sourcing_exclusions record --handle <handle> \
+      --about sector:banking --words "no banking, please"
+  ```
+
+  `--about` is `<facet>:<value>` (`sector:banking`, `topic:betting`); the value is the word an advert would use, so record one row per wording the boards use ("banca" and "banking" are two rows). Do this when they say it, not at the end of the step. Say it back in one line — "Noted, nothing on banking will reach you" — and never promise more than word matching does: an advert that only *alludes* to the topic, or that uses the word as a metaphor, is out of its reach.
 - An unconfirmed claim stays `unknown`; unknown neither passes nor vetoes, and surfaces later as something still owed.
 
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.

@@ -1134,14 +1134,15 @@ def test_the_unrealized_row_fields_are_derived_not_hand_listed() -> None:
     assert set(result) == {f.name for f in dc_fields(Sample)} - {"kept_out", "also_kept_out"}
 
 
-def test_the_board_outcome_unrealized_row_fields_are_todays_five_terms() -> None:
+def test_the_board_outcome_unrealized_row_fields_are_todays_six_terms() -> None:
     """Pins what `_UNREALIZED_ROW_FIELDS` resolves to today — `dropped`,
-    `off_aim`, `unopened`, `over_ceiling`, `refused_rows` — so a change to
+    `off_aim`, `unopened`, `over_ceiling`, `refused_rows`, `excluded` — so a change to
     `BoardOutcome` or to the exclusion set it is derived against is visible
     here, not only in `employer_boards`'s or `rows_not_accounted_for`'s
     behaviour. `refused_rows` (T174, #466 review round 1 F6) is the fifth: a
     row whose advert host had already refused before it was read, counted in
-    none of the original four."""
+    none of the original four. `excluded` (T203) is the sixth: a row built into
+    an offer and left out because its topic was ruled out."""
     from integral.sourcing import _UNREALIZED_ROW_FIELDS
 
     assert set(_UNREALIZED_ROW_FIELDS) == {
@@ -1150,11 +1151,12 @@ def test_the_board_outcome_unrealized_row_fields_are_todays_five_terms() -> None
         "unopened",
         "over_ceiling",
         "refused_rows",
+        "excluded",
     }
 
 
 @pytest.mark.parametrize(
-    "bucket", ["dropped", "off_aim", "unopened", "over_ceiling", "refused_rows"]
+    "bucket", ["dropped", "off_aim", "unopened", "over_ceiling", "refused_rows", "excluded"]
 )
 def test_employer_boards_excludes_a_board_whose_rows_are_all_one_bucket(bucket: str) -> None:
     """Round 6, F2: T172's partition (`items > dropped+off_aim+unopened+

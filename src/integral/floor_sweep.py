@@ -3238,7 +3238,10 @@ def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
 #: instance of the same collision; measured with
 #: `uv run python -m integral.floor_sweep` against the merged tree rather than
 #: picked from either side. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 85
+#: **88 with T203**, whose `exclusion_live_round` module declares three floors
+#: (`MINIMUM_EXCLUDED_SERVED`, `MINIMUM_UNEXCLUDED_SERVED`,
+#: `MINIMUM_EXCLUSIONS_TRIPPED`). Still zero slack.
+MINIMUM_FLOORS_SWEPT = 88
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3661,7 +3664,9 @@ def measure_marker_restatement_clearance() -> dict[str, Any]:
 #: corrupting — true the moment this merge gave them a marker and pulled them
 #: out of `silent_margin`, so they joined this battery's scope for the first
 #: time; splitting the block, not loosening the refusal, is the fix.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 82
+#: **85 with T203**: `exclusion_live_round`'s three floors each carry their own
+#: comment block and marker, so each is one more scenario. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 85
 
 
 def measure_prose_clearance() -> dict[str, Any]:

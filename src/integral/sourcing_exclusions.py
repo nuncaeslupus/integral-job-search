@@ -44,8 +44,17 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from integral.identity import IdentityError, ProfileStore
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
+
+#: Where what the candidate ruled out lives, beside the aim and for the same
+#: reason (`search_terms.AIM_FILE`): a stated topic is not a hard constraint
+#: (D-20's gate says every pinned field is one), it shapes what the search
+#: **returns**. `sourcing.source` reads it itself, so no caller has to remember
+#: to hand it over — T203 is what happens when a correct module waits for one to.
+EXCLUSIONS_FILE = ("search", "exclusions.json")
 
 #: A zero over nothing shown is not a pass. Four exclusions were restated in
 #: the live session and each arrived again; the probe puts at least that many
@@ -240,6 +249,41 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     return False
 
 
+def load_exclusions(store: ProfileStore) -> tuple[Exclusion, ...]:
+    """Everything this candidate has ruled out, or `()` when nothing was.
+
+    A file that will not parse **raises**. An unreadable list treated as an
+    empty one is the filter quietly stopping — the reported defect, arriving
+    through a corrupt file instead of a missing call.
+    """
+    if not store.exists(*EXCLUSIONS_FILE):
+        return ()
+    payload = store.read_json(*EXCLUSIONS_FILE)
+    if not isinstance(payload, list):
+        raise IdentityError(f"{'/'.join(EXCLUSIONS_FILE)} must be a list")
+    try:
+        return tuple(Exclusion.model_validate(row) for row in payload)
+    except ValueError as exc:
+        raise IdentityError(
+            f"{'/'.join(EXCLUSIONS_FILE)} holds a row that is not one: {exc}"
+        ) from exc
+
+
+def record_exclusion(store: ProfileStore, exclusion: Exclusion) -> Path:
+    """Keep a topic the candidate ruled out, so every later search leaves it out.
+
+    Idempotent on `about`: saying it again replaces the row and never doubles
+    it, and the candidate's latest words are the ones quoted back.
+    """
+    kept = [e for e in load_exclusions(store) if e.about != exclusion.about]
+    return store.write_json([e.model_dump() for e in (*kept, exclusion)], *EXCLUSIONS_FILE)
+
+
+def ruled_out_by(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple[str, ...]:
+    """The `about` of every exclusion this advert trips, in the order stated."""
+    return tuple(e.about for e in exclusions if matches(candidate, e))
+
+
 def resurfaced(
     presentations: Sequence[Presentation], exclusions: Sequence[Exclusion], *, cycle: int
 ) -> list[Resurfaced]:
@@ -432,23 +476,58 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+def _record(argv: list[str]) -> int:
+    """`record --handle H --about facet:value --words "…" [--cycle N] [--root DIR]`."""
+    import argparse
+
+    from integral.identity import default_profiles_root
+
+    parser = argparse.ArgumentParser(prog="integral.sourcing_exclusions record")
+    parser.add_argument("--handle", required=True)
+    parser.add_argument("--about", required=True, help="<facet>:<value>, e.g. sector:banking")
+    parser.add_argument("--words", required=True, help="what the candidate actually said")
+    parser.add_argument("--cycle", type=int, default=1)
+    parser.add_argument("--root", type=Path, default=None)
+    args = parser.parse_args(argv)
+    store = ProfileStore(args.root or default_profiles_root(), args.handle)
+    exclusion = Exclusion(about=args.about, stated_at_cycle=args.cycle, words=args.words)
+    path = record_exclusion(store, exclusion)
+    print(f"recorded {exclusion.about} -> {path}")
+    return 0
+
+
 def _main(argv: list[str]) -> int:
-    """`python -m integral.sourcing_exclusions [path]` → T90's gate evidence."""
+    """`python -m integral.sourcing_exclusions [path]` → T90's and T203's gate evidence.
+
+    `record …` is the producer: the conversation keeps a topic the candidate
+    ruled out, so the next `source()` leaves it out.
+
+    T203's measurement runs in a **subprocess** of its own module rather than an
+    import: it reads the committed adverts, and this module is on the serving
+    path, which may neither import a corpus reader nor launder one.
+    """
+    if len(argv) > 1 and argv[1] == "record":
+        return _record(argv[2:])
+    import subprocess
+
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
     measured = write_evidence(Path(positional[0]) if positional else DEFAULT_EVIDENCE_PATH)
     print(json.dumps(measured, ensure_ascii=False))
     for failure in measured["failures"]:
         print(failure, file=sys.stderr)
-    if measured["restated_exclusions_resurfaced"]:
+    live_args = [str(Path(positional[0]).with_name("T203.json"))] if positional else []
+    live = subprocess.run(
+        [sys.executable, "-m", "integral.exclusion_live_round", *live_args], check=False
+    ).returncode
+    if measured["restated_exclusions_resurfaced"] or live == 1:
         return 1
-    if measured["gate_status"] == "unmeasured":
+    if measured["gate_status"] == "unmeasured" or live == 3:
         print(
-            "restated_exclusions_resurfaced: UNMEASURED — nothing was shown, so nothing "
-            "resurfaced. Not a pass and not a fail.",
+            "UNMEASURED — nothing was shown, so nothing resurfaced. Not a pass and not a fail.",
             file=sys.stderr,
         )
         return 3
-    return 0
+    return live
 
 
 if __name__ == "__main__":  # pragma: no cover
