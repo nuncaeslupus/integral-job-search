@@ -1,0 +1,12 @@
+{
+  "rows": {
+    "0": {
+      "verdict": "refused",
+      "why": "The advert publishes no salary — Remotive prints its `Salary` label with an empty value (\"Salary -\"). The figure the scan found, \"paid out over $11M to our engineers\", is the employer's marketing copy about total historical payouts, and is not this job's pay. The page also carries $120–$170/hr and $90–$150/hr under \"Similar Remote Jobs\"; those are *other* adverts' rates, and the connector's detail fields already exclude that block, which is why the scan does not see them. Reading any of the three would attach a number to this offer that nobody offered for this job."
+    },
+    "1": {
+      "verdict": "refused",
+      "why": "Same advert, same refusal: this package commits one `fixture/detail.html`, so both rows are measured against it. See row 0. That the two verdicts are one measurement is what `detail_rows_sharing_one_fixture` reports."
+    }
+  }
+}

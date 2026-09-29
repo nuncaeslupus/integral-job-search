@@ -161,14 +161,44 @@ list:
     # asserted (and this schema has no vocabulary for a constant anyway). The
     # detail page states it properly, in microdata; see below.
     #
-    # No `salary_*` here either, and this is the expensive one to get wrong.
-    # `span.salary` carries the whole band as ONE string — "45.000 € - 55.000 €"
-    # — and nothing in this grammar can split it. Mapping it to `salary_min`
-    # would hand `_as_float` a string with a dash and two euro signs; that
-    # returns `None`, so `Salary(stated=True)` would be recorded with no
-    # numbers at all: an advert claiming to state a salary it does not.
-    # The detail page publishes min and max as separate schema.org elements,
-    # which is where the numbers actually come from.
+    # The band. **The note this replaces was wrong**, and the correction is the
+    # reason the fields below exist. It said `span.salary` "carries the whole
+    # band as ONE string … and nothing in this grammar can split it", and
+    # pointed at the detail page's schema.org `minValue`/`maxValue` as where
+    # the numbers actually come from. Both halves fail now:
+    #
+    #  * T132 added the `take:` vocabulary, so the grammar *can* split it.
+    #    Measured against `fixture/list.html` on 2026-09-22: `span.salary`
+    #    holds "45.000 € - 55.000 €", `_numbers_in` reads [45000.0, 55000.0],
+    #    and `range_low`/`range_high`/`currency` return 45000 / 55000 / EUR.
+    #  * **The detail fields were unreachable.** `source()` fetches an advert's
+    #    own page only when the list row could not build an offer by itself
+    #    (`sourcing.py:1138`), and every row here builds — this connector maps
+    #    `title`, `company` and `text` on the list. So the `salary_min`,
+    #    `salary_max`, `salary_currency` and `salary_period` declared under
+    #    `detail:` below never ran on a single row. The band was deferred to a
+    #    page nothing opens, which is how a connector reads as handling salary
+    #    while publishing none: the only case of it in this library.
+    #
+    # The detail block keeps its four fields — they are correct, and they are
+    # what a run that *does* reach an ad page reads — but they are no longer
+    # the answer to where this board's numbers come from.
+    #
+    # KNOWN CEILING — no period on the list route. The detail block reads
+    # schema.org's `unitText` (YEAR); `span.salary` states none, and the
+    # grammar has no vocabulary for a constant. `presentation` prints a
+    # periodless band with no "/year" suffix and `bulk_filter._below_pay_floor`
+    # refuses to measure one against a floor, so nothing claims a period the
+    # card did not state.
+    salary_min:
+      css: "span.salary"
+      take: range_low
+    salary_max:
+      css: "span.salary"
+      take: range_high
+    salary_currency:
+      css: "span.salary"
+      take: currency
 
 # Proven, not merely declared: `fixture/detail.html` is a real ad page and every
 # selector below matched something in it (`check_fixture` refuses a detail block

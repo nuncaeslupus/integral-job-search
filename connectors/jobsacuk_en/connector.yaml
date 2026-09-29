@@ -123,7 +123,9 @@ list:
     # salary_period.
     #
     # The board does publish both on the result card, and it was worth wanting.
-    # It does not publish either in a form this grammar can address:
+    # Neither is in a form a `take:` member can cut — the location has no
+    # selector at all, and the band comes as one labelled string. Only the band
+    # has a way out of that, `salary_text` at the end of this note:
     #
     #   location   `<div>Location:\n            Oxford\n        </div>` — an
     #              element with no class, no id and no attribute. This grammar
@@ -149,14 +151,34 @@ list:
     #              (returns None), so mapping the band to either would store
     #              nothing useful at best; mapping it to `salary_min` in the hope
     #              the parser copes would be a confidently wrong number feeding
-    #              straight into ranking. There is no `salary_raw` in
-    #              `ALLOWED_OFFER_FIELDS` to park the unsplit string in.
+    #              straight into ranking. That is why the four band fields stay
+    #              absent — and it is `salary_text` below, not a fifth one of
+    #              them, that reads this card.
     #
-    # So neither is declared. An absent field is a known gap; a wrong number is a
-    # ranking that lies. The upgrade path for both is the same and is in the
-    # engine, not here: a `text_before`/`strip_label` or an index on
-    # `FieldSelector` would make the card's label-plus-value shape addressable.
-    # Both values are still in the offer's `text`, where a reader can see them.
+    # So `location_raw` is not declared. An absent field is a known gap; a wrong
+    # number is a ranking that lies. Its upgrade path is in the engine, not here:
+    # a `text_before`/`strip_label` or an index on `FieldSelector` would make the
+    # card's label-plus-value shape addressable. The value is still in the
+    # offer's `text`, where a reader can see it.
+
+    # The band. `salary_text` says the element holds the phrase rather than a
+    # figure, and `sourcing._offer_from` reads it with
+    # `salary_recovery.band_in_text` — the reader `recover` already runs over
+    # advert bodies — before `build_offer` sees the row, so the label, the
+    # currency, the two numbers and the period all come out of the one string
+    # the paragraph above says no `take:` member can cut. Measured on this
+    # fixture's three cards:
+    #
+    #   "Salary: £35,681 to £39,424 per annum"                    35681–39424 GBP/year
+    #   "Salary: £87,465.51 to £127,834.20 A taxable annual …"    87465.51–127834.20 GBP/year
+    #   "Salary: Up to £2,206 per module (dependent on class size)" refused
+    #
+    # The third is the reason this is safe rather than merely wider: a per-module
+    # rate is not an annual band, the reader finds no period it recognises and
+    # returns nothing, and the row stays silent instead of recording £2,206 as a
+    # salary. Fail-closed is the property being kept, not traded.
+    salary_text:
+      css: ".j-search-result__info"
 
 detail:
   # Proven, not merely declared: `https://www.jobs.ac.uk/job/DST601/research-

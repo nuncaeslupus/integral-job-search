@@ -55,10 +55,53 @@ list:
     text:
       css: "aside.tw-w-full"
 
-# No `salary_min`/`salary_max` on purpose. The board prints the range as one
-# string — "105 – 115 PLN / h", "20 000 – 26 000 PLN / mth" — and `_as_float`
-# returns `None` on both halves, while `build_offer` would still construct
-# `Salary(stated=True)` because a salary key is present. A salary that claims to
-# be stated and carries no numbers is worse than no salary at all: the ranking
-# reads `stated` and the candidate reads nothing. The range stays inside `text`,
-# where it is true.
+    # The band. **The note this replaces was wrong**, and the way it was wrong
+    # is worth keeping: it said the board "prints the range as one string … and
+    # nothing in this grammar can split it", so it declared no salary field at
+    # all. That was true when it was written and false since T132 added the
+    # `take:` vocabulary — and because it read as a settled refusal rather than
+    # as a dated measurement, nobody re-ran it. A board whose entire reason for
+    # being in this library is that every advert publishes a band was
+    # contributing no bands.
+    #
+    # Measured against `fixture/list.html` on 2026-09-22, through
+    # `<nfj-posting-item-salary>` (an Angular component element; the grammar's
+    # tag selector addresses it like any other):
+    #
+    #   [0] "105 – 115 PLN / h"           -> min 105  max 115  PLN
+    #   [2] "35 – 43 USD / h"             -> min 35   max 43   USD
+    #   [1] "33 000 – 45 000 PLN / month" -> refused, and correctly
+    #
+    # The refusal is the design working, not a gap left to close. A space is
+    # not a thousands separator in `_numbers_in`, so "33 000 – 45 000" reads as
+    # *four* numbers (33, 0, 45, 0) and `_take`'s exactly-two rule answers
+    # `None`. Teaching `_NUMBER` that a space separates thousands would merge an
+    # unseparated pair — "105 115" — into 105115: the same 1000x error arriving
+    # from the other side, and that one reaches a ranking wearing `stated=True`
+    # instead of reaching it as nothing. `salary_currency` still resolves to PLN
+    # on that row, which is what makes the refusal total: `build_offer`
+    # constructs a `Salary` only when a number survived, so the row keeps its
+    # band inside `text` and claims nothing.
+    #
+    # KNOWN CEILING — no period, and both readable rows are hourly. The grammar
+    # has no `take` that cuts a period out of free text and `h` is not a word
+    # `normalize_period`'s closed table accepts, so this connector cannot
+    # declare `salary_period`. A band with no period is bounded as annual on
+    # every route (`build_offer`, as `salary_recovery._band_defect` does for a
+    # recovered one), and `105 – 115` / `35 – 43` fall outside it: these two
+    # rows are REFUSED, with the reason written in `fixture/salary.json`, and
+    # they read again the day a period `take` exists. They used to read with
+    # `period=None`, which `bulk_filter._below_pay_floor` skips and
+    # `presentation` prints with no unit — an hourly wage shown as a bare
+    # number. The other hazard stands for whoever wires it: `pay_dominance`
+    # compares on currency alone, so a periodless band that did get through
+    # would rank an hourly PLN band against a monthly one.
+    salary_min:
+      css: "nfj-posting-item-salary"
+      take: range_low
+    salary_max:
+      css: "nfj-posting-item-salary"
+      take: range_high
+    salary_currency:
+      css: "nfj-posting-item-salary"
+      take: currency

@@ -239,35 +239,41 @@ list:
     text:
       css: "p.ij-OfferCardContent-description-description"
 
-    # ------------------------------------------------------------------
-    # salary_min / salary_max / salary_currency / salary_period: DELIBERATELY
-    # ABSENT. This is the one field on this board that can do real harm.
-    # ------------------------------------------------------------------
-    # The card does carry pay, in `span.ij-OfferCardContent-description-salary-info`,
-    # and the temptation is to map it to `salary_min`. Measured values:
+    # The band, when the employer states one: "44.000 € - 50.000 € Bruto/año"
+    # — a range, a currency and a period in one unsplittable string, in one
+    # element. Measured values across the fixture:
     #
     #   "44.000 € - 50.000 € Bruto/año"
-    #   "26.000 € - 30.000 € Bruto/año"
+    #   "36.000 € - 45.000 € Bruto/año"
     #
-    # That is a *range*, a currency and a period in one unsplittable string,
-    # in one element. The schema has no selector that can cut it — there is no
-    # separate `minValue`/`maxValue` markup to point at, and the grammar has
-    # no combinators or text operations. Mapping it would hand `_as_float`
-    # `"44.000 € - 50.000 € Bruto/año"`, which returns `None` (it refuses
-    # anything it cannot resolve unambiguously) — while `build_offer` would
-    # still construct `Salary(min=None, max=None, stated=True)`. The offer
-    # would then claim the employer stated a salary and record no number: a
-    # lie the ranking reads, and one nothing downstream can detect.
+    # `salary_min` is still DELIBERATELY ABSENT and the reason stands: there is
+    # no separate `minValue`/`maxValue` markup to point at, and the grammar has
+    # no combinators or text operations, so mapping this element to `salary_min`
+    # would hand `_as_float` the whole string. It returns `None` — it refuses
+    # what it cannot resolve unambiguously — while `build_offer` would still
+    # construct `Salary(min=None, max=None, stated=True)`: an offer claiming the
+    # employer stated a band and recording no number, which the ranking reads
+    # and nothing downstream can detect.
     #
-    # An absent salary is honest and ranks neutrally; a wrong one is silent
-    # and permanent. So no salary field is mapped.
+    # What changed is that the string no longer has to be cut by a selector.
+    # `salary_text` says "this element holds the phrase, not a figure", and
+    # `sourcing._offer_from` reads it with `salary_recovery.band_in_text` — the
+    # same reader `recover` already runs over advert bodies — before
+    # `build_offer` sees it. Measured on this phrase: 44000–50000 EUR/year,
+    # period included, which no arrangement of `take:` members reads. A phrase
+    # the reader refuses yields nothing at all, so the fail-closed property the
+    # paragraph above was protecting is kept rather than traded away.
     #
-    # Checked for the structured escape hatch and it is not there: the detail
-    # pages carry **no** schema.org `JobPosting` — zero `application/ld+json`
-    # blocks, zero `itemprop` attributes, zero occurrences of the string
-    # `JobPosting` (measured on two adverts). There is nothing structured to
-    # read the range out of. The upgrade path is a `split`/`regex` facility on
-    # `FieldSelector`, or the board emitting microdata; not this file.
+    # Present on 2 of the 3 fixture rows and absent on the third, which is this
+    # board's own state: most Spanish IT adverts publish no band. A row without
+    # one yields no `salary_text`, so no salary, rather than a guess.
+    #
+    # The structured escape hatch is still not there, and that note is worth
+    # keeping: the detail pages carry **no** schema.org `JobPosting` — zero
+    # `application/ld+json` blocks, zero `itemprop` attributes, zero occurrences
+    # of the string `JobPosting` (measured on two adverts).
+    salary_text:
+      css: "span.ij-OfferCardContent-description-salary-info"
 
 # ---------------------------------------------------------------------------
 # No `detail:` block — measured, not skipped

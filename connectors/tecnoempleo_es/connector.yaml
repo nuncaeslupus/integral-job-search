@@ -179,6 +179,23 @@ list:
     # a list-only parse still yields one. The detail body overrides it.
     text:
       css: "span.hidden-md-down.text-gray-800"
+    # The band, when the employer states one: "30.000€ - 36.000€ b/a", where
+    # `b/a` is *bruto anual*. It sits in the mobile line as a bare text node
+    # after a `<br>`, sharing its span with the place name and the posting
+    # date — "Málaga (Híbrido) - 28/08/2026 30.000€ - 36.000€ b/a" is what
+    # the whole element reads, and `take: range_low` counts five numbers there
+    # and refuses. `last_text_node` is what separates the band from the date
+    # (the `<br>` is a text-node boundary), and `salary_text` is what says the
+    # result is a phrase to read rather than a figure: `band_in_text` returns
+    # 30000-36000 EUR/year from it, period included, which no arrangement of
+    # `take:` members can.
+    #
+    # Present on 2 of the 3 fixture cards and absent on the third, which is the
+    # board's own state: most Spanish IT adverts publish no band at all. A card
+    # without one yields no `salary_text`, so no salary, rather than a guess.
+    salary_text:
+      css: "span.d-block.d-lg-none"
+      take: last_text_node
 
 # Verified on three different adverts fetched 2026-08-30 — an employer-branded
 # one (Arelance) and two anonymised aggregator ones (GFT, and a Barcelona role)

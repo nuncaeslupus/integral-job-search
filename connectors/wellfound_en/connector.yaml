@@ -177,7 +177,28 @@ list:
     # Canada" for the rest. The detail block below carries a location that is
     # unambiguously a location.
     #
-    # ## No salary anywhere — see the detail block for the measurement.
+    # ## Salary — read from the card, whose band is the row's own.
+    #
+    # The card writes compensation as ONE string, `$70k – $76k • No equity`, in
+    # the first `span.pl-1.text-xs` when the role states one (the trap above is
+    # that this same selector lands on the *location* span when it does not).
+    # T132's `take` vocabulary reads that string as a band: `range_low` and
+    # `range_high` demand exactly two figures and `currency` exactly one token,
+    # and each fails closed, so a card with no compensation — whose first span
+    # is a location — yields nothing and no `Salary` is built. `k` and the U+2013
+    # dash are handled by `_numbers_in`; "No equity" carries no digit. Before
+    # this the detail page's `Salary: $76,000 Per Annum` was recovered from the
+    # body instead, which is the top of the band and not the band: a card
+    # stating $70k-$76k read as 76000 with no minimum (T200, second reader).
+    salary_min:
+      css: "span.pl-1.text-xs"
+      take: "range_low"
+    salary_max:
+      css: "span.pl-1.text-xs"
+      take: "range_high"
+    salary_currency:
+      css: "span.pl-1.text-xs"
+      take: "currency"
 
 # Declared because it was fetched, read and verified on three different
 # adverts, not because a detail page exists. `/jobs/4550780-python-developer`
@@ -214,27 +235,7 @@ detail:
     # the city.
     location_raw:
       css: "a.font-normal.text-black.text-sm.underline"
-    # ## No salary_min / salary_max / salary_currency / salary_period. On purpose.
-    #
-    # Wellfound publishes compensation prominently and it would be the single
-    # most valuable thing to map — which is exactly why getting it wrong here
-    # would do the most harm. It is not mappable. Both the list card and the
-    # detail header write it as ONE string:
-    #
-    #     "$200k – $250k"                 (detail header <li>, advert 4617952)
-    #     "$70k – $76k • No equity"       (list card span, advert 4550780)
-    #
-    # One element, so min and max cannot be separated; `$` and `k` and a U+2013
-    # en dash, none of which `_as_float` parses. Mapping that string to
-    # `salary_min` returns `None` from `_as_float` while `build_offer` still
-    # constructs `Salary(stated=True)` — an offer that claims the employer
-    # stated a salary and carries no number. That is strictly worse than no
-    # salary at all, because ranking reads the field. So it is omitted, and the
-    # figures stay where they are honest: inside `text`, which a reader sees.
-    #
-    # The trailing "• No equity" is a second reason. `ALLOWED_OFFER_FIELDS` has
-    # no vocabulary for equity, and there is no salary field it could be
-    # smuggled into without misstating what the employer said.
+    # No salary field on the detail: the card carries the band (see the list block).
     #
     # ## No `company` on the detail page either — it would overwrite a good value.
     #
