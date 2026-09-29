@@ -79,3 +79,9 @@ The gate needs a deliberate break in the T45 style: disable one detector and
 require `capture_misses` to rise **and name the turn it missed**. A silent
 capture mechanism whose own failures are silent is the thing being built here,
 so its check cannot be one that passes by doing nothing.
+
+## Folded in by T188 (test-mode note, session 26470ef3, step-07-sourcing, note 9)
+
+> If you dont have dimensions from me, maybe you should ask me about them to fill those holes instead of not using them because they are empty.
+
+The same gap from the other side: an empty dimension is left empty rather than elicited. Capturing what is said and asking for what is missing belong to one mechanism.
