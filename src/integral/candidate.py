@@ -56,7 +56,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar, Literal, cast, get_args
+from typing import Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -210,6 +210,13 @@ class Location(ConstraintField):
     Deliberately scoped to *within* the candidate's own country — a job in a
     different country is `Relocation`'s question, not this one, so the two
     fields do not both have an opinion about the same offer.
+
+    Except under a stated `commutable_regions`, which governs every on-site
+    offer the advert does not flag as a move, abroad as at home. A candidate who
+    would move to Poland is still not shown an unflagged Kraków vacancy, just
+    as one who would move anywhere is refused an unflagged Madrid one (#550).
+    Deferring to `Relocation` there would present that vacancy to a candidate
+    whose relocation is unstated too.
     """
 
     country: str | None = _country_field(required=False)
@@ -561,8 +568,10 @@ class Uncomparable:
     one, and T201 measured the other direction on a live candidate who cannot
     relocate — 45 Madrid vacancies presented as reachable.
 
-    **Only `_violates_location` returns this today**, and the type widening on
-    `_CHECKS` should not be read as a claim otherwise. `_violates_pay_country`
+    **Only `_violates_location` returns this today**, plus `relocation` and
+    `reach` through `_read_either_way` where a commute radius cannot say whether
+    the job means moving — and the type widening on `_CHECKS` should not be read
+    as a claim otherwise. `_violates_pay_country`
     and `_violates_tax_country` still clear on an absent advert-side value, as
     do `_violates_languages` and `_violates_salary`. That is the same
     fail-open, in places where it costs a candidate less, and closing it is
@@ -851,6 +860,42 @@ def _violates_reach(
     return None
 
 
+def _read_either_way(
+    check: Callable[[Any, OfferFacts, str | None], str | None],
+    value: Any,
+    offer: OfferFacts,
+    location: Location | None,
+    home_country: str | None,
+) -> str | Uncomparable | None:
+    """`relocation` or `reach`, answered only where the answer is decided.
+
+    `home_country=None` beside a stated radius means the radius could not say
+    whether this job means moving (see `filter_hard_constraints`). The checker
+    is then put the question both ways — moving to `offer.country`, and not
+    moving — and its verdict is reported only if the two agree. Where they
+    disagree the answer is a guess, and a guessed "satisfied" is what `annotate`
+    turned into "nothing in this advert conflicts" (#574's reader, F3), so it is
+    withheld the way `_violates_location` withholds (#547) rather than reported
+    as decided (`HardFilterResult.outcome_for`). Where they agree nothing was
+    guessed: a candidate who would move to Poland is satisfied by a Polish job
+    either way.
+    """
+    verdict = check(value, offer, home_country)
+    if home_country is not None or location is None:
+        return verdict
+    moving = check(value, offer, location.country)
+    if verdict is not None and moving is not None and verdict != moving:
+        # Refused either way, for different reasons: name both, not the guess.
+        return f"{verdict}; if it means moving, {moving}"
+    if (verdict is None) == (moving is None):
+        return verdict
+    where = f"in {offer.region}, {offer.country}" if offer.region else f"in {offer.country}"
+    return Uncomparable(
+        f"is on site {where}, and whether that means moving turns on a travel radius "
+        f"({', '.join(location.commutable_regions)}) that cannot place it across a border"
+    )
+
+
 # One checker per pinned field, in the same order as `FIELD_MODELS`. A checker
 # is only ever called with a field whose `state` is `stated` — see
 # `filter_hard_constraints` — so none of them branch on `state` themselves.
@@ -918,7 +963,9 @@ def filter_hard_constraints(
         # second reader, N6: `relocation: no` read "satisfied" over a Kraków
         # vacancy it could refuse). A foreign offer with no region, or whose
         # region's name is in the radius, is undecidable across the border and
-        # stays with `_violates_location`'s `unplaced` (#550).
+        # stays with `_violates_location`'s `unplaced` (#550) — and so does
+        # `relocation` / `reach` wherever their answer turns on it
+        # (`_read_either_way`).
         home_country = (
             location.country
             if location is not None
@@ -934,9 +981,9 @@ def filter_hard_constraints(
                 # `reach` and `relocation` need more than their field's value —
                 # the candidate's own country, via `_needs_relocation` — so they
                 # are called directly rather than through `_CHECKS`.
-                _violates_reach(cast(Reach, value), offer, home_country)
+                _read_either_way(_violates_reach, value, offer, location, home_country)
                 if name == "reach"
-                else _violates_relocation(cast(Relocation, value), offer, home_country)
+                else _read_either_way(_violates_relocation, value, offer, location, home_country)
                 if name == "relocation"
                 else _CHECKS[name](value, offer),
             )
@@ -1350,6 +1397,72 @@ def probe_hard_filter() -> dict[str, Any]:
         "radius, for a candidate who will not relocate",
     )
 
+    # #574's reader, F3: a vacancy abroad the radius cannot place — no region,
+    # or a homonym of a radius entry. Whether it means moving is undecided, so
+    # a field whose answer turns on that is withheld with `location` rather than
+    # read "satisfied"; one whose answer does not (a mover to Poland, a reach
+    # spanning commute and relocate) is decided either way and must say so.
+    unplaceable = [
+        _good_offer(f"offer-abroad-unplaceable-{index}").model_copy(
+            update={"delivery": "onsite", "country": "PL", "region": region}
+        )
+        for index, region in enumerate((None, "Barcelona"))
+    ]
+    guesser = stays_put.model_copy(
+        update={"reach": Reach(state="stated", modes=("remote", "commute"))}
+    )
+    mover = stays_put.model_copy(
+        update={
+            "relocation": Relocation(state="stated", willingness="yes", destinations=("PL",)),
+            "reach": Reach(state="stated", modes=("remote", "commute", "relocate")),
+        }
+    )
+    guessed = filter_hard_constraints(guesser, unplaceable)
+    check(
+        not guessed.removed
+        and {(removal.offer_id, removal.field) for removal in guessed.unplaced}
+        == {
+            (offer.offer_id, field)
+            for offer in unplaceable
+            for field in ("location", "relocation", "reach")
+        },
+        "relocation or reach answered a move the commute radius cannot decide — a guess "
+        "reported as decided (#574's reader, F3)",
+    )
+    decided = filter_hard_constraints(mover, unplaceable)
+    check(
+        not decided.removed
+        and {(removal.offer_id, removal.field) for removal in decided.unplaced}
+        == {(offer.offer_id, "location") for offer in unplaceable},
+        "relocation or reach was withheld where both readings of the radius agree",
+    )
+    # #578's reader, F1 and F2: agreeing on a refusal is decided too, and the
+    # reason names both readings rather than the guessed one.
+    remote_only = filter_hard_constraints(
+        stays_put.model_copy(update={"reach": Reach(state="stated", modes=("remote",))}),
+        unplaceable,
+    )
+    check(
+        {(removal.offer_id, removal.field) for removal in remote_only.removed}
+        == {(offer.offer_id, "reach") for offer in unplaceable}
+        and all(
+            "'commute'" in removal.reason and "'relocate'" in removal.reason
+            for removal in remote_only.removed
+        ),
+        "reach withheld, or named only the guessed mode for, a vacancy both readings "
+        "of the radius refuse",
+    )
+    flagged = unplaceable[0].model_copy(
+        update={"offer_id": "offer-abroad-unplaceable-flagged", "requires_relocation": True}
+    )
+    flagged_result = filter_hard_constraints(stays_put, [flagged])
+    check(
+        [(removal.offer_id, removal.field) for removal in flagged_result.removed]
+        == [(flagged.offer_id, "relocation")]
+        and all(removal.field != "relocation" for removal in flagged_result.unplaced),
+        "relocation withheld a vacancy flagged as a move, which both readings refuse",
+    )
+
     # An offer both refused and unreadable records both, and resolves to the
     # refusal. Dropping the unreadable half is what let `annotate` report a
     # field it could not read as one it read and cleared.
@@ -1450,7 +1563,11 @@ def probe_hard_filter() -> dict[str, Any]:
 #: refused-and-unreadable offer whose withheld record was being discarded.
 #: -> 32 for #570's second reader, N6: relocation refusing a foreign on-site
 #: vacancy outside a commute radius for a candidate who will not move.
-MINIMUM_CASES = 32
+#: -> 34 for #574's reader, F3: relocation and reach withheld where the radius
+#: cannot decide the move, and not withheld where both readings agree.
+#: -> 36 for #578's reader, F1: a refusal both readings agree on is removed, not
+#: withheld, and names both modes when they differ.
+MINIMUM_CASES = 36
 
 
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
