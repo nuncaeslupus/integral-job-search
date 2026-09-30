@@ -44,6 +44,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from integral.candidate import CONSTRAINT_FIELD_NAMES
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer
 from integral.profile import EvidenceLog, ProfileError
@@ -416,6 +417,11 @@ def states_a_refusal(text: str) -> bool:
     return bool(_REFUSAL.search(_fold(text.translate(_APOSTROPHES), " ")))
 
 
+def _states_pinned_fields(dimensions: Sequence[str]) -> bool:
+    """Whether a row states only T24's pinned constraint fields — never a topic."""
+    return bool(dimensions) and set(dimensions) <= set(CONSTRAINT_FIELD_NAMES)
+
+
 class UnrecordedStatement(Strict):
     """One evidence row that rules a topic out and that no recorded exclusion covers."""
 
@@ -427,7 +433,8 @@ class UnrecordedStatement(Strict):
 def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
     """The live rows of `STATEMENT_STEPS` that refuse something no exclusion matches.
 
-    Every `constraint`-kind row counts, whatever its words; other kinds need the cue.
+    Every `constraint`-kind row counts, whatever its words, except one stating only
+    T24's pinned fields, which is never a topic; other kinds need the cue.
 
     "Covered" means a recorded exclusion `matches` the row's own words, so a
     partial backfill lists only what is left. A row naming several topics
@@ -440,9 +447,17 @@ def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...
     for row in EvidenceLog(store).effective_rows():
         if row.step not in STATEMENT_STEPS:
             continue
-        # A `constraint` row is the candidate saying what rules a job out, whatever
-        # the words: a bare list ("defensa, apuestas, tabacos, bancos") has no cue.
-        # The cue is only for the other kinds, where it tells a refusal from a fact.
+        # A row stating one of T24's pinned fields (salary, location, relocation, …)
+        # is never a topic: step 2 writes one per field on every profile, `source()`
+        # applies them as constraints, and no `record` can cover one — listed, it
+        # would keep the backfill loop from ever reaching exit 0. Its quote is
+        # skipped even when it carries a cue ("no menos de 40k", "no me reubico").
+        if _states_pinned_fields(row.dimensions):
+            continue
+        # Any other `constraint` row is the candidate saying what rules a job out,
+        # whatever the words: a bare list ("defensa, apuestas, tabacos, bancos") has
+        # no cue. The cue is only for the other kinds, where it tells a refusal
+        # from a fact.
         if row.kind != "constraint" and not states_a_refusal(row.text):
             continue
         said = Candidate(offer_id=row.id, text=row.text)
@@ -716,10 +731,16 @@ def _unrecorded(argv: list[str]) -> int:
         # Silence here reads as "backfill done", the one thing a missing profile is not.
         print(f"unrecorded: no identified profile {args.handle!r}: {exc}", file=sys.stderr)
         return 2
-    rows = unrecorded_statements(store)
+    try:
+        rows = unrecorded_statements(store)
+        warning = backfill_warning(store)
+    except (IdentityError, OSError, ProfileError) as exc:
+        # An unreadable exclusions file or evidence log cannot answer; exit 1
+        # would read as "rows left", and the checkpoint exits 2 on the same file.
+        print(f"unrecorded: could not be computed: {exc}", file=sys.stderr)
+        return 2
     for row in rows:
         print(row.model_dump_json())
-    warning = backfill_warning(store)
     if warning:
         print(warning, file=sys.stderr)
     return 1 if rows else 0

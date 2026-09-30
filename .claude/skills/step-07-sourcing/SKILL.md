@@ -39,7 +39,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `sourcing` for 
       --term betting --term gambling --term apostes
   ```
 
-  Re-run `unrecorded` until it exits 0. A row it lists that rules out no topic (a pay floor, "no relocation") is left as it is — the cue is broad on purpose. Tell the candidate in one line what is now filtered; never record a topic they did not say.
+  Re-run `unrecorded` until it exits 0. Step 2's pinned fields (salary, location, relocation, …) are never listed. A row it does list that rules out no topic (a pay floor said in passing) is left as it is — the cue is broad on purpose. Tell the candidate in one line what is now filtered; never record a topic they did not say.
 - **Deduplication is by similarity, not by hash** — the same job at two boards is rarely byte-identical.
 - Where a source needs a login, drive the candidate's **own browser session** rather than storing credentials — nothing to leak, nothing to rotate.
 
@@ -271,7 +271,8 @@ It also reports `exclusions_recorded`, `unrecorded_exclusion_statements` and
 `exclusion_backfill_warning` (also printed to stderr): evidence rows in which the candidate
 ruled something out that no recorded exclusion matches. Every `constraint`-kind row in those
 steps is listed regardless of wording (a bare list such as "defensa, apuestas, tabacos, bancos"
-has no cue word); only other kinds need a refusal cue. The warning does not change the exit
+has no cue word), except a row stating only step 2's pinned fields (salary, location,
+relocation, …), which is never a topic and never listed; only other kinds need a refusal cue. The warning does not change the exit
 code, but a `search/exclusions.json` that does not parse now makes the checkpoint exit 2 — the
 same file `source()` refuses, so the two agree. A row counts as covered once **any** recorded
 exclusion matches any word in it, so keep each `--term` specific to its topic (`seguridad` alone

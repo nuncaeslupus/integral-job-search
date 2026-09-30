@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from integral import sourcing_exclusions as se
+from integral.candidate import CONSTRAINT_FIELD_NAMES
 from integral.identity import ProfileStore, create_profile
 from integral.sourcing_exclusions import (
     Exclusion,
@@ -281,3 +282,63 @@ def test_the_checkpoint_counts_what_is_recorded_and_quiets_to_a_note(root: Path)
     result = _drive_step_7_checkpoint(root, store.handle)
     assert result["exclusions_recorded"] == 2
     assert result["exclusion_backfill_warning"].startswith("note:")
+
+
+# Round 2 of the second reader: step 2 writes a `constraint` row for each of T24's
+# pinned fields on every profile, and no topic can cover one — so listing them
+# left the backfill loop unable to reach exit 0.
+
+
+def _pinned_row(n: int, fields: list[str], quote: str) -> dict[str, Any]:
+    text = json.dumps({"quote": quote, "value": {"stated": True}}, ensure_ascii=False)
+    return _row(n, "constraints", text, dimensions=fields)
+
+
+@pytest.mark.parametrize("field", CONSTRAINT_FIELD_NAMES)
+@pytest.mark.parametrize("quote", ["Barcelona, 40k brutos", "no menos de 40k, no me reubico"])
+def test_a_pinned_field_row_is_never_a_topic(root: Path, field: str, quote: str) -> None:
+    store = _profile(root, [_pinned_row(1, [field], quote)])
+    assert unrecorded_statements(store) == ()
+    assert backfill_warning(store) is None
+
+
+def test_a_row_naming_a_pinned_field_and_another_dimension_is_still_listed(root: Path) -> None:
+    store = _profile(root, [_pinned_row(1, ["salary", "sector"], "nada de banca")])
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+
+
+def test_the_backfill_closes_on_a_profile_that_finished_step_2(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rows = [
+        _pinned_row(1, ["salary"], "no menos de 40k brutos"),
+        _pinned_row(2, ["location"], "vivo en Barcelona"),
+        _pinned_row(3, ["relocation"], "no me reubico"),
+        _row(4, "constraints", "defensa, apuestas"),
+    ]
+    store = _profile(root, rows)
+    argv = ["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]
+    assert se._main(argv) == 1
+    listed = [json.loads(line)["evidence_id"] for line in capsys.readouterr().out.splitlines()]
+    assert listed == ["ev-000004"]
+    for topic in ("defensa", "apuestas"):
+        record_exclusion(store, Exclusion(about=f"sector:{topic}", stated_at_cycle=1, words=topic))
+    assert se._main(argv) == 0
+
+
+def test_the_unrecorded_cli_exits_2_on_a_corrupt_exclusions_file(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, _PRE_T203[:1])
+    store.write_json({"bad": 1}, *se.EXCLUSIONS_FILE)
+    assert se._main(["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]) == 2
+    assert "could not be computed" in capsys.readouterr().err
+
+
+def test_the_unrecorded_cli_exits_2_on_a_corrupt_evidence_log(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, _PRE_T203[:1])
+    store.path("profile", "evidence.jsonl").write_text("{not json\n", encoding="utf-8")
+    assert se._main(["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]) == 2
+    assert "could not be computed" in capsys.readouterr().err
