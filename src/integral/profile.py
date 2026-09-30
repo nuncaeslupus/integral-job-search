@@ -188,6 +188,35 @@ class EvidenceSubject(Strict):
         return self
 
 
+SkillLevel = Literal["none", "basic", "working", "strong", "expert"]
+
+
+class SkillStance(Strict):
+    """T219: what the candidate said about one technology, as data.
+
+    `integral.stack_fit` reads it over `cv/master.json`'s `skills` entry for
+    the same technology. `level` replaces the CV's level (the CV is a document
+    somebody wrote for employers, the statement is the candidate talking to
+    us), and "none" is a level the CV vocabulary cannot hold — *"Kubernetes no
+    sé cómo funciona"*. `averse` is a separate axis on purpose: *"odio Java"*
+    does not unlearn Java, so the CV's `working` stays true for an application
+    document while the ranking states a Java offer as a mismatch of preference.
+    The row's own `text` keeps the candidate's words; this is only what they mean.
+    `technology` must resolve through `integral.stack_fit.resolve_technology`,
+    which raises on a name it cannot place rather than let the stance go unread.
+    """
+
+    technology: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
+    level: SkillLevel | None = None
+    averse: bool | None = None
+
+    @model_validator(mode="after")
+    def _says_something(self) -> SkillStance:
+        if self.level is None and self.averse is None:
+            raise ValueError("a skill stance with neither a level nor an aversion says nothing")
+        return self
+
+
 class EvidenceRow(Strict):
     """One row of `profile/evidence.jsonl` — process specification §4.1.
 
@@ -221,6 +250,8 @@ class EvidenceRow(Strict):
     # Set only on a `retraction` row: the id of the row it suppresses (§4.1).
     retracts: str | None = None
     about: EvidenceSubject | None = None
+    # T219: set only on a `statement` about one technology — see `SkillStance`.
+    skill: SkillStance | None = None
 
     @model_validator(mode="after")
     def _check(self) -> EvidenceRow:
@@ -238,6 +269,8 @@ class EvidenceRow(Strict):
             raise ValueError(f"only a retraction row may set `retracts` (kind={self.kind})")
         if self.occurred_precision is not None and self.occurred_at is None:
             raise ValueError("occurred_precision without occurred_at says nothing")
+        if self.skill is not None and self.kind != "statement":
+            raise ValueError(f"only a statement row may carry a skill stance (kind={self.kind})")
         return self
 
     def canonical(self) -> str:
@@ -355,6 +388,7 @@ class EvidenceLog:
         disclosure: Disclosure = "private",
         retracts: str | None = None,
         about: EvidenceSubject | None = None,
+        skill: SkillStance | None = None,
     ) -> EvidenceRow:
         """Add one row. The only writer, and it never rewrites what is there."""
         if retracts is not None and not self._has(retracts):
@@ -372,6 +406,7 @@ class EvidenceLog:
             disclosure=disclosure,
             retracts=retracts,
             about=about,
+            skill=skill,
         )
         path = self.store.path(*EVIDENCE_PARTS)
         path.parent.mkdir(parents=True, exist_ok=True)

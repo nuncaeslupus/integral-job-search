@@ -24,7 +24,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `ranking` for t
 
 Extractions for the live offers, and `profile/constraints.json`. Weights are optional: without them the ranking is L1 and says so.
 
-**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` where a dimension is trait-side.
+**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` where a dimension is trait-side; `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T219).
 
 ## Protocol — the manner, not the mechanism
 
@@ -47,6 +47,34 @@ In this step that sounds like:
 
 - Never show what is unknown about an offer as neutral — an advert silent on hours is not an advert promising good ones.
 - Never assemble the card's prose a paragraph at a time by a model — it is a template filled from the normalised JSON.
+
+## The candidate's stack is data, not a question
+
+What the candidate knows is already on disk: `cv/master.json` (`skills` with levels,
+`experience`, `episodes`) and any skill statement they made — an evidence row with a
+`skill` stance. *"odio Java"* is `{technology: java, averse: true}`; *"Kubernetes no sé
+cómo funciona"* is `{technology: kubernetes, level: none}`. A statement overrides the
+CV's level (it is later, and said to us rather than to employers); aversion does not
+change the level, so the CV stays true for an application document.
+
+```python
+from integral.stack_fit import fits_for_store, summary_line
+
+stack = fits_for_store(store, offer_ids)
+ranking = rank(candidates, ..., stack=stack)       # carried under `stack_fit`, moves nothing
+line = summary_line(stack[offer_id])               # the card's stack line, from data
+```
+
+- Each card states the fit in the technology's own name — *"no consta en tu CV: Go,
+  TypeScript; nivel bajo: Kubernetes"*. A `mismatch` is part of the bad part the card's
+  one line must not hide.
+- Asking which technologies the candidate knows, or whether they built something, when
+  the CV already says so, tells them the tool did not read what they gave it — that is
+  the complaint this section exists for. The one stack question worth asking names a
+  technology in `missing`, where the CV is silent.
+- When the candidate states a level or an aversion, record it as a `statement` row with
+  `skill=SkillStance(...)`, their words in `text`. The next ranking reads it.
+- `unknown` means the advert named no technology — say so; it is not a fit.
 
 ## Record what was shown, and say what was held back
 
