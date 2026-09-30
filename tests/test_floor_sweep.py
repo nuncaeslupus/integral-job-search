@@ -13,8 +13,10 @@ is the separate, complementary check that today's actual tree is clean.
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -3979,3 +3981,116 @@ def check():
     measured = floor_sweep.measure(tmp_path)
     finding = next(f for f in measured["findings"] if f["name"] == "MINIMUM_TURNS")
     assert finding["reason"] == "population_on_dynamic_floor"
+
+
+# ---------------------------------------------------------------------------
+# T198: the live tree is analysed once per process, and a cache never hides a change.
+# ---------------------------------------------------------------------------
+
+_COMPLIANT_TREE = """
+ITEMS = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+MINIMUM_ITEMS = 10
+
+def measure(items=ITEMS):
+    if len(items) < MINIMUM_ITEMS:
+        raise SystemExit(1)
+"""
+
+
+def _count_analyses(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Start from an empty cache and record every real analysis at its entry point."""
+    monkeypatch.setattr(floor_sweep, "_ANALYSES", {})
+    real = floor_sweep._analyse
+    calls: list[Path] = []
+
+    def counting(src_dir: Path) -> dict[str, Any]:
+        calls.append(src_dir)
+        return real(src_dir)
+
+    monkeypatch.setattr(floor_sweep, "_analyse", counting)
+    return calls
+
+
+def test_the_live_tree_is_analysed_once_in_a_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _count_analyses(monkeypatch)
+    floor_sweep.measure()
+    floor_sweep.measure()
+    floor_sweep.write_evidence(tmp_path / "evidence.json")
+    floor_sweep.measure()
+    assert calls == [floor_sweep._SRC_DIR]
+
+
+def test_a_cached_analysis_still_sees_a_changed_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _count_analyses(monkeypatch)
+    _write(tmp_path, _COMPLIANT_TREE)
+    first = floor_sweep.measure(tmp_path)
+    assert first["floors_that_do_not_refuse_the_first_deletion"] == 0
+    assert floor_sweep.measure(tmp_path) == first
+    assert len(calls) == 1
+    # A floor with an undocumented margin: the same directory, different bytes.
+    _write(tmp_path, _COMPLIANT_TREE.replace("MINIMUM_ITEMS = 10", "MINIMUM_ITEMS = 3"))
+    second = floor_sweep.measure(tmp_path)
+    assert len(calls) == 2
+    assert second["floors_that_do_not_refuse_the_first_deletion"] == 1
+    assert second != first
+
+
+def test_a_byte_identical_copy_does_not_share_the_live_trees_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_analyse` depends on the path (`_THIS_FILE` identity), not only the bytes."""
+    calls = _count_analyses(monkeypatch)
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(floor_sweep._SRC_DIR, copy_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    floor_sweep.measure(copy_dir)
+    floor_sweep.measure()
+    assert [c.resolve() for c in calls] == [copy_dir.resolve(), floor_sweep._SRC_DIR]
+
+
+def test_a_returned_analysis_is_a_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _count_analyses(monkeypatch)
+    _write(tmp_path, _COMPLIANT_TREE)
+    first = floor_sweep.measure(tmp_path)
+    pristine = copy.deepcopy(first)
+    first["floors_that_do_not_refuse_the_first_deletion"] = 99
+    first["poison"] = True
+    assert floor_sweep.measure(tmp_path) == pristine
+
+
+def test_every_live_tree_caller_reaches_the_cache() -> None:
+    """Derived, not listed: over every top-level function callable with no arguments,
+    `_analyse` must be unreachable except through `measure`, the memoised entry."""
+    tree = ast.parse(Path(floor_sweep.__file__).read_text(encoding="utf-8"))
+    funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    calls = {
+        name: {
+            c.func.id
+            for c in ast.walk(f)
+            if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id in funcs
+        }
+        for name, f in funcs.items()
+    }
+
+    def reaches(start: str, target: str, banned: str) -> bool:
+        seen, todo = set(), [start]
+        while todo:
+            name = todo.pop()
+            if name == banned or name in seen:
+                continue
+            seen.add(name)
+            todo.extend(calls[name])
+        return target in seen
+
+    def no_args(f: ast.FunctionDef) -> bool:
+        a = f.args
+        return len(a.args) == len(a.defaults) and not [k for k in a.kwonlyargs if k.arg]
+
+    entries = [n for n, f in funcs.items() if no_args(f) and n != "_analyse"]
+    live = [n for n in entries if reaches(n, "_analyse", banned="")]
+    # denominator: measure, _main, write_evidence, write_prose_clearance_evidence, ...
+    assert len(live) >= 5, live
+    assert [n for n in live if reaches(n, "_analyse", banned="measure")] == []
