@@ -402,7 +402,9 @@ _REFUSAL = re.compile(
     r"don'?t|won'?t|descart\w*|avoid\w*|evit\w*|exclu\w*|rule[sd]?\s+out|rul\w+\s+out|"
     r"bastante|enough|prou|hart[oa]s?|fart[oa]s?|cansad\w*|tired|"
     r"odi\w*|detest\w*|hate\w*|hating|dislike\w*|niego|nego|refus\w*|ningun\w*|cap|cero|"
-    r"jamas|quemad\w*|away|done|sick|fed\s+up|paso\s+de)(?![0-9a-z])"
+    r"jamas|quemad\w*|away|done|sick|fed\s+up|paso\s+de|tampoc\w*|sense|menos|salvo|"
+    r"except\w*|but|rechaz\w*|reject\w*|rebutj\w*|vet[ao]\w*|fuera|can'?t|cannot|"
+    r"exclo\w*|avorre\w*)(?![0-9a-z])"
 )
 
 #: Typographic apostrophes, read as the ASCII one before the cue is matched.

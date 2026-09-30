@@ -150,6 +150,25 @@ def test_the_cue_hears_a_refusal_in_es_en_ca(text: str) -> None:
         "fed up with ecommerce",
         "I refuse to work for defence contractors",
         "ruling out defence",
+        # From #598's second second-reader report (F1): each missed before.
+        "tampoco apuestas",
+        "rechazo el tabaco",
+        "todo menos banca",
+        "salvo defensa",
+        "excepto apuestas",
+        "vetado: tabaco",
+        "defensa: fuera",
+        "I can\u2019t stand adtech",
+        "I cannot work in betting",
+        "anything but banking",
+        "reject defence",
+        "tampoc apostes",
+        "sense banca",
+        "exclou la banca",
+        "excloc la banca",
+        "excluyo la banca",
+        "rebutjo el tabac",
+        "m'avorreix el retail",
     ],
 )
 def test_the_cue_hears_the_wider_wordings_and_curly_apostrophes(text: str) -> None:
@@ -253,3 +272,12 @@ def test_a_corrupt_evidence_log_makes_the_checkpoint_main_exit_2(
         sys.modules.pop("_t217_main_checkpoint", None)
     assert code == 2
     assert "could not be computed" in capsys.readouterr().err
+
+
+def test_the_checkpoint_counts_what_is_recorded_and_quiets_to_a_note(root: Path) -> None:
+    store = _profile(root, _PRE_T203)
+    record_exclusion(store, Exclusion(about="sector:bancos", stated_at_cycle=1, words="bancos"))
+    record_exclusion(store, Exclusion(about="sector:fintech", stated_at_cycle=1, words="fintechs"))
+    result = _drive_step_7_checkpoint(root, store.handle)
+    assert result["exclusions_recorded"] == 2
+    assert result["exclusion_backfill_warning"].startswith("note:")

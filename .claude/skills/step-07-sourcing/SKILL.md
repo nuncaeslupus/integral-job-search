@@ -272,8 +272,11 @@ It also reports `exclusions_recorded`, `unrecorded_exclusion_statements` and
 ruled something out that no recorded exclusion matches. Every `constraint`-kind row in those
 steps is listed regardless of wording (a bare list such as "defensa, apuestas, tabacos, bancos"
 has no cue word); only other kinds need a refusal cue. The warning does not change the exit
-code — it is the backfill above left undone, and it is closed by recording the topics, not by
-editing the file.
+code, but a `search/exclusions.json` that does not parse now makes the checkpoint exit 2 — the
+same file `source()` refuses, so the two agree. A row counts as covered once **any** recorded
+exclusion matches any word in it, so keep each `--term` specific to its topic (`seguridad` alone
+would cover a row that also rules out `publicidad`). The warning is the backfill above left
+undone, and it is closed by recording the topics, not by editing the file.
 
 ## Gotchas
 
