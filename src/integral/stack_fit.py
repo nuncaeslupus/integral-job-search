@@ -1,4 +1,4 @@
-"""T217 — the candidate's stack against the offer's, stated from data.
+"""T219 — the candidate's stack against the offer's, stated from data.
 
 A real session on 2026-09-30 asked the candidate, at step 9, which technologies
 he knew and whether he had built agents. `cv/master.json` already said so — a
@@ -50,7 +50,7 @@ from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog, EvidenceRow, SkillStance
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T217.json"
+DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T219.json"
 DEFAULT_CASES_PATH = _REPO_ROOT / "tests" / "fixtures" / "stack_fit" / "cases.json"
 
 # The second reader committed 134 cases; a floor,
@@ -514,13 +514,13 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
 
 
 def _main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Measure T217's stack fit.")
+    parser = argparse.ArgumentParser(description="Measure T219's stack fit.")
     parser.add_argument("evidence", nargs="?", default=str(DEFAULT_EVIDENCE_PATH), type=Path)
     args = parser.parse_args(argv)
     measured = write_evidence(args.evidence)
     print(f"stack_fit_cases_disagreeing: {measured['stack_fit_cases_disagreeing']} (== 0)")
     if measured["gate_status"] != "measured":
-        print(f"T217 cannot be scored: {measured.get('reason', 'too few cases')}", file=sys.stderr)
+        print(f"T219 cannot be scored: {measured.get('reason', 'too few cases')}", file=sys.stderr)
         return 3
     for entry in measured["disagreeing_case_ids"]:
         print(f"  disagrees: {entry}", file=sys.stderr)

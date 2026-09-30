@@ -24,7 +24,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `ranking` for t
 
 Extractions for the live offers, and `profile/constraints.json`. Weights are optional: without them the ranking is L1 and says so.
 
-**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` where a dimension is trait-side; `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T217).
+**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` where a dimension is trait-side; `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T219).
 
 ## Protocol — the manner, not the mechanism
 

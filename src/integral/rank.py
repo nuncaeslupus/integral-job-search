@@ -393,7 +393,7 @@ def rank(
 ) -> dict[str, Any]:
     """`rankings/<run_id>.json` — spec §5.5, minus T19's `explanations`.
 
-    `stack` is T217's `integral.stack_fit.fits_for_store`: the candidate's CV
+    `stack` is T219's `integral.stack_fit.fits_for_store`: the candidate's CV
     and stated skills against each offer's named technologies. It is carried
     under `stack_fit` for the offers shown and moves nothing — stated, not
     scored, because pricing a stack match is a preference T10 does not hold.

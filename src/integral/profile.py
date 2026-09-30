@@ -192,7 +192,7 @@ SkillLevel = Literal["none", "basic", "working", "strong", "expert"]
 
 
 class SkillStance(Strict):
-    """T217: what the candidate said about one technology, as data.
+    """T219: what the candidate said about one technology, as data.
 
     `integral.stack_fit` reads it over `cv/master.json`'s `skills` entry for
     the same technology. `level` replaces the CV's level (the CV is a document
@@ -250,7 +250,7 @@ class EvidenceRow(Strict):
     # Set only on a `retraction` row: the id of the row it suppresses (§4.1).
     retracts: str | None = None
     about: EvidenceSubject | None = None
-    # T217: set only on a `statement` about one technology — see `SkillStance`.
+    # T219: set only on a `statement` about one technology — see `SkillStance`.
     skill: SkillStance | None = None
 
     @model_validator(mode="after")

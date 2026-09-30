@@ -783,7 +783,7 @@ Weights are optional: without them the ranking is L1 and says so.
 **Inputs.** `extractions/*`; `profile/constraints.json`;
 `profile/weights.json` — **optional**; `profile/traits.json` where a dimension
 is trait-side; `cv/master.json` and the skill statements in `evidence.jsonl`,
-which `integral.stack_fit` (T217) turns into each offer's stated stack fit — so
+which `integral.stack_fit` (T219) turns into each offer's stated stack fit — so
 the step never asks for a technology the CV already records.
 
 **Protocol.** No questions; this step presents. **Presentation is half the

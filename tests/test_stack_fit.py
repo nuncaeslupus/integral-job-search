@@ -1,4 +1,4 @@
-"""T217 — the candidate's CV stack reaches the ranking, and statements override it.
+"""T219 — the candidate's CV stack reaches the ranking, and statements override it.
 
 The correctness cases live in `tests/fixtures/stack_fit/cases.json`, written by
 a session other than the implementer from the task's spec; each one runs here
