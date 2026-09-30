@@ -389,8 +389,14 @@ def rank(
     at: str,
     currency: str | None = None,
     readings: Sequence[Reading] = (),
+    stack: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """`rankings/<run_id>.json` — spec §5.5, minus T19's `explanations`.
+
+    `stack` is T217's `integral.stack_fit.fits_for_store`: the candidate's CV
+    and stated skills against each offer's named technologies. It is carried
+    under `stack_fit` for the offers shown and moves nothing — stated, not
+    scored, because pricing a stack match is a preference T10 does not hold.
 
     `profile_revision` carries T6's whole `{rows, sha256}` rather than the
     spec example's bare digest, matching `annotation.Annotation`: the row
@@ -448,7 +454,7 @@ def rank(
         salaries,
     )
 
-    return {
+    ranking: dict[str, Any] = {
         "run_id": at,
         "profile_revision": revision.as_json(),
         "level": level,
@@ -466,6 +472,11 @@ def rank(
             if by_id[offer_id].unknown & set(dimensions)
         },
     }
+    if stack is not None:
+        ranking["stack_fit"] = {
+            offer_id: dict(stack[offer_id]) for offer_id in ordered if offer_id in stack
+        }
+    return ranking
 
 
 def _pay_before_the_alphabet(

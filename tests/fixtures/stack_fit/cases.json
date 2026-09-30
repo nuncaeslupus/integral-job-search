@@ -1,0 +1,2930 @@
+{
+  "cases": [
+    {
+      "id": "java-not-inside-javascript",
+      "rule": "R2",
+      "why": "R2: Java inside JavaScript does not name java.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Frontend work in JavaScript and TypeScript.",
+      "expected_named": [
+        "javascript",
+        "typescript"
+      ]
+    },
+    {
+      "id": "java-and-javascript-both",
+      "rule": "R2",
+      "why": "R2: standalone Java names java even when JavaScript is also present.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "We use Java on the backend and JavaScript in the browser.",
+      "expected_named": [
+        "java",
+        "javascript"
+      ]
+    },
+    {
+      "id": "java-slash-kotlin",
+      "rule": "R2",
+      "why": "R2: '/' is not a word character, so Java and Kotlin are whole names.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Services in Java/Kotlin.",
+      "expected_named": [
+        "java",
+        "kotlin"
+      ]
+    },
+    {
+      "id": "sql-not-inside-postgresql-mysql",
+      "rule": "R2",
+      "why": "R2: SQL inside PostgreSQL or MySQL does not name sql.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Experience with PostgreSQL and MySQL.",
+      "expected_named": [
+        "mysql",
+        "postgresql"
+      ]
+    },
+    {
+      "id": "sql-not-inside-nosql",
+      "rule": "R2",
+      "why": "R2: SQL inside NoSQL does not name sql.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "NoSQL document stores preferred.",
+      "expected_named": []
+    },
+    {
+      "id": "sql-standalone-with-postgres",
+      "rule": "R2",
+      "why": "R2: standalone SQL names sql; Postgres names postgresql (R1).",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Strong SQL, ideally on Postgres.",
+      "expected_named": [
+        "postgresql",
+        "sql"
+      ]
+    },
+    {
+      "id": "sql-after-hyphen-tsql",
+      "rule": "R2",
+      "why": "R2: '-' is not a word character, so SQL in T-SQL is not part of a longer word and names sql.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Writes T-SQL stored procedures.",
+      "expected_named": [
+        "sql"
+      ]
+    },
+    {
+      "id": "google-not-go",
+      "rule": "R2",
+      "why": "R2: Go inside Google does not name go.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Ex-Google engineers welcome.",
+      "expected_named": []
+    },
+    {
+      "id": "google-cloud-is-gcp-not-go",
+      "rule": "R2",
+      "why": "R1/R2: Google Cloud names gcp; Go inside Google names nothing.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "We deploy everything on Google Cloud.",
+      "expected_named": [
+        "gcp"
+      ]
+    },
+    {
+      "id": "golang-names-go-case-insensitive",
+      "rule": "R2",
+      "why": "R2/R3: Golang is its own unstarred name of go, so lowercase golang counts.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Backend services in golang.",
+      "expected_named": [
+        "go"
+      ]
+    },
+    {
+      "id": "cpp-and-csharp",
+      "rule": "R2",
+      "why": "R2: + and # at the edge belong to C++ and C#.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Hiring C++ and C# engineers.",
+      "expected_named": [
+        "cpp",
+        "csharp"
+      ]
+    },
+    {
+      "id": "cpp-csharp-dotnet-slashes",
+      "rule": "R2",
+      "why": "R2: C++, C# and .NET separated by '/' are each whole names.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Languages we use daily include C++/C#/.NET tooling.",
+      "expected_named": [
+        "cpp",
+        "csharp",
+        "dotnet"
+      ]
+    },
+    {
+      "id": "dotnet-at-sentence-end",
+      "rule": "R2",
+      "why": "R2: the leading '.' belongs to .NET; a trailing sentence period does not break it.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "We build on .NET.",
+      "expected_named": [
+        "dotnet"
+      ]
+    },
+    {
+      "id": "dotnet-word",
+      "rule": "R1",
+      "why": "R1: dotnet is a name of dotnet, case-insensitive (R3).",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Modern dotnet services.",
+      "expected_named": [
+        "dotnet"
+      ]
+    },
+    {
+      "id": "mongoose-not-mongo",
+      "rule": "R2",
+      "why": "R2: Mongo inside Mongoose is part of a longer word.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Data layer uses the Mongoose ORM.",
+      "expected_named": []
+    },
+    {
+      "id": "mongo-short-name",
+      "rule": "R2",
+      "why": "R1/R2: standalone Mongo names mongodb.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Mongo and Redis in production.",
+      "expected_named": [
+        "mongodb",
+        "redis"
+      ]
+    },
+    {
+      "id": "mongodb-full-name",
+      "rule": "R1",
+      "why": "R1: MongoDB names mongodb.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "MongoDB Atlas clusters.",
+      "expected_named": [
+        "mongodb"
+      ]
+    },
+    {
+      "id": "vue-js-not-javascript",
+      "rule": "R3",
+      "why": "R1/R3: Vue.js names vue; its lowercase js is not the starred JS.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Build the Vue.js SPA.",
+      "expected_named": [
+        "vue"
+      ]
+    },
+    {
+      "id": "vue-lowercase",
+      "rule": "R3",
+      "why": "R3: Vue is unstarred, so lowercase vue names vue.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Components written in vue 3.",
+      "expected_named": [
+        "vue"
+      ]
+    },
+    {
+      "id": "python3-digit-suffix",
+      "rule": "R2",
+      "why": "R2: digits are word characters, so Python in Python3 is part of a longer word.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Automation scripts in Python3.",
+      "expected_named": []
+    },
+    {
+      "id": "pyspark-names-spark",
+      "rule": "R1",
+      "why": "R1: PySpark is an unstarred name of spark, so lowercase pyspark counts (R3).",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Batch jobs in pyspark.",
+      "expected_named": [
+        "spark"
+      ]
+    },
+    {
+      "id": "typescript-not-javascript",
+      "rule": "R2",
+      "why": "R2: TypeScript names only typescript.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "TypeScript everywhere.",
+      "expected_named": [
+        "typescript"
+      ]
+    },
+    {
+      "id": "ecmascript-is-javascript",
+      "rule": "R1",
+      "why": "R1: ECMAScript names javascript.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Modern ECMAScript features.",
+      "expected_named": [
+        "javascript"
+      ]
+    },
+    {
+      "id": "swiftui-not-swift",
+      "rule": "R2",
+      "why": "R2: Swift inside SwiftUI is part of a longer word.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Screens built with SwiftUI.",
+      "expected_named": []
+    },
+    {
+      "id": "react-exact-case",
+      "rule": "R3",
+      "why": "R3: React spelled exactly names react.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "React and TypeScript frontend.",
+      "expected_named": [
+        "react",
+        "typescript"
+      ]
+    },
+    {
+      "id": "react-lowercase-verb",
+      "rule": "R3",
+      "why": "R3: react is starred; lowercase react is an ordinary word.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Able to react quickly to incidents.",
+      "expected_named": []
+    },
+    {
+      "id": "react-uppercase",
+      "rule": "R3",
+      "why": "R3: starred names count only spelled exactly; REACT is not React.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "REACT ninja wanted for a small team.",
+      "expected_named": []
+    },
+    {
+      "id": "reactjs-lowercase",
+      "rule": "R3",
+      "why": "R3: ReactJS is unstarred, so lowercase reactjs names react.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Dashboards in reactjs.",
+      "expected_named": [
+        "react"
+      ]
+    },
+    {
+      "id": "react-native-and-react-js",
+      "rule": "R3",
+      "why": "R1/R3: React and React.js both name react; lowercase js is not JS.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "React Native and React.js experience.",
+      "expected_named": [
+        "react"
+      ]
+    },
+    {
+      "id": "js-uppercase",
+      "rule": "R3",
+      "why": "R3: JS spelled exactly names javascript.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Solid JS and CSS skills.",
+      "expected_named": [
+        "javascript"
+      ]
+    },
+    {
+      "id": "js-lowercase-filename",
+      "rule": "R3",
+      "why": "R3: lowercase js is not the starred JS.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Ships a single main.js bundle.",
+      "expected_named": []
+    },
+    {
+      "id": "nodejs-not-javascript",
+      "rule": "R3",
+      "why": "R3 explicit: Node.js does not name javascript.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "APIs in Node.js.",
+      "expected_named": [
+        "nodejs"
+      ]
+    },
+    {
+      "id": "nodejs-one-word",
+      "rule": "R2",
+      "why": "R1/R2: NodeJS names nodejs; JS inside it is part of a longer word.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "NodeJS microservices.",
+      "expected_named": [
+        "nodejs"
+      ]
+    },
+    {
+      "id": "rust-exact-at-sentence-start",
+      "rule": "R4",
+      "why": "R3: Rust exact names rust; R4's sentence-start exception applies to Go only.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Rust is a plus.",
+      "expected_named": [
+        "rust"
+      ]
+    },
+    {
+      "id": "rust-lowercase",
+      "rule": "R3",
+      "why": "R3: lowercase rust is an ordinary word.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Remove rust from the pipes.",
+      "expected_named": []
+    },
+    {
+      "id": "swift-exact-and-lowercase",
+      "rule": "R3",
+      "why": "R3: Swift exact names swift; lowercase swift does not.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Swift and Kotlin apps with swift delivery.",
+      "expected_named": [
+        "kotlin",
+        "swift"
+      ]
+    },
+    {
+      "id": "spark-exact-vs-lowercase",
+      "rule": "R3",
+      "why": "R3: Spark exact names spark; lowercase spark is a word.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Spark pipelines that spark joy, fed by Kafka.",
+      "expected_named": [
+        "kafka",
+        "spark"
+      ]
+    },
+    {
+      "id": "spark-lowercase-only",
+      "rule": "R3",
+      "why": "R3: lowercase spark alone names nothing.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Ideas that spark conversation.",
+      "expected_named": []
+    },
+    {
+      "id": "flask-exact-vs-lowercase",
+      "rule": "R3",
+      "why": "R3: Flask exact names flask; lowercase flask does not.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Flask APIs, and a flask of coffee.",
+      "expected_named": [
+        "flask"
+      ]
+    },
+    {
+      "id": "flask-lowercase-only",
+      "rule": "R3",
+      "why": "R3: lowercase flask is an ordinary word.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Bring a flask on the hike.",
+      "expected_named": []
+    },
+    {
+      "id": "unstarred-case-insensitive",
+      "rule": "R3",
+      "why": "R3: unstarred names are case-insensitive (PYTHON, linux, k8s, php).",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "PYTHON on linux, deployed to k8s, with some php.",
+      "expected_named": [
+        "kubernetes",
+        "linux",
+        "php",
+        "python"
+      ]
+    },
+    {
+      "id": "duplicate-mentions-once",
+      "rule": "R5",
+      "why": "R5: named at least once is named; repeats add nothing.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Python, python and more Python.",
+      "expected_named": [
+        "python"
+      ]
+    },
+    {
+      "id": "go-start-of-text",
+      "rule": "R4",
+      "why": "R4: Go opening the text does not count.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Go developers wanted.",
+      "expected_named": []
+    },
+    {
+      "id": "go-after-colon",
+      "rule": "R4",
+      "why": "R4: Go after ':' with only whitespace between opens a sentence.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Stack: Go, Postgres.",
+      "expected_named": [
+        "postgresql"
+      ]
+    },
+    {
+      "id": "go-after-newline",
+      "rule": "R4",
+      "why": "R4: Go after a line break does not count.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Requirements\nGo experience",
+      "expected_named": []
+    },
+    {
+      "id": "go-after-exclamation",
+      "rule": "R4",
+      "why": "R4: Go after '!' plus whitespace opens a sentence.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Join us! Go experience required.",
+      "expected_named": []
+    },
+    {
+      "id": "go-after-abbreviation-period",
+      "rule": "R4",
+      "why": "R4 literal: Go after '.' with only whitespace between does not count, even after 'e.g.'.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Compiled languages e.g. Go or Rust.",
+      "expected_named": [
+        "rust"
+      ]
+    },
+    {
+      "id": "go-hyphen-go-to-market",
+      "rule": "R4",
+      "why": "R4: a hyphen following Go excludes it.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Own our Go-to-market plan.",
+      "expected_named": []
+    },
+    {
+      "id": "go-hyphen-based",
+      "rule": "R4",
+      "why": "R4: a hyphen following Go excludes it (Go-based).",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "A Go-based platform team.",
+      "expected_named": []
+    },
+    {
+      "id": "go-ahead",
+      "rule": "R4",
+      "why": "R4: next word 'ahead' excludes Go.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Get the Go ahead from product.",
+      "expected_named": []
+    },
+    {
+      "id": "go-live",
+      "rule": "R4",
+      "why": "R4: next word 'live' excludes Go.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Prepare the Go live checklist.",
+      "expected_named": []
+    },
+    {
+      "id": "go-further-beyond-to",
+      "rule": "R4",
+      "why": "R4: next words 'further', 'beyond', 'to' exclude Go.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "We Go further, we Go beyond, your Go to team.",
+      "expected_named": []
+    },
+    {
+      "id": "go-mid-sentence-and-rust",
+      "rule": "R4",
+      "why": "R4 exceptions do not apply mid-sentence; Go names go.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Services in Go and Rust.",
+      "expected_named": [
+        "go",
+        "rust"
+      ]
+    },
+    {
+      "id": "go-in-parentheses",
+      "rule": "R4",
+      "why": "R4: '(' is not a sentence opener, so (Go) names go.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Backend (Go) and frontend (React).",
+      "expected_named": [
+        "go",
+        "react"
+      ]
+    },
+    {
+      "id": "go-comma-list",
+      "rule": "R4",
+      "why": "R4: Go followed by a comma mid-sentence names go.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "We use Go, Python and Redis.",
+      "expected_named": [
+        "go",
+        "python",
+        "redis"
+      ]
+    },
+    {
+      "id": "go-sentence-end",
+      "rule": "R4",
+      "why": "R4 does not exclude Go at the end of a sentence.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Our core is written in Go.",
+      "expected_named": [
+        "go"
+      ]
+    },
+    {
+      "id": "go-question-mid",
+      "rule": "R4",
+      "why": "R4: Go mid-question names go.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Do you write Go?",
+      "expected_named": [
+        "go"
+      ]
+    },
+    {
+      "id": "go-after-question-sentence",
+      "rule": "R4",
+      "why": "R4: only Go directly opening a sentence is excluded; mid next sentence counts.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Why us? We ship Go daily.",
+      "expected_named": [
+        "go"
+      ]
+    },
+    {
+      "id": "go-bullet-dash",
+      "rule": "R4",
+      "why": "R4: after a line break a '-' is not whitespace, so '- Go' does not open a sentence.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Skills:\n- Go\n- Docker",
+      "expected_named": [
+        "docker",
+        "go"
+      ]
+    },
+    {
+      "id": "go-lowercase",
+      "rule": "R3",
+      "why": "R3: go is starred; lowercase go is not Go.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Ready to go on day one.",
+      "expected_named": []
+    },
+    {
+      "id": "go-uppercase",
+      "rule": "R3",
+      "why": "R3: GO is not the exact spelling Go.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "GO PROGRAMMER needed.",
+      "expected_named": []
+    },
+    {
+      "id": "title-and-text-union",
+      "rule": "R5",
+      "why": "R5: the offer names what its title and text name together.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "Senior Kotlin Engineer",
+      "text": "We ship on AWS.",
+      "expected_named": [
+        "aws",
+        "kotlin"
+      ]
+    },
+    {
+      "id": "title-only",
+      "rule": "R5",
+      "why": "R5: a technology named only in the title is named.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "Platform Engineer (Terraform)",
+      "text": "Join a friendly team.",
+      "expected_named": [
+        "terraform"
+      ]
+    },
+    {
+      "id": "title-go-start",
+      "rule": "R4",
+      "why": "R4/R5: Go opening the title opens the text, so it does not count.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "Go Engineer",
+      "text": "Build services in Rust.",
+      "expected_named": [
+        "rust"
+      ]
+    },
+    {
+      "id": "spanish-offer",
+      "rule": "R5",
+      "why": "R1/R2: names are matched in Spanish text too.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Buscamos ingeniero con experiencia en Python, Django y Kubernetes. Valorable Terraform.",
+      "expected_named": [
+        "django",
+        "kubernetes",
+        "python",
+        "terraform"
+      ]
+    },
+    {
+      "id": "spanish-agents",
+      "rule": "R1",
+      "why": "R1: 'agentes de IA' names ai_agents; LangChain names langchain.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Desarrollo de agentes de IA con LangChain.",
+      "expected_named": [
+        "ai_agents",
+        "langchain"
+      ]
+    },
+    {
+      "id": "spanish-go-mid",
+      "rule": "R4",
+      "why": "R4: Go mid-sentence in Spanish names go.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Se requiere experiencia en Go y PostgreSQL.",
+      "expected_named": [
+        "go",
+        "postgresql"
+      ]
+    },
+    {
+      "id": "llm-plural-long",
+      "rule": "R1",
+      "why": "R1: LLMs and large language models name llm.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Work with LLMs and large language models.",
+      "expected_named": [
+        "llm"
+      ]
+    },
+    {
+      "id": "agentic-multi-agent",
+      "rule": "R1",
+      "why": "R1: agentic and multi-agent name ai_agents.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Build agentic workflows and multi-agent systems.",
+      "expected_named": [
+        "ai_agents"
+      ]
+    },
+    {
+      "id": "aws-long-name",
+      "rule": "R1",
+      "why": "R1: Amazon Web Services names aws; Amazon alone is not a name.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Amazon Web Services experience; Amazon retail background irrelevant.",
+      "expected_named": [
+        "aws"
+      ]
+    },
+    {
+      "id": "rails-is-ruby",
+      "rule": "R1",
+      "why": "R1: Rails names ruby.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "",
+      "text": "Rails monolith.",
+      "expected_named": [
+        "ruby"
+      ]
+    },
+    {
+      "id": "fit-strong-match",
+      "rule": "R8",
+      "why": "R8/R9: strong is match; every named tech in match gives match.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python backend.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-basic-is-weak-mismatch",
+      "rule": "R9",
+      "why": "R8: basic is weak; R9: none in match or used gives mismatch.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python backend.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "python"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-null-level-used-partial",
+      "rule": "R9",
+      "why": "R6: null level is unstated -> used; R9: used-only is partial, not mismatch.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": null
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python backend.",
+      "expected": {
+        "verdict": "partial",
+        "match": [],
+        "used": [
+          "python"
+        ],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-missing-mismatch",
+      "rule": "R8",
+      "why": "R8: tech absent from CV and statements is missing; R9 mismatch.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python backend.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "python"
+        ]
+      }
+    },
+    {
+      "id": "fit-unknown-no-names",
+      "rule": "R9",
+      "why": "R9: an offer naming nothing is unknown, never match.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "expert"
+          },
+          {
+            "name": "React",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "A great place to work.",
+      "expected": {
+        "verdict": "unknown",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-unknown-only-ordinary-words",
+      "rule": "R9",
+      "why": "R3/R9: lowercase react/go/rust name nothing, so the verdict is unknown.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "React",
+            "level": "expert"
+          },
+          {
+            "name": "Go",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Ready to go and react fast; no rust here.",
+      "expected": {
+        "verdict": "unknown",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-unknown-go-sentence-start",
+      "rule": "R9",
+      "why": "R4/R9: Go opening the text is not named, so nothing is named: unknown.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Go",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Go ahead and apply.",
+      "expected": {
+        "verdict": "unknown",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-only-mismatch",
+      "rule": "R9",
+      "why": "R8: aversion puts java in averse; R9: none in match/used -> mismatch.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "java",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "Java platform team.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "java"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-weak-only-mismatch",
+      "rule": "R9",
+      "why": "R9: weak-only (none match or used) is mismatch.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Rust",
+            "level": "basic"
+          },
+          {
+            "name": "Kafka",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Rust and Kafka.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "kafka",
+          "rust"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-used-plus-missing-partial",
+      "rule": "R9",
+      "why": "R9: a used tech keeps the verdict out of mismatch; not all match -> partial.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "Engineer",
+            "organisation": "Acme",
+            "description": "Ran Kafka clusters."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Kafka and Scala.",
+      "expected": {
+        "verdict": "partial",
+        "match": [],
+        "used": [
+          "kafka"
+        ],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "scala"
+        ]
+      }
+    },
+    {
+      "id": "fit-match-plus-missing-partial",
+      "rule": "R9",
+      "why": "R9: one match, one missing -> partial.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python and Go services.",
+      "expected": {
+        "verdict": "partial",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "go"
+        ]
+      }
+    },
+    {
+      "id": "fit-match-plus-weak-partial",
+      "rule": "R9",
+      "why": "R9: match plus weak is partial, not match.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "expert"
+          },
+          {
+            "name": "Docker",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python and Docker.",
+      "expected": {
+        "verdict": "partial",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [
+          "docker"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-match-plus-averse-partial",
+      "rule": "R9",
+      "why": "R9: an averse tech is not in match, so the verdict is partial.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "expert"
+          },
+          {
+            "name": "Java",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "java",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "Python and Java.",
+      "expected": {
+        "verdict": "partial",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "java"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-three-all-match",
+      "rule": "R9",
+      "why": "R8: working/strong/expert all match; R9 every named in match -> match.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "working"
+          },
+          {
+            "name": "PostgreSQL",
+            "level": "strong"
+          },
+          {
+            "name": "AWS",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python on AWS with Postgres.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "aws",
+          "postgresql",
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-multi-name-skill",
+      "rule": "R6",
+      "why": "R6: 'Python (Django, FastAPI)' gives its level to all three.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python (Django, FastAPI)",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Django and FastAPI services.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "django",
+          "fastapi"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-higher-level-wins",
+      "rule": "R6",
+      "why": "R6: two entries naming python, the higher level (strong) wins.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "basic"
+          },
+          {
+            "name": "Python, Go",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python services.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-higher-level-wins-not-last",
+      "rule": "R6",
+      "why": "R6: the higher level wins regardless of entry order.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Kafka",
+            "level": "expert"
+          },
+          {
+            "name": "Kafka Streams",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Kafka engineers.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "kafka"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-stated-level-beats-null",
+      "rule": "R6",
+      "why": "R6: null is unstated (no level); a stated basic from another entry is the level, so weak.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Rust",
+            "level": null
+          },
+          {
+            "name": "Rust, C++",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Rust role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "rust"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-skill-label-go",
+      "rule": "R6",
+      "why": "R6: a skill name is a label; R4 does not apply, so a skill named 'Go' names go.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Go",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Services in Go.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "go"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-skill-label-go-to-first",
+      "rule": "R6",
+      "why": "R6: R4 does not apply to skill names, so 'Go, Rust' gives go its level too.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Go, Rust",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Services in Go and Rust.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "go",
+          "rust"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-skill-label-lowercase-go",
+      "rule": "R6",
+      "why": "R6: R3 applies to skill names, so a skill named 'go' names nothing -> go missing.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "go",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Services in Go.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "go"
+        ]
+      }
+    },
+    {
+      "id": "fit-skill-label-lowercase-react",
+      "rule": "R6",
+      "why": "R6: R3 applies to skill names; 'react' names nothing, so react is missing.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "react",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Frontend in React.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "react"
+        ]
+      }
+    },
+    {
+      "id": "fit-skill-label-java-not-javascript",
+      "rule": "R6",
+      "why": "R6/R2: a skill 'Java' names java, not javascript.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "JavaScript frontend.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "javascript"
+        ]
+      }
+    },
+    {
+      "id": "fit-skill-javascript-not-java",
+      "rule": "R6",
+      "why": "R6/R2: a skill 'JavaScript' does not name java.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "JavaScript",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Java backend.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "java"
+        ]
+      }
+    },
+    {
+      "id": "fit-skill-postgresql-not-sql",
+      "rule": "R6",
+      "why": "R6/R2: a skill 'PostgreSQL' does not name sql.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "PostgreSQL",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Strong SQL required.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "sql"
+        ]
+      }
+    },
+    {
+      "id": "fit-skill-nodejs-not-javascript",
+      "rule": "R6",
+      "why": "R6/R3: a skill 'Node.js' does not name javascript.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Node.js",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "JavaScript and Node.js.",
+      "expected": {
+        "verdict": "partial",
+        "match": [
+          "nodejs"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "javascript"
+        ]
+      }
+    },
+    {
+      "id": "fit-alias-postgres",
+      "rule": "R6",
+      "why": "R1/R6: CV PostgreSQL and ad Postgres are the same technology.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "PostgreSQL",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Postgres DBA.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "postgresql"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-alias-golang-cv",
+      "rule": "R6",
+      "why": "R1/R6: CV Golang names go, matching an ad's mid-sentence Go.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Golang",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Backend in Go.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "go"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-alias-k8s",
+      "rule": "R6",
+      "why": "R1/R6: CV Kubernetes and ad K8s are one technology.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Kubernetes",
+            "level": "working"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Run K8s clusters.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "kubernetes"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-experience-only-used",
+      "rule": "R6",
+      "why": "R6: a tech named only in experience description is used.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "Backend engineer",
+            "organisation": "Acme",
+            "description": "Built Kafka consumers."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Kafka role.",
+      "expected": {
+        "verdict": "partial",
+        "match": [],
+        "used": [
+          "kafka"
+        ],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-experience-title-used",
+      "rule": "R6",
+      "why": "R6: experience title counts as experience text.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "Rust developer",
+            "organisation": "Acme",
+            "description": "Systems work."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Rust role.",
+      "expected": {
+        "verdict": "partial",
+        "match": [],
+        "used": [
+          "rust"
+        ],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-experience-organisation-used",
+      "rule": "R6",
+      "why": "R6: experience organisation counts as experience text.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "Engineer",
+            "organisation": "Docker Inc",
+            "description": "Tooling."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Docker platform.",
+      "expected": {
+        "verdict": "partial",
+        "match": [],
+        "used": [
+          "docker"
+        ],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-episode-only-used",
+      "rule": "R6",
+      "why": "R6: a tech named only in episodes is used.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [],
+        "episodes": [
+          "Migrated our search to Redis in two weeks."
+        ]
+      },
+      "statements": [],
+      "title": "",
+      "text": "Redis caching.",
+      "expected": {
+        "verdict": "partial",
+        "match": [],
+        "used": [
+          "redis"
+        ],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-skill-level-beats-experience",
+      "rule": "R6",
+      "why": "R6: used applies only to techs named ONLY in experience; a basic skill makes it weak.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "basic"
+          }
+        ],
+        "experience": [
+          {
+            "title": "Python engineer",
+            "organisation": "Acme",
+            "description": "Python daily."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "python"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-experience-react-verb-not-used",
+      "rule": "R6",
+      "why": "R3/R6: lowercase 'react' in experience names nothing, so react is missing.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "SRE",
+            "organisation": "Acme",
+            "description": "Helped the team react to incidents."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "React frontend.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "react"
+        ]
+      }
+    },
+    {
+      "id": "fit-episode-go-to-market-not-used",
+      "rule": "R6",
+      "why": "R4/R6: 'Go-to-market' in episode text does not name go.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [],
+        "episodes": [
+          "Led the Go-to-market launch."
+        ]
+      },
+      "statements": [],
+      "title": "",
+      "text": "Services in Go.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "go"
+        ]
+      }
+    },
+    {
+      "id": "fit-experience-google-not-go",
+      "rule": "R6",
+      "why": "R2/R6: organisation Google does not name go.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "Engineer",
+            "organisation": "Google",
+            "description": "Search infra."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Services in Go.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "go"
+        ]
+      }
+    },
+    {
+      "id": "fit-statement-downgrade-to-none",
+      "rule": "R7",
+      "why": "R7: a statement level none replaces CV expert, downward; R8 none is weak.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "python",
+          "level": "none"
+        }
+      ],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "python"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-downgrade-to-basic",
+      "rule": "R7",
+      "why": "R7: downward override to basic replaces CV strong.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Kubernetes",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "kubernetes",
+          "level": "basic"
+        }
+      ],
+      "title": "",
+      "text": "Kubernetes ops.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "kubernetes"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-upgrade",
+      "rule": "R7",
+      "why": "R7: a statement level replaces the CV level upward too.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "python",
+          "level": "strong"
+        }
+      ],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-last-row-wins",
+      "rule": "R7",
+      "why": "R7: the last row setting level wins (strong then basic -> basic).",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "python",
+          "level": "strong"
+        },
+        {
+          "technology": "python",
+          "level": "basic"
+        }
+      ],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "python"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-last-level-row-not-last-row",
+      "rule": "R7",
+      "why": "R7: a later row that sets only averse does not reset level; the last level row (basic) stands.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "expert"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "python",
+          "level": "basic"
+        },
+        {
+          "technology": "python",
+          "averse": false
+        }
+      ],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "python"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-retracted-downgrade-ignored",
+      "rule": "R7",
+      "why": "R7: a retracted row is as if never written; CV strong stands.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "retracted": true,
+          "technology": "python",
+          "level": "none"
+        }
+      ],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-retracted-last-row-falls-back",
+      "rule": "R7",
+      "why": "R7: retracting the last level row leaves the previous effective row (basic).",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Go",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "go",
+          "level": "basic"
+        },
+        {
+          "retracted": true,
+          "technology": "go",
+          "level": "expert"
+        }
+      ],
+      "title": "",
+      "text": "Services in Go.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "go"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-retracted-upgrade-falls-back-to-cv",
+      "rule": "R7",
+      "why": "R7: a retracted upgrade is never written; CV basic stands.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Rust",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "retracted": true,
+          "technology": "rust",
+          "level": "expert"
+        }
+      ],
+      "title": "",
+      "text": "Rust role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "rust"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-then-level-still-averse",
+      "rule": "R7",
+      "why": "R7: aversion is decided by the last averse row; a later level row does not clear it.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "java",
+          "averse": true
+        },
+        {
+          "technology": "java",
+          "level": "expert"
+        }
+      ],
+      "title": "",
+      "text": "Java role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "java"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-and-level-same-row",
+      "rule": "R7",
+      "why": "R7: aversion does not change level, and R8 puts an averse tech in averse regardless of level.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "scala",
+          "level": "expert",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "Scala role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "scala"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-cleared-by-later-row",
+      "rule": "R7",
+      "why": "R7: the last row setting averse (false) decides; CV strong -> match.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "java",
+          "averse": true
+        },
+        {
+          "technology": "java",
+          "averse": false
+        }
+      ],
+      "title": "",
+      "text": "Java role.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "java"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-retracted",
+      "rule": "R7",
+      "why": "R7: a retracted averse row is never written; CV strong -> match.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "retracted": true,
+          "technology": "java",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "Java role.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "java"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-last-retracted-earlier-stands",
+      "rule": "R7",
+      "why": "R7: retracting a later averse:false leaves the earlier averse:true in force.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "java",
+          "averse": true
+        },
+        {
+          "retracted": true,
+          "technology": "java",
+          "averse": false
+        }
+      ],
+      "title": "",
+      "text": "Java role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "java"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-tech-not-in-cv",
+      "rule": "R8",
+      "why": "R8: averse is checked first; an averse tech absent from CV is averse, not missing.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "php",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "PHP shop.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "php"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-averse-over-used",
+      "rule": "R8",
+      "why": "R8: averse outranks used; the only named tech averse -> mismatch, not partial.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "Dev",
+            "organisation": "Acme",
+            "description": "Maintained Java services."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "java",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "Java role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "java"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-level-on-missing",
+      "rule": "R7",
+      "why": "R7: a statement level on a tech absent from the CV gives it that level (working -> match).",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "kubernetes",
+          "level": "working"
+        }
+      ],
+      "title": "",
+      "text": "Kubernetes ops.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "kubernetes"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-none-not-missing",
+      "rule": "R8",
+      "why": "R7/R8: a stated level none is a mention; the tech is weak, not missing.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "terraform",
+          "level": "none"
+        }
+      ],
+      "title": "",
+      "text": "Terraform role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "terraform"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-sets-level-over-null",
+      "rule": "R7",
+      "why": "R7: a statement level replaces an unstated CV level (null -> working -> match).",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Docker",
+            "level": null
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "docker",
+          "level": "working"
+        }
+      ],
+      "title": "",
+      "text": "Docker role.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "docker"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-downgrade-used-to-weak",
+      "rule": "R7",
+      "why": "R7: a statement level basic replaces the unstated (used) level; weak -> mismatch.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [],
+        "experience": [
+          {
+            "title": "Dev",
+            "organisation": "Acme",
+            "description": "Some Redis work."
+          }
+        ],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "redis",
+          "level": "basic"
+        }
+      ],
+      "title": "",
+      "text": "Redis role.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "redis"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-statement-other-tech-irrelevant",
+      "rule": "R8",
+      "why": "R8: buckets are per technology the offer names; an aversion to an unnamed tech does not appear.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "java",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-multi-name-partial-downgrade",
+      "rule": "R7",
+      "why": "R6/R7: a multi-name skill gives both techs strong; a statement downgrades django only.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python (Django)",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [
+        {
+          "technology": "django",
+          "level": "basic"
+        }
+      ],
+      "title": "",
+      "text": "Python and Django.",
+      "expected": {
+        "verdict": "partial",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [
+          "django"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-cv-names-not-in-offer-ignored",
+      "rule": "R8",
+      "why": "R8: only technologies the offer names get buckets; CV-only techs are absent.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "strong"
+          },
+          {
+            "name": "Rust",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Python role.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-title-and-text",
+      "rule": "R5",
+      "why": "R5: title Python + text Terraform both named; Terraform missing -> partial.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "Python Engineer",
+      "text": "We use Terraform.",
+      "expected": {
+        "verdict": "partial",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "terraform"
+        ]
+      }
+    },
+    {
+      "id": "fit-spanish-offer",
+      "rule": "R5",
+      "why": "R5/R9: Spanish text names python and kubernetes; match + weak -> partial.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Python",
+            "level": "expert"
+          },
+          {
+            "name": "Kubernetes",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Buscamos experiencia en Python y Kubernetes.",
+      "expected": {
+        "verdict": "partial",
+        "match": [
+          "python"
+        ],
+        "used": [],
+        "weak": [
+          "kubernetes"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-go-colon-not-named",
+      "rule": "R4",
+      "why": "R4: 'Stack: Go' is not named, so only rust counts; CV rust strong -> match.",
+      "direction": "fail-closed",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Rust",
+            "level": "strong"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "Stack: Go and Rust.",
+      "expected": {
+        "verdict": "match",
+        "match": [
+          "rust"
+        ],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": []
+      }
+    },
+    {
+      "id": "fit-java-in-javascript-ad",
+      "rule": "R2",
+      "why": "R2: the ad names only javascript; a CV java expert does not match it.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Java",
+            "level": "expert"
+          },
+          {
+            "name": "JavaScript",
+            "level": "basic"
+          }
+        ],
+        "experience": [],
+        "episodes": []
+      },
+      "statements": [],
+      "title": "",
+      "text": "JavaScript frontend.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "javascript"
+        ],
+        "averse": [],
+        "missing": []
+      }
+    }
+  ]
+}
