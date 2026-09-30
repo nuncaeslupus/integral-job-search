@@ -337,3 +337,33 @@ def test_a_phrase_that_is_itself_a_question_states_no_closure(page: str) -> None
 )
 def test_a_stated_closure_still_reads_dead(page: str) -> None:
     assert liveness.read_response("d", 200, page).liveness == "dead"
+
+
+#: The sentence breaks that bound a `¿…?` span. Each is tried alone, on each
+#: side it matters, so no one of them can be dropped unnoticed (#599 round 2).
+#: `¿` before the phrase and `?` after it are not listed: a later `¿` restarts
+#: the span and the first `?` closes it, so dropping either changes nothing.
+_OPEN_SIDE_BREAKS = (".", "!", "?", "¡")
+_CLOSE_SIDE_BREAKS = (".", "!", "¡", "¿")
+
+
+def test_an_unbroken_inverted_question_span_is_a_question() -> None:
+    assert liveness.dead_phrase_in("¿Hola, oferta cerrada, dices?") is None
+
+
+@pytest.mark.parametrize("brk", _OPEN_SIDE_BREAKS)
+def test_a_break_between_the_open_mark_and_the_phrase_ends_the_question(brk: str) -> None:
+    assert liveness.dead_phrase_in(f"¿Hola{brk} oferta cerrada, dices?") == "oferta cerrada"
+
+
+@pytest.mark.parametrize("brk", _CLOSE_SIDE_BREAKS)
+def test_a_break_between_the_phrase_and_the_close_mark_ends_the_question(brk: str) -> None:
+    assert liveness.dead_phrase_in(f"¿Oferta cerrada{brk} vale?") == "oferta cerrada"
+
+
+def test_an_unclosed_angle_bracket_does_not_make_the_scan_quadratic() -> None:
+    import time
+
+    start = time.perf_counter()
+    liveness.dead_phrase_in("<a " * 200_000)
+    assert time.perf_counter() - start < 5

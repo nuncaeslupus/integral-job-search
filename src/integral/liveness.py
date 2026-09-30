@@ -134,12 +134,20 @@ def dead_phrase_in(text: str) -> str | None:
     Both the raw markup (attributes included, as before) and the visible text
     (where a phrase split by inline markup reads whole) are searched; a
     statement in either is enough, so neither view can hide a closure.
+
+    Known edges, each named by #599's second reader and left as they are: a
+    question answered in the next sentence (`Position filled? Yes.`) reads as
+    a question — the Jobfluent button has exactly that shape; a `?` split from
+    its phrase by a tag, an entity (`&iquest;`) or a fullwidth question mark (U+FF1F) reads as a
+    statement (fail-closed).
     """
     views = (normalise(text), visible_text(text))
     return next((p for p in DEAD_PHRASES if any(_stated(v, p) for v in views)), None)
 
 
-_TAG = re.compile(r"<[^>]*>")
+#: `[^<>]`, not `[^>]`: a `<` never closed by a `>` made the scan quadratic
+#: (600 KB of `<a ` took 75 s — #599 round 2, N6), and every body is read here.
+_TAG = re.compile(r"<[^<>]*>")
 
 
 def visible_text(html: str) -> str:
