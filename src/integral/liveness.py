@@ -95,38 +95,48 @@ def normalise(text: str) -> str:
     return _WHITESPACE.sub(" ", text).strip().lower()
 
 
-#: Controls — a link or a button. Their text names an action the reader may
-#: take, not a statement the page makes about the vacancy.
-_CONTROL = re.compile(r"<(a|button)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+#: A phrase that is itself a question: followed directly by `?`, or opened by
+#: an inverted `¿` with no sentence break between it and the phrase, and closed
+#: by a `?` with none between the phrase and it.
+_ASKED_AFTER = re.compile(r"\s*\?")
+_ASKED_OPEN = re.compile(r"¿[^.!?¡¿]*$")
+_ASKED_CLOSE = re.compile(r"[^.!?¡¿]*\?")
 
-#: One sentence of visible text, with its terminator when it has one.
-_SENTENCE = re.compile(r"[^.!?]+[.!?]*")
+
+def _stated(haystack: str, phrase: str) -> bool:
+    """Whether `haystack` carries `phrase` at least once *not* as a question."""
+    for match in re.finditer(re.escape(phrase), haystack):
+        before, after = haystack[: match.start()], haystack[match.end() :]
+        if _ASKED_AFTER.match(after):
+            continue
+        if _ASKED_OPEN.search(before) and _ASKED_CLOSE.match(after):
+            continue
+        return True
+    return False
 
 
 def dead_phrase_in(text: str) -> str | None:
     """The closure notice the body states, if it states one.
 
-    A closure notice is a **statement the page makes** that the vacancy is
-    closed. Two kinds of text carry the same words and make no such statement,
-    and neither counts — one closed rule, not a list of boards:
+    A closure notice is a **statement** that the vacancy is closed. A phrase
+    that is itself a question — `Oferta no disponible?`, `¿Oferta no
+    disponible?` — asks rather than states, and does not count. Only the
+    phrase's own question: a closure stated and *then* followed by a question
+    (`Esta oferta ya no está disponible, ¿quieres ver otras?`) is still a
+    closure, which is the fail-open direction #599's second reader caught.
 
-    - **the text of a control** (`<a>`, `<button>`): it names an action the
-      reader may take, such as reporting that an advert is filled;
-    - **a question** (a sentence ending in `?`): it asks, it does not state.
+    Every Jobfluent advert carries a site-wide report button reading
+    `Oferta no disponible? Dínoslo!`. Matching the phrase anywhere read every
+    live Jobfluent advert as `dead` and `expire` retired it (measured
+    2026-09-30: 15 of 15) — fail-closed, and a tombstone stops a vacancy ever
+    being offered again.
 
-    Every Jobfluent advert carries a site-wide
-    `<a …>Oferta no disponible? Dínoslo!</a>` report button, which is both.
-    Matching the phrase anywhere read every live Jobfluent advert as `dead`
-    and `expire` retired it (measured 2026-09-30: 15 of 15) — fail-closed, and
-    a tombstone is what stops a vacancy ever being offered again.
+    Both the raw markup (attributes included, as before) and the visible text
+    (where a phrase split by inline markup reads whole) are searched; a
+    statement in either is enough, so neither view can hide a closure.
     """
-    for sentence in _SENTENCE.findall(visible_text(_CONTROL.sub(" ", text))):
-        if sentence.rstrip().endswith("?"):
-            continue
-        phrase = next((p for p in DEAD_PHRASES if p in sentence), None)
-        if phrase is not None:
-            return phrase
-    return None
+    views = (normalise(text), visible_text(text))
+    return next((p for p in DEAD_PHRASES if any(_stated(v, p) for v in views)), None)
 
 
 _TAG = re.compile(r"<[^>]*>")
@@ -444,7 +454,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
         # FAIL-CLOSED. Jobfluent's real markup, 2026-09-30: a site-wide report
         # button on every advert, whose text holds "oferta no disponible".
-        # A control and a question, so it states nothing about the vacancy.
+        # The phrase is itself a question, so it states nothing about the vacancy.
         "jobfluent, a live advert carrying the site-wide report button",
         "jobfluent",
         200,

@@ -297,13 +297,14 @@ def test_a_live_jobfluent_advert_is_not_read_dead_by_its_report_button() -> None
 @pytest.mark.parametrize(
     "page",
     [
-        '<a href="/report">Oferta no disponible</a>',  # a link, not a question
-        "<button>Puesto ocupado</button>",  # a button
-        "<p>¿Oferta no disponible? Avísanos.</p>",  # a question in plain text
+        "<p>¿Oferta no disponible? Avísanos.</p>",  # the phrase is the question
         "<P>Position filled?</P>",
+        "<p>Oferta no disponible ?</p>",  # whitespace before the mark
+        "<p>¿Oferta no disponible, dices?</p>",  # ¿…? span around the phrase
+        "<A HREF=/r>Oferta no disponible?\n Dínoslo!</A>",
     ],
 )
-def test_a_control_or_a_question_states_no_closure(page: str) -> None:
+def test_a_phrase_that_is_itself_a_question_states_no_closure(page: str) -> None:
     assert liveness.dead_phrase_in(page) is None
 
 
@@ -313,8 +314,25 @@ def test_a_control_or_a_question_states_no_closure(page: str) -> None:
         "<h1>Albañil</h1><p>PUESTO OCUPADO</p>",
         f"<p>Oferta no disponible.</p>{_JOBFLUENT_REPORT_BUTTON}",
         f"{_JOBFLUENT_REPORT_BUTTON}<p>Esta oferta ya no está disponible</p>",
-        "<p>¿Buscas trabajo? Vacante cubierta.</p>",  # the question is a different sentence
-        "<abbr>x</abbr><p>Oferta cerrada</p>",  # <abbr> is not <a>
+        "<p>¿Buscas trabajo? Vacante cubierta.</p>",  # the question is another sentence
+        "Puesto <b>ocupado</b>",  # split by inline markup
+        # the same phrase asked first and stated after: every occurrence counts
+        f"{_JOBFLUENT_REPORT_BUTTON}<p>Oferta no disponible.</p>",
+        # a `¿` span ends at a sentence break, on either side of the phrase
+        "<h1>¿Buscas empleo</h1><p>Oferta cerrada. ¿Te ayudamos?</p>",
+        "<p>¿Dudas? Vacante cubierta, pero puedes ver otras ofertas?</p>",
+        # #599 second reader, F1-F4: a closure stated, THEN a question. Fail-open
+        # under a rule that skipped any sentence ending in `?`.
+        "<h1>Dev</h1><h2>Position filled</h2><p>Looking for something similar?</p>",
+        "<p>Esta oferta ya no está disponible, ¿quieres ver ofertas similares?</p>",
+        "<p>This job is no longer available - why not browse similar jobs?</p>",
+        "<title>Oferta cerrada</title><h1>¿Buscas empleo?</h1>",
+        # F5/F6: a closure inside a link is still a statement, and markup that
+        # never closes cannot swallow one.
+        '<a href="/similar"><div>Esta oferta ya no está disponible. Ver similares</div></a>',
+        '<a name="top"><p>Oferta cerrada.</p><a href="/x">Inicio</a>',
+        # F7: a closure stated only in an attribute still counts, as on main.
+        '<meta name="description" content="Oferta cerrada"><h1>Dev</h1>',
     ],
 )
 def test_a_stated_closure_still_reads_dead(page: str) -> None:
