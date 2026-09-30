@@ -527,6 +527,7 @@
     "sourcing._FLOOD_PAGE_ROWS",
     "sourcing_exclusions.MINIMUM_PRESENTATIONS",
     "sourcing_exclusions._MIN_STEM",
+    "stack_fit.MINIMUM_CASES",
     "step_gates.UNCERTIFIABLE",
     "step_gates.VOCABULARY_SILENT",
     "step_specs.MIN_FIELD_WORDS",
