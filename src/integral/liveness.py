@@ -95,13 +95,59 @@ def normalise(text: str) -> str:
     return _WHITESPACE.sub(" ", text).strip().lower()
 
 
+#: A phrase that is itself a question: followed directly by `?`, or opened by
+#: an inverted `¿` with no sentence break between it and the phrase, and closed
+#: by a `?` with none between the phrase and it.
+_ASKED_AFTER = re.compile(r"\s*\?")
+_ASKED_OPEN = re.compile(r"¿[^.!?¡¿]*$")
+_ASKED_CLOSE = re.compile(r"[^.!?¡¿]*\?")
+
+
+def _stated(haystack: str, phrase: str) -> bool:
+    """Whether `haystack` carries `phrase` at least once *not* as a question."""
+    for match in re.finditer(re.escape(phrase), haystack):
+        before, after = haystack[: match.start()], haystack[match.end() :]
+        if _ASKED_AFTER.match(after):
+            continue
+        if _ASKED_OPEN.search(before) and _ASKED_CLOSE.match(after):
+            continue
+        return True
+    return False
+
+
 def dead_phrase_in(text: str) -> str | None:
-    """The closure phrase the body carries, if it carries one."""
-    haystack = normalise(text)
-    return next((phrase for phrase in DEAD_PHRASES if phrase in haystack), None)
+    """The closure notice the body states, if it states one.
+
+    A closure notice is a **statement** that the vacancy is closed. A phrase
+    that is itself a question — `Oferta no disponible?`, `¿Oferta no
+    disponible?` — asks rather than states, and does not count. Only the
+    phrase's own question: a closure stated and *then* followed by a question
+    (`Esta oferta ya no está disponible, ¿quieres ver otras?`) is still a
+    closure, which is the fail-open direction #599's second reader caught.
+
+    Every Jobfluent advert carries a site-wide report button reading
+    `Oferta no disponible? Dínoslo!`. Matching the phrase anywhere read every
+    live Jobfluent advert as `dead` and `expire` retired it (measured
+    2026-09-30: 15 of 15) — fail-closed, and a tombstone stops a vacancy ever
+    being offered again.
+
+    Both the raw markup (attributes included, as before) and the visible text
+    (where a phrase split by inline markup reads whole) are searched; a
+    statement in either is enough, so neither view can hide a closure.
+
+    Known edges, each named by #599's second reader and left as they are: a
+    question answered in the next sentence (`Position filled? Yes.`) reads as
+    a question — the Jobfluent button has exactly that shape; a `?` split from
+    its phrase by a tag, an entity (`&iquest;`) or a fullwidth question mark (U+FF1F) reads as a
+    statement (fail-closed).
+    """
+    views = (normalise(text), visible_text(text))
+    return next((p for p in DEAD_PHRASES if any(_stated(v, p) for v in views)), None)
 
 
-_TAG = re.compile(r"<[^>]*>")
+#: `[^<>]`, not `[^>]`: a `<` never closed by a `>` made the scan quadratic
+#: (600 KB of `<a ` took 75 s — #599 round 2, N6), and every body is read here.
+_TAG = re.compile(r"<[^<>]*>")
 
 
 def visible_text(html: str) -> str:
@@ -412,6 +458,31 @@ SCENARIOS: tuple[Scenario, ...] = (
         "<h1>No podemos identificar tu navegador</h1>"
         "<p>Comprueba que JavaScript esté habilitado en tu navegador.</p></body></html>",
         "unverified",
+    ),
+    Scenario(
+        # FAIL-CLOSED. Jobfluent's real markup, 2026-09-30: a site-wide report
+        # button on every advert, whose text holds "oferta no disponible".
+        # The phrase is itself a question, so it states nothing about the vacancy.
+        "jobfluent, a live advert carrying the site-wide report button",
+        "jobfluent",
+        200,
+        "<h1>AI Engineer</h1><p>Barcelona. Jornada completa.</p>"
+        '<div class="not-available row"><a class="btn btn-danger btn-sm" '
+        'href="/es/offers/f28af3/report-filled">Oferta no disponible? Dínoslo!</a></div>',
+        "live",
+        title="AI Engineer",
+    ),
+    Scenario(
+        # FAIL-OPEN guard for the rule above: the same page, closed, still
+        # reads dead when the closure is stated in the page's own text.
+        "jobfluent, a closed advert stating it beside the report button",
+        "jobfluent",
+        200,
+        "<h1>AI Engineer</h1><p>Oferta no disponible.</p>"
+        '<div class="not-available row"><a class="btn btn-danger btn-sm" '
+        'href="/es/offers/f28af3/report-filled">Oferta no disponible? Dínoslo!</a></div>',
+        "dead",
+        title="AI Engineer",
     ),
     Scenario(
         "a board listing retired at source",

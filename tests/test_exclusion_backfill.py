@@ -1,4 +1,4 @@
-"""T217 — topics stated before T203 are visible to step 7 until they are recorded.
+"""T218 — topics stated before T203 are visible to step 7 until they are recorded.
 
 A profile begun before `source()` read `search/exclusions.json` holds its
 ruled-out topics only as evidence rows, so its exclusions filter nothing and
@@ -53,7 +53,7 @@ def root(tmp_path: Path) -> Path:
 
 
 def _profile(root: Path, rows: list[dict[str, Any]]) -> ProfileStore:
-    identity = create_profile(root, "T217 Probe", handle="t217-probe", fiction=True)
+    identity = create_profile(root, "T218 Probe", handle="t217-probe", fiction=True)
     store = ProfileStore(root, identity.handle)
     for row in rows:
         store.append_jsonl(row, "profile", "evidence.jsonl")
@@ -196,7 +196,7 @@ def test_the_unrecorded_cli_exits_1_until_the_backfill_is_done(
 
 
 def _drive_step_7_checkpoint(root: Path, handle: str) -> dict[str, Any]:
-    spec = importlib.util.spec_from_file_location("_t217_step_7_checkpoint", _STEP_7_CHECKPOINT)
+    spec = importlib.util.spec_from_file_location("_t218_step_7_checkpoint", _STEP_7_CHECKPOINT)
     assert spec is not None and spec.loader is not None
     module: Any = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -241,7 +241,7 @@ def test_the_unrecorded_cli_fails_for_a_handle_with_no_profile(
 
 
 def _load_checkpoint_module() -> Any:
-    spec = importlib.util.spec_from_file_location("_t217_main_checkpoint", _STEP_7_CHECKPOINT)
+    spec = importlib.util.spec_from_file_location("_t218_main_checkpoint", _STEP_7_CHECKPOINT)
     assert spec is not None and spec.loader is not None
     module: Any = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
@@ -257,7 +257,7 @@ def test_the_checkpoint_main_prints_the_warning_to_stderr(
         module = _load_checkpoint_module()
         module.main(["--id", store.handle, "--input-dir", str(root), "--dev"])
     finally:
-        sys.modules.pop("_t217_main_checkpoint", None)
+        sys.modules.pop("_t218_main_checkpoint", None)
     assert capsys.readouterr().err.startswith("WARNING")
 
 
@@ -270,7 +270,7 @@ def test_a_corrupt_evidence_log_makes_the_checkpoint_main_exit_2(
         module = _load_checkpoint_module()
         code = module.main(["--id", store.handle, "--input-dir", str(root), "--dev"])
     finally:
-        sys.modules.pop("_t217_main_checkpoint", None)
+        sys.modules.pop("_t218_main_checkpoint", None)
     assert code == 2
     assert "could not be computed" in capsys.readouterr().err
 

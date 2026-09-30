@@ -132,7 +132,7 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
             "measures separately."
         ),
         "certification_note": (None if certifiable(step) else certification_note(step)),
-        # T217: a profile begun before T203 stated its ruled-out topics only as
+        # T218: a profile begun before T203 stated its ruled-out topics only as
         # evidence rows, and `source()` reads `search/exclusions.json`, never
         # those. A warning, not a coverage input: the rows are free text, and
         # the backfill is the candidate's words recorded, not a file conjured.

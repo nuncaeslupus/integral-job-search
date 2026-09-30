@@ -383,7 +383,7 @@ def ruled_out_by(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple
 
 
 # ---------------------------------------------------------------------------
-# T217 — topics stated before T203 wired the file in, and never recorded
+# T218 — topics stated before T203 wired the file in, and never recorded
 #
 # Until T203 nothing read `search/exclusions.json`, so a profile begun before it
 # holds its ruled-out topics only as evidence rows, and `source()` filters
@@ -751,7 +751,7 @@ def _main(argv: list[str]) -> int:
 
     `record …` is the producer: the conversation keeps a topic the candidate
     ruled out, so the next `source()` leaves it out. `unrecorded …` lists the
-    evidence rows that rule a topic out and are not yet recorded (T217).
+    evidence rows that rule a topic out and are not yet recorded (T218).
 
     T203's measurement runs in a **subprocess** of its own module rather than an
     import: it reads the committed adverts, and this module is on the serving

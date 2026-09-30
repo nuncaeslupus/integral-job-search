@@ -1,6 +1,6 @@
 {
   "offers_presented_without_a_liveness_check": 0,
-  "scenarios_probed": 13,
+  "scenarios_probed": 15,
   "dead_phrases_known": 9,
   "violations": [],
   "readings": [
@@ -50,6 +50,30 @@
       "presented": false,
       "expired": false,
       "reason": "the page reads as a block page ('no podemos identificar tu navegador') — being blocked is not the advert being open",
+      "reasons": []
+    },
+    {
+      "scenario": "jobfluent, a live advert carrying the site-wide report button",
+      "source": "jobfluent",
+      "index_sourced": false,
+      "title": "AI Engineer",
+      "liveness": "live",
+      "expected": "live",
+      "presented": true,
+      "expired": false,
+      "reason": "fetched from source, 200, no closure notice",
+      "reasons": []
+    },
+    {
+      "scenario": "jobfluent, a closed advert stating it beside the report button",
+      "source": "jobfluent",
+      "index_sourced": false,
+      "title": "AI Engineer",
+      "liveness": "dead",
+      "expected": "dead",
+      "presented": false,
+      "expired": true,
+      "reason": "the advert's own page says 'oferta no disponible'",
       "reasons": []
     },
     {
