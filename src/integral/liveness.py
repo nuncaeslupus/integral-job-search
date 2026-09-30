@@ -95,10 +95,38 @@ def normalise(text: str) -> str:
     return _WHITESPACE.sub(" ", text).strip().lower()
 
 
+#: Controls — a link or a button. Their text names an action the reader may
+#: take, not a statement the page makes about the vacancy.
+_CONTROL = re.compile(r"<(a|button)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+
+#: One sentence of visible text, with its terminator when it has one.
+_SENTENCE = re.compile(r"[^.!?]+[.!?]*")
+
+
 def dead_phrase_in(text: str) -> str | None:
-    """The closure phrase the body carries, if it carries one."""
-    haystack = normalise(text)
-    return next((phrase for phrase in DEAD_PHRASES if phrase in haystack), None)
+    """The closure notice the body states, if it states one.
+
+    A closure notice is a **statement the page makes** that the vacancy is
+    closed. Two kinds of text carry the same words and make no such statement,
+    and neither counts — one closed rule, not a list of boards:
+
+    - **the text of a control** (`<a>`, `<button>`): it names an action the
+      reader may take, such as reporting that an advert is filled;
+    - **a question** (a sentence ending in `?`): it asks, it does not state.
+
+    Every Jobfluent advert carries a site-wide
+    `<a …>Oferta no disponible? Dínoslo!</a>` report button, which is both.
+    Matching the phrase anywhere read every live Jobfluent advert as `dead`
+    and `expire` retired it (measured 2026-09-30: 15 of 15) — fail-closed, and
+    a tombstone is what stops a vacancy ever being offered again.
+    """
+    for sentence in _SENTENCE.findall(visible_text(_CONTROL.sub(" ", text))):
+        if sentence.rstrip().endswith("?"):
+            continue
+        phrase = next((p for p in DEAD_PHRASES if p in sentence), None)
+        if phrase is not None:
+            return phrase
+    return None
 
 
 _TAG = re.compile(r"<[^>]*>")
@@ -412,6 +440,31 @@ SCENARIOS: tuple[Scenario, ...] = (
         "<h1>No podemos identificar tu navegador</h1>"
         "<p>Comprueba que JavaScript esté habilitado en tu navegador.</p></body></html>",
         "unverified",
+    ),
+    Scenario(
+        # FAIL-CLOSED. Jobfluent's real markup, 2026-09-30: a site-wide report
+        # button on every advert, whose text holds "oferta no disponible".
+        # A control and a question, so it states nothing about the vacancy.
+        "jobfluent, a live advert carrying the site-wide report button",
+        "jobfluent",
+        200,
+        "<h1>AI Engineer</h1><p>Barcelona. Jornada completa.</p>"
+        '<div class="not-available row"><a class="btn btn-danger btn-sm" '
+        'href="/es/offers/f28af3/report-filled">Oferta no disponible? Dínoslo!</a></div>',
+        "live",
+        title="AI Engineer",
+    ),
+    Scenario(
+        # FAIL-OPEN guard for the rule above: the same page, closed, still
+        # reads dead when the closure is stated in the page's own text.
+        "jobfluent, a closed advert stating it beside the report button",
+        "jobfluent",
+        200,
+        "<h1>AI Engineer</h1><p>Oferta no disponible.</p>"
+        '<div class="not-available row"><a class="btn btn-danger btn-sm" '
+        'href="/es/offers/f28af3/report-filled">Oferta no disponible? Dínoslo!</a></div>',
+        "dead",
+        title="AI Engineer",
     ),
     Scenario(
         "a board listing retired at source",

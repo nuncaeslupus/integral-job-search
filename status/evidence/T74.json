@@ -1,10 +1,34 @@
 {
   "offers_presented_from_a_page_that_is_not_the_advert": 0,
-  "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 6,
-  "pages_checked": 6,
+  "offers_presented_from_a_page_that_is_not_the_advert_evaluated": 8,
+  "pages_checked": 8,
   "gate_status": "measured",
   "violations": [],
   "readings": [
+    {
+      "scenario": "jobfluent, a live advert carrying the site-wide report button",
+      "source": "jobfluent",
+      "index_sourced": false,
+      "title": "AI Engineer",
+      "liveness": "live",
+      "expected": "live",
+      "presented": true,
+      "expired": false,
+      "reason": "fetched from source, 200, no closure notice",
+      "reasons": []
+    },
+    {
+      "scenario": "jobfluent, a closed advert stating it beside the report button",
+      "source": "jobfluent",
+      "index_sourced": false,
+      "title": "AI Engineer",
+      "liveness": "dead",
+      "expected": "dead",
+      "presented": false,
+      "expired": true,
+      "reason": "the advert's own page says 'oferta no disponible'",
+      "reasons": []
+    },
     {
       "scenario": "a connector listing, fetched and open",
       "source": "examplejobs",

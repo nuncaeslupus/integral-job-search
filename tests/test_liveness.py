@@ -276,3 +276,46 @@ def test_no_known_refusal_reads_as_a_live_advert(
     page = _SHAPES[shape](body)
     check = liveness.read_response("r", status if status is not None else 200, page)
     assert check.liveness != "live", (case, shape, check.reason)
+
+
+#: Jobfluent's site-wide report button, verbatim from
+#: https://www.jobfluent.com/es/empleos/ai-engineer-barcelona-f28af3 (2026-09-30).
+_JOBFLUENT_REPORT_BUTTON = (
+    '<div class="not-available row"><a class="btn btn-danger btn-sm" '
+    'href="/es/offers/f28af3/report-filled">Oferta no disponible? Dínoslo!</a></div>'
+)
+
+
+def test_a_live_jobfluent_advert_is_not_read_dead_by_its_report_button() -> None:
+    """FAIL-CLOSED, measured: 15 of 15 live Jobfluent adverts read `dead`."""
+    page = f"<h1>AI Engineer</h1><p>Barcelona, jornada completa.</p>{_JOBFLUENT_REPORT_BUTTON}"
+    check = liveness.read_response("j", 200, page, title="AI Engineer")
+    assert check.liveness == "live", check.reason
+    assert liveness.expire(_advert("j", title="AI Engineer"), check).status != "expired"
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        '<a href="/report">Oferta no disponible</a>',  # a link, not a question
+        "<button>Puesto ocupado</button>",  # a button
+        "<p>¿Oferta no disponible? Avísanos.</p>",  # a question in plain text
+        "<P>Position filled?</P>",
+    ],
+)
+def test_a_control_or_a_question_states_no_closure(page: str) -> None:
+    assert liveness.dead_phrase_in(page) is None
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "<h1>Albañil</h1><p>PUESTO OCUPADO</p>",
+        f"<p>Oferta no disponible.</p>{_JOBFLUENT_REPORT_BUTTON}",
+        f"{_JOBFLUENT_REPORT_BUTTON}<p>Esta oferta ya no está disponible</p>",
+        "<p>¿Buscas trabajo? Vacante cubierta.</p>",  # the question is a different sentence
+        "<abbr>x</abbr><p>Oferta cerrada</p>",  # <abbr> is not <a>
+    ],
+)
+def test_a_stated_closure_still_reads_dead(page: str) -> None:
+    assert liveness.read_response("d", 200, page).liveness == "dead"
