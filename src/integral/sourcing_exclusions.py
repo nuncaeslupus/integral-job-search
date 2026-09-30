@@ -46,7 +46,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer
-from integral.profile import EvidenceLog
+from integral.profile import EvidenceLog, ProfileError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
@@ -399,14 +399,19 @@ STATEMENT_STEPS: tuple[str, ...] = ("identify", "constraints")
 #: candidate keeps seeing — so a pay floor ("no menos de 40k") trips it too.
 _REFUSAL = re.compile(
     r"(?<![0-9a-z])(?:no|not|ni|nada|nothing|never|nunca|mai|res|gens|sin|without|"
-    r"don'?t|won'?t|descart\w*|avoid\w*|evit\w*|exclu\w*|rule[sd]?\s+out|"
-    r"bastante|enough|prou|hart[oa]s?|fart[oa]s?|cansad\w*|tired)(?![0-9a-z])"
+    r"don'?t|won'?t|descart\w*|avoid\w*|evit\w*|exclu\w*|rule[sd]?\s+out|rul\w+\s+out|"
+    r"bastante|enough|prou|hart[oa]s?|fart[oa]s?|cansad\w*|tired|"
+    r"odi\w*|detest\w*|hate\w*|hating|dislike\w*|niego|nego|refus\w*|ningun\w*|cap|cero|"
+    r"jamas|quemad\w*|away|done|sick|fed\s+up|paso\s+de)(?![0-9a-z])"
 )
+
+#: Typographic apostrophes, read as the ASCII one before the cue is matched.
+_APOSTROPHES = str.maketrans({"\u2018": "'", "\u2019": "'", "\u02bc": "'", "\u2032": "'"})
 
 
 def states_a_refusal(text: str) -> bool:
     """Whether a row's words rule something out — a cue, not a reading."""
-    return bool(_REFUSAL.search(_fold(text, " ")))
+    return bool(_REFUSAL.search(_fold(text.translate(_APOSTROPHES), " ")))
 
 
 class UnrecordedStatement(Strict):
@@ -420,6 +425,8 @@ class UnrecordedStatement(Strict):
 def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
     """The live rows of `STATEMENT_STEPS` that refuse something no exclusion matches.
 
+    Every `constraint`-kind row counts, whatever its words; other kinds need the cue.
+
     "Covered" means a recorded exclusion `matches` the row's own words, so a
     partial backfill lists only what is left. A row naming several topics
     counts as covered once any one of them is recorded — the ceiling of a
@@ -429,7 +436,12 @@ def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...
     exclusions = load_exclusions(store)
     unrecorded: list[UnrecordedStatement] = []
     for row in EvidenceLog(store).effective_rows():
-        if row.step not in STATEMENT_STEPS or not states_a_refusal(row.text):
+        if row.step not in STATEMENT_STEPS:
+            continue
+        # A `constraint` row is the candidate saying what rules a job out, whatever
+        # the words: a bare list ("defensa, apuestas, tabacos, bancos") has no cue.
+        # The cue is only for the other kinds, where it tells a refusal from a fact.
+        if row.kind != "constraint" and not states_a_refusal(row.text):
             continue
         said = Candidate(offer_id=row.id, text=row.text)
         if any(matches(said, exclusion) for exclusion in exclusions):
@@ -696,6 +708,12 @@ def _unrecorded(argv: list[str]) -> int:
     parser.add_argument("--root", type=Path, default=None)
     args = parser.parse_args(argv)
     store = ProfileStore(args.root or default_profiles_root(), args.handle)
+    try:
+        store.identity()
+    except (IdentityError, OSError, ProfileError) as exc:
+        # Silence here reads as "backfill done", the one thing a missing profile is not.
+        print(f"unrecorded: no identified profile {args.handle!r}: {exc}", file=sys.stderr)
+        return 2
     rows = unrecorded_statements(store)
     for row in rows:
         print(row.model_dump_json())

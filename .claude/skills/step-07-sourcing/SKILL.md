@@ -269,7 +269,9 @@ global path.
 
 It also reports `exclusions_recorded`, `unrecorded_exclusion_statements` and
 `exclusion_backfill_warning` (also printed to stderr): evidence rows in which the candidate
-ruled something out that no recorded exclusion matches. The warning does not change the exit
+ruled something out that no recorded exclusion matches. Every `constraint`-kind row in those
+steps is listed regardless of wording (a bare list such as "defensa, apuestas, tabacos, bancos"
+has no cue word); only other kinds need a refusal cue. The warning does not change the exit
 code — it is the backfill above left undone, and it is closed by recording the topics, not by
 editing the file.
 

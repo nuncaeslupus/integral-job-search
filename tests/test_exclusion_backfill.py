@@ -60,11 +60,11 @@ def _profile(root: Path, rows: list[dict[str, Any]]) -> ProfileStore:
 
 
 _PRE_T203 = [
-    _row(9, "constraints", "Descarto defensa, apuestas, tabacos y bancos"),
+    _row(9, "constraints", "defensa, apuestas, tabacos, bancos"),
     _row(26, "constraints", "no me gusta todo lo que sea comprar y vender (e-commerce, etc.)"),
     _row(30, "identify", "ya tuve bastante de fintechs", kind="statement"),
     _row(31, "constraints", "no m'interessa la ciberseguretat"),
-    _row(40, "constraints", "Vivo en Barcelona y trabajo en remoto"),
+    _row(40, "constraints", "Vivo en Barcelona y trabajo en remoto", kind="statement"),
     _row(41, "history", "No me gustaba la banca en mi anterior trabajo", kind="episode"),
 ]
 
@@ -128,6 +128,34 @@ def test_the_cue_hears_a_refusal_in_es_en_ca(text: str) -> None:
     assert states_a_refusal(text)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I don\u2019t want to work in banking",
+        "I don\u2018t want to work in banking",
+        "odio la banca",
+        "paso de la banca",
+        "detesto la publicidad",
+        "me niego a trabajar en defensa",
+        "ning\u00fan inter\u00e9s en defensa",
+        "cero inter\u00e9s en la ciberseguridad",
+        "Tabaco: jam\u00e1s",
+        "estoy quemado de las fintechs",
+        "cap interès en la banca",
+        "I hate adtech",
+        "dislike ad tech",
+        "Stay away from gambling",
+        "I'm done with fintech",
+        "sick of fintech",
+        "fed up with ecommerce",
+        "I refuse to work for defence contractors",
+        "ruling out defence",
+    ],
+)
+def test_the_cue_hears_the_wider_wordings_and_curly_apostrophes(text: str) -> None:
+    assert states_a_refusal(text)
+
+
 @pytest.mark.parametrize("text", ["Vivo en Barcelona", "Busco un rol de backend en Python"])
 def test_the_cue_is_silent_on_a_plain_statement(text: str) -> None:
     assert not states_a_refusal(text)
@@ -171,3 +199,57 @@ def test_the_step_7_checkpoint_carries_the_warning(root: Path) -> None:
         "ev-000031",
     ]
     assert result["exclusion_backfill_warning"].startswith("WARNING")
+
+
+def test_a_constraint_row_with_no_cue_is_listed_but_a_statement_row_is_not(root: Path) -> None:
+    rows = [
+        _row(1, "constraints", "defensa, apuestas, tabacos, bancos"),
+        _row(2, "constraints", "Vivo en Barcelona", kind="statement"),
+    ]
+    store = _profile(root, rows)
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+    warning = backfill_warning(store)
+    assert warning is not None and warning.startswith("WARNING") and "ev-000001" in warning
+
+
+def test_the_unrecorded_cli_fails_for_a_handle_with_no_profile(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root.mkdir()
+    assert se._main(["prog", "unrecorded", "--handle", "nobody-here", "--root", str(root)]) != 0
+    assert "nobody-here" in capsys.readouterr().err
+
+
+def _load_checkpoint_module() -> Any:
+    spec = importlib.util.spec_from_file_location("_t217_main_checkpoint", _STEP_7_CHECKPOINT)
+    assert spec is not None and spec.loader is not None
+    module: Any = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_checkpoint_main_prints_the_warning_to_stderr(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, _PRE_T203)
+    try:
+        module = _load_checkpoint_module()
+        module.main(["--id", store.handle, "--input-dir", str(root), "--dev"])
+    finally:
+        sys.modules.pop("_t217_main_checkpoint", None)
+    assert capsys.readouterr().err.startswith("WARNING")
+
+
+def test_a_corrupt_evidence_log_makes_the_checkpoint_main_exit_2(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, _PRE_T203[:1])
+    store.path("profile", "evidence.jsonl").write_text("{not json\n", encoding="utf-8")
+    try:
+        module = _load_checkpoint_module()
+        code = module.main(["--id", store.handle, "--input-dir", str(root), "--dev"])
+    finally:
+        sys.modules.pop("_t217_main_checkpoint", None)
+    assert code == 2
+    assert "could not be computed" in capsys.readouterr().err
