@@ -31,6 +31,15 @@ If the runtime (`integral.step_runtime.offered`) is not offering `sourcing` for 
 - Mostly automatic, with one conversational duty: establish how far the search can travel, at the moment it becomes relevant — remote, commuting distance, relocation, and cross-border employment (employed or contracting, paid where, taxed where).
 - Reach beyond the obvious portals to boards specialised in the candidate's field, and go to employers directly where the field has obvious ones.
 - **Topics the candidate ruled out are applied by `source()` itself** (`search/exclusions.json`, recorded in step 2 or whenever they say it). Adverts left out that way are counted and named in the run's `EXCLUDED` line — say so to the candidate ("12 left out on the banking topic they ruled out") rather than letting a smaller list look like a thinner market. A topic they rule out during this step is recorded first (`uv run python -m integral.sourcing_exclusions record …` with `--term` forms in Spanish, English and Catalan, see step 2), then the search is re-run.
+- **Backfill before the first search on an older profile.** A profile begun before exclusions were applied holds its ruled-out topics only as evidence rows (step `identify` or `constraints`), and `source()` never reads those — it reads `search/exclusions.json` alone, so nothing is filtered. Run the checkpoint (or `uv run python -m integral.sourcing_exclusions unrecorded --handle <handle>`) first: a `WARNING` naming evidence ids means topics were stated and none is recorded. Read those rows, then record **every topic each one names** — one `record` per topic, `--words` quoted from the row, `--term` forms in Spanish, English and Catalan:
+
+  ```bash
+  uv run python -m integral.sourcing_exclusions record --handle <handle> \
+      --about sector:apuestas --words "defensa, apuestas, tabacos, bancos" \
+      --term betting --term gambling --term apostes
+  ```
+
+  Re-run `unrecorded` until it exits 0. A row it lists that rules out no topic (a pay floor, "no relocation") is left as it is — the cue is broad on purpose. Tell the candidate in one line what is now filtered; never record a topic they did not say.
 - **Deduplication is by similarity, not by hash** — the same job at two boards is rarely byte-identical.
 - Where a source needs a login, drive the candidate's **own browser session** rather than storing credentials — nothing to leak, nothing to rotate.
 
@@ -257,6 +266,12 @@ covered step is not a passed one (D-21).
 
 The script writes its result to the candidate's own tree at `session/checkpoint-sourcing.json`, never to a shared or
 global path.
+
+It also reports `exclusions_recorded`, `unrecorded_exclusion_statements` and
+`exclusion_backfill_warning` (also printed to stderr): evidence rows in which the candidate
+ruled something out that no recorded exclusion matches. The warning does not change the exit
+code — it is the backfill above left undone, and it is closed by recording the topics, not by
+editing the file.
 
 ## Gotchas
 

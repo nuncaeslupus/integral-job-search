@@ -43,7 +43,13 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 from integral.identity import IdentityError, ProfileStore  # noqa: E402
 from integral.process_spec import Step, StepList, load_steps  # noqa: E402
+from integral.profile import ProfileError  # noqa: E402
 from integral.session import SessionError, SessionStore  # noqa: E402
+from integral.sourcing_exclusions import (  # noqa: E402
+    backfill_warning,
+    load_exclusions,
+    unrecorded_statements,
+)
 from integral.state_home import (  # noqa: E402
     StateHomeRefused,
     ensure_outside_a_work_tree,
@@ -126,6 +132,15 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
             "measures separately."
         ),
         "certification_note": (None if certifiable(step) else certification_note(step)),
+        # T217: a profile begun before T203 stated its ruled-out topics only as
+        # evidence rows, and `source()` reads `search/exclusions.json`, never
+        # those. A warning, not a coverage input: the rows are free text, and
+        # the backfill is the candidate's words recorded, not a file conjured.
+        "exclusions_recorded": len(load_exclusions(store)),
+        "unrecorded_exclusion_statements": [
+            row.model_dump() for row in unrecorded_statements(store)
+        ],
+        "exclusion_backfill_warning": backfill_warning(store),
     }
     store.write_json(result, "session", f"checkpoint-{STEP_ID}.json")
     return result
@@ -168,11 +183,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = checkpoint(root, args.handle)
-    except (CheckpointError, IdentityError, SessionError) as exc:
+    except (CheckpointError, IdentityError, ProfileError, SessionError) as exc:
         print(f"checkpoint could not be computed: {exc}", file=sys.stderr)
         return 2
 
     print(json.dumps(result, ensure_ascii=False))
+    if result.get("exclusion_backfill_warning"):
+        print(result["exclusion_backfill_warning"], file=sys.stderr)
     if not result["runnable"]:
         print(f"{STEP_ID} is not runnable: missing {result['missing_inputs']}", file=sys.stderr)
     if result["certification_note"] and result["runnable"] and result["coverage_met"]:

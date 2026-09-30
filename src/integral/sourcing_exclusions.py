@@ -46,6 +46,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer
+from integral.profile import EvidenceLog
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
@@ -380,6 +381,87 @@ def ruled_out_by(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple
     return tuple(e.about for e in exclusions if matches(candidate, e))
 
 
+# ---------------------------------------------------------------------------
+# T217 — topics stated before T203 wired the file in, and never recorded
+#
+# Until T203 nothing read `search/exclusions.json`, so a profile begun before it
+# holds its ruled-out topics only as evidence rows, and `source()` filters
+# nothing for them. Nothing about that profile looks wrong: the file is simply
+# absent, which `load_exclusions` reads — correctly — as "nothing ruled out".
+# So the gap is looked for from the other side: the rows in which a candidate
+# says what rules a job out, set against what is recorded.
+
+#: The steps whose rows state what rules a job out (step 0 and step 2).
+STATEMENT_STEPS: tuple[str, ...] = ("identify", "constraints")
+
+#: A refusal in ES/EN/CA, matched on folded text. Deliberately broad: a row it
+#: over-reads costs one line of review, and a row it misses is a topic the
+#: candidate keeps seeing — so a pay floor ("no menos de 40k") trips it too.
+_REFUSAL = re.compile(
+    r"(?<![0-9a-z])(?:no|not|ni|nada|nothing|never|nunca|mai|res|gens|sin|without|"
+    r"don'?t|won'?t|descart\w*|avoid\w*|evit\w*|exclu\w*|rule[sd]?\s+out|"
+    r"bastante|enough|prou|hart[oa]s?|fart[oa]s?|cansad\w*|tired)(?![0-9a-z])"
+)
+
+
+def states_a_refusal(text: str) -> bool:
+    """Whether a row's words rule something out — a cue, not a reading."""
+    return bool(_REFUSAL.search(_fold(text, " ")))
+
+
+class UnrecordedStatement(Strict):
+    """One evidence row that rules a topic out and that no recorded exclusion covers."""
+
+    evidence_id: str
+    step: str
+    words: str
+
+
+def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
+    """The live rows of `STATEMENT_STEPS` that refuse something no exclusion matches.
+
+    "Covered" means a recorded exclusion `matches` the row's own words, so a
+    partial backfill lists only what is left. A row naming several topics
+    counts as covered once any one of them is recorded — the ceiling of a
+    check that cannot split free text into topics, and why the backfill
+    records every topic a row names, not the first.
+    """
+    exclusions = load_exclusions(store)
+    unrecorded: list[UnrecordedStatement] = []
+    for row in EvidenceLog(store).effective_rows():
+        if row.step not in STATEMENT_STEPS or not states_a_refusal(row.text):
+            continue
+        said = Candidate(offer_id=row.id, text=row.text)
+        if any(matches(said, exclusion) for exclusion in exclusions):
+            continue
+        unrecorded.append(UnrecordedStatement(evidence_id=row.id, step=row.step, words=row.text))
+    return tuple(unrecorded)
+
+
+def backfill_warning(store: ProfileStore) -> str | None:
+    """What step 7 says before sourcing, or `None` when there is nothing to say.
+
+    Loud when **nothing** is recorded — the pre-T203 profile, whose every
+    ruled-out topic is being ignored. Quieter when some is: those rows may
+    still hold a topic, or may be a pay floor the cue over-read.
+    """
+    rows = unrecorded_statements(store)
+    if not rows:
+        return None
+    ids = ", ".join(row.evidence_id for row in rows)
+    if not load_exclusions(store):
+        return (
+            f"WARNING: {len(rows)} evidence row(s) rule something out ({ids}) and "
+            f"{'/'.join(EXCLUSIONS_FILE)} records nothing, so source() filters none of it. "
+            "Record each topic before sourcing: "
+            "uv run python -m integral.sourcing_exclusions record … (see step 7, 'Backfill')."
+        )
+    return (
+        f"note: {len(rows)} evidence row(s) rule something out that no recorded exclusion "
+        f"matches ({ids}) — record any topic among them, or leave a pay floor as it is."
+    )
+
+
 def resurfaced(
     presentations: Sequence[Presentation], exclusions: Sequence[Exclusion], *, cycle: int
 ) -> list[Resurfaced]:
@@ -600,11 +682,35 @@ def _record(argv: list[str]) -> int:
     return 0
 
 
+def _unrecorded(argv: list[str]) -> int:
+    """`unrecorded --handle H [--root DIR]` → one JSON row per statement left to record.
+
+    Exit 1 while any is left, so a session can loop until the backfill is done.
+    """
+    import argparse
+
+    from integral.identity import default_profiles_root
+
+    parser = argparse.ArgumentParser(prog="integral.sourcing_exclusions unrecorded")
+    parser.add_argument("--handle", required=True)
+    parser.add_argument("--root", type=Path, default=None)
+    args = parser.parse_args(argv)
+    store = ProfileStore(args.root or default_profiles_root(), args.handle)
+    rows = unrecorded_statements(store)
+    for row in rows:
+        print(row.model_dump_json())
+    warning = backfill_warning(store)
+    if warning:
+        print(warning, file=sys.stderr)
+    return 1 if rows else 0
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.sourcing_exclusions [path]` → T90's and T203's gate evidence.
 
     `record …` is the producer: the conversation keeps a topic the candidate
-    ruled out, so the next `source()` leaves it out.
+    ruled out, so the next `source()` leaves it out. `unrecorded …` lists the
+    evidence rows that rule a topic out and are not yet recorded (T217).
 
     T203's measurement runs in a **subprocess** of its own module rather than an
     import: it reads the committed adverts, and this module is on the serving
@@ -612,6 +718,8 @@ def _main(argv: list[str]) -> int:
     """
     if len(argv) > 1 and argv[1] == "record":
         return _record(argv[2:])
+    if len(argv) > 1 and argv[1] == "unrecorded":
+        return _unrecorded(argv[2:])
     import subprocess
 
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
