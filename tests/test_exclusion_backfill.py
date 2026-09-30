@@ -53,7 +53,7 @@ def root(tmp_path: Path) -> Path:
 
 
 def _profile(root: Path, rows: list[dict[str, Any]]) -> ProfileStore:
-    identity = create_profile(root, "T218 Probe", handle="t217-probe", fiction=True)
+    identity = create_profile(root, "T218 Probe", handle="t218-probe", fiction=True)
     store = ProfileStore(root, identity.handle)
     for row in rows:
         store.append_jsonl(row, "profile", "evidence.jsonl")
@@ -340,5 +340,58 @@ def test_the_unrecorded_cli_exits_2_on_a_corrupt_evidence_log(
 ) -> None:
     store = _profile(root, _PRE_T203[:1])
     store.path("profile", "evidence.jsonl").write_text("{not json\n", encoding="utf-8")
+    assert se._main(["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]) == 2
+    assert "could not be computed" in capsys.readouterr().err
+
+
+# Round 3: the skip is for step 2's own write, never for a dimension tag alone.
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        _row(1, "constraints", "defensa, apuestas, tabacos, bancos", dimensions=["reach"]),
+        _row(
+            1,
+            "identify",
+            "Vivo en Barcelona, pero nada de banca",
+            kind="statement",
+            dimensions=["location"],
+        ),
+        _row(
+            1,
+            "constraints",
+            json.dumps({"quote": "nada de banca", "value": "banca"}),
+            dimensions=["salary"],
+        ),
+        _row(
+            1,
+            "identify",
+            json.dumps({"quote": "nada de banca", "value": {"city": "Barcelona"}}),
+            kind="statement",
+            dimensions=["location"],
+        ),
+    ],
+)
+def test_a_topic_row_merely_tagged_with_a_pinned_field_is_still_listed(
+    root: Path, row: dict[str, Any]
+) -> None:
+    store = _profile(root, [row])
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+    warning = backfill_warning(store)
+    assert warning is not None and warning.startswith("WARNING")
+
+
+@pytest.mark.parametrize("corrupt", ["directory", "not-utf8"])
+def test_the_unrecorded_cli_exits_2_on_an_unreadable_exclusions_file(
+    root: Path, capsys: pytest.CaptureFixture[str], corrupt: str
+) -> None:
+    store = _profile(root, _PRE_T203[:1])
+    path = store.path(*se.EXCLUSIONS_FILE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if corrupt == "directory":
+        path.mkdir()
+    else:
+        path.write_bytes(b"\xff\xfe[]")
     assert se._main(["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]) == 2
     assert "could not be computed" in capsys.readouterr().err

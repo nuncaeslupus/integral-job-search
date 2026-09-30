@@ -47,7 +47,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from integral.candidate import CONSTRAINT_FIELD_NAMES
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer
-from integral.profile import EvidenceLog, ProfileError
+from integral.profile import EvidenceLog, EvidenceRow, ProfileError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
@@ -417,9 +417,27 @@ def states_a_refusal(text: str) -> bool:
     return bool(_REFUSAL.search(_fold(text.translate(_APOSTROPHES), " ")))
 
 
-def _states_pinned_fields(dimensions: Sequence[str]) -> bool:
-    """Whether a row states only T24's pinned constraint fields — never a topic."""
-    return bool(dimensions) and set(dimensions) <= set(CONSTRAINT_FIELD_NAMES)
+def _is_a_pinned_field_write(row: EvidenceRow) -> bool:
+    """Whether a row is step 2's own write of T24's pinned fields — never a topic.
+
+    All three are required, and together they are the shape
+    `constraints_step._encode_stated` writes and `profile._last_pinned_value`
+    reads back: kind `constraint`, only pinned dimensions, and a text that
+    decodes to `{"quote": …, "value": {…}}`. A dimension tag alone is not
+    enough — a free-text row tagged `reach` saying "defensa, apuestas" is a
+    topic the candidate ruled out, and skipping it would silence the warning.
+    """
+    if row.kind != "constraint" or not row.dimensions:
+        return False
+    if not set(row.dimensions) <= set(CONSTRAINT_FIELD_NAMES):
+        return False
+    try:
+        payload = json.loads(row.text)
+    except json.JSONDecodeError:
+        return False
+    return (
+        isinstance(payload, dict) and "quote" in payload and isinstance(payload.get("value"), dict)
+    )
 
 
 class UnrecordedStatement(Strict):
@@ -452,7 +470,7 @@ def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...
         # applies them as constraints, and no `record` can cover one — listed, it
         # would keep the backfill loop from ever reaching exit 0. Its quote is
         # skipped even when it carries a cue ("no menos de 40k", "no me reubico").
-        if _states_pinned_fields(row.dimensions):
+        if _is_a_pinned_field_write(row):
             continue
         # Any other `constraint` row is the candidate saying what rules a job out,
         # whatever the words: a bare list ("defensa, apuestas, tabacos, bancos") has
@@ -734,7 +752,7 @@ def _unrecorded(argv: list[str]) -> int:
     try:
         rows = unrecorded_statements(store)
         warning = backfill_warning(store)
-    except (IdentityError, OSError, ProfileError) as exc:
+    except (IdentityError, OSError, ProfileError, UnicodeDecodeError) as exc:
         # An unreadable exclusions file or evidence log cannot answer; exit 1
         # would read as "rows left", and the checkpoint exits 2 on the same file.
         print(f"unrecorded: could not be computed: {exc}", file=sys.stderr)

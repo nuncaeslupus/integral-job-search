@@ -100,10 +100,7 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
     session = SessionStore(store).read()
     on_this_step = bool(session and session.current_step == STEP_ID)
     outstanding = list(session.position.outstanding) if on_this_step else []
-    started = bool(
-        session
-        and (on_this_step or finished or STEP_ID in session.pending_steps)
-    )
+    started = bool(session and (on_this_step or finished or STEP_ID in session.pending_steps))
     coverage_met = finished and not outstanding
 
     result: dict[str, Any] = {
@@ -148,7 +145,9 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--id", required=True, dest="handle", help="the candidate's resolved handle")
+    parser.add_argument(
+        "--id", required=True, dest="handle", help="the candidate's resolved handle"
+    )
     parser.add_argument(
         "--input-dir",
         default=None,
@@ -183,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = checkpoint(root, args.handle)
-    except (CheckpointError, IdentityError, ProfileError, SessionError) as exc:
+    except (CheckpointError, IdentityError, ProfileError, SessionError, UnicodeDecodeError) as exc:
         print(f"checkpoint could not be computed: {exc}", file=sys.stderr)
         return 2
 

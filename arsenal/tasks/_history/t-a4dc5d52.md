@@ -15,7 +15,7 @@ Found 2026-09-30 on a real candidate profile: 9 ruled-out topics stated across s
 - CLI `python -m integral.sourcing_exclusions unrecorded --handle H` — exit 1 while anything is left, so the backfill loop is closable.
 - Step 7's SKILL.md documents the backfill: one `record` per topic, words quoted from the row, `--term` in ES/EN/CA.
 
-Ceiling: a row naming several topics counts as covered once any one of them is recorded — free text cannot be split into topics, so the skill asks for every topic a row names.
+Ceiling: a row naming several topics counts as covered once any one of them is recorded — free text cannot be split into topics, so the skill asks for every topic a row names. Step 2's own write of a pinned field (salary, location, …) is never listed, so a topic said inside its quote is not seen either.
 
 ## Acceptance gate
 

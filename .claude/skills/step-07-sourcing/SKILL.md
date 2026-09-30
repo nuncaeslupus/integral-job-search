@@ -271,8 +271,11 @@ It also reports `exclusions_recorded`, `unrecorded_exclusion_statements` and
 `exclusion_backfill_warning` (also printed to stderr): evidence rows in which the candidate
 ruled something out that no recorded exclusion matches. Every `constraint`-kind row in those
 steps is listed regardless of wording (a bare list such as "defensa, apuestas, tabacos, bancos"
-has no cue word), except a row stating only step 2's pinned fields (salary, location,
-relocation, …), which is never a topic and never listed; only other kinds need a refusal cue. The warning does not change the exit
+has no cue word), except step 2's own write of its pinned fields (salary, location,
+relocation, …: a `{"quote", "value"}` row), which is never a topic and never listed — a
+free-text row merely tagged with one of those fields is still listed. Only other kinds need a
+refusal cue. Ceiling: a topic said inside a pinned field's quote ("remoto, y nada de
+consultoras") is not seen; ask for it as its own statement. The warning does not change the exit
 code, but a `search/exclusions.json` that does not parse now makes the checkpoint exit 2 — the
 same file `source()` refuses, so the two agree. A row counts as covered once **any** recorded
 exclusion matches any word in it, so keep each `--term` specific to its topic (`seguridad` alone
