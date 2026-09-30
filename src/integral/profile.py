@@ -202,6 +202,8 @@ class SkillStance(Strict):
     does not unlearn Java, so the CV's `working` stays true for an application
     document while the ranking states a Java offer as a mismatch of preference.
     The row's own `text` keeps the candidate's words; this is only what they mean.
+    `technology` must resolve through `integral.stack_fit.resolve_technology`,
+    which raises on a name it cannot place rather than let the stance go unread.
     """
 
     technology: str = Field(pattern=r"^[a-z][a-z0-9_]*$")

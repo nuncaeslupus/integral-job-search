@@ -738,12 +738,13 @@
     {
       "id": "title-go-start",
       "rule": "R4",
-      "why": "R4/R5: Go opening the title opens the text, so it does not count.",
-      "direction": "fail-closed",
+      "why": "R4/R5 as revised after the second reader on #601 (N2): a title is a label, so Go opening it still names go; the text's Rust is named too.",
+      "direction": "fail-open",
       "kind": "named",
       "title": "Go Engineer",
       "text": "Build services in Rust.",
       "expected_named": [
+        "go",
         "rust"
       ]
     },
@@ -2925,6 +2926,152 @@
         "averse": [],
         "missing": []
       }
+    },
+    {
+      "id": "f1-statement-by-alias-k8s",
+      "rule": "R7",
+      "why": "Accepted from the second reader on #601: a statement naming K8s is about kubernetes and lowers the CV's strong to none.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Kubernetes",
+            "level": "strong"
+          }
+        ]
+      },
+      "statements": [
+        {
+          "technology": "k8s",
+          "level": "none"
+        }
+      ],
+      "title": "",
+      "text": "Kubernetes and Python.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [
+          "kubernetes"
+        ],
+        "averse": [],
+        "missing": [
+          "python"
+        ]
+      }
+    },
+    {
+      "id": "f1-aversion-by-alias-golang",
+      "rule": "R7",
+      "why": "Accepted from the second reader on #601: an aversion recorded as golang is an aversion to go.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Go",
+            "level": "working"
+          }
+        ]
+      },
+      "statements": [
+        {
+          "technology": "golang",
+          "averse": true
+        }
+      ],
+      "title": "",
+      "text": "Backend in Golang.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [
+          "go"
+        ],
+        "missing": []
+      }
+    },
+    {
+      "id": "n1-non-averse-stance-alone-is-not-a-mention",
+      "rule": "R8",
+      "why": "Accepted from the second reader on #601: a statement setting only averse=false mentions no level, so with nothing in the CV the technology is missing, not used.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": []
+      },
+      "statements": [
+        {
+          "technology": "rust",
+          "averse": false
+        }
+      ],
+      "title": "",
+      "text": "We write Rust.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "rust"
+        ]
+      }
+    },
+    {
+      "id": "n2-go-to-market-skill-is-not-go",
+      "rule": "R6",
+      "why": "Accepted from the second reader on #601: a skill named Go-to-market does not name go: the hyphen clause of R4 still applies to labels.",
+      "direction": "fail-open",
+      "kind": "fit",
+      "cv": {
+        "skills": [
+          {
+            "name": "Go-to-market",
+            "level": "expert"
+          }
+        ]
+      },
+      "statements": [],
+      "title": "",
+      "text": "Services in Golang.",
+      "expected": {
+        "verdict": "mismatch",
+        "match": [],
+        "used": [],
+        "weak": [],
+        "averse": [],
+        "missing": [
+          "go"
+        ]
+      }
+    },
+    {
+      "id": "n2-title-go-developer",
+      "rule": "R5",
+      "why": "Accepted from the second reader on #601: a title is a label, so Go Developer names go.",
+      "direction": "fail-open",
+      "kind": "named",
+      "title": "Go Developer",
+      "text": "Join our team.",
+      "expected_named": [
+        "go"
+      ]
+    },
+    {
+      "id": "n4-unicode-letter-continues-word",
+      "rule": "R2",
+      "why": "Accepted from the second reader on #601: an accented letter is a letter, so Pythonía is a longer word and does not name python.",
+      "direction": "fail-closed",
+      "kind": "named",
+      "title": "",
+      "text": "Bienvenido a Pythonía, nuestra academia.",
+      "expected_named": []
     }
   ]
 }

@@ -124,7 +124,6 @@ VOCABULARY: dict[str, tuple[_Name, ...]] = {
     "langchain": (("LangChain", False),),
 }
 
-_WORD = "A-Za-z0-9_"
 # R4: `Go` is also the verb.
 _GO_VERB_NEXT = re.compile(r"\s+(?:to|ahead|live|further|beyond)\b", re.IGNORECASE)
 _SENTENCE_END = ".!?:"
@@ -137,9 +136,9 @@ def _compile(name: str, exact: bool) -> re.Pattern[str]:
     so only a repetition of it would be "a longer word" — `C+++` is not C++.
     """
     body = r"\s+".join(re.escape(part) for part in name.split(" "))
-    left = f"(?<![{_WORD}])" if re.match(f"[{_WORD}]", name[0]) else ""
-    word_edge = re.match(f"[{_WORD}]", name[-1])
-    right = f"(?![{_WORD}])" if word_edge else f"(?!{re.escape(name[-1])})"
+    # `\w` rather than an ASCII class: `Pythonía` is one word, not Python.
+    left = r"(?<!\w)" if re.match(r"\w", name[0]) else ""
+    right = r"(?!\w)" if re.match(r"\w", name[-1]) else f"(?!{re.escape(name[-1])})"
     return re.compile(left + body + right, 0 if exact else re.IGNORECASE)
 
 
@@ -158,8 +157,8 @@ def _opens_a_sentence(text: str, start: int) -> bool:
     return "\n" in gap or stripped[-1] in _SENTENCE_END
 
 
-def _is_go_the_verb(text: str, match: re.Match[str]) -> bool:
-    if _opens_a_sentence(text, match.start()):
+def _is_go_the_verb(text: str, match: re.Match[str], *, label: bool) -> bool:
+    if not label and _opens_a_sentence(text, match.start()):
         return True
     rest = text[match.end() :]
     return rest.startswith("-") or _GO_VERB_NEXT.match(rest) is not None
@@ -168,20 +167,27 @@ def _is_go_the_verb(text: str, match: re.Match[str]) -> bool:
 def named(text: str, *, label: bool = False) -> dict[str, str]:
     """Every technology `text` names (R1-R4), with the first span that named it.
 
-    `label=True` reads a skill name (R6): a label is not a sentence, so R4's
-    verb rule does not apply and a skill called `Go` names go.
+    `label=True` reads a skill name (R6) or an offer title (R5): a label is not
+    a sentence, so R4's sentence-start clause does not apply and a skill or a
+    title called `Go Developer` names go. The hyphen and next-word clauses
+    still do — a skill called `Go-to-market` is not Go.
     """
     found: dict[str, str] = {}
     for technology, patterns in _PATTERNS.items():
         for pattern, is_go in patterns:
             for match in pattern.finditer(text):
-                if is_go and not label and _is_go_the_verb(text, match):
+                if is_go and _is_go_the_verb(text, match, label=label):
                     continue
                 found[technology] = match.group(0)
                 break
             if technology in found:
                 break
     return found
+
+
+def offer_named(title: str, text: str) -> dict[str, str]:
+    """R5: what an offer names — its text as prose, its title as a label."""
+    return named(text) | named(title, label=True)
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +209,31 @@ class Held:
     level: str | None
     averse: bool
     source: str
+
+
+class StackFitError(Exception):
+    """A statement names a technology the vocabulary cannot resolve."""
+
+
+def resolve_technology(word: str, *, row_id: str = "") -> str:
+    """A stance's `technology` as an R1 id: the id itself, or any R1 name.
+
+    Case and `_`-for-space are forgiven here (`k8s`, `golang`, `js`,
+    `amazon_web_services`) because a stance is written by a model from what
+    the candidate said, not read out of prose. Anything else raises: a
+    statement stored under a key no offer can name would be ignored in
+    silence, and ignoring "no sé Kubernetes" credits the CV's level instead.
+    """
+    if word in VOCABULARY:
+        return word
+    spoken = word.replace("_", " ").casefold()
+    for technology, names in VOCABULARY.items():
+        if any(name.casefold() == spoken for name, _ in names):
+            return technology
+    raise StackFitError(
+        f"{row_id or 'a statement'} names {word!r}, which is no technology in "
+        "integral.stack_fit.VOCABULARY — record it under one of those ids"
+    )
 
 
 def candidate_stack(master: CVMaster, statements: Iterable[EvidenceRow] = ()) -> dict[str, Held]:
@@ -236,11 +267,12 @@ def candidate_stack(master: CVMaster, statements: Iterable[EvidenceRow] = ()) ->
         stance: SkillStance | None = row.skill
         if row.kind != "statement" or stance is None:
             continue
+        technology = resolve_technology(stance.technology, row_id=row.id)
         if stance.level is not None:
-            levels[stance.technology] = (stance.level, row.id)
+            levels[technology] = (stance.level, row.id)
         if stance.averse is not None:
-            averse[stance.technology] = stance.averse
-            levels.setdefault(stance.technology, (None, row.id))
+            averse[technology] = stance.averse
+            levels.setdefault(technology, (None, row.id))
 
     return {
         technology: Held(level=level, averse=averse.get(technology, False), source=source)
@@ -259,7 +291,7 @@ def _mentioned(held: Held) -> bool:
 
 def fit(title: str, text: str, held: Mapping[str, Held]) -> dict[str, Any]:
     """R5, R8, R9: what the offer names, bucketed against what the candidate holds."""
-    spans = named(f"{title}\n{text}")
+    spans = offer_named(title, text)
     buckets: dict[str, list[str]] = {bucket: [] for bucket in BUCKETS}
     sources: dict[str, str] = {}
     for technology in sorted(spans):
@@ -386,7 +418,7 @@ def disagreements(cases: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     wrong: list[dict[str, Any]] = []
     for case in cases:
         if case["kind"] == "named":
-            got: Any = sorted(named(f"{case.get('title', '')}\n{case['text']}"))
+            got: Any = sorted(offer_named(case.get("title", ""), case["text"]))
             want: Any = sorted(case["expected_named"])
         else:
             held = candidate_stack(

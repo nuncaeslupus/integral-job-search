@@ -165,3 +165,10 @@ def test_rank_carries_the_fit_and_moves_nothing() -> None:
     assert "stack_fit" not in plain
     assert stated["stack_fit"] == fits
     assert stated["pareto"] == plain["pareto"] == ["b", "a"]
+
+
+def test_an_unresolvable_stance_raises_instead_of_going_unread() -> None:
+    assert stack_fit.resolve_technology("K8S") == "kubernetes"
+    assert stack_fit.resolve_technology("amazon_web_services") == "aws"
+    with pytest.raises(stack_fit.StackFitError):
+        stack_fit.resolve_technology("node")
