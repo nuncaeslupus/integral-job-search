@@ -44,8 +44,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from integral.candidate import CONSTRAINT_FIELD_NAMES
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer
+from integral.profile import EvidenceLog, EvidenceRow, ProfileError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
@@ -380,6 +382,133 @@ def ruled_out_by(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple
     return tuple(e.about for e in exclusions if matches(candidate, e))
 
 
+# ---------------------------------------------------------------------------
+# T218 — topics stated before T203 wired the file in, and never recorded
+#
+# Until T203 nothing read `search/exclusions.json`, so a profile begun before it
+# holds its ruled-out topics only as evidence rows, and `source()` filters
+# nothing for them. Nothing about that profile looks wrong: the file is simply
+# absent, which `load_exclusions` reads — correctly — as "nothing ruled out".
+# So the gap is looked for from the other side: the rows in which a candidate
+# says what rules a job out, set against what is recorded.
+
+#: The steps whose rows state what rules a job out (step 0 and step 2).
+STATEMENT_STEPS: tuple[str, ...] = ("identify", "constraints")
+
+#: A refusal in ES/EN/CA, matched on folded text. Deliberately broad: a row it
+#: over-reads costs one line of review, and a row it misses is a topic the
+#: candidate keeps seeing — so a pay floor ("no menos de 40k") trips it too.
+_REFUSAL = re.compile(
+    r"(?<![0-9a-z])(?:no|not|ni|nada|nothing|never|nunca|mai|res|gens|sin|without|"
+    r"don'?t|won'?t|descart\w*|avoid\w*|evit\w*|exclu\w*|rule[sd]?\s+out|rul\w+\s+out|"
+    r"bastante|enough|prou|hart[oa]s?|fart[oa]s?|cansad\w*|tired|"
+    r"odi\w*|detest\w*|hate\w*|hating|dislike\w*|niego|nego|refus\w*|ningun\w*|cap|cero|"
+    r"jamas|quemad\w*|away|done|sick|fed\s+up|paso\s+de|tampoc\w*|sense|menos|salvo|"
+    r"except\w*|but|rechaz\w*|reject\w*|rebutj\w*|vet[ao]\w*|fuera|can'?t|cannot|"
+    r"exclo\w*|avorre\w*)(?![0-9a-z])"
+)
+
+#: Typographic apostrophes, read as the ASCII one before the cue is matched.
+_APOSTROPHES = str.maketrans({"\u2018": "'", "\u2019": "'", "\u02bc": "'", "\u2032": "'"})
+
+
+def states_a_refusal(text: str) -> bool:
+    """Whether a row's words rule something out — a cue, not a reading."""
+    return bool(_REFUSAL.search(_fold(text.translate(_APOSTROPHES), " ")))
+
+
+def _is_a_pinned_field_write(row: EvidenceRow) -> bool:
+    """Whether a row is step 2's own write of T24's pinned fields — never a topic.
+
+    All three are required, and together they are the shape
+    `constraints_step._encode_stated` writes and `profile._last_pinned_value`
+    reads back: kind `constraint`, only pinned dimensions, and a text that
+    decodes to `{"quote": …, "value": {…}}`. A dimension tag alone is not
+    enough — a free-text row tagged `reach` saying "defensa, apuestas" is a
+    topic the candidate ruled out, and skipping it would silence the warning.
+    """
+    if row.kind != "constraint" or not row.dimensions:
+        return False
+    if not set(row.dimensions) <= set(CONSTRAINT_FIELD_NAMES):
+        return False
+    try:
+        payload = json.loads(row.text)
+    except json.JSONDecodeError:
+        return False
+    return (
+        isinstance(payload, dict) and "quote" in payload and isinstance(payload.get("value"), dict)
+    )
+
+
+class UnrecordedStatement(Strict):
+    """One evidence row that rules a topic out and that no recorded exclusion covers."""
+
+    evidence_id: str
+    step: str
+    words: str
+
+
+def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
+    """The live rows of `STATEMENT_STEPS` that refuse something no exclusion matches.
+
+    Every `constraint`-kind row counts, whatever its words, except one stating only
+    T24's pinned fields, which is never a topic; other kinds need the cue.
+
+    "Covered" means a recorded exclusion `matches` the row's own words, so a
+    partial backfill lists only what is left. A row naming several topics
+    counts as covered once any one of them is recorded — the ceiling of a
+    check that cannot split free text into topics, and why the backfill
+    records every topic a row names, not the first.
+    """
+    exclusions = load_exclusions(store)
+    unrecorded: list[UnrecordedStatement] = []
+    for row in EvidenceLog(store).effective_rows():
+        if row.step not in STATEMENT_STEPS:
+            continue
+        # A row stating one of T24's pinned fields (salary, location, relocation, …)
+        # is never a topic: step 2 writes one per field on every profile, `source()`
+        # applies them as constraints, and no `record` can cover one — listed, it
+        # would keep the backfill loop from ever reaching exit 0. Its quote is
+        # skipped even when it carries a cue ("no menos de 40k", "no me reubico").
+        if _is_a_pinned_field_write(row):
+            continue
+        # Any other `constraint` row is the candidate saying what rules a job out,
+        # whatever the words: a bare list ("defensa, apuestas, tabacos, bancos") has
+        # no cue. The cue is only for the other kinds, where it tells a refusal
+        # from a fact.
+        if row.kind != "constraint" and not states_a_refusal(row.text):
+            continue
+        said = Candidate(offer_id=row.id, text=row.text)
+        if any(matches(said, exclusion) for exclusion in exclusions):
+            continue
+        unrecorded.append(UnrecordedStatement(evidence_id=row.id, step=row.step, words=row.text))
+    return tuple(unrecorded)
+
+
+def backfill_warning(store: ProfileStore) -> str | None:
+    """What step 7 says before sourcing, or `None` when there is nothing to say.
+
+    Loud when **nothing** is recorded — the pre-T203 profile, whose every
+    ruled-out topic is being ignored. Quieter when some is: those rows may
+    still hold a topic, or may be a pay floor the cue over-read.
+    """
+    rows = unrecorded_statements(store)
+    if not rows:
+        return None
+    ids = ", ".join(row.evidence_id for row in rows)
+    if not load_exclusions(store):
+        return (
+            f"WARNING: {len(rows)} evidence row(s) rule something out ({ids}) and "
+            f"{'/'.join(EXCLUSIONS_FILE)} records nothing, so source() filters none of it. "
+            "Record each topic before sourcing: "
+            "uv run python -m integral.sourcing_exclusions record … (see step 7, 'Backfill')."
+        )
+    return (
+        f"note: {len(rows)} evidence row(s) rule something out that no recorded exclusion "
+        f"matches ({ids}) — record any topic among them, or leave a pay floor as it is."
+    )
+
+
 def resurfaced(
     presentations: Sequence[Presentation], exclusions: Sequence[Exclusion], *, cycle: int
 ) -> list[Resurfaced]:
@@ -600,11 +729,47 @@ def _record(argv: list[str]) -> int:
     return 0
 
 
+def _unrecorded(argv: list[str]) -> int:
+    """`unrecorded --handle H [--root DIR]` → one JSON row per statement left to record.
+
+    Exit 1 while any is left, so a session can loop until the backfill is done.
+    """
+    import argparse
+
+    from integral.identity import default_profiles_root
+
+    parser = argparse.ArgumentParser(prog="integral.sourcing_exclusions unrecorded")
+    parser.add_argument("--handle", required=True)
+    parser.add_argument("--root", type=Path, default=None)
+    args = parser.parse_args(argv)
+    store = ProfileStore(args.root or default_profiles_root(), args.handle)
+    try:
+        store.identity()
+    except (IdentityError, OSError, ProfileError) as exc:
+        # Silence here reads as "backfill done", the one thing a missing profile is not.
+        print(f"unrecorded: no identified profile {args.handle!r}: {exc}", file=sys.stderr)
+        return 2
+    try:
+        rows = unrecorded_statements(store)
+        warning = backfill_warning(store)
+    except (IdentityError, OSError, ProfileError, UnicodeDecodeError) as exc:
+        # An unreadable exclusions file or evidence log cannot answer; exit 1
+        # would read as "rows left", and the checkpoint exits 2 on the same file.
+        print(f"unrecorded: could not be computed: {exc}", file=sys.stderr)
+        return 2
+    for row in rows:
+        print(row.model_dump_json())
+    if warning:
+        print(warning, file=sys.stderr)
+    return 1 if rows else 0
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.sourcing_exclusions [path]` → T90's and T203's gate evidence.
 
     `record …` is the producer: the conversation keeps a topic the candidate
-    ruled out, so the next `source()` leaves it out.
+    ruled out, so the next `source()` leaves it out. `unrecorded …` lists the
+    evidence rows that rule a topic out and are not yet recorded (T218).
 
     T203's measurement runs in a **subprocess** of its own module rather than an
     import: it reads the committed adverts, and this module is on the serving
@@ -612,6 +777,8 @@ def _main(argv: list[str]) -> int:
     """
     if len(argv) > 1 and argv[1] == "record":
         return _record(argv[2:])
+    if len(argv) > 1 and argv[1] == "unrecorded":
+        return _unrecorded(argv[2:])
     import subprocess
 
     positional = [arg for arg in argv[1:] if not arg.startswith("--")]
