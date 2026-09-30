@@ -1,5 +1,35 @@
 # Session handover
 
+## 00010. #554 (T200), #583 (T188), #584 (T198) merged; T215/T216 seeded in #593
+
+- **#582 MERGED**: bundle re-vendored at claude-arsenal 4.24.0. Branch protection on `main` stays on.
+- **#554 MERGED** (T200 / #549, `t-06b341fa`): every board's salary is read or declared refused.
+  - Reader round 2 BLOCKED `369e6623`. R1: 50 foorilla rows declared one CAD band while their
+    cards said otherwise, and the audit only matched `list_says` text. R2: the distinct-row floor
+    counted rows, not verdicts.
+  - Fixed in `dea33f2d`: `card_band()` parses each card with the engine's `_take`, and the declared
+    read must equal it. `distinct_salary_verdicts_read` is floored at 75 (78 measured).
+  - The fix agent named its follow-up T207, which collided with #583. It was renumbered to **T214**
+    (currency-blind annual bound: every INR band refused; nofluffjobs hourly bands).
+  - Round 3 CLEAR on `f764439b`. verified_gate PASS: 5461 passed.
+- **#583 MERGED** (T188 / #500): the 58 historical test-mode notes were triaged.
+  - T207-T213 seeded (issues #585-#591), one note folded into T145, four discarded.
+- **#584 MERGED** (T198 / #527): `floor_sweep` memoises `_analyse`, so the full suite drops from
+  ~547 s to **~225-280 s**.
+  - Round 1 BLOCK: the key hashed contents but not paths, so a byte-identical temp copy shared the
+    live tree's entry and could blind the self-floors. Fixed in `e413c127`.
+  - Round 2 CLEAR. verified_gate PASS on `cb017ff9`: 5466 passed.
+- **#593 open** (docs-only): seeds **T215** (#554 N1-N3: 40 rows skip the card check silently,
+  single figures refused, a following `Madrid`/`Mountain View` read as a magnitude) and **T216**
+  (#584 R2-3..5: cache key omits the in-memory floors and the resolver's reach; stale comments).
+  It also carries this handover. Merges on green CI plus its verified_gate block.
+- **Merging:** the auto-mode classifier refused `gh pr merge` on both code PRs
+  (`review_reader check` exits 2 on the shared login). Both were merged by the owner running the
+  handed-over command with `--match-head-commit` and `--body-file`.
+- **Open work:** 00006's items (#571, #541, #566/#567/#559) are unchanged. Next board picks
+  include T214-T216 and T207-T213.
+
+
 ## 00009. #579 merged (F4 from #574): commute-radius region names compared caselessly
 
 - **#579 MERGED** as `74d1399a` (T205 / #576, task `t-d09fef7c`). The rule has three outcomes:
