@@ -630,3 +630,41 @@ def test_the_stack_line_is_translated_not_hard_coded() -> None:
     assert stack_fit.summary_line(fit, language="es").startswith("no consta en tu CV: ")
     assert stack_fit.summary_line(fit, language="ca").startswith("no consta al teu CV: ")
     assert stack_fit.summary_line(fit, language="en").startswith("not in your CV: ")
+
+
+@pytest.mark.parametrize("language", ["en", "es", "ca"])
+def test_a_weak_or_averse_technology_is_named_on_the_card_in_every_language(
+    language: str,
+) -> None:
+    """Second reader on #613: dropping the `weak` and `averse` buckets from the
+    row left every test green while an offer the candidate said they do not
+    want read "you know: Python." — the mismatch rendered as a fit."""
+    from integral import stack_fit
+    from integral.cv_store import CVMaster
+
+    held = stack_fit.candidate_stack(
+        CVMaster.model_validate(
+            {
+                "skills": [
+                    {"name": "Python", "level": "expert"},
+                    {"name": "Go", "level": "basic"},
+                    {"name": "Java", "level": "working"},
+                ]
+            }
+        ),
+        stack_fit._statement_rows([{"technology": "java", "averse": True}]),
+    )
+    fit = stack_fit.fit("Backend", "Python, Java and Golang.", held)
+    assert (fit["match"], fit["weak"], fit["averse"]) == (["python"], ["go"], ["java"])
+
+    label = presentation._t("card_stack", language)
+    rows = [
+        line
+        for line in card(_offer(), stack_fit=fit, language=language).splitlines()
+        if line.strip().startswith(f"{label}:")
+    ]
+    assert len(rows) == 1
+    row = rows[0]
+    for bucket, spelling in (("weak", "Golang"), ("averse", "Java")):
+        assert presentation._t(f"stack_{bucket}", language) in row
+        assert spelling in row
