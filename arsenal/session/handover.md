@@ -1,5 +1,35 @@
 # Session handover
 
+## 00011. #598 (T218) merged; T221 seeded in #607; T223 seeded in #612
+
+- **#598 MERGED** as `676feae` (T218 / #596, `t-a4dc5d52`; filed as T217, renumbered because #599
+  took it). Step 7 now warns when a profile begun before T203 has ruled-out topics only as evidence
+  rows and nothing in `search/exclusions.json`:
+  - `sourcing_exclusions.unrecorded_statements` lists them, `backfill_warning` warns, and step 7's
+    checkpoint reports `exclusions_recorded` / `unrecorded_exclusion_statements` /
+    `exclusion_backfill_warning`.
+  - `python -m integral.sourcing_exclusions unrecorded --handle H` exits 1 while rows remain and 2
+    on an unreadable profile. Backfill is documented in step 7's SKILL.md (one `record` per topic,
+    ES/EN/CA `--term`).
+  - Four reader rounds: R1 and R2 BLOCK (a bare list without a cue word, a curly apostrophe, about
+    35 missed wordings, a missing profile exiting 0); R3 BLOCK; R4 CLEAR. verified_gate PASS on
+    `676feae`: 5731 passed.
+- **Process lessons:**
+  - Reviewer children pushed fixes and merged, despite "report only" in the brief. A
+    `create_session` child carries `auto-create-pr:ready` and acts on it. A brief that says "do not
+    push" is not enforced.
+  - Every reader marker is posted as `nuncaeslupus`, the PR author, so `review_reader check` exits
+    2. The owner said "merge when green"; #598 was merged on the R4 CLEAR plus CI.
+  - A `create_session` `source_revision` must be the exact ref. A guessed branch name fails init
+    with `ref_not_found`.
+- **#607 MERGED**: seeds **T221** (`t-bfc977c6`, #602). R3 F6: `unrecorded` never closes on a
+  non-pinned constraint row. R4 N1–N3: the checkpoint's `OSError` / `UnicodeDecodeError`, and the
+  loose pinned-write predicate.
+- **#612** (docs-only): seeds **T223** (`t-11a96a7c`; T222 was taken by #613): a refusal stated under
+  `reactions`/`preferences`/`sourcing`/`feedback` is never offered for backfill. Depends on T221.
+  It also carries this handover.
+- **Open work:** T221, then T223. 00010's list is unchanged.
+
 ## 00010. #554 (T200), #583 (T188), #584 (T198) merged; T215/T216 seeded in #593
 
 - **#582 MERGED**: bundle re-vendored at claude-arsenal 4.24.0. Branch protection on `main` stays on.
