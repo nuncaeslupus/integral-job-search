@@ -1,6 +1,6 @@
 # Session handover
 
-## 00011. #598 (T218) merged; T221 seeded in #607; T223 seeded in #612
+## 00011. #598 (T218) merged; T221 seeded in #607; T223 seeded in #612 and withdrawn as a duplicate of T220
 
 - **#598 MERGED** as `676feae` (T218 / #596, `t-a4dc5d52`; filed as T217, renumbered because #599
   took it). Step 7 now warns when a profile begun before T203 has ruled-out topics only as evidence
@@ -28,7 +28,10 @@
 - **#612** (docs-only): seeds **T223** (`t-11a96a7c`; T222 was taken by #613): a refusal stated under
   `reactions`/`preferences`/`sourcing`/`feedback` is never offered for backfill. Depends on T221.
   It also carries this handover.
-- **Open work:** T221, then T223. 00010's list is unchanged.
+- **T223 withdrawn**: it duplicated **T220** (#609, `t-8c36ace9`), filed from the same F2 earlier the
+  same day. Its two extra points (step `sourcing`, step 10's privacy rule) are on #609 as a comment.
+  Before seeding a task from a review finding, search the open `arsenal:task` issues first.
+- **Open work:** T221 and T220. 00010's list is unchanged.
 
 ## 00010. #554 (T200), #583 (T188), #584 (T198) merged; T215/T216 seeded in #593
 
