@@ -9,6 +9,7 @@ is read.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -472,3 +473,217 @@ def test_step_2s_real_write_is_never_listed(root: Path, field: str, text: str) -
     rows = [r for r in EvidenceLog(store).effective_rows() if field in r.dimensions]
     assert rows, "resolve wrote no row for the field"
     assert unrecorded_statements(store) == ()
+
+
+# T221: a listed row on one non-topic dimension closes by acknowledgement —
+# its whole text, re-checked against the live row on every read — and a topic
+# row never does.
+
+_COMMUTE = "No quiero desplazarme más de 30 minutos."
+
+
+def _ack_cli(store: ProfileStore, root: Path, evidence: str, words: str) -> int:
+    argv = ["prog", "acknowledge", "--handle", store.handle, "--root", str(root)]
+    return se._main([*argv, "--evidence", evidence, "--words", words])
+
+
+def _unrecorded_cli(store: ProfileStore, root: Path) -> int:
+    return se._main(["prog", "unrecorded", "--handle", store.handle, "--root", str(root)])
+
+
+def test_a_non_topic_row_closes_and_stays_visible(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, [_row(1, "constraints", _COMMUTE, dimensions=["commute_burden"])])
+    assert _unrecorded_cli(store, root) == 1
+    capsys.readouterr()
+    assert _ack_cli(store, root, "ev-000001", "  No quiero desplazarme\nmás de 30 minutos. ") == 0
+    assert unrecorded_statements(store) == ()
+    assert [r.evidence_id for r in se.acknowledged_statements(store)] == ["ev-000001"]
+    assert _unrecorded_cli(store, root) == 0
+    assert 'acknowledged: ev-000001 "No quiero' in capsys.readouterr().err
+    assert _drive_step_7_checkpoint(root, store.handle)["acknowledged_exclusion_statements"]
+
+
+@pytest.mark.parametrize(
+    ("row", "words"),
+    [
+        # the bare topic list (T218's canonical case): no tag
+        (_row(1, "constraints", "defensa, apuestas"), "defensa, apuestas"),
+        # #610 B1: a topic row tagged with a pinned field
+        (_row(1, "constraints", "defensa, apuestas", dimensions=["reach"]), "defensa, apuestas"),
+        # a facet name on a profile with nothing recorded: not a dimension id
+        (_row(1, "constraints", "nada de banca", dimensions=["sector"]), "nada de banca"),
+        # each topic dimension the owner named
+        (
+            _row(1, "constraints", "nada de defensa", dimensions=["mission_alignment"]),
+            "nada de defensa",
+        ),
+        (
+            _row(1, "constraints", "nada de fintech", dimensions=["domain_knowledge"]),
+            "nada de fintech",
+        ),
+        (
+            _row(1, "constraints", "no consultoras", dimensions=["product_vs_services"]),
+            "no consultoras",
+        ),
+        (_row(1, "constraints", "no startups", dimensions=["company_stage"]), "no startups"),
+        # two tags
+        (
+            _row(1, "constraints", _COMMUTE, dimensions=["commute_burden", "schedule_flexibility"]),
+            _COMMUTE,
+        ),
+        # #610 F1: exact ids only — never folded into one. `EvidenceRow` already
+        # refuses a tag outside `[a-z][a-z0-9_]*`, so case and padding cannot reach here.
+        (_row(1, "constraints", _COMMUTE, dimensions=["commute"]), _COMMUTE),
+        (_row(1, "constraints", _COMMUTE, dimensions=["commute_burdens"]), _COMMUTE),
+        # words that are not the whole text
+        (
+            _row(1, "constraints", "30 minutos, y nada de banca", dimensions=["commute_burden"]),
+            "30 minutos",
+        ),
+        (_row(1, "constraints", _COMMUTE, dimensions=["commute_burden"]), "a"),
+        (_row(1, "constraints", _COMMUTE, dimensions=["commute_burden"]), _COMMUTE + " Y banca."),
+    ],
+)
+def test_an_acknowledgement_is_refused_and_the_row_stays_listed(
+    root: Path, capsys: pytest.CaptureFixture[str], row: dict[str, Any], words: str
+) -> None:
+    store = _profile(root, [row])
+    assert _ack_cli(store, root, "ev-000001", words) == 2
+    assert "acknowledge:" in capsys.readouterr().err
+    assert not store.exists(*se.ACKNOWLEDGEMENTS_FILE)
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+
+
+def test_only_a_listed_row_can_be_acknowledged(root: Path) -> None:
+    rows = [
+        _pinned_row(1, ["salary"], "40k"),
+        _row(2, "history", _COMMUTE, kind="episode", dimensions=["commute_burden"]),
+    ]
+    store = _profile(root, rows)
+    for evidence in ("ev-000001", "ev-000002", "ev-999999"):
+        assert _ack_cli(store, root, evidence, "40k" if evidence == "ev-000001" else _COMMUTE) == 2
+
+
+def _hand_written(store: ProfileStore, **overrides: str) -> None:
+    ack = {
+        "evidence_id": "ev-000001",
+        "words": _COMMUTE,
+        "text_sha256": hashlib.sha256(_COMMUTE.encode("utf-8")).hexdigest(),
+        **overrides,
+    }
+    store.write_json([ack], *se.ACKNOWLEDGEMENTS_FILE)
+
+
+@pytest.mark.parametrize(
+    ("dimensions", "overrides"),
+    [
+        (["commute_burden"], {"text_sha256": "0" * 64}),  # the row changed since
+        (["commute_burden"], {"words": "30 minutos"}),  # not the whole text
+        (["commute_burden"], {"evidence_id": "ev-000002"}),  # another row
+        (["mission_alignment"], {}),  # a topic dimension
+        ([], {}),  # untagged
+    ],
+)
+def test_a_hand_written_acknowledgement_is_re_checked_on_read(
+    root: Path, dimensions: list[str], overrides: dict[str, str]
+) -> None:
+    rows = [
+        _row(1, "constraints", _COMMUTE, dimensions=dimensions),
+        _row(2, "constraints", "defensa, apuestas"),
+    ]
+    store = _profile(root, rows)
+    _hand_written(store, **overrides)
+    assert "ev-000001" in [r.evidence_id for r in unrecorded_statements(store)]
+    assert se.acknowledged_statements(store) == ()
+
+
+def test_the_hand_written_control_does_close(root: Path) -> None:
+    store = _profile(root, [_row(1, "constraints", _COMMUTE, dimensions=["commute_burden"])])
+    _hand_written(store)
+    assert unrecorded_statements(store) == ()
+
+
+def test_an_acknowledgement_closes_its_row_and_no_other(root: Path) -> None:
+    rows = [
+        _row(1, "constraints", _COMMUTE, dimensions=["commute_burden"]),
+        _row(2, "constraints", _COMMUTE, dimensions=["commute_burden"]),
+    ]
+    store = _profile(root, rows)
+    assert _ack_cli(store, root, "ev-000001", _COMMUTE) == 0
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000002"]
+
+
+@pytest.mark.parametrize("payload", ['{"not": "a list"}', '[{"evidence_id": "ev-000001"}]'])
+def test_an_unreadable_acknowledgements_file_exits_2(
+    root: Path, capsys: pytest.CaptureFixture[str], payload: str
+) -> None:
+    store = _profile(root, [_row(1, "constraints", _COMMUTE, dimensions=["commute_burden"])])
+    path = store.path(*se.ACKNOWLEDGEMENTS_FILE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+    assert _unrecorded_cli(store, root) == 2
+    assert "could not be computed" in capsys.readouterr().err
+
+
+def test_the_owner_s_topic_dimensions_are_real_ids_and_never_acknowledgeable() -> None:
+    from integral.dimensions import load_dimensions
+
+    ids = {d.id for d in load_dimensions()}
+    assert ids >= se.TOPIC_DIMENSIONS
+    assert not se.TOPIC_DIMENSIONS & se.acknowledgeable_dimensions()
+    assert not set(CONSTRAINT_FIELD_NAMES) & se.acknowledgeable_dimensions()
+    assert "commute_burden" in se.acknowledgeable_dimensions()
+
+
+#: Every state the backfill must be able to close, each with the closure step 7's
+#: SKILL.md prescribes for it. A floor, so a shrinking list cannot read as a pass.
+_CLOSABLE_STATES = 4
+
+
+def test_backfill_rows_that_can_never_close_is_zero(root: Path) -> None:
+    from integral.constraints_step import CandidateTurn, resolve
+
+    states: list[tuple[list[dict[str, Any]], str | None]] = [
+        ([_row(1, "constraints", _COMMUTE, dimensions=["commute_burden"])], _COMMUTE),
+        (
+            [_row(1, "constraints", "Nada de guardias.", dimensions=["on_call_load"])],
+            "Nada de guardias.",
+        ),
+        ([_row(1, "constraints", "defensa, apuestas")], None),  # closed by `record`
+        ([], None),  # step 2's real write with a blank quote, below
+    ]
+    never_close = 0
+    for n, (rows, words) in enumerate(states):
+        store = _profile(root / str(n), rows)
+        if not rows:
+            turn = CandidateTurn(field="salary", action="state", value=_STATED_VALUE["salary"])
+            resolve(store, [turn], now="2026-10-01T10:00:00Z")
+        elif words is not None:
+            se.record_acknowledgement(store, "ev-000001", words)
+        else:
+            for topic in ("defensa", "apuestas"):
+                record_exclusion(
+                    store, Exclusion(about=f"sector:{topic}", stated_at_cycle=1, words=topic)
+                )
+        never_close += len(unrecorded_statements(store))
+    assert len(states) >= _CLOSABLE_STATES
+    assert never_close == 0
+
+
+def test_a_pinned_field_in_the_dimension_files_is_still_not_acknowledgeable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Defensive today (no pinned field is a `dimensions/*.yaml` id); pinned so
+    # the day one becomes an id, a topic row tagged with it stays listed (#610 B1).
+    import integral.dimensions as dims
+
+    real = dims.load_dimensions()
+    fake = [real[0].model_copy(update={"id": "reach"}), *real]
+    monkeypatch.setattr(dims, "load_dimensions", lambda: fake)
+    se.acknowledgeable_dimensions.cache_clear()
+    try:
+        assert "reach" not in se.acknowledgeable_dimensions()
+    finally:
+        se.acknowledgeable_dimensions.cache_clear()

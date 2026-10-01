@@ -39,7 +39,14 @@ If the runtime (`integral.step_runtime.offered`) is not offering `sourcing` for 
       --term betting --term gambling --term apostes
   ```
 
-  Re-run `unrecorded` until it exits 0. Step 2's pinned fields (salary, location, relocation, …) are never listed. A row it does list that rules out no topic (a pay floor said in passing) is left as it is — the cue is broad on purpose. Tell the candidate in one line what is now filtered; never record a topic they did not say.
+  A listed row tagged with exactly one non-topic dimension that rules out **no kind of work** ("No quiero desplazarme más de 30 minutos.", `commute_burden`) is acknowledged instead, with its whole text:
+
+  ```bash
+  uv run python -m integral.sourcing_exclusions acknowledge --handle <handle> \
+      --evidence ev-000012 --words "No quiero desplazarme más de 30 minutos."
+  ```
+
+  It is refused (exit 2) for an untagged row, a row with two tags, a pinned-field tag, a topic dimension (`domain_knowledge`, `mission_alignment`, `product_vs_services`, `company_stage`), a tag that is not a `dimensions/*.yaml` id, or words that are not the row's whole text. A row that names **any** topic is recorded, never acknowledged; a correction to the row re-lists it. Re-run `unrecorded` until it exits 0 — acknowledged rows are printed to stderr on every run. Step 2's pinned fields (salary, location, relocation, …) are never listed. An untagged row that rules out no topic (a pay floor said in passing) cannot be closed either way: tell the owner its id rather than record a topic nobody said. Tell the candidate in one line what is now filtered; never record a topic they did not say.
 - **Deduplication is by similarity, not by hash** — the same job at two boards is rarely byte-identical.
 - Where a source needs a login, drive the candidate's **own browser session** rather than storing credentials — nothing to leak, nothing to rotate.
 
@@ -267,7 +274,8 @@ covered step is not a passed one (D-21).
 The script writes its result to the candidate's own tree at `session/checkpoint-sourcing.json`, never to a shared or
 global path.
 
-It also reports `exclusions_recorded`, `unrecorded_exclusion_statements` and
+It also reports `exclusions_recorded`, `unrecorded_exclusion_statements`,
+`acknowledged_exclusion_statements` (rows closed by `acknowledge`, still shown) and
 `exclusion_backfill_warning` (also printed to stderr): evidence rows in which the candidate
 ruled something out that no recorded exclusion matches. Every `constraint`-kind row in those
 steps is listed regardless of wording (a bare list such as "defensa, apuestas, tabacos, bancos"

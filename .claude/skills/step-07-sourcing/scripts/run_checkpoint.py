@@ -46,6 +46,7 @@ from integral.process_spec import Step, StepList, load_steps  # noqa: E402
 from integral.profile import ProfileError  # noqa: E402
 from integral.session import SessionError, SessionStore  # noqa: E402
 from integral.sourcing_exclusions import (  # noqa: E402
+    acknowledged_statements,
     backfill_warning,
     load_exclusions,
     unrecorded_statements,
@@ -136,6 +137,10 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         "exclusions_recorded": len(load_exclusions(store)),
         "unrecorded_exclusion_statements": [
             row.model_dump() for row in unrecorded_statements(store)
+        ],
+        # T221: rows an acknowledgement closed — no longer counted, still shown.
+        "acknowledged_exclusion_statements": [
+            row.model_dump() for row in acknowledged_statements(store)
         ],
         "exclusion_backfill_warning": backfill_warning(store),
     }
