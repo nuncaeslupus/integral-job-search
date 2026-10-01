@@ -328,6 +328,94 @@
         "text": "hora",
         "of": "9ac0add475dd38e6ab3a3fb5ab4579c886eb654f57764210a352fd62e9dd9706"
       }
+    },
+    "card_stack": {
+      "en": "stack",
+      "es": {
+        "text": "pila",
+        "of": "6ee08e6eb3bc6f45bc99fcd39fcc479286a1beb0c04d39f204c61762378075d6"
+      },
+      "ca": {
+        "text": "pila",
+        "of": "6ee08e6eb3bc6f45bc99fcd39fcc479286a1beb0c04d39f204c61762378075d6"
+      }
+    },
+    "stack_none_named": {
+      "en": "The advert names no technology.",
+      "es": {
+        "text": "El anuncio no nombra tecnologías.",
+        "of": "067e2fee311cafe37b52842ed0e1556b3ccf7c8de69a09d884c445e3c1c2190f"
+      },
+      "ca": {
+        "text": "L'anunci no esmenta cap tecnologia.",
+        "of": "067e2fee311cafe37b52842ed0e1556b3ccf7c8de69a09d884c445e3c1c2190f"
+      }
+    },
+    "stack_not_assessed": {
+      "en": "Not assessed: no stack fit was computed for this offer.",
+      "es": {
+        "text": "Sin evaluar: no se calculó el ajuste de tecnologías para esta oferta.",
+        "of": "c358c5046853ee9670b323ff1e3eba63f63183a10d655341882f4e649a6f36ba"
+      },
+      "ca": {
+        "text": "Sense avaluar: no s'ha calculat l'ajust de tecnologies per a aquesta oferta.",
+        "of": "c358c5046853ee9670b323ff1e3eba63f63183a10d655341882f4e649a6f36ba"
+      }
+    },
+    "stack_match": {
+      "en": "you know",
+      "es": {
+        "text": "dominas",
+        "of": "01a142253839133710dad3532236999ce16c18687536a7d240da1faac9e2abca"
+      },
+      "ca": {
+        "text": "domines",
+        "of": "01a142253839133710dad3532236999ce16c18687536a7d240da1faac9e2abca"
+      }
+    },
+    "stack_used": {
+      "en": "in your experience, level unstated",
+      "es": {
+        "text": "usada en tu experiencia, sin nivel",
+        "of": "e1f570886bb51bffd8cbec6e8fec98950a69edb805b7decea5ec021b2d7c4f32"
+      },
+      "ca": {
+        "text": "usada en la teva experiència, sense nivell",
+        "of": "e1f570886bb51bffd8cbec6e8fec98950a69edb805b7decea5ec021b2d7c4f32"
+      }
+    },
+    "stack_weak": {
+      "en": "low level",
+      "es": {
+        "text": "nivel bajo",
+        "of": "4c25cf7debac2dcccf9eb303be6ec3b7ffc85085bb31e06ca852a71599d00653"
+      },
+      "ca": {
+        "text": "nivell baix",
+        "of": "4c25cf7debac2dcccf9eb303be6ec3b7ffc85085bb31e06ca852a71599d00653"
+      }
+    },
+    "stack_averse": {
+      "en": "you said you would rather not",
+      "es": {
+        "text": "dijiste que no la quieres",
+        "of": "f36f006993867bf9d42cabe8e20d1619a73015ca4e0d8a281e750364a512a739"
+      },
+      "ca": {
+        "text": "vas dir que no la vols",
+        "of": "f36f006993867bf9d42cabe8e20d1619a73015ca4e0d8a281e750364a512a739"
+      }
+    },
+    "stack_missing": {
+      "en": "not in your CV",
+      "es": {
+        "text": "no consta en tu CV",
+        "of": "041d2d1e07385f286539f16d2bda31f068418d1376d30a903cc29bdc5c3e50e9"
+      },
+      "ca": {
+        "text": "no consta al teu CV",
+        "of": "041d2d1e07385f286539f16d2bda31f068418d1376d30a903cc29bdc5c3e50e9"
+      }
     }
   }
 }
