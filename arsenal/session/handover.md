@@ -1,6 +1,6 @@
 # Session handover
 
-## 00011. #598 (T218) merged; T221 seeded in #607; T222 seeded in #612
+## 00011. #598 (T218) merged; T221 seeded in #607; T223 seeded in #612
 
 - **#598 MERGED** as `676feae` (T218 / #596, `t-a4dc5d52`; filed as T217, renumbered because #599
   took it). Step 7 now warns when a profile begun before T203 has ruled-out topics only as evidence
@@ -25,10 +25,10 @@
 - **#607 MERGED**: seeds **T221** (`t-bfc977c6`, #602). R3 F6: `unrecorded` never closes on a
   non-pinned constraint row. R4 N1–N3: the checkpoint's `OSError` / `UnicodeDecodeError`, and the
   loose pinned-write predicate.
-- **#612** (docs-only): seeds **T222** (`t-11a96a7c`): a refusal stated under
+- **#612** (docs-only): seeds **T223** (`t-11a96a7c`; T222 was taken by #613): a refusal stated under
   `reactions`/`preferences`/`sourcing`/`feedback` is never offered for backfill. Depends on T221.
   It also carries this handover.
-- **Open work:** T221, then T222. 00010's list is unchanged.
+- **Open work:** T221, then T223. 00010's list is unchanged.
 
 ## 00010. #554 (T200), #583 (T188), #584 (T198) merged; T215/T216 seeded in #593
 

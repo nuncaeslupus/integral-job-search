@@ -182,7 +182,16 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = checkpoint(root, args.handle)
-    except (CheckpointError, IdentityError, ProfileError, SessionError, UnicodeDecodeError) as exc:
+    except (
+        CheckpointError,
+        IdentityError,
+        OSError,
+        ProfileError,
+        SessionError,
+        UnicodeDecodeError,
+    ) as exc:
+        # `OSError` too: `search/exclusions.json` as a directory is unreadable,
+        # and `unrecorded` exits 2 on the same file — never a traceback's 1.
         print(f"checkpoint could not be computed: {exc}", file=sys.stderr)
         return 2
 

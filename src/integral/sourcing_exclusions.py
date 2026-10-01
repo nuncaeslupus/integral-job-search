@@ -42,9 +42,9 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from integral.candidate import CONSTRAINT_FIELD_NAMES
+from integral.candidate import CONSTRAINT_FIELD_NAMES, FIELD_MODELS
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer
 from integral.profile import EvidenceLog, EvidenceRow, ProfileError
@@ -423,9 +423,14 @@ def _is_a_pinned_field_write(row: EvidenceRow) -> bool:
     All three are required, and together they are the shape
     `constraints_step._encode_stated` writes and `profile._last_pinned_value`
     reads back: kind `constraint`, only pinned dimensions, and a text that
-    decodes to `{"quote": …, "value": {…}}`. A dimension tag alone is not
-    enough — a free-text row tagged `reach` saying "defensa, apuestas" is a
+    decodes to `{"quote": "<words, maybe blank>", "value": {…}}`. A dimension tag alone is
+    not enough — a free-text row tagged `reach` saying "defensa, apuestas" is a
     topic the candidate ruled out, and skipping it would silence the warning.
+
+    Nor is the shape alone: the value must be one `candidate.FIELD_MODELS`
+    accepts as `stated` for every tagged field, which is what
+    `constraints_step` builds from it. `{"quote": 7, "value": {}}` decodes
+    but states no field, so it is listed rather than skipped.
     """
     if row.kind != "constraint" or not row.dimensions:
         return False
@@ -435,9 +440,19 @@ def _is_a_pinned_field_write(row: EvidenceRow) -> bool:
         payload = json.loads(row.text)
     except json.JSONDecodeError:
         return False
-    return (
-        isinstance(payload, dict) and "quote" in payload and isinstance(payload.get("value"), dict)
-    )
+    if not isinstance(payload, dict):
+        return False
+    quote, value = payload.get("quote"), payload.get("value")
+    # A blank quote is still step 2's write: `CandidateTurn.text` defaults to "",
+    # and listing that row would leave a field no `record` can ever close.
+    if not isinstance(quote, str) or not isinstance(value, dict):
+        return False
+    for field in row.dimensions:
+        try:
+            FIELD_MODELS[field](state="stated", evidence=(row.id,), **value)
+        except (TypeError, ValidationError):
+            return False
+    return True
 
 
 class UnrecordedStatement(Strict):

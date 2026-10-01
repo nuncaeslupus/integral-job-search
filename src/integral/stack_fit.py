@@ -45,10 +45,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from integral import strings
 from integral.cv_store import CVMaster, load_master
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog, EvidenceRow, SkillStance
 
+_CATALOGUE = strings.load()
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T219.json"
 DEFAULT_CASES_PATH = _REPO_ROOT / "tests" / "fixtures" / "stack_fit" / "cases.json"
@@ -347,31 +349,14 @@ def summary_line(offer_fit: Mapping[str, Any], *, language: str = "es") -> str:
     """The card's stack line (R11): what the offer names and what the CV holds.
 
     Filled from the fit, never composed by a model — the same rule step 9's
-    card follows for everything else.
+    card follows for everything else. The wording lives in
+    `strings/catalogue.json`, so `presentation.untranslated(language)` covers it.
     """
     if offer_fit["verdict"] == "unknown":
-        return (
-            "El anuncio no nombra tecnologías."
-            if language == "es"
-            else "The advert names no technology."
-        )
-    labels_es = {
-        "match": "dominas",
-        "used": "usada en tu experiencia, sin nivel",
-        "weak": "nivel bajo",
-        "averse": "dijiste que no la quieres",
-        "missing": "no consta en tu CV",
-    }
-    labels_en = {
-        "match": "you know",
-        "used": "in your experience, level unstated",
-        "weak": "low level",
-        "averse": "you said you would rather not",
-        "missing": "not in your CV",
-    }
-    labels = labels_es if language == "es" else labels_en
+        return strings.text(_CATALOGUE, "stack_none_named", language)
     parts = [
-        f"{labels[bucket]}: {', '.join(offer_fit['spans'][t] for t in offer_fit[bucket])}"
+        f"{strings.text(_CATALOGUE, f'stack_{bucket}', language)}: "
+        f"{', '.join(offer_fit['spans'][t] for t in offer_fit[bucket])}"
         for bucket in BUCKETS
         if offer_fit[bucket]
     ]
