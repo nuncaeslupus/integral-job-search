@@ -423,7 +423,7 @@ def _is_a_pinned_field_write(row: EvidenceRow) -> bool:
     All three are required, and together they are the shape
     `constraints_step._encode_stated` writes and `profile._last_pinned_value`
     reads back: kind `constraint`, only pinned dimensions, and a text that
-    decodes to `{"quote": "<words>", "value": {…}}`. A dimension tag alone is
+    decodes to `{"quote": "<words, maybe blank>", "value": {…}}`. A dimension tag alone is
     not enough — a free-text row tagged `reach` saying "defensa, apuestas" is a
     topic the candidate ruled out, and skipping it would silence the warning.
 
@@ -443,7 +443,9 @@ def _is_a_pinned_field_write(row: EvidenceRow) -> bool:
     if not isinstance(payload, dict):
         return False
     quote, value = payload.get("quote"), payload.get("value")
-    if not isinstance(quote, str) or not quote.strip() or not isinstance(value, dict):
+    # A blank quote is still step 2's write: `CandidateTurn.text` defaults to "",
+    # and listing that row would leave a field no `record` can ever close.
+    if not isinstance(quote, str) or not isinstance(value, dict):
         return False
     for field in row.dimensions:
         try:

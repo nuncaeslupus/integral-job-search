@@ -437,7 +437,6 @@ def test_the_unrecorded_cli_exits_2_on_an_unreadable_exclusions_file(
     [
         {"quote": 7, "value": _STATED_VALUE["salary"]},
         {"quote": None, "value": _STATED_VALUE["salary"]},
-        {"quote": "  ", "value": _STATED_VALUE["salary"]},
         {"value": _STATED_VALUE["salary"]},
         {"quote": "nada de banca", "value": {}},
         {"quote": "nada de banca", "value": {"stated": True}},
@@ -451,3 +450,25 @@ def test_a_pinned_shape_that_states_no_field_is_still_listed(root: Path, payload
     row = _row(1, "constraints", json.dumps(payload), dimensions=["salary"])
     store = _profile(root, [row])
     assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+
+
+def test_a_two_field_row_must_state_every_field_it_is_tagged_with(root: Path) -> None:
+    text = json.dumps({"quote": "40k, y nada de banca", "value": _STATED_VALUE["salary"]})
+    store = _profile(root, [_row(1, "constraints", text, dimensions=["salary", "reach"])])
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+
+
+@pytest.mark.parametrize("field", CONSTRAINT_FIELD_NAMES)
+@pytest.mark.parametrize("text", ["", "  ", "no menos de 40k, no me reubico"])
+def test_step_2s_real_write_is_never_listed(root: Path, field: str, text: str) -> None:
+    # Driven through `constraints_step.resolve` itself, not a hand-built row:
+    # `CandidateTurn.text` defaults to "", so a blank quote is a real write.
+    from integral.constraints_step import CandidateTurn, resolve
+    from integral.profile import EvidenceLog
+
+    store = _profile(root, [])
+    turn = CandidateTurn(field=field, action="state", value=_STATED_VALUE[field], text=text)
+    resolve(store, [turn], now="2026-10-01T10:00:00Z")
+    rows = [r for r in EvidenceLog(store).effective_rows() if field in r.dimensions]
+    assert rows, "resolve wrote no row for the field"
+    assert unrecorded_statements(store) == ()
