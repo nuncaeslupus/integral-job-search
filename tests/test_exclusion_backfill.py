@@ -261,11 +261,20 @@ def test_the_checkpoint_main_prints_the_warning_to_stderr(
     assert capsys.readouterr().err.startswith("WARNING")
 
 
+@pytest.mark.parametrize("corrupt", ["not-json", "not-utf8", "exclusions-directory"])
 def test_a_corrupt_evidence_log_makes_the_checkpoint_main_exit_2(
-    root: Path, capsys: pytest.CaptureFixture[str]
+    root: Path, capsys: pytest.CaptureFixture[str], corrupt: str
 ) -> None:
     store = _profile(root, _PRE_T203[:1])
-    store.path("profile", "evidence.jsonl").write_text("{not json\n", encoding="utf-8")
+    if corrupt == "not-json":
+        store.path("profile", "evidence.jsonl").write_text("{not json\n", encoding="utf-8")
+    elif corrupt == "not-utf8":
+        store.path("profile", "evidence.jsonl").write_bytes(b"\xff\xfe{}\n")
+    else:
+        # The `unrecorded` CLI exits 2 on this same file; the checkpoint must too.
+        path = store.path(*se.EXCLUSIONS_FILE)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.mkdir()
     try:
         module = _load_checkpoint_module()
         code = module.main(["--id", store.handle, "--input-dir", str(root), "--dev"])
@@ -289,8 +298,29 @@ def test_the_checkpoint_counts_what_is_recorded_and_quiets_to_a_note(root: Path)
 # left the backfill loop unable to reach exit 0.
 
 
+#: One value per pinned field that `candidate.FIELD_MODELS` accepts as `stated`,
+#: the shape `constraints_step._encode_stated` writes.
+_STATED_VALUE: dict[str, dict[str, Any]] = {
+    "languages": {"levels": [{"language": "es", "level": "native"}]},
+    "location": {"country": "ES", "accepts_onsite_in_country": True},
+    "relocation": {"willingness": "no"},
+    "salary": {"floor": 40000, "currency": "EUR"},
+    "availability": {"notice_period_days": 30, "earliest_start": "2026-11-01"},
+    "work_authorisation": {"authorised_countries": ["ES"]},
+    "employment_mode": {"accepted": ["employed"]},
+    "pay_country": {"countries": ["ES"]},
+    "tax_country": {"country": "ES"},
+    "reach": {"modes": ["remote"]},
+}
+
+
+def test_every_pinned_field_has_a_stated_value() -> None:
+    assert set(_STATED_VALUE) == set(CONSTRAINT_FIELD_NAMES)
+
+
 def _pinned_row(n: int, fields: list[str], quote: str) -> dict[str, Any]:
-    text = json.dumps({"quote": quote, "value": {"stated": True}}, ensure_ascii=False)
+    value = _STATED_VALUE.get(fields[0], {})
+    text = json.dumps({"quote": quote, "value": value}, ensure_ascii=False)
     return _row(n, "constraints", text, dimensions=fields)
 
 
@@ -395,3 +425,29 @@ def test_the_unrecorded_cli_exits_2_on_an_unreadable_exclusions_file(
         path.write_bytes(b"\xff\xfe[]")
     assert se._main(["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]) == 2
     assert "could not be computed" in capsys.readouterr().err
+
+
+# Round 4: the skip needs step 2's write to state its field — a string quote and
+# a value `FIELD_MODELS` accepts. Each of these decodes to the old shape and is
+# still a row nobody recorded, so it stays listed.
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"quote": 7, "value": _STATED_VALUE["salary"]},
+        {"quote": None, "value": _STATED_VALUE["salary"]},
+        {"quote": "  ", "value": _STATED_VALUE["salary"]},
+        {"value": _STATED_VALUE["salary"]},
+        {"quote": "nada de banca", "value": {}},
+        {"quote": "nada de banca", "value": {"stated": True}},
+        {"quote": "nada de banca", "value": {"sector": "banca"}},
+        {"quote": "nada de banca", "value": {"state": "stated"}},
+        {"quote": "nada de banca", "value": _STATED_VALUE["location"]},
+        [{"quote": "nada de banca", "value": _STATED_VALUE["salary"]}],
+    ],
+)
+def test_a_pinned_shape_that_states_no_field_is_still_listed(root: Path, payload: Any) -> None:
+    row = _row(1, "constraints", json.dumps(payload), dimensions=["salary"])
+    store = _profile(root, [row])
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
