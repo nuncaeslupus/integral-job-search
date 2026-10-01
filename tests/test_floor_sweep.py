@@ -4094,3 +4094,108 @@ def test_every_live_tree_caller_reaches_the_cache() -> None:
     # denominator: measure, _main, write_evidence, write_prose_clearance_evidence, ...
     assert len(live) >= 5, live
     assert [n for n in live if reaches(n, "_analyse", banned="measure")] == []
+
+
+# ---------------------------------------------------------------------------
+# T216: the cache key holds every input the analysis reads (R2-3, R2-4).
+# ---------------------------------------------------------------------------
+
+
+def _stub_analysis(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    monkeypatch.setattr(floor_sweep, "_ANALYSES", {})
+    return []
+
+
+def test_patching_the_self_floor_between_two_same_tree_calls_changes_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R2-3, end to end over the live tree: the self-floor finding must reappear."""
+    monkeypatch.setattr(floor_sweep, "_ANALYSES", {})
+    before = floor_sweep.measure()
+    swept = floor_sweep.MINIMUM_FLOORS_SWEPT
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_SWEPT", swept - 40)
+    after = floor_sweep.measure()
+    assert after != before
+    assert (
+        after["floors_that_do_not_refuse_the_first_deletion"]
+        > before["floors_that_do_not_refuse_the_first_deletion"]
+    )
+
+
+def test_patching_the_prose_scenario_floor_misses_the_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R2-3: the prose clearance's floor is in the key of its cached entry."""
+    calls = _stub_analysis(monkeypatch)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {"floor": floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS}
+
+    first = floor_sweep._analysed_once("prose", floor_sweep._SRC_DIR, analyse)
+    assert floor_sweep._analysed_once("prose", floor_sweep._SRC_DIR, analyse) == first
+    assert len(calls) == 1
+    monkeypatch.setattr(floor_sweep, "MINIMUM_PROSE_MUTATION_SCENARIOS", 1)
+    second = floor_sweep._analysed_once("prose", floor_sweep._SRC_DIR, analyse)
+    assert len(calls) == 2
+    assert second == {"floor": 1} != first
+
+
+def test_a_floor_constant_added_later_enters_the_key_by_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Closed rule, not a list: every `MINIMUM_*` global is in the key, including
+    one that did not exist when this test was written; and so is every one that exists."""
+    calls = _stub_analysis(monkeypatch)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {}
+
+    def run() -> dict[str, Any]:
+        return floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
+
+    run()
+    run()
+    assert len(calls) == 1
+    monkeypatch.setattr(floor_sweep, "MINIMUM_A_FLOOR_ADDED_LATER", 7, raising=False)
+    run()
+    assert len(calls) == 2
+    names = [n for n in vars(floor_sweep) if n.startswith("MINIMUM_") and n.isupper()]
+    assert len(names) >= 4, names  # denominator: the four committed floors
+    for name in names:
+        before = len(calls)
+        monkeypatch.setattr(floor_sweep, name, getattr(floor_sweep, name) + 1)
+        run()
+        assert len(calls) == before + 1, name
+
+
+def test_every_evidence_path_the_resolver_accepts_is_hashed_by_the_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R2-4: a path the resolver reaches is a path whose bytes change the digest;
+    one outside the hashed directory does not resolve at all."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    exprs = {
+        "evidence": ('_REPO_ROOT / "status" / "evidence" / "T1.json"', True),
+        "elsewhere": ('_REPO_ROOT / "tests" / "fixtures" / "T1.json"', False),
+        "status_root": ('_REPO_ROOT / "status" / "T1.json"', False),
+        "nested": ('_REPO_ROOT / "status" / "evidence" / "sub" / "T1.json"', False),
+        "escape": ('_REPO_ROOT / "status" / "evidence" / ".." / "T1.json"', False),
+    }
+    resolved_any = 0
+    for label, (text, expect) in exprs.items():
+        node = ast.parse(text, mode="eval").body
+        path = floor_sweep._extract_evidence_path_literal(node)
+        assert (path is not None) is expect, label
+        if path is None:
+            continue
+        resolved_any += 1
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+        digest = floor_sweep._content_digest(src)
+        path.write_text('{"x": 1}', encoding="utf-8")
+        assert floor_sweep._content_digest(src) != digest, label
+    assert resolved_any == 1  # denominator: the loop reached the hashed branch

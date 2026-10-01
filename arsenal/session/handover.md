@@ -1,5 +1,31 @@
 # Session handover
 
+## 00012. T221 handed to #608's session; owner decisions recorded; T216 picked up
+
+- **#604 closed, #603 closed as a duplicate.** This session seeded its own "T220" for #598's F6
+  while #607 seeded **T221** (#602) for the same finding, and #605 took the T220 number. Search the
+  open `arsenal:task` issues before seeding from a review finding. 00011 says the same, and it
+  happened again within the hour.
+- **#610 closed**, an earlier, weaker acknowledgement rule for T221 (a facet guard derived from
+  recorded exclusions). The second reader returned BLOCK, both findings fail-open:
+  - B1: a `reach`-tagged topic row ("defensa, apuestas") could be acknowledged.
+  - B2: a test certified that a `sector`-tagged topic row is silenced on a profile with nothing
+    recorded.
+  - The report is on #610 (issuecomment-5936824361) and is useful as fixtures.
+- **#608 merged** (another session): T221's N1–N3, and a stricter acknowledgement spec in
+  `arsenal/tasks/t-bfc977c6.md`.
+- **Owner decisions on T221** (recorded on #602, relayed to session `015wdWQMiKGt69RDnQKTKsHB`):
+  - **Topic-bearing dimensions, never acknowledgeable:** `domain_knowledge`, `mission_alignment`,
+    `product_vs_services`, `company_stage`.
+  - **Only `dimensions/*.yaml` ids count:** `commute_burden` is accepted, and a `commute`-tagged row
+    stays listed.
+  - T221 is left to that session. The claim ref `arsenal/claims/t-bfc977c6` still exists, because
+    remote ref deletion is blocked here.
+- **Environment:** this container's default Python is 3.13, on which
+  `tests/test_connector_policy.py` fails (stdlib `robotparser` changed). Run the gate with
+  `UV_PYTHON=3.12 make host-gate`, which is what CI uses.
+- **Open work:** T216 (#594), claimed by this session. T221 (#602) and T220 (#609) belong to others.
+
 ## 00011. #598 (T218) merged; T221 seeded in #607; T223 seeded in #612 and withdrawn as a duplicate of T220
 
 - **#598 MERGED** as `676feae` (T218 / #596, `t-a4dc5d52`; filed as T217, renumbered because #599

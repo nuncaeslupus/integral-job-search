@@ -2315,6 +2315,15 @@ def _delegated_other_operand(
     return None
 
 
+def _evidence_dir() -> Path:
+    """The one directory committed evidence is read from (R2-4). Both the path
+    resolver (`_extract_evidence_path_literal`) and the cache key's content digest
+    (`_content_digest`) derive from this single definition, so a file the resolver
+    can reach is by construction a file the digest hashes. Computed at call time
+    because `_REPO_ROOT` is patched by tests."""
+    return _REPO_ROOT / "status" / "evidence"
+
+
 #: This repository's own evidence-path convention, read structurally rather than
 #: by name: `DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" /
 #: "T24.json"` (and every `DEFAULT_..._EVIDENCE_PATH` sibling — `D8`, `S12`, …).
@@ -2338,7 +2347,14 @@ def _extract_evidence_path_literal(expr: ast.expr) -> Path | None:
         and parts[0].endswith(".json")
     ):
         parts.reverse()
-        return _REPO_ROOT.joinpath(*parts)
+        path = _REPO_ROOT.joinpath(*parts)
+        # R2-4: only a file *directly* in the evidence directory resolves -- the
+        # set `_content_digest` hashes. Any other `_REPO_ROOT/**/*.json` would be
+        # read by `_committed_evidence_population` yet absent from the cache key,
+        # so an edit to it would be served a stale analysis. Restricting the
+        # resolver (rather than widening the digest to every repo json) keeps the
+        # key cheap and the read set equal to the hashed set by rule.
+        return path if path.parent == _evidence_dir() else None
     return None
 
 
@@ -2958,17 +2974,32 @@ def _classify_floor(
 
 #: T198: one analysis of a given tree per process. `measure` costs ~13s over the
 #: live tree and the gate's callers (`_main` alone reaches it three times) ask
-#: the same question of the same bytes. The key is the tree's *content* and the
-#: paths `_analyse` compares against (see `_analysed_once`) -- every
-#: `src_dir/*.py` byte plus every committed `status/evidence/*.json` byte, which
-#: `_committed_evidence_population` reads -- never a path or a bare `lru_cache`,
-#: so any edit to either input is a miss and re-analyses.
+#: the same question of the same bytes. The key (see `_analysed_once`) is every
+#: input `_analyse` and the prose clearance read: the tree's *content* (every
+#: `src_dir/*.py` byte plus every `_evidence_dir()/*.json` byte, which
+#: `_committed_evidence_population` reads), the paths they are compared against
+#: (`src_dir`, `_THIS_FILE`, `_REPO_ROOT`) and the module's own live
+#: `MINIMUM_*` floors (`_floor_values`, R2-3). No bare `lru_cache`: any edit to
+#: any of those is a miss and re-analyses.
 _ANALYSES: dict[tuple[str, ...], dict[str, Any]] = {}
+
+_FLOOR_NAME_RE = re.compile(r"MINIMUM_[A-Z0-9_]+")
+
+
+def _floor_values() -> str:
+    """The module's own committed floors as they are *now* (R2-3). `_analyse` reads
+    `MINIMUM_FLOORS_*` through `_margin_finding` and the prose clearance reads
+    `MINIMUM_PROSE_MUTATION_SCENARIOS`; a caller that patches either between two
+    same-tree calls must not be served the earlier analysis. Derived by a closed
+    rule -- every module global named `MINIMUM_*` -- never a list, so a floor added
+    later enters the key without anyone remembering to."""
+    return repr(sorted((n, repr(v)) for n, v in globals().items() if _FLOOR_NAME_RE.fullmatch(n)))
 
 
 def _content_digest(src_dir: Path) -> str:
     digest = hashlib.sha256()
-    for root in (src_dir, _REPO_ROOT / "status" / "evidence"):
+    evidence = _evidence_dir()
+    for root in (src_dir, evidence):
         for path in sorted(root.glob("*.py" if root == src_dir else "*.json")):
             digest.update(path.name.encode() + b"\0" + path.read_bytes() + b"\0")
         digest.update(b"\1")
@@ -2978,19 +3009,27 @@ def _content_digest(src_dir: Path) -> str:
 def _analysed_once(
     name: str, src_dir: Path, analyse: Callable[[], dict[str, Any]]
 ) -> dict[str, Any]:
-    """`analyse()`'s result, computed once per (`name`, tree content); each caller
-    gets its own deep copy so mutating a result cannot poison the next one."""
+    """`analyse()`'s result, computed once per (`name`, paths, tree content, live
+    floors); each caller gets its own deep copy so mutating a result cannot
+    poison the next one."""
     # `_analyse` also compares each module's *path* to `_THIS_FILE` and reads
     # evidence under `_REPO_ROOT`, so a byte-identical copy of the tree at another
     # path is a different question and must not share the live tree's entry.
-    key = (name, str(src_dir.resolve()), str(_THIS_FILE), str(_REPO_ROOT), _content_digest(src_dir))
+    key = (
+        name,
+        str(src_dir.resolve()),
+        str(_THIS_FILE),
+        str(_REPO_ROOT),
+        _content_digest(src_dir),
+        _floor_values(),
+    )
     if key not in _ANALYSES:
         _ANALYSES[key] = analyse()
     return copy.deepcopy(_ANALYSES[key])
 
 
 def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
-    """T159's gate, memoised on the tree's content (see `_ANALYSES`)."""
+    """T159's gate, memoised on the tree's content, paths and live floors (see `_ANALYSES`)."""
     return _analysed_once("measure", src_dir, lambda: _analyse(src_dir))
 
 
