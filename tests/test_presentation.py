@@ -548,3 +548,123 @@ def test_a_page_wide_marker_search_misses_an_unmarked_flagged_card() -> None:
     # The fix: check containment of each offer's own re-rendered card.
     assert card(offers[0], flagged=True) in page
     assert card(offers[1], flagged=True) not in page
+
+
+# --- T222: the stack row ---------------------------------------------------
+
+_STACK_ADVERT = "Stack: Golang, TypeScript and k8s."
+
+
+def _stack_row(page: str) -> str:
+    rows = [line for line in page.splitlines() if line.startswith("  stack:")]
+    assert len(rows) == 1, page
+    return rows[0]
+
+
+def test_a_mismatch_card_names_each_missing_technology_by_its_advert_spelling() -> None:
+    from integral import stack_fit
+
+    offer = _offer()
+    fit = stack_fit.fit("Backend engineer", _STACK_ADVERT, {})
+    assert fit["verdict"] == "mismatch"
+    row = _stack_row(card(offer, stack_fit=fit))
+
+    # The advert's words, not the canonical names ("go", "kubernetes").
+    for spelling in ("Golang", "TypeScript", "k8s"):
+        assert spelling in row
+    assert "kubernetes" not in row.lower()
+
+
+def test_render_carries_the_rankings_stack_fit_onto_each_card() -> None:
+    from integral import stack_fit
+
+    offer = _offer()
+    ranking, explanations = _ranked([_candidate(offer, 3600.0, {"remote": 1.0})], None)
+    ranking["stack_fit"] = {offer.id: stack_fit.fit("Backend", _STACK_ADVERT, {})}
+    page = render(ranking, [offer], explanations=explanations)
+
+    assert "Golang, k8s, TypeScript" in _stack_row(page)
+    # An explicit argument wins over the ranking's.
+    other = {offer.id: stack_fit.fit("Backend", "We use Rust.", {})}
+    assert "Rust" in _stack_row(
+        render(ranking, [offer], explanations=explanations, stack_fit=other)
+    )
+
+
+def test_a_card_with_no_carried_fit_says_it_was_not_assessed() -> None:
+    offer = _offer()
+    row = _stack_row(card(offer))
+
+    assert presentation._t("stack_not_assessed") in row
+    ranking, explanations = _ranked([_candidate(offer, 3600.0, {"remote": 1.0})], None)
+    assert presentation._t("stack_not_assessed") in _stack_row(
+        render(ranking, [offer], explanations=explanations)
+    )
+
+
+def test_an_unknown_verdict_says_the_advert_names_no_technology() -> None:
+    from integral import stack_fit
+
+    fit = stack_fit.fit("Backend", "Nothing technical here.", {})
+    assert fit["verdict"] == "unknown"
+    assert presentation._t("stack_none_named") in _stack_row(card(_offer(), stack_fit=fit))
+
+
+def test_the_stack_row_sits_after_the_facts_and_before_what_matters() -> None:
+    lines = card(_offer()).splitlines()
+    labels = [line.split(":")[0].strip() for line in lines[1:7]]
+    assert labels[-2:] == ["link", "stack"]
+    assert lines[7] == ""
+
+
+@pytest.mark.parametrize("language", ["es", "en", "ca"])
+def test_no_catalogue_language_falls_back_on_the_stack_strings(language: str) -> None:
+    assert presentation.untranslated(language) == []
+    assert language in presentation._CATALOGUE["languages"]
+
+
+def test_the_stack_line_is_translated_not_hard_coded() -> None:
+    from integral import stack_fit
+
+    fit = stack_fit.fit("Backend", _STACK_ADVERT, {})
+    assert stack_fit.summary_line(fit, language="es").startswith("no consta en tu CV: ")
+    assert stack_fit.summary_line(fit, language="ca").startswith("no consta al teu CV: ")
+    assert stack_fit.summary_line(fit, language="en").startswith("not in your CV: ")
+
+
+@pytest.mark.parametrize("language", ["en", "es", "ca"])
+def test_a_weak_or_averse_technology_is_named_on_the_card_in_every_language(
+    language: str,
+) -> None:
+    """Second reader on #613: dropping the `weak` and `averse` buckets from the
+    row left every test green while an offer the candidate said they do not
+    want read "you know: Python." — the mismatch rendered as a fit."""
+    from integral import stack_fit
+    from integral.cv_store import CVMaster
+
+    held = stack_fit.candidate_stack(
+        CVMaster.model_validate(
+            {
+                "skills": [
+                    {"name": "Python", "level": "expert"},
+                    {"name": "Go", "level": "basic"},
+                    {"name": "Java", "level": "working"},
+                ]
+            }
+        ),
+        stack_fit._statement_rows([{"technology": "java", "averse": True}]),
+    )
+    fit = stack_fit.fit("Backend", "Python, Java and Golang.", held)
+    assert (fit["match"], fit["weak"], fit["averse"]) == (["python"], ["go"], ["java"])
+
+    label = presentation._t("card_stack", language)
+    rows = [
+        line
+        for line in card(_offer(), stack_fit=fit, language=language).splitlines()
+        if line.strip().startswith(f"{label}:")
+    ]
+    assert len(rows) == 1
+    row = rows[0]
+    for bucket, spelling in (("weak", "Golang"), ("averse", "Java")):
+        assert presentation._t(f"stack_{bucket}", language) in row
+        assert spelling in row

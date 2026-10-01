@@ -56,6 +56,7 @@ from integral.offers import Location, Offer, Salary
 from integral.pay import NetEstimate
 from integral.profile import ProfileRevision
 from integral.rank import Candidate, rank
+from integral.stack_fit import summary_line
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T44.json"
@@ -116,7 +117,7 @@ NO_REASON_GIVEN = _t("no_reason_given")
 #: start at is **derived** from the widest label rather than typed as spaces,
 #: because "ubicación" and "location" are not the same width and a card whose
 #: alignment was hardcoded in English renders ragged in every other language.
-_CARD_ROWS: tuple[str, ...] = ("pay", "hours", "location", "contract", "link")
+_CARD_ROWS: tuple[str, ...] = ("pay", "hours", "location", "contract", "link", "stack")
 
 
 def _card_column(language: str | None = None) -> int:
@@ -272,6 +273,17 @@ def _phrase(driver: Mapping[str, Any], language: str | None = None) -> str:
     return f'"{span}" ({driver["contribution_eur_month"]:+,.0f} EUR/mo)'
 
 
+def _stack(fit: Mapping[str, Any] | None, language: str | None = None) -> str:
+    """T222: the stack row, from the carried fit and never from a model.
+
+    No fit carried reads as "not assessed" and an `unknown` verdict as "names no
+    technology" — in words, because a row left out reads as a match (T219 R9).
+    """
+    if fit is None:
+        return _t("stack_not_assessed", language)
+    return summary_line(fit, language=language or SOURCE_LANGUAGE)
+
+
 def card(
     offer: Offer,
     explanation: Mapping[str, Any] | None = None,
@@ -279,6 +291,7 @@ def card(
     outside: Sequence[OutsideFinding] = (),
     flagged: bool = False,
     language: str | None = None,
+    stack_fit: Mapping[str, Any] | None = None,
 ) -> str:
     """One offer, as the candidate sees it. Pure: same input, same bytes.
 
@@ -317,6 +330,7 @@ def card(
         # to show", which the candidate cannot tell from a card with no link
         # field at all.
         link=offer.url or _t("unknown", language),
+        stack=_stack(stack_fit, language),
         matters=_matters(explanation, language),
         outside=_outside_block(outside),
     )
@@ -388,6 +402,7 @@ def render(
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
     language: str | None = None,
+    stack_fit: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> str:
     """The page: the provisional line when it is true, then a handful of cards.
 
@@ -419,6 +434,9 @@ def render(
     shown = groups[offset] if groups else []
     remaining = len(frontier) - (offset + 1) * limit if limit else 0
     flagged = set(ranking.get("flagged", ()))
+    # T222: the fits ride on the ranking (`rank(..., stack=...)`), so the page
+    # reads them from there unless a caller passes its own.
+    fits = stack_fit if stack_fit is not None else ranking.get("stack_fit") or {}
 
     lines: list[str] = []
     if ranking["level"] == "L1":
@@ -435,6 +453,7 @@ def render(
             (outside or {}).get(offer_id, ()),
             offer_id in flagged,
             language,
+            fits.get(offer_id),
         )
         for offer_id in shown
     ]
