@@ -34,6 +34,8 @@ requires it to be spoken.
 
 from __future__ import annotations
 
+import functools
+import hashlib
 import json
 import re
 import sys
@@ -58,6 +60,15 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
 #: **returns**. `sourcing.source` reads it itself, so no caller has to remember
 #: to hand it over — T203 is what happens when a correct module waits for one to.
 EXCLUSIONS_FILE = ("search", "exclusions.json")
+#: T221: listed rows the candidate's words show rule out no kind of work.
+ACKNOWLEDGEMENTS_FILE = ("search", "exclusion_acknowledgements.json")
+
+#: T221: dimensions whose rows are about *which work* — a topic the candidate
+#: rules out — never about how the work is done. The owner's decision
+#: (2026-10-01); a row tagged with one is recorded, never acknowledged.
+TOPIC_DIMENSIONS: frozenset[str] = frozenset(
+    {"domain_knowledge", "mission_alignment", "product_vs_services", "company_stage"}
+)
 
 #: A zero over nothing shown is not a pass. Four exclusions were restated in
 #: the live session and each arrived again; the probe puts at least that many
@@ -463,20 +474,109 @@ class UnrecordedStatement(Strict):
     words: str
 
 
-def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
-    """The live rows of `STATEMENT_STEPS` that refuse something no exclusion matches.
+def _text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    Every `constraint`-kind row counts, whatever its words, except one stating only
-    T24's pinned fields, which is never a topic; other kinds need the cue.
 
-    "Covered" means a recorded exclusion `matches` the row's own words, so a
-    partial backfill lists only what is left. A row naming several topics
-    counts as covered once any one of them is recorded — the ceiling of a
-    check that cannot split free text into topics, and why the backfill
-    records every topic a row names, not the first.
+def _normalised(text: str) -> str:
+    return " ".join(text.split())
+
+
+@functools.cache
+def acknowledgeable_dimensions() -> frozenset[str]:
+    """The dimension ids a row may be acknowledged under — a closed list.
+
+    `dimensions/*.yaml`'s ids, less T24's pinned fields (a row tagged with one
+    that is not step 2's write is a topic, T218 round 3) and less
+    `TOPIC_DIMENSIONS`. Membership is exact: a tag is an id or it is not, and
+    nothing is folded into one — `commute` is not `commute_burden`.
+    """
+    from integral.dimensions import load_dimensions
+
+    ids = {dimension.id for dimension in load_dimensions()}
+    return frozenset(ids - set(CONSTRAINT_FIELD_NAMES) - TOPIC_DIMENSIONS)
+
+
+class Acknowledgement(Strict):
+    """T221 — one listed row whose words rule out no kind of work.
+
+    A `constraint` row on a non-pinned dimension ("No quiero desplazarme más
+    de 30 minutos.", `commute_burden`) is listed whatever its words, and no
+    honest `record` covers it; without this the backfill could never exit 0.
+    It carries the row's id, the row's **whole** text and that text's hash —
+    no reason field, so a session has nowhere to put a judgement of its own.
+    Whether it is honoured is `refusal`'s answer against the live row, on
+    every read.
+    """
+
+    evidence_id: str
+    words: str
+    text_sha256: str
+
+    @model_validator(mode="after")
+    def _it_names_a_row_and_its_words(self) -> Acknowledgement:
+        if not (self.evidence_id.strip() and self.words.strip()):
+            raise ValueError("an acknowledgement names a row and the row's words")
+        if not re.fullmatch(r"[0-9a-f]{64}", self.text_sha256):
+            raise ValueError("text_sha256 is not a sha256 hex digest")
+        return self
+
+
+def refusal(ack: Acknowledgement, row: EvidenceRow) -> str | None:
+    """Why `ack` does not close `row`, or `None` when it does.
+
+    `row` must already be one the raw listing returns (`_listed_rows`); every
+    other condition is about the row as it stands now, so a correction re-lists it:
+
+    - the words are the row's **whole** text, whitespace aside — a substring
+      would let the non-topic half of a row close its topic half;
+    - the hash is the row's current text's;
+    - the row carries exactly one dimension, and it is in
+      `acknowledgeable_dimensions()`: untagged rows (the bare topic list),
+      pinned-tagged rows, topic dimensions and two-tag rows stay listed.
+    """
+    if ack.evidence_id != row.id:
+        return f"it names {ack.evidence_id}, not {row.id}"
+    if _normalised(ack.words) != _normalised(row.text):
+        return "its words are not the row's whole text"
+    if ack.text_sha256 != _text_sha256(row.text):
+        return "the row's text has changed since it was acknowledged"
+    if len(row.dimensions) != 1:
+        return (
+            f"the row names {len(row.dimensions)} dimensions, not exactly one — "
+            "record each topic it names instead"
+        )
+    outside = [d for d in row.dimensions if d not in acknowledgeable_dimensions()]
+    if outside:
+        return (
+            f"{outside[0]!r} is not an acknowledgeable dimension (a pinned field, a topic "
+            "dimension, or no dimension id at all) — record each topic it names instead"
+        )
+    return None
+
+
+def load_acknowledgements(store: ProfileStore) -> tuple[Acknowledgement, ...]:
+    """Every acknowledgement written, or `()`. A file that will not parse raises."""
+    if not store.exists(*ACKNOWLEDGEMENTS_FILE):
+        return ()
+    payload = store.read_json(*ACKNOWLEDGEMENTS_FILE)
+    name = "/".join(ACKNOWLEDGEMENTS_FILE)
+    if not isinstance(payload, list):
+        raise IdentityError(f"{name} must be a list")
+    try:
+        return tuple(Acknowledgement.model_validate(item) for item in payload)
+    except ValueError as exc:
+        raise IdentityError(f"{name} holds an entry that is not one: {exc}") from exc
+
+
+def _listed_rows(store: ProfileStore) -> list[EvidenceRow]:
+    """The raw listing: rows that refuse something no exclusion matches.
+
+    Before any acknowledgement is applied, so checking an acknowledgement
+    against it is never circular.
     """
     exclusions = load_exclusions(store)
-    unrecorded: list[UnrecordedStatement] = []
+    listed: list[EvidenceRow] = []
     for row in EvidenceLog(store).effective_rows():
         if row.step not in STATEMENT_STEPS:
             continue
@@ -496,8 +596,61 @@ def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...
         said = Candidate(offer_id=row.id, text=row.text)
         if any(matches(said, exclusion) for exclusion in exclusions):
             continue
-        unrecorded.append(UnrecordedStatement(evidence_id=row.id, step=row.step, words=row.text))
-    return tuple(unrecorded)
+        listed.append(row)
+    return listed
+
+
+def _split(
+    store: ProfileStore,
+) -> tuple[tuple[UnrecordedStatement, ...], tuple[UnrecordedStatement, ...]]:
+    acknowledgements = load_acknowledgements(store)
+    unrecorded: list[UnrecordedStatement] = []
+    acknowledged: list[UnrecordedStatement] = []
+    for row in _listed_rows(store):
+        statement = UnrecordedStatement(evidence_id=row.id, step=row.step, words=row.text)
+        closed = any(refusal(ack, row) is None for ack in acknowledgements)
+        (acknowledged if closed else unrecorded).append(statement)
+    return tuple(unrecorded), tuple(acknowledged)
+
+
+def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
+    """The live rows of `STATEMENT_STEPS` that refuse something no exclusion matches.
+
+    Every `constraint`-kind row counts, whatever its words, except one stating only
+    T24's pinned fields, which is never a topic; other kinds need the cue. A row
+    closed by an acknowledgement (T221) is not counted — `acknowledged_statements`
+    names it, so it is closed, never silent.
+
+    "Covered" means a recorded exclusion `matches` the row's own words, so a
+    partial backfill lists only what is left. A row naming several topics
+    counts as covered once any one of them is recorded — the ceiling of a
+    check that cannot split free text into topics, and why the backfill
+    records every topic a row names, not the first.
+    """
+    return _split(store)[0]
+
+
+def acknowledged_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
+    """The listed rows an acknowledgement closes today (T221)."""
+    return _split(store)[1]
+
+
+def record_acknowledgement(store: ProfileStore, evidence_id: str, words: str) -> Path:
+    """Acknowledge one listed row with its own words; refused with the reason.
+
+    The hash is taken from the live row, never from the caller. Idempotent on
+    `evidence_id`. Checked here so a refusal is said at once, and again on
+    every read so a later correction re-lists the row.
+    """
+    row = next((r for r in _listed_rows(store) if r.id == evidence_id), None)
+    if row is None:
+        raise IdentityError(f"{evidence_id} is not a row the backfill lists")
+    ack = Acknowledgement(evidence_id=evidence_id, words=words, text_sha256=_text_sha256(row.text))
+    reason = refusal(ack, row)
+    if reason is not None:
+        raise IdentityError(f"{evidence_id} cannot be acknowledged: {reason}")
+    kept = [a for a in load_acknowledgements(store) if a.evidence_id != evidence_id]
+    return store.write_json([a.model_dump() for a in (*kept, ack)], *ACKNOWLEDGEMENTS_FILE)
 
 
 def backfill_warning(store: ProfileStore) -> str | None:
@@ -520,7 +673,9 @@ def backfill_warning(store: ProfileStore) -> str | None:
         )
     return (
         f"note: {len(rows)} evidence row(s) rule something out that no recorded exclusion "
-        f"matches ({ids}) — record any topic among them, or leave a pay floor as it is."
+        f"matches ({ids}) — record any topic among them; a row tagged with one non-topic "
+        "dimension that rules out no kind of work is acknowledged instead "
+        "(see step 7, 'Backfill')."
     )
 
 
@@ -744,6 +899,33 @@ def _record(argv: list[str]) -> int:
     return 0
 
 
+def _acknowledge(argv: list[str]) -> int:
+    """`acknowledge --handle H --evidence ID --words "…" [--root DIR]`.
+
+    Exit 2, with the reason, when the row cannot be acknowledged.
+    """
+    import argparse
+
+    from integral.identity import default_profiles_root
+
+    parser = argparse.ArgumentParser(prog="integral.sourcing_exclusions acknowledge")
+    parser.add_argument("--handle", required=True)
+    parser.add_argument("--evidence", required=True, help="the listed row's evidence id")
+    parser.add_argument(
+        "--words", required=True, help="the row's whole text, as the candidate said it"
+    )
+    parser.add_argument("--root", type=Path, default=None)
+    args = parser.parse_args(argv)
+    store = ProfileStore(args.root or default_profiles_root(), args.handle)
+    try:
+        path = record_acknowledgement(store, args.evidence, args.words)
+    except (IdentityError, OSError, ProfileError, UnicodeDecodeError, ValueError) as exc:
+        print(f"acknowledge: {exc}", file=sys.stderr)
+        return 2
+    print(f"acknowledged {args.evidence} -> {path}")
+    return 0
+
+
 def _unrecorded(argv: list[str]) -> int:
     """`unrecorded --handle H [--root DIR]` → one JSON row per statement left to record.
 
@@ -766,6 +948,7 @@ def _unrecorded(argv: list[str]) -> int:
         return 2
     try:
         rows = unrecorded_statements(store)
+        acknowledged = acknowledged_statements(store)
         warning = backfill_warning(store)
     except (IdentityError, OSError, ProfileError, UnicodeDecodeError) as exc:
         # An unreadable exclusions file or evidence log cannot answer; exit 1
@@ -774,6 +957,12 @@ def _unrecorded(argv: list[str]) -> int:
         return 2
     for row in rows:
         print(row.model_dump_json())
+    for row in acknowledged:
+        # Closed, never silent: what was acknowledged is said on every run.
+        print(
+            f"acknowledged: {row.evidence_id} {json.dumps(row.words, ensure_ascii=False)}",
+            file=sys.stderr,
+        )
     if warning:
         print(warning, file=sys.stderr)
     return 1 if rows else 0
@@ -792,6 +981,8 @@ def _main(argv: list[str]) -> int:
     """
     if len(argv) > 1 and argv[1] == "record":
         return _record(argv[2:])
+    if len(argv) > 1 and argv[1] == "acknowledge":
+        return _acknowledge(argv[2:])
     if len(argv) > 1 and argv[1] == "unrecorded":
         return _unrecorded(argv[2:])
     import subprocess

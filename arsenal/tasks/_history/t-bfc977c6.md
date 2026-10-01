@@ -3,6 +3,7 @@ id: t-bfc977c6
 title: "T221: T218's backfill loop still cannot close on a non-pinned constraint row, and the step-7 checkpoint has two unpinned error paths"
 priority: 5
 deps: [t-a4dc5d52]
+status: merged
 ---
 
 
@@ -71,6 +72,13 @@ row stays listed.
 Known ceiling: a single-tag non-topic row whose whole text also names a topic can
 still be acknowledged by quoting all of it. The stderr line keeps that visible; no
 free-text check can close it.
+
+## Owner decisions (2026-10-01)
+
+- Topic-bearing dimensions, never acknowledgeable: `domain_knowledge`, `mission_alignment`,
+  `product_vs_services`, `company_stage` (`sourcing_exclusions.TOPIC_DIMENSIONS`).
+- A tag must be a `dimensions/*.yaml` id exactly, so the commute example is tagged
+  `commute_burden`; a `commute`-tagged row stays listed.
 
 ## Acceptance gate
 
