@@ -528,6 +528,15 @@ def test_a_non_topic_row_closes_and_stays_visible(
             "no consultoras",
         ),
         (_row(1, "constraints", "no startups", dimensions=["company_stage"]), "no startups"),
+        (
+            _row(
+                1,
+                "constraints",
+                "No quiero trabajar en productos de IA.",
+                dimensions=["ai_in_the_work"],
+            ),
+            "No quiero trabajar en productos de IA.",
+        ),
         # two tags
         (
             _row(1, "constraints", _COMMUTE, dimensions=["commute_burden", "schedule_flexibility"]),

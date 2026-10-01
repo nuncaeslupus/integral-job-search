@@ -67,7 +67,13 @@ ACKNOWLEDGEMENTS_FILE = ("search", "exclusion_acknowledgements.json")
 #: rules out — never about how the work is done. The owner's decision
 #: (2026-10-01); a row tagged with one is recorded, never acknowledged.
 TOPIC_DIMENSIONS: frozenset[str] = frozenset(
-    {"domain_knowledge", "mission_alignment", "product_vs_services", "company_stage"}
+    {
+        "ai_in_the_work",
+        "company_stage",
+        "domain_knowledge",
+        "mission_alignment",
+        "product_vs_services",
+    }
 )
 
 #: A zero over nothing shown is not a pass. Four exclusions were restated in

@@ -77,6 +77,7 @@ free-text check can close it.
 
 - Topic-bearing dimensions, never acknowledgeable: `domain_knowledge`, `mission_alignment`,
   `product_vs_services`, `company_stage` (`sourcing_exclusions.TOPIC_DIMENSIONS`).
+  `ai_in_the_work` added after #614's second reader (F1), same owner, same day.
 - A tag must be a `dimensions/*.yaml` id exactly, so the commute example is tagged
   `commute_burden`; a `commute`-tagged row stays listed.
 
