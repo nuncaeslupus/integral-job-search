@@ -20,7 +20,7 @@ import pytest
 
 from integral import sourcing_exclusions as se
 from integral.candidate import CONSTRAINT_FIELD_NAMES
-from integral.identity import ProfileStore, create_profile
+from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.sourcing_exclusions import (
     Exclusion,
     backfill_warning,
@@ -289,9 +289,32 @@ def test_the_checkpoint_counts_what_is_recorded_and_quiets_to_a_note(root: Path)
 # left the backfill loop unable to reach exit 0.
 
 
-def _pinned_row(n: int, fields: list[str], quote: str) -> dict[str, Any]:
-    text = json.dumps({"quote": quote, "value": {"stated": True}}, ensure_ascii=False)
-    return _row(n, "constraints", text, dimensions=fields)
+#: One value per pinned field that step 2 could replay (`FIELD_MODELS[f](state="stated", **v)`).
+_STATED: dict[str, dict[str, Any]] = {
+    "languages": {"levels": [{"language": "es", "level": "native"}]},
+    "location": {"country": "ES"},
+    "relocation": {"willingness": "no"},
+    "salary": {"floor": 40000, "currency": "EUR"},
+    "availability": {"earliest_start": "2026-11-01"},
+    "work_authorisation": {"authorised_countries": ["ES"]},
+    "employment_mode": {"accepted": ["employed"]},
+    "pay_country": {"countries": ["ES"]},
+    "tax_country": {"country": "ES"},
+    "reach": {"modes": ["remote"]},
+}
+
+
+def test_the_stated_fixture_covers_every_pinned_field() -> None:
+    assert set(_STATED) == set(CONSTRAINT_FIELD_NAMES)
+
+
+def _pinned_row(
+    n: int, fields: list[str], quote: Any, value: Any = None, **extra: Any
+) -> dict[str, Any]:
+    if value is None:
+        value = {k: v for f in fields if f in _STATED for k, v in _STATED[f].items()}
+    text = json.dumps({"quote": quote, "value": value}, ensure_ascii=False)
+    return _row(n, "constraints", text, dimensions=fields, **extra)
 
 
 @pytest.mark.parametrize("field", CONSTRAINT_FIELD_NAMES)
@@ -395,3 +418,199 @@ def test_the_unrecorded_cli_exits_2_on_an_unreadable_exclusions_file(
         path.write_bytes(b"\xff\xfe[]")
     assert se._main(["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]) == 2
     assert "could not be computed" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# T220 — a tagged row that rules out no kind of work is acknowledged, never recorded
+
+_COMMUTE = "No quiero desplazarme más de 30 minutos."
+
+
+def _ack(n: int, dimension: str = "commute", words: str = _COMMUTE) -> se.Acknowledgement:
+    return se.Acknowledgement(evidence_id=f"ev-{n:06d}", dimension=dimension, words=words)
+
+
+def test_a_commute_row_is_listed_until_it_is_acknowledged(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # integral.feedback's own fixture shape: a constraint outside T24's pinned fields.
+    store = _profile(root, [_row(44, "constraints", _COMMUTE, dimensions=["commute"])])
+    argv = ["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]
+    assert se._main(argv) == 1
+    capsys.readouterr()
+    ack = ["prog", "acknowledge", "--handle", store.handle, "--root", str(root)]
+    ack += ["--evidence-id", "ev-000044", "--dimension", "commute", "--words", _COMMUTE]
+    assert se._main(ack) == 0
+    assert se._main(argv) == 0
+    assert backfill_warning(store) is None
+
+
+def test_a_statement_row_with_a_cue_is_acknowledgeable_too(root: Path) -> None:
+    store = _profile(
+        root, [_row(1, "identify", _COMMUTE, kind="statement", dimensions=["commute"])]
+    )
+    assert len(unrecorded_statements(store)) == 1
+    se.record_acknowledgement(store, _ack(1))
+    assert unrecorded_statements(store) == ()
+
+
+@pytest.mark.parametrize(
+    ("row", "ack", "said"),
+    [
+        # the bare topic list T218 exists for: untagged, so never acknowledgeable
+        (_row(1, "constraints", "defensa, apuestas"), _ack(1, words="defensa, apuestas"), "no dim"),
+        # words not the row's own, even by one character or by trailing space
+        (
+            _row(1, "constraints", _COMMUTE, dimensions=["commute"]),
+            _ack(1, words=_COMMUTE[:-1]),
+            "words",
+        ),
+        (
+            _row(1, "constraints", _COMMUTE, dimensions=["commute"]),
+            _ack(1, words=_COMMUTE + " "),
+            "words",
+        ),
+        # a dimension the row does not carry
+        (
+            _row(1, "constraints", _COMMUTE, dimensions=["commute"]),
+            _ack(1, dimension="sector"),
+            "not one",
+        ),
+    ],
+)
+def test_an_acknowledgement_that_does_not_fit_the_row_is_refused(
+    root: Path, row: dict[str, Any], ack: se.Acknowledgement, said: str
+) -> None:
+    store = _profile(root, [row])
+    with pytest.raises(IdentityError, match=said):
+        se.record_acknowledgement(store, ack)
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+
+
+def test_a_row_tagged_with_a_topic_facet_cannot_be_acknowledged(root: Path) -> None:
+    store = _profile(root, [_row(1, "constraints", "nada de banca", dimensions=["sector"])])
+    record_exclusion(store, Exclusion(about="sector:tabaco", stated_at_cycle=1, words="tabaco"))
+    with pytest.raises(IdentityError, match="facet"):
+        se.record_acknowledgement(store, _ack(1, dimension="sector", words="nada de banca"))
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+
+
+def test_an_acknowledgement_is_rechecked_on_every_read(root: Path) -> None:
+    # Acknowledged while no `sector` exclusion existed; once one is recorded the
+    # facet is a topic and the row is listed again, without touching the file.
+    store = _profile(root, [_row(1, "constraints", "nada de banca", dimensions=["sector"])])
+    se.record_acknowledgement(store, _ack(1, dimension="sector", words="nada de banca"))
+    assert unrecorded_statements(store) == ()
+    record_exclusion(store, Exclusion(about="Sector:tabaco", stated_at_cycle=1, words="tabaco"))
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]
+
+
+def test_a_hand_written_acknowledgement_is_held_to_the_same_rule(root: Path) -> None:
+    rows = [
+        _row(1, "constraints", "defensa, apuestas"),
+        _row(2, "constraints", _COMMUTE, dimensions=["commute"]),
+    ]
+    store = _profile(root, rows)
+    # Written past `record_acknowledgement`: an untagged row, wrong words for the other.
+    store.write_json(
+        [
+            {"evidence_id": "ev-000001", "dimension": "commute", "words": "defensa, apuestas"},
+            {"evidence_id": "ev-000002", "dimension": "commute", "words": "no quiero desplazarme"},
+        ],
+        *se.ACKNOWLEDGEMENTS_FILE,
+    )
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001", "ev-000002"]
+
+
+def test_an_acknowledgement_covers_only_its_own_row(root: Path) -> None:
+    rows = [
+        _row(1, "constraints", _COMMUTE, dimensions=["commute"]),
+        _row(2, "constraints", _COMMUTE, dimensions=["commute"]),
+    ]
+    store = _profile(root, rows)
+    se.record_acknowledgement(store, _ack(1))
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000002"]
+
+
+def test_a_retracted_row_cannot_be_acknowledged(root: Path) -> None:
+    rows = [
+        _row(1, "constraints", _COMMUTE, dimensions=["commute"]),
+        _row(2, "constraints", "retiro eso", kind="retraction", retracts="ev-000001"),
+    ]
+    with pytest.raises(IdentityError, match="not a live evidence row"):
+        se.record_acknowledgement(_profile(root, rows), _ack(1))
+
+
+def test_a_row_outside_the_statement_steps_cannot_be_acknowledged(root: Path) -> None:
+    store = _profile(root, [_row(1, "history", _COMMUTE, dimensions=["commute"])])
+    with pytest.raises(IdentityError, match="statement step"):
+        se.record_acknowledgement(store, _ack(1))
+
+
+def test_the_acknowledge_cli_exits_2_with_the_reason(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, [_row(9, "constraints", "defensa, apuestas")])
+    argv = ["prog", "acknowledge", "--handle", store.handle, "--root", str(root)]
+    argv += ["--evidence-id", "ev-000009", "--dimension", "commute", "--words", "defensa, apuestas"]
+    assert se._main(argv) == 2
+    assert "record each topic" in capsys.readouterr().err
+    assert not store.exists(*se.ACKNOWLEDGEMENTS_FILE)
+
+
+def test_a_corrupt_acknowledgements_file_makes_unrecorded_exit_2(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, [_row(1, "constraints", _COMMUTE, dimensions=["commute"])])
+    store.write_json({"not": "a list"}, *se.ACKNOWLEDGEMENTS_FILE)
+    argv = ["prog", "unrecorded", "--handle", store.handle, "--root", str(root)]
+    assert se._main(argv) == 2
+    assert "could not be computed" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# T221 N1-N3 — the checkpoint's error paths, and what counts as step 2's write
+
+
+def _checkpoint_main(root: Path, handle: str) -> int:
+    try:
+        module = _load_checkpoint_module()
+        return int(module.main(["--id", handle, "--input-dir", str(root), "--dev"]))
+    finally:
+        sys.modules.pop("_t218_main_checkpoint", None)
+
+
+def test_a_non_utf8_evidence_log_makes_the_checkpoint_main_exit_2(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _profile(root, _PRE_T203[:1])
+    store.path("profile", "evidence.jsonl").write_bytes(b'{"id": "\xff\xfe"}\n')
+    assert _checkpoint_main(root, store.handle) == 2
+    assert "could not be computed" in capsys.readouterr().err
+
+
+def test_an_unreadable_exclusions_file_makes_the_checkpoint_main_exit_2(
+    root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The same state the `unrecorded` CLI exits 2 on; SKILL.md says the two agree.
+    store = _profile(root, _PRE_T203[:1])
+    store.path(*se.EXCLUSIONS_FILE).mkdir(parents=True)
+    assert _checkpoint_main(root, store.handle) == 2
+    assert "could not be computed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("quote", "value"),
+    [
+        (5, None),  # a quote that is not words
+        ("nada de banca", {}),  # a value step 2 could never have written
+        ("nada de banca", {"stated": True}),  # not a field of Salary
+        ("nada de banca", {"floor": 40000}),  # Salary stated without its currency
+        ("nada de banca", {"floor": 40000, "currency": "EUR", "evidence": ["ev-000009"]}),
+    ],
+)
+def test_a_payload_step_2_could_not_have_written_is_still_listed(
+    root: Path, quote: Any, value: Any
+) -> None:
+    store = _profile(root, [_pinned_row(1, ["salary"], quote, value)])
+    assert [r.evidence_id for r in unrecorded_statements(store)] == ["ev-000001"]

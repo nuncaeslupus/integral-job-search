@@ -39,7 +39,14 @@ If the runtime (`integral.step_runtime.offered`) is not offering `sourcing` for 
       --term betting --term gambling --term apostes
   ```
 
-  Re-run `unrecorded` until it exits 0. Step 2's pinned fields (salary, location, relocation, …) are never listed. A row it does list that rules out no topic (a pay floor said in passing) is left as it is — the cue is broad on purpose. Tell the candidate in one line what is now filtered; never record a topic they did not say.
+  Step 2's pinned fields (salary, location, relocation, …) are never listed. A listed row that rules out **no kind of work** — `commute`: "No quiero desplazarme más de 30 minutos." — is acknowledged instead. Do this only after reading it with the candidate. Pass its id, one of its own dimensions, and its text **exactly**; there is no field for your reasoning:
+
+  ```bash
+  uv run python -m integral.sourcing_exclusions acknowledge --handle <handle> \
+      --evidence-id ev-000044 --dimension commute --words "No quiero desplazarme más de 30 minutos."
+  ```
+
+  It is refused (exit 2, with the reason) in four cases: the words differ, the row has no dimension, the dimension is not the row's own, or a row dimension is a facet some recorded exclusion uses. If the row also names a topic ("…y nada de bancos"), `record` that topic first; an acknowledgement covers the whole row. An **untagged** row can never be acknowledged, because nothing tells it apart from a bare topic list. Ask the candidate what it rules out and `record` each topic. If it rules out none, it stays listed: say so to the candidate and go on. That is the one case where the loop ends short of exit 0. Otherwise, re-run `unrecorded` until it exits 0. Tell the candidate in one line what is now filtered; never record a topic they did not say.
 - **Deduplication is by similarity, not by hash** — the same job at two boards is rarely byte-identical.
 - Where a source needs a login, drive the candidate's **own browser session** rather than storing credentials — nothing to leak, nothing to rotate.
 
@@ -280,7 +287,9 @@ code, but a `search/exclusions.json` that does not parse now makes the checkpoin
 same file `source()` refuses, so the two agree. A row counts as covered once **any** recorded
 exclusion matches any word in it, so keep each `--term` specific to its topic (`seguridad` alone
 would cover a row that also rules out `publicidad`). The warning is the backfill above left
-undone, and it is closed by recording the topics, not by editing the file.
+undone. It is closed by recording the topics, or by acknowledging a tagged row that rules out no
+kind of work (T220), never by editing either file. An acknowledgement whose row was later
+restated or retracted no longer counts, and that row is listed again.
 
 ## Gotchas
 

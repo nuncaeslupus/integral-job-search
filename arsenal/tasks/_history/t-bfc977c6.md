@@ -2,6 +2,7 @@
 id: t-bfc977c6
 title: "T221: T218's backfill loop still cannot close on a non-pinned constraint row, and the step-7 checkpoint has two unpinned error paths"
 priority: 5
+status: merged
 deps: [t-a4dc5d52]
 ---
 

@@ -44,7 +44,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from integral.candidate import CONSTRAINT_FIELD_NAMES
+from integral.candidate import CONSTRAINT_FIELD_NAMES, FIELD_MODELS
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer
 from integral.profile import EvidenceLog, EvidenceRow, ProfileError
@@ -58,6 +58,8 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T90.json"
 #: **returns**. `sourcing.source` reads it itself, so no caller has to remember
 #: to hand it over — T203 is what happens when a correct module waits for one to.
 EXCLUSIONS_FILE = ("search", "exclusions.json")
+#: T220: rows read with the candidate that rule out no kind of work.
+ACKNOWLEDGEMENTS_FILE = ("search", "exclusion_acknowledgements.json")
 
 #: A zero over nothing shown is not a pass. Four exclusions were restated in
 #: the live session and each arrived again; the probe puts at least that many
@@ -435,9 +437,112 @@ def _is_a_pinned_field_write(row: EvidenceRow) -> bool:
         payload = json.loads(row.text)
     except json.JSONDecodeError:
         return False
-    return (
-        isinstance(payload, dict) and "quote" in payload and isinstance(payload.get("value"), dict)
-    )
+    if not (isinstance(payload, dict) and isinstance(payload.get("quote"), str)):
+        return False
+    value = payload.get("value")
+    if not isinstance(value, dict):
+        return False
+    # T221 (N3): the value must be one step 2 could replay — the same
+    # `FIELD_MODELS[field](state="stated", …)` construction `constraints_step`
+    # performs — for every dimension the row names. A shape that merely looks
+    # like a write (`{"quote": 5, "value": {}}`) is not one, and stays listed.
+    for field in row.dimensions:
+        try:
+            FIELD_MODELS[field](state="stated", evidence=(row.id,), **value)
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+class Acknowledgement(Strict):
+    """T220 — one listed row the candidate confirmed rules out no kind of work.
+
+    A `constraint` row tagged with a dimension outside T24's pinned fields
+    (`commute`: "No quiero desplazarme más de 30 minutos.") is listed by
+    `unrecorded_statements` whatever its words, and no honest `record` covers
+    it — so without this the backfill loop could never reach exit 0.
+
+    It carries the row's id, one of the row's own dimensions and the row's own
+    words, and **nothing else**: there is no reason field, so a session has
+    nowhere to put a judgement of its own. Whether it is honoured is decided by
+    `refusal`, against the live row, on every read.
+    """
+
+    evidence_id: str
+    dimension: str
+    words: str
+
+    @model_validator(mode="after")
+    def _it_names_a_row_a_dimension_and_words(self) -> Acknowledgement:
+        if not (self.evidence_id.strip() and self.dimension.strip() and self.words.strip()):
+            raise ValueError("an acknowledgement names a row, one of its dimensions and its words")
+        return self
+
+
+def refusal(ack: Acknowledgement, row: EvidenceRow, exclusions: Iterable[Exclusion]) -> str | None:
+    """Why `ack` does not acknowledge `row`, or `None` when it does.
+
+    Every condition is about the row as it stands now, so a row restated,
+    corrected or retracted after it was acknowledged is listed again:
+
+    - per row, never per dimension — a later row with the same tag is listed;
+    - the words are the row's own, byte for byte;
+    - the row is tagged, and the acknowledgement names one of its tags. An
+      untagged row is the bare topic list ("defensa, apuestas, tabacos,
+      bancos") this check exists for, and nothing tells it from a pay floor,
+      so it is never acknowledgeable — fail-closed by choice;
+    - no tag of the row is the facet of a recorded exclusion — the profile's
+      own record of which facets are topics.
+    """
+    if ack.evidence_id != row.id:
+        return f"it names {ack.evidence_id}, not {row.id}"
+    if ack.words != row.text:
+        return "its words are not the row's own words, exactly"
+    if not row.dimensions:
+        return (
+            "the row names no dimension, so nothing tells it from a list of topics — "
+            "record each topic it names instead"
+        )
+    if ack.dimension not in row.dimensions:
+        return f"{ack.dimension!r} is not one of the row's dimensions {list(row.dimensions)}"
+    topics = {exclusion.facet.strip().casefold() for exclusion in exclusions}
+    tagged = sorted(d for d in row.dimensions if d.casefold() in topics)
+    if tagged:
+        return f"the row is tagged {tagged}, a facet the candidate rules topics out by"
+    return None
+
+
+def load_acknowledgements(store: ProfileStore) -> tuple[Acknowledgement, ...]:
+    """Every acknowledgement written, or `()`. A file that will not parse raises."""
+    if not store.exists(*ACKNOWLEDGEMENTS_FILE):
+        return ()
+    payload = store.read_json(*ACKNOWLEDGEMENTS_FILE)
+    name = "/".join(ACKNOWLEDGEMENTS_FILE)
+    if not isinstance(payload, list):
+        raise IdentityError(f"{name} must be a list")
+    try:
+        return tuple(Acknowledgement.model_validate(row) for row in payload)
+    except ValueError as exc:
+        raise IdentityError(f"{name} holds a row that is not one: {exc}") from exc
+
+
+def record_acknowledgement(store: ProfileStore, ack: Acknowledgement) -> Path:
+    """Keep `ack`, after checking it against the live row; refused with the reason.
+
+    Idempotent on `evidence_id`. Checked here so a refusal is said at once,
+    and again on every read so a later change to the row re-lists it.
+    """
+    rows = {row.id: row for row in EvidenceLog(store).effective_rows()}
+    row = rows.get(ack.evidence_id)
+    if row is None:
+        raise IdentityError(f"{ack.evidence_id} is not a live evidence row")
+    if row.step not in STATEMENT_STEPS:
+        raise IdentityError(f"{ack.evidence_id} is a {row.step!r} row, not a statement step's")
+    reason = refusal(ack, row, load_exclusions(store))
+    if reason is not None:
+        raise IdentityError(f"{ack.evidence_id} cannot be acknowledged: {reason}")
+    kept = [a for a in load_acknowledgements(store) if a.evidence_id != ack.evidence_id]
+    return store.write_json([a.model_dump() for a in (*kept, ack)], *ACKNOWLEDGEMENTS_FILE)
 
 
 class UnrecordedStatement(Strict):
@@ -461,6 +566,7 @@ def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...
     records every topic a row names, not the first.
     """
     exclusions = load_exclusions(store)
+    acknowledged = load_acknowledgements(store)
     unrecorded: list[UnrecordedStatement] = []
     for row in EvidenceLog(store).effective_rows():
         if row.step not in STATEMENT_STEPS:
@@ -480,6 +586,9 @@ def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...
             continue
         said = Candidate(offer_id=row.id, text=row.text)
         if any(matches(said, exclusion) for exclusion in exclusions):
+            continue
+        # T220: a row read with the candidate that rules out no kind of work.
+        if any(refusal(ack, row, exclusions) is None for ack in acknowledged):
             continue
         unrecorded.append(UnrecordedStatement(evidence_id=row.id, step=row.step, words=row.text))
     return tuple(unrecorded)
@@ -505,7 +614,8 @@ def backfill_warning(store: ProfileStore) -> str | None:
         )
     return (
         f"note: {len(rows)} evidence row(s) rule something out that no recorded exclusion "
-        f"matches ({ids}) — record any topic among them, or leave a pay floor as it is."
+        f"matches ({ids}) — record any topic among them; a tagged row that rules out "
+        "no kind of work is acknowledged instead (see step 7, 'Backfill')."
     )
 
 
@@ -729,6 +839,35 @@ def _record(argv: list[str]) -> int:
     return 0
 
 
+def _acknowledge(argv: list[str]) -> int:
+    """`acknowledge --handle H --evidence-id ID --dimension D --words "…" [--root DIR]`.
+
+    Exit 2, with the reason, when the row cannot be acknowledged.
+    """
+    import argparse
+
+    from integral.identity import default_profiles_root
+
+    parser = argparse.ArgumentParser(prog="integral.sourcing_exclusions acknowledge")
+    parser.add_argument("--handle", required=True)
+    parser.add_argument("--evidence-id", required=True)
+    parser.add_argument("--dimension", required=True, help="one of the row's own dimensions")
+    parser.add_argument("--words", required=True, help="the row's text, exactly")
+    parser.add_argument("--root", type=Path, default=None)
+    args = parser.parse_args(argv)
+    store = ProfileStore(args.root or default_profiles_root(), args.handle)
+    try:
+        ack = Acknowledgement(
+            evidence_id=args.evidence_id, dimension=args.dimension, words=args.words
+        )
+        path = record_acknowledgement(store, ack)
+    except (IdentityError, OSError, ProfileError, UnicodeDecodeError, ValueError) as exc:
+        print(f"acknowledge: {exc}", file=sys.stderr)
+        return 2
+    print(f"acknowledged {ack.evidence_id} -> {path}")
+    return 0
+
+
 def _unrecorded(argv: list[str]) -> int:
     """`unrecorded --handle H [--root DIR]` → one JSON row per statement left to record.
 
@@ -777,6 +916,8 @@ def _main(argv: list[str]) -> int:
     """
     if len(argv) > 1 and argv[1] == "record":
         return _record(argv[2:])
+    if len(argv) > 1 and argv[1] == "acknowledge":
+        return _acknowledge(argv[2:])
     if len(argv) > 1 and argv[1] == "unrecorded":
         return _unrecorded(argv[2:])
     import subprocess
