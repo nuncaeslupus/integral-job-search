@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import ast
 import copy
+import itertools
 import json
 import re
 import shutil
+import types
 from pathlib import Path
 from typing import Any
 
@@ -4094,3 +4096,153 @@ def test_every_live_tree_caller_reaches_the_cache() -> None:
     # denominator: measure, _main, write_evidence, write_prose_clearance_evidence, ...
     assert len(live) >= 5, live
     assert [n for n in live if reaches(n, "_analyse", banned="measure")] == []
+
+
+# ---------------------------------------------------------------------------
+# T216: the cache key holds every input the analysis reads (R2-3, R2-4).
+# ---------------------------------------------------------------------------
+
+
+def _stub_analysis(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    monkeypatch.setattr(floor_sweep, "_ANALYSES", {})
+    return []
+
+
+def test_patching_the_self_floor_between_two_same_tree_calls_changes_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R2-3, end to end over the live tree: the self-floor finding must reappear."""
+    monkeypatch.setattr(floor_sweep, "_ANALYSES", {})
+    before = floor_sweep.measure()
+    swept = floor_sweep.MINIMUM_FLOORS_SWEPT
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_SWEPT", swept - 40)
+    after = floor_sweep.measure()
+    assert after != before
+    assert (
+        after["floors_that_do_not_refuse_the_first_deletion"]
+        > before["floors_that_do_not_refuse_the_first_deletion"]
+    )
+
+
+def test_patching_the_prose_scenario_floor_misses_the_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R2-3: the prose clearance's floor is in the key of its cached entry."""
+    calls = _stub_analysis(monkeypatch)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {"floor": floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS}
+
+    first = floor_sweep._analysed_once("prose", floor_sweep._SRC_DIR, analyse)
+    assert floor_sweep._analysed_once("prose", floor_sweep._SRC_DIR, analyse) == first
+    assert len(calls) == 1
+    monkeypatch.setattr(floor_sweep, "MINIMUM_PROSE_MUTATION_SCENARIOS", 1)
+    second = floor_sweep._analysed_once("prose", floor_sweep._SRC_DIR, analyse)
+    assert len(calls) == 2
+    assert second == {"floor": 1} != first
+
+
+def test_patching_a_pattern_the_analysis_reads_changes_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R2-3, end to end, beyond the floors: the second reader patched
+    `MARGIN_MARKER_RE` between two calls and the cache served the old answer."""
+    monkeypatch.setattr(floor_sweep, "_ANALYSES", {})
+    before = floor_sweep.measure()
+    monkeypatch.setattr(floor_sweep, "_CONSTANT_NAME_RE", re.compile(r"(?!)"))
+    after = floor_sweep.measure()
+    assert after["floors_swept"] != before["floors_swept"]
+
+
+def test_patching_any_module_global_misses_the_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Closed over the module, not a name pattern: every global the analysis could
+    read -- constants, patterns, helper functions, and one added later -- is in
+    the key. The population is the module's own namespace, not the key's rule."""
+    calls = _stub_analysis(monkeypatch)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {}
+
+    src_dir = floor_sweep._SRC_DIR
+
+    def run() -> dict[str, Any]:
+        return floor_sweep._analysed_once("x", src_dir, analyse)
+
+    run()
+    run()
+    assert len(calls) == 1
+    monkeypatch.setattr(floor_sweep, "MINIMUM_A_FLOOR_ADDED_LATER", 7, raising=False)
+    run()
+    assert len(calls) == 2
+    names = [
+        name
+        for name, value in vars(floor_sweep).items()
+        if not name.startswith("__")
+        and name != "_ANALYSES"
+        and not isinstance(value, types.ModuleType)
+    ]
+    kinds = {
+        "floor": [n for n in names if n.startswith("MINIMUM_")],
+        "pattern": [n for n in names if isinstance(getattr(floor_sweep, n), re.Pattern)],
+        "function": [n for n in names if isinstance(getattr(floor_sweep, n), types.FunctionType)],
+    }
+    # Denominators: each kind the second reader found outside the old key is present.
+    assert {"MARGIN_MARKER_RE", "_CONSTANT_NAME_RE"} <= set(kinds["pattern"])
+    assert "_MAX_DELEGATION_DEPTH" in names
+    assert len(kinds["floor"]) >= 4 and len(kinds["function"]) >= 50
+    # The key machinery itself cannot be replaced by an inert object and still run;
+    # each of these is in the key anyway (directly, or as `_THIS_FILE`'s code).
+    machinery = {
+        "_analysed_once",
+        "_module_inputs",
+        "_content_digest",
+        "_evidence_dir",
+        "_REPO_ROOT",
+        "Path",
+    }
+    for name in names:
+        if name in machinery:
+            continue
+        # Both an inert value and a callable one, so a key that skips either kind
+        # (constants, or helper functions) is caught.
+        for replacement in (object(), lambda *args, **kwargs: None):
+            before = len(calls)
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(floor_sweep, name, replacement)
+                run()
+            assert len(calls) == before + 1, (name, replacement)
+
+
+def test_every_evidence_path_the_resolver_accepts_is_hashed_by_the_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R2-4: a path the resolver reaches is a path whose bytes change the digest.
+    The candidates are generated, every `_REPO_ROOT / s1 / … / "T1.json"` over a
+    segment alphabet to depth four, never a hand-picked list."""
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    alphabet = ("status", "evidence", "tests", "sub", "..", ".")
+    candidates = [
+        combo for depth in range(0, 5) for combo in itertools.product(alphabet, repeat=depth)
+    ]
+    resolved = 0
+    for combo in candidates:
+        text = " / ".join(["_REPO_ROOT", *(repr(seg) for seg in combo), '"T1.json"'])
+        path = floor_sweep._extract_evidence_path_literal(ast.parse(text, mode="eval").body)
+        if path is None:
+            continue
+        resolved += 1
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+        digest = floor_sweep._content_digest(src)
+        path.write_text('{"x": 1}', encoding="utf-8")
+        assert floor_sweep._content_digest(src) != digest, combo
+        path.unlink()
+    # Denominators: the alphabet produced many candidates, and the hashed branch ran.
+    assert len(candidates) > 1000
+    assert resolved >= 1
