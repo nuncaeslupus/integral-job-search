@@ -512,6 +512,7 @@ import re
 import shutil
 import sys
 import tempfile
+import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -2978,22 +2979,31 @@ def _classify_floor(
 #: input `_analyse` and the prose clearance read: the tree's *content* (every
 #: `src_dir/*.py` byte plus every `_evidence_dir()/*.json` byte, which
 #: `_committed_evidence_population` reads), the paths they are compared against
-#: (`src_dir`, `_THIS_FILE`, `_REPO_ROOT`) and the module's own live
-#: `MINIMUM_*` floors (`_floor_values`, R2-3). No bare `lru_cache`: any edit to
+#: (`src_dir`, `_THIS_FILE`, `_REPO_ROOT`) and the module's own globals as
+#: they are now (`_module_inputs`, R2-3). No bare `lru_cache`: any edit to
 #: any of those is a miss and re-analyses.
 _ANALYSES: dict[tuple[str, ...], dict[str, Any]] = {}
 
-_FLOOR_NAME_RE = re.compile(r"MINIMUM_[A-Z0-9_]+")
 
-
-def _floor_values() -> str:
-    """The module's own committed floors as they are *now* (R2-3). `_analyse` reads
-    `MINIMUM_FLOORS_*` through `_margin_finding` and the prose clearance reads
-    `MINIMUM_PROSE_MUTATION_SCENARIOS`; a caller that patches either between two
-    same-tree calls must not be served the earlier analysis. Derived by a closed
-    rule -- every module global named `MINIMUM_*` -- never a list, so a floor added
-    later enters the key without anyone remembering to."""
-    return repr(sorted((n, repr(v)) for n, v in globals().items() if _FLOOR_NAME_RE.fullmatch(n)))
+def _module_inputs() -> str:
+    """Every module-level value `_analyse` and the prose clearance could read, as it
+    is *now* (R2-3). Not only the `MINIMUM_*` floors: the analysis also reads
+    patterns and bounds such as `MARGIN_MARKER_RE`, `_CONSTANT_NAME_RE` and
+    `_MAX_DELEGATION_DEPTH`, and a caller that patches any of them -- or a helper
+    function -- between two same-tree calls must not be served the earlier
+    analysis. So the rule is closed over the module, never a name pattern: every
+    global, functions included (a function's repr names its object, so patching
+    one changes the key), except imported modules, dunders and `_ANALYSES` itself,
+    which cannot be part of its own key."""
+    return repr(
+        sorted(
+            (name, repr(value))
+            for name, value in globals().items()
+            if not name.startswith("__")
+            and name != "_ANALYSES"
+            and not isinstance(value, types.ModuleType)
+        )
+    )
 
 
 def _content_digest(src_dir: Path) -> str:
@@ -3010,7 +3020,7 @@ def _analysed_once(
     name: str, src_dir: Path, analyse: Callable[[], dict[str, Any]]
 ) -> dict[str, Any]:
     """`analyse()`'s result, computed once per (`name`, paths, tree content, live
-    floors); each caller gets its own deep copy so mutating a result cannot
+    module globals); each caller gets its own deep copy so mutating a result cannot
     poison the next one."""
     # `_analyse` also compares each module's *path* to `_THIS_FILE` and reads
     # evidence under `_REPO_ROOT`, so a byte-identical copy of the tree at another
@@ -3021,7 +3031,7 @@ def _analysed_once(
         str(_THIS_FILE),
         str(_REPO_ROOT),
         _content_digest(src_dir),
-        _floor_values(),
+        _module_inputs(),
     )
     if key not in _ANALYSES:
         _ANALYSES[key] = analyse()
@@ -3029,7 +3039,7 @@ def _analysed_once(
 
 
 def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:
-    """T159's gate, memoised on the tree's content, paths and live floors (see `_ANALYSES`)."""
+    """T159's gate, memoised on the tree's content, paths and live globals (see `_ANALYSES`)."""
     return _analysed_once("measure", src_dir, lambda: _analyse(src_dir))
 
 
