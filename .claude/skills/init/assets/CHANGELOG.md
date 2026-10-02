@@ -18,6 +18,76 @@ being a changelog nobody reads.
 
 Format: `## [X.Y.Z] - YYYY-MM-DD`, newest first, plain bullets below.
 
+## [5.0.1] - 2026-10-01
+
+- **Spec/plan readers keep your notes.** Three bugs in the annotatable reader that `create_reader.py` generates are fixed (#477). Regenerate a reader to pick up the fixes:
+  - clearing a note no longer brings the original note back after a reload;
+  - blocked browser storage no longer hides the notes embedded in the reader;
+  - "Copy" reports success only when the copy really happened, and otherwise tells you to select the text and copy it yourself.
+
+## [5.0.0] - 2026-10-01
+
+Prompts rewritten for the current Claude model generation (Opus 5.5, Sonnet 5.5, Fable 5.1), following Anthropic's prompting guides for those models. Skills do the same jobs with less context and calmer, explained instructions.
+
+- **Less context, every turn.** The always-loaded tier (vendored `AGENTS.md` plus the skill list) dropped from 4,162 to about 2,765 tokens, and skill bodies dropped from about 38k to 22.5k tokens in total. Rarely needed detail moved to references that load only when needed: `har` query grammar, `queue-next` claim gotchas, `github` multi-PR stacking.
+- **Breaking: text that moved.** If your own prompts or tooling quote arsenal prose, these moved:
+  - `AGENTS.md` now points to `github-automation.md`, `worker-loop.md § Credit guards` and `evidence-gates.md` instead of repeating them.
+  - Model dispatch for workers and reviewers lives only in `worker-loop.md § Credit guards`; the snippet in `reviewer.md` is gone.
+  - Gate-speed tuning moved from `evidence-gates.md` to `performance-tuning.md § Making the gate faster`.
+  - The reviewer's follow-up-round rules now arrive in the review packet.
+- **Agents finish the job.** Workers and `execution` carry the plan through to the PR without pausing between tasks. Pre-existing bugs and unrequested cleanup are reported as follow-ups, not fixed. A code change needs one real check (tests, build, typecheck or the command itself) before it is called done.
+- **Reviews report everything.** `review`, the reviewer agent and `repo-audit` give every finding a severity and a confidence, and filtering is a separate step. `repo-audit` sizes its fan-out to the repo, has no mandatory re-verify pass, and no longer asks which model to use. The reviewer prompt is about half its old size.
+- **Short task labels.** Task files take an optional `label:` (up to 5 words). Board output and sessions name tasks as `<label> (t-id)` instead of a bare id. `create_task.py --label` writes one.
+- **New `autonomy` key** (`ask-often | ask-when-blocked | autonomous`, default `ask-when-blocked`) says how often a session stops to ask.
+- **Setup interview.** `/init` can ask four questions: autonomy, verification profile, review time budget and bot wait. It suggests `bot-triggers` for the review bots you use. Every question can be skipped, and an upgrade does not ask again; run `/init --interview` to answer later.
+- **Per-skill effort.** `queue-status` and `pin-check` run at `effort: low`.
+- **skill-workshop** (not vendored by `/init`):
+  - New `references/model-prompting.md` with the prompting rules for this generation.
+  - New style checks, now errors: CAPS emphasis, ritual re-checks, "think step by step", report-only-high-severity, hard-coded model names, turn-ending "Shall I…", and reference links with no load-when trigger.
+  - New `model-upgrade` mode documents how to repeat this alignment for the next model generation.
+- **Skill-load record.** A `PostToolUse` hook appends each skill load to `tmp/arsenal-metrics/skill-loads.tsv`. CANARY lines stay.
+
+## [4.26.0] - 2026-10-01
+
+- **Verification is bounded.** One PR had run 8 review rounds of ~40 minutes. The review loop now ends:
+  - **Rounds follow the branch.** The round counter is kept per branch, so rebases and base merges no longer restart it. `review-max-rounds` now defaults to **2**: one full review, plus a follow-up only for BLOCKERs. `adversarial_review.sh emit --reset` starts over deliberately. Set the key back to 3 if you relied on it.
+  - **Each round has a budget.** Every packet states it (`review-budget-min`, default 10). The reviewer runs targeted tests only; the full suite and mutation runs are reserved for the new `strict` profile.
+  - **Findings come with severity and confidence.** The reviewer now reports every finding with a severity and a confidence instead of dropping the uncertain ones.
+- **New `verification` profile** (`fast | balanced | strict`, default `balanced`) decides how much local checking a PR needs, given what CI and the review bots did. With CI and a bot both green on a low-risk diff, no local review round runs. `risk-paths` and `risk-lines` mark changes that always get one.
+- **New `review_sources.py --pr N`.** It reports CI and each review bot as `ok`, `pending`, `skipped`, `rate-limited` or `absent`, and prints the decision line every caller now follows. It reads the bots' skip, rate-limit and pause notices, including commit statuses that read "success" on a skipped review and summary comments edited in place.
+- **The bot wait ends.** After `bot-wait-min` (default 20), `--trigger` asks a silent or skipped bot once, using its `bot-triggers` entry (`"login=comment"`, or `request-reviewer` for bots requested as reviewers; a paused bot gets its resume command). After one more wait the bot is `absent` and the loop moves on. `query_pr_state.py` has new states `bot_skipped`, `bot_rate_limited` and `bot_absent`, and a `--local-review-done` flag.
+- **The full test suite runs once per tree.** `fast_gate.sh --full` and `open_task_pr.sh` record a receipt keyed by tree hash and reuse it while the tree is unchanged. Green CI on the PR head counts as the merge-time evidence, except under `strict`.
+- **One review procedure.** `execution`, `github`, `ship` and the worker agent all point to `references/pre-pr-review.md` (about half its old size). `ship` reuses the last verdict unless commits landed after it.
+
+## [4.25.0] - 2026-09-30
+
+- **Long tasks survive context compaction.** `execution`'s notes file
+  (`tmp/<task-id>-notes.md`) now opens with a **Resume** block — *Decided* (do not
+  reopen), *Ruled out*, *Next step* — kept current after RED, GREEN and each
+  decision. A new `SessionStart` hook (matcher `compact`,
+  `claude-arsenal/bin/compact_resume.sh`) prints that block and a short
+  `git status` right after compaction, so the session resumes from disk rather
+  than from a lossy summary. It is silent when there is no notes file from the
+  last 7 days.
+- **Each session resumes its own task.** A companion `PostToolUse` hook records
+  which notes file each session edits (`tmp/.arsenal-sessions/<session_id>`), so
+  several agents sharing one checkout each get their own notes back. Without a
+  record it uses a notes file whose task id is in the branch name, and only then
+  the newest one — flagged as a guess to confirm. `/init` registers it in `.claude/settings.json`; re-run `/init`
+  (or let the session-start refresh do it) to pick it up.
+- The core plugin's `hooks.json` now uses the standard `{matcher, hooks: [...]}`
+  shape for its `SessionStart` entries.
+
+## [4.24.1] - 2026-09-29
+
+- **Queue workflow fixes now reach existing installs.** `/init` (and the
+  session-start refresh) used to leave `.github/workflows/arsenal-queue.yml`
+  alone whenever it differed from the shipped copy, which included every older
+  shipped version nobody had touched, so no upstream fix ever arrived. A copy
+  that matches any version arsenal has shipped is now refreshed, and init
+  prints `refreshed`; commit it with the bundle update. That delivers 4.24.0's
+  cheaper triggers without a manual diff. A copy you edited is still left alone.
+
 ## [4.24.0] - 2026-09-29
 
 - **`/init` now checks the newest release.** A plugin cache frozen at an old
