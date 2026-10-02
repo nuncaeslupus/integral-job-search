@@ -26,7 +26,8 @@ directory and hands it to `create_reader.py` with the same arguments.
 - *A lone heading in a split document* is not left as a heading in a body (the
   generator would then cut a stray extra section there). It becomes the label of
   the section made from the paragraph that follows it, and is a section of its
-  own, empty, when nothing follows. Its text survives as the label.
+  own, empty, when nothing follows. Its text survives as the label, verbatim:
+  never shortened or stripped of markup, so no word of it is lost.
 - *Paragraphs* are runs of lines separated by blank lines. A line holding only
   whitespace is blank, runs of blank lines are one separator, and CRLF / CR line
   endings are normalised to `\\n` (this applies to a split document only).
@@ -154,8 +155,12 @@ def sectioned(markdown: str) -> str:
     if title is not None:
         blocks.append(f"# {title}")
     for n, (heading, body) in enumerate(items, start=1):
-        first = heading if heading is not None else body.split("\n", 1)[0]
-        head = f"## {n}. {label_for(first)}"
+        # A lone heading is the candidate's own text: it becomes the label
+        # verbatim, never truncated or stripped, or the reader would show a
+        # letter missing words (#621 second reader, F1). Only a label derived
+        # from a paragraph's opening is shortened, and that paragraph is shown whole.
+        label = heading if heading is not None else label_for(body.split("\n", 1)[0])
+        head = f"## {n}. {label}"
         blocks.append(f"{head}\n\n{body}" if body else head)
     return "\n\n".join(blocks) + "\n"
 
@@ -168,6 +173,11 @@ def _input_arg(argv: list[str]) -> tuple[int, str, bool] | None:
         if arg.startswith("--input="):
             return i, arg.split("=", 1)[1], True
     return None
+
+
+def _names_output_dir(arg: str) -> bool:
+    name = arg.split("=", 1)[0]
+    return len(name) > len("--o") and "--output-dir".startswith(name)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,7 +199,9 @@ def main(argv: list[str] | None = None) -> int:
         copy.write_text(sectioned(source.read_text(encoding="utf-8")), encoding="utf-8")
         new = [*argv]
         new[idx] = f"--input={copy}" if joined else str(copy)
-        if "--output-dir" not in argv and not any(a.startswith("--output-dir=") for a in argv):
+        # argparse accepts any unambiguous prefix (`--out X`), so any prefix of
+        # `--output-dir` counts as the caller having chosen one.
+        if not any(_names_output_dir(a) for a in argv):
             new += ["--output-dir", str(source.resolve().parent)]
         return subprocess.run([*cmd, *new], check=False).returncode
 

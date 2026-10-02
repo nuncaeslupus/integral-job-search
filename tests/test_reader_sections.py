@@ -172,3 +172,82 @@ def test_the_real_generator_cuts_one_section_per_paragraph(tmp_path: Path) -> No
     ids = re.findall(r'<article class="sec" id="([^"]+)"', html)
     assert len(set(ids)) == len(ids)
     assert src.read_text(encoding="utf-8") == LETTER  # the original is never rewritten
+
+
+# ---------------------------------------------------------------------------
+# #621 second reader: F1 (a lone heading was truncated) and F3 (CLI behaviour)
+
+_LONG_HEADING = "Una cabecera larga con [un enlace](https://example.org/x) y *énfasis* final"
+
+
+def test_a_lone_heading_survives_whole_with_its_markup() -> None:
+    out = sectioned(f"## {_LONG_HEADING}\n\nHola.\n")
+    assert _sections(out)[0] == (f"1. {_LONG_HEADING}", "Hola.")
+
+
+def test_every_source_line_reaches_the_output_verbatim() -> None:
+    """Checked against the source, not the splitter: every non-blank line, bar the
+    title and rule-only lines, appears whole in the sectioned text, a heading's
+    words included."""
+    doc = f"# T\n\n## {_LONG_HEADING}\n\n{LETTER}"
+    out = sectioned(doc)
+    for line in doc.split("\n"):
+        text = line.strip()
+        if not text or text == "# T" or set(text) <= {"-"}:
+            continue
+        assert text.removeprefix("## ") in out, line
+
+
+class _Run:
+    def __init__(self, code: int = 0) -> None:
+        self.code, self.cmd, self.copied = code, [], ""
+
+    def __call__(self, cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
+        self.cmd = cmd
+        path = next(
+            (a.split("=", 1)[1] if a.startswith("--input=") else a)
+            for a in cmd
+            if a.endswith(".md")
+        )
+        self.copied = Path(path).read_text(encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, self.code)
+
+
+def _doc(tmp_path: Path) -> Path:
+    source = tmp_path / "carta.md"
+    source.write_text(LETTER, encoding="utf-8")
+    return source
+
+
+def test_the_reader_lands_beside_the_source_unless_an_output_dir_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _doc(tmp_path)
+    run = _Run()
+    monkeypatch.setattr(reader_sections.subprocess, "run", run)
+    assert reader_sections.main(["--input", str(source)]) == 0
+    assert run.cmd[-2:] == ["--output-dir", str(tmp_path.resolve())]
+    for named in (["--output-dir", "x"], ["--output-dir=x"], ["--out", "x"]):
+        reader_sections.main(["--input", str(source), *named])
+        assert run.cmd.count("--output-dir") == named.count("--output-dir"), named
+        assert run.cmd[-len(named) :] == named
+
+
+def test_the_equals_form_of_input_is_rewritten_to_the_sectioned_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _doc(tmp_path)
+    run = _Run()
+    monkeypatch.setattr(reader_sections.subprocess, "run", run)
+    assert reader_sections.main([f"--input={source}"]) == 0
+    given = next(a for a in run.cmd if a.startswith("--input="))
+    assert given != f"--input={source}"
+    assert run.copied == sectioned(LETTER)
+    assert source.read_text(encoding="utf-8") == LETTER
+
+
+def test_the_generators_exit_code_is_returned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(reader_sections.subprocess, "run", _Run(code=3))
+    assert reader_sections.main(["--input", str(_doc(tmp_path))]) == 3
