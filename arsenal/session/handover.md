@@ -1,5 +1,25 @@
 # Session handover
 
+## 00015. Candidate session 658fcce2 closed; T240–T241 seeded
+
+- **The session is closed.** It was a candidate session in test mode: one sourcing round, three
+  applications generated and sent by the candidate, each recorded in their own profile. Nothing of
+  the candidate's is in this repository, and nothing here needs resuming.
+- **Two tasks, files and plan rows only; each gate is set in its own PR:**
+  - **T241** (`t-bdbffb8b`): reports and dashboards have no shared visual style. `src/integral`
+    holds no stylesheet and no HTML template; the only HTML generator in the tree is the vendored
+    spec reader. The owner asked that reports follow one style, and said it is not urgent.
+  - **T240** (`t-7b11ab67`, depends on T241): a candidate cannot see their sent applications as
+    one board. The session answered with a scratch script and a hand-written fit-notes file.
+- **Two constraints T240 will meet, found while writing the scratch version:**
+  `approval.sends_without_confirmation` rglobs `applications/**/*.json` and flags any file without
+  `offer_id`/`version`, and `revision._CLASSES` reads an unplaced top-level profile folder as
+  `authored`. The scratch board therefore writes beside the profiles tree, at
+  `<state home>/boards/<handle>/`, which is nobody's convention yet.
+- **The scratch version lives in the owner's gitignored `tmp/`** (a board script and a notes
+  script). It is the worked example for T240, not its implementation.
+- **Still open from 00013 and 00014:** T224–T239, none claimed.
+
 ## 00014. T234–T239 seeded from the same candidate session (test-mode 658fcce2)
 
 - **Six tasks, files and plan rows only; each gate is set in its own PR.** Five are defects met
