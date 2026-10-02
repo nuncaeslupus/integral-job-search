@@ -200,7 +200,9 @@ def test_every_source_line_reaches_the_output_verbatim() -> None:
 
 class _Run:
     def __init__(self, code: int = 0) -> None:
-        self.code, self.cmd, self.copied = code, [], ""
+        self.code = code
+        self.cmd: list[str] = []
+        self.copied = ""
 
     def __call__(self, cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
         self.cmd = cmd
@@ -224,7 +226,7 @@ def test_the_reader_lands_beside_the_source_unless_an_output_dir_is_named(
 ) -> None:
     source = _doc(tmp_path)
     run = _Run()
-    monkeypatch.setattr(reader_sections.subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "run", run)
     assert reader_sections.main(["--input", str(source)]) == 0
     assert run.cmd[-2:] == ["--output-dir", str(tmp_path.resolve())]
     for named in (["--output-dir", "x"], ["--output-dir=x"], ["--out", "x"]):
@@ -238,7 +240,7 @@ def test_the_equals_form_of_input_is_rewritten_to_the_sectioned_copy(
 ) -> None:
     source = _doc(tmp_path)
     run = _Run()
-    monkeypatch.setattr(reader_sections.subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "run", run)
     assert reader_sections.main([f"--input={source}"]) == 0
     given = next(a for a in run.cmd if a.startswith("--input="))
     assert given != f"--input={source}"
@@ -249,5 +251,5 @@ def test_the_equals_form_of_input_is_rewritten_to_the_sectioned_copy(
 def test_the_generators_exit_code_is_returned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(reader_sections.subprocess, "run", _Run(code=3))
+    monkeypatch.setattr(subprocess, "run", _Run(code=3))
     assert reader_sections.main(["--input", str(_doc(tmp_path))]) == 3
