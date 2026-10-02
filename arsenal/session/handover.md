@@ -1,5 +1,27 @@
 # Session handover
 
+## 00014. T234–T239 seeded from the same candidate session (test-mode 658fcce2)
+
+- **Six tasks, files and plan rows only; each gate is set in its own PR.** Five are defects met
+  while sourcing on 2026-10-02, one is the session's first note:
+  - **T234** (`t-afd63f27`): talent_es reads the advert page with `div.sc-f4dbceab-10`, a build-hash
+    class the live page no longer carries (200, 310 kB, zero matches; the fixture still has two).
+    Nothing reports a detail selector that matches nothing on a 200 page.
+  - **T235** (`t-be887fe3`): every foorilla offer is stored with no company and no location
+    (527 of 527).
+  - **T236** (`t-80980abe`): an offer with an empty company is stored and presented like any other
+    — tecnoempleo 101 of 349, pythonorg 8 of 16.
+  - **T237** (`t-4e92b039`): `source()` saves whatever aim it is handed, so searching the terms
+    past `PHRASE_CEILING` replaces the stored aim with a slice of it.
+  - **T238** (`t-58aebebd`): one failed read of robots.txt drops the board for the round, with no
+    retry.
+  - **T239** (`t-4f28dd8c`): a lesson learned inside one candidate's session has no route into the
+    process every candidate gets.
+- **Not seeded:** a suspected talent dedup defect was the session's own scratch script dropping
+  `?id=`; `canonicalize_url` keeps it. Recorded as one paragraph on T224 instead.
+- **Four `[[…]]` markers were declined by the paste guard** in this session (#498 again), so the
+  ledger is short by four notes nobody can recover.
+
 ## 00013. T224–T233 seeded from a candidate session (test-mode 658fcce2)
 
 - **Ten tasks, files and plan rows only; each gate is set in its own PR.** All from one real

@@ -11,6 +11,10 @@ Measured 2026-10-02 on one candidate's store: 2,840 readable offers, **139 canon
 
 Key storage and tombstones on the canonical URL (query string dropped where the connector declares it is not identity), and pin it per connector rather than for JobFluent alone.
 
+Not every query string is disposable: talent.com's advert URL is `/view?id=<n>`, and the `id` is the
+identity — 183 canonical talent URLs are 183 distinct adverts. `lifecycle.canonicalize_url` already
+keeps it; a per-connector rule must not drop it.
+
 
 ## Acceptance gate
 
