@@ -238,8 +238,49 @@ def resolve_technology(word: str, *, row_id: str = "") -> str:
     )
 
 
-def candidate_stack(master: CVMaster, statements: Iterable[EvidenceRow] = ()) -> dict[str, Held]:
+def cited_by_generated(store: ProfileStore, master: CVMaster) -> list[tuple[str, str]]:
+    """T245: the episode texts an approved generated document may cite.
+
+    `cv/generated/<offer>/v<N>/approvals.json` names the story-bank sentences
+    the candidate cleared for a letter. Work told in conversation reaches those
+    documents without ever reaching `cv/master.json`, so reading the master
+    alone reported "not on your CV" for what the candidate had approved for
+    employers. A sentence a live retraction has withdrawn is left out: it is no
+    longer something the candidate stands behind.
+    """
+    from integral.approval import _withdrawn_by, read_approvals, retracted_episode_texts
+
+    root = store.path("cv", "generated")
+    if not root.is_dir():
+        return []
+    retracted = retracted_episode_texts(store, master)
+    cited: list[tuple[str, str]] = []
+    for offer_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        for version_dir in sorted(p for p in offer_dir.iterdir() if p.is_dir()):
+            match = re.fullmatch(r"v(\d+)", version_dir.name)
+            if match is None:
+                continue
+            approvals = read_approvals(store, offer_dir.name, int(match.group(1)))
+            if approvals is None:
+                continue
+            for approval in approvals.episodes:
+                if not _withdrawn_by(approval.text, retracted):
+                    cited.append(
+                        (f"cv:generated/{offer_dir.name}/{version_dir.name}", approval.text)
+                    )
+    return cited
+
+
+def candidate_stack(
+    master: CVMaster,
+    statements: Iterable[EvidenceRow] = (),
+    cited: Iterable[tuple[str, str]] = (),
+) -> dict[str, Held]:
     """R6 then R7: the CV's reading, overridden by what the candidate said.
+
+    `cited` is `(source, text)` pairs from approved generated documents
+    (`cited_by_generated`): read as prose like an episode, so a technology they
+    name is *used, level unstated* rather than missing (T245).
 
     `statements` is the effective log (`EvidenceLog.effective_rows`), so a
     retracted row never arrives; rows without a `skill` stance are ignored.
@@ -261,6 +302,9 @@ def candidate_stack(master: CVMaster, statements: Iterable[EvidenceRow] = ()) ->
         for i, e in enumerate(master.experience)
     ] + [(f"cv:episodes[{i}]", e.text) for i, e in enumerate(master.episodes)]
     for source, text in prose:
+        for technology in named(text):
+            levels.setdefault(technology, (None, source))
+    for source, text in cited:
         for technology in named(text):
             levels.setdefault(technology, (None, source))
 
@@ -334,7 +378,10 @@ def fits_for_store(store: ProfileStore, offer_ids: Iterable[str]) -> dict[str, d
     An offer that is not on disk is left out rather than guessed at; the
     ranking then carries no fit for it, which reads as unknown, not as a match.
     """
-    held = candidate_stack(load_master(store), EvidenceLog(store).effective_rows())
+    master = load_master(store)
+    held = candidate_stack(
+        master, EvidenceLog(store).effective_rows(), cited_by_generated(store, master)
+    )
     fits: dict[str, dict[str, Any]] = {}
     for offer_id in offer_ids:
         path = store.path("offers", f"{offer_id}.json")
