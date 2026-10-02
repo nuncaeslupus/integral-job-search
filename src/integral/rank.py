@@ -72,6 +72,7 @@ import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,7 @@ METHODS_REF = "METHODS.md#43-offer-comparison--pareto-dominance-then-salary-equi
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T18.json"
 DEFAULT_T79_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T79.json"
+DEFAULT_T242_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T242.json"
 
 #: How `rankings/<run_id>.json` names an offer's collapser (spec §5.5).
 DOMINATED_BY = "dominated_by:"
@@ -440,7 +442,12 @@ def rank(
     # the alternative — dropping them — is the collapse this module refuses
     # everywhere else.
     salaries = _salaries(kept, by_id)
-    ordering = totals if level == "L2" else salaries
+    # T242: every offer is read as a salary-equivalent interval over its unknown
+    # priced dimensions and ordered by the known part (the midpoint), so an offer
+    # whose total does not exist still has an order — see `SalaryInterval`. At L1
+    # nothing is priced and the midpoint is the salary itself.
+    intervals = {offer_id: salary_interval(by_id[offer_id], priced) for offer_id in kept}
+    ordering = _ordering_key(kept, by_id, intervals, priced)
     # T138: the salary breaks the tie, before the id does. Two offers alike on
     # every other ranked dimension share a bucket here by construction — the
     # same unknown set means either both have a total or neither does — so
@@ -468,7 +475,7 @@ def rank(
         "salary_equivalent_total": totals,
         # T242: which reading put each offer where it is, and which offers the
         # ranker could not tell apart. See `order_readings`.
-        **order_readings(ordered, by_id, totals, set(dimensions)),
+        **order_readings(ordered, intervals),
         "unknown_dimensions": {
             offer_id: sorted(by_id[offer_id].unknown & set(dimensions))
             for offer_id in ordered
@@ -482,95 +489,224 @@ def rank(
     return ranking
 
 
-def order_readings(
-    ordered: Sequence[str],
-    by_id: Mapping[str, Candidate],
-    totals: Mapping[str, float],
-    dimensions: set[str],
-) -> dict[str, Any]:
-    """T242: name the reading behind each position, and report ties as ties.
+#: A score is bounded by `extraction.Score.value` (`ge=-1.0, le=1.0`). An unknown
+#: priced dimension can therefore contribute anywhere in `[-e, +e]` euros, and
+#: no tighter claim is made about it.
+SCORE_BOUND = 1.0
 
-    Three readings exist, strongest first: the full salary-equivalent `total`;
-    the advert's `salary` when a priced dimension is unknown so no total exists
-    (unknown stays unknown — it is not scored 0.0 and the total is not
-    pretended); and `none`, an offer with neither. The final `offer_id` sort is
-    a tie-break for a stable page and **never a preference**, so every group of
-    offers whose reading is equal — and every `none` offer, which has no
-    reading to be equal or unequal with — is listed under `ties`, and the
-    `none` ones also under `unordered`.
+_INF = float("inf")
+
+
+@dataclass(frozen=True)
+class SalaryInterval:
+    """T242: the salary-equivalent total as an interval over the unknowns.
+
+    Salary and every known priced dimension are fixed; each unknown priced
+    dimension spans its whole score range. `mid` is the known part (salary plus
+    known contributions) and is what orders offers; `low`/`high` say how far the
+    unknowns could move it, so two offers whose intervals overlap are not
+    ordered by any preference. An offer with no published salary has an
+    unbounded interval (the salary is itself unknown) but keeps a `known_part`
+    reading when a priced dimension is known — it is never scored as if the
+    salary were zero, and it claims nothing against its neighbours.
     """
-    basis: dict[str, dict[str, Any]] = {}
-    groups: dict[tuple[str, float], list[str]] = {}
-    unordered: list[str] = []
-    for offer_id in ordered:
-        candidate = by_id[offer_id]
-        missing = sorted(candidate.unknown & dimensions)
-        if offer_id in totals:
-            reading, value = "total", totals[offer_id]
-        elif candidate.salary_per_month is not None:
-            reading, value = "salary", candidate.salary_per_month
-        else:
-            basis[offer_id] = {"reading": "none", "value": None, "unknown": missing}
-            unordered.append(offer_id)
-            continue
-        basis[offer_id] = {"reading": reading, "value": value, "unknown": missing}
-        groups.setdefault((reading, value), []).append(offer_id)
-    ties: list[dict[str, Any]] = [
-        {
-            "offer_ids": sorted(ids),
-            "reading": reading,
-            "reason": f"equal {reading} ({value:g}); listed in id order, which is not a preference",
-        }
-        for (reading, value), ids in groups.items()
-        if len(ids) > 1
-    ]
-    if len(unordered) > 1:
-        ties.append(
-            {
-                "offer_ids": sorted(unordered),
-                "reading": "none",
-                "reason": "no total and no published salary; the ranker cannot order these",
-            }
+
+    reading: str
+    mid: float
+    low: float
+    high: float
+
+    def overlaps(self, other: SalaryInterval) -> bool:
+        return self.low <= other.high and other.low <= self.high
+
+
+NO_READING = SalaryInterval("none", 0.0, -_INF, _INF)
+
+
+def salary_interval(candidate: Candidate, priced: Mapping[str, float]) -> SalaryInterval:
+    """The interval, or `NO_READING` for an offer with nothing known to order on."""
+    known = sum(
+        euros * candidate.scores[name] for name, euros in priced.items() if name in candidate.scores
+    )
+    span = SCORE_BOUND * sum(
+        abs(euros) for name, euros in priced.items() if name not in candidate.scores
+    )
+    if candidate.salary_per_month is None:
+        if any(name in candidate.scores for name in priced):
+            return SalaryInterval("known_part", known, -_INF, _INF)
+        return NO_READING
+    mid = candidate.salary_per_month + known
+    reading = "salary" if not priced else ("total" if span == 0 else "interval")
+    return SalaryInterval(reading, mid, mid - span, mid + span)
+
+
+def _ordering_key(
+    kept: Sequence[str],
+    by_id: Mapping[str, Candidate],
+    intervals: Mapping[str, SalaryInterval],
+    priced: Mapping[str, float],
+) -> dict[str, float]:
+    """The number each offer is sorted on; an offer with no reading has none.
+
+    An offer that published no salary does not sink below the ones that did —
+    T138's decision, kept: an unpublished salary is not a low one. It takes the
+    key of the best-keyed offer that is alike on every priced reading (same
+    known scores, same unknown set) and differs only in having published pay,
+    and failing any such offer, its own known part. Its interval is unbounded
+    either way, so it is reported `incomparable` with its neighbours rather than
+    ordered by that key.
+    """
+
+    def signature(offer_id: str) -> tuple[Any, ...]:
+        scores = by_id[offer_id].scores
+        return (
+            tuple(sorted((name, scores[name]) for name in priced if name in scores)),
+            tuple(sorted(name for name in priced if name not in scores)),
         )
-    return {"order_basis": basis, "ties": ties, "unordered": sorted(unordered)}
+
+    best: dict[tuple[Any, ...], float] = {}
+    for offer_id in kept:
+        if by_id[offer_id].salary_per_month is not None:
+            key = signature(offer_id)
+            best[key] = max(best.get(key, -_INF), intervals[offer_id].mid)
+    ordering: dict[str, float] = {}
+    for offer_id in kept:
+        interval = intervals[offer_id]
+        if interval.reading == "none":
+            continue
+        if interval.reading == "known_part":
+            ordering[offer_id] = best.get(signature(offer_id), interval.mid)
+        else:
+            ordering[offer_id] = interval.mid
+    return ordering
 
 
-def ordering_defects(ranking: Mapping[str, Any]) -> dict[str, int]:
-    """Audit a published ranking's order against its own stated readings.
+def _json_bound(value: float) -> float | None:
+    return None if value in (_INF, -_INF) else value
 
-    Re-derived from the published `pareto` and `order_basis`, not from the
-    pass that built them: `unreported_ties` are offers sharing a reading with
-    another but absent from every tie group (so the id order reads as a
-    preference), `unlabelled` are offers with no stated reading at all, and
-    `inversions` are pairs on the same reading printed against its value.
-    `offers_ordered_by_id` is their union.
+
+def order_readings(
+    ordered: Sequence[str], intervals: Mapping[str, SalaryInterval]
+) -> dict[str, Any]:
+    """T242: name the reading behind each position, and report what is not ordered.
+
+    `order_basis` gives every offer's reading and its interval. `ties` are
+    offers with an equal known part; `incomparable` are adjacent pairs whose
+    intervals overlap, so the printed order between them is not a preference.
+    The final `offer_id` sort is a tie-break for a stable page and is never one
+    either. `unordered` are the offers with no reading at all.
+    """
+    basis: dict[str, dict[str, Any]] = {
+        offer_id: {
+            "reading": intervals[offer_id].reading,
+            "value": None if intervals[offer_id].reading == "none" else intervals[offer_id].mid,
+            "low": _json_bound(intervals[offer_id].low),
+            "high": _json_bound(intervals[offer_id].high),
+        }
+        for offer_id in ordered
+    }
+    groups: dict[float | None, list[str]] = {}
+    for offer_id in ordered:
+        groups.setdefault(basis[offer_id]["value"], []).append(offer_id)
+    ties: list[dict[str, Any]] = []
+    for value, ids in groups.items():
+        if len(ids) < 2:
+            continue
+        readings = sorted({basis[o]["reading"] for o in ids})
+        if value is None:
+            reason = "no total and no published salary; the ranker cannot order these"
+        else:
+            reason = (
+                f"equal known part {value:g} on reading {'/'.join(readings)}; listed by "
+                "published pay where given, then id — not a preference"
+            )
+        ties.append({"offer_ids": sorted(ids), "reading": "/".join(readings), "reason": reason})
+    in_group = {o: frozenset(tie["offer_ids"]) for tie in ties for o in tie["offer_ids"]}
+    incomparable = [
+        {
+            "offer_ids": [first, second],
+            "reason": "incomparable: intervals overlap",
+        }
+        for first, second in pairwise(ordered)
+        if intervals[first].overlaps(intervals[second])
+        and not (first in in_group and in_group[first] == in_group.get(second))
+    ]
+    unordered = sorted(o for o in ordered if intervals[o].reading == "none")
+    return {
+        "order_basis": basis,
+        "ties": ties,
+        "incomparable": incomparable,
+        "unordered": unordered,
+    }
+
+
+def ordering_defects(
+    ranking: Mapping[str, Any],
+    candidates: Sequence[Candidate] | None = None,
+    priced: Mapping[str, float] | None = None,
+) -> dict[str, int]:
+    """Audit a published ranking's order, across readings.
+
+    With `candidates` and `priced` the intervals are re-derived from the
+    candidates and compared with the published ones (`mismatched`); otherwise the
+    published ones are read. Over the published `pareto`:
+
+    - `inversions`: an adjacent pair where the lower offer's interval lies wholly
+      above the upper's — the order contradicts what every resolution of the
+      unknowns says. Audited across readings, so a `total` printed above a
+      `salary`-only offer that is better under every resolution is caught.
+    - `unreported`: an adjacent pair whose intervals overlap and which is neither
+      in one tie group nor listed under `incomparable`, so its id-order reads as
+      a preference.
+    - `unlabelled`: an offer with no published reading.
+
+    `offers_ordered_by_id` is the number of offers touched by any of them.
     """
     pareto = list(ranking["pareto"])
     basis = ranking.get("order_basis", {})
-    tied = {offer_id for tie in ranking.get("ties", ()) for offer_id in tie["offer_ids"]}
     unlabelled = {o for o in pareto if o not in basis}
-    keys = {
-        o: (basis[o]["reading"], basis[o]["value"])
-        for o in pareto
-        if o in basis and basis[o]["reading"] != "none"
-    }
-    counts: dict[tuple[str, Any], int] = {}
-    for key in keys.values():
-        counts[key] = counts.get(key, 0) + 1
-    unreported = {o for o, key in keys.items() if counts[key] > 1 and o not in tied}
-    unreported |= {o for o in pareto if o in basis and basis[o]["reading"] == "none"} - tied
+    spans: dict[str, tuple[float, float]] = {}
+    mismatched: set[str] = set()
+    derived = (
+        {c.offer_id: salary_interval(c, priced or {}) for c in candidates}
+        if candidates is not None
+        else {}
+    )
+    for offer_id in pareto:
+        if offer_id in unlabelled:
+            continue
+        low = basis[offer_id]["low"]
+        high = basis[offer_id]["high"]
+        published = (-_INF if low is None else low, _INF if high is None else high)
+        if offer_id in derived:
+            mine = (derived[offer_id].low, derived[offer_id].high)
+            if mine != published:
+                mismatched.add(offer_id)
+            published = mine
+        spans[offer_id] = published
+    groups = [set(tie["offer_ids"]) for tie in ranking.get("ties", ())]
+    pairs = {frozenset(entry["offer_ids"]) for entry in ranking.get("incomparable", ())}
     inversions: set[str] = set()
-    for i, first in enumerate(pareto):
-        for second in pareto[i + 1 :]:
-            a, b = keys.get(first), keys.get(second)
-            if a and b and a[0] == b[0] and a[1] < b[1]:
-                inversions |= {first, second}
-    bad = unlabelled | unreported | inversions
+    unreported: set[str] = set()
+    for first, second in pairwise(pareto):
+        if first not in spans or second not in spans:
+            continue
+        if spans[second][0] > spans[first][1]:
+            inversions |= {first, second}
+        elif (
+            spans[first][0] <= spans[second][1]
+            and spans[second][0] <= spans[first][1]
+            and not any({first, second} <= group for group in groups)
+            and frozenset((first, second)) not in pairs
+        ):
+            unreported |= {first, second}
+    bad = unlabelled | inversions | unreported | mismatched
     return {
         "offers": len(pareto),
         "unlabelled": len(unlabelled),
-        "unreported_ties": len(unreported),
+        "unreported": len(unreported),
         "inversions": len(inversions),
+        "mismatched": len(mismatched),
         "offers_ordered_by_id": len(bad),
     }
 
@@ -936,6 +1072,75 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+def _unknown_everywhere_candidates() -> list[Candidate]:
+    """T242's realistic set: the repo fixture's salaries and scores, with the
+    priced `commute` dimension unknown on every offer.
+
+    The six `_FIXTURE` offers are repeated in three variants — as written, with
+    `mentoring` also unknown, and with the salary withheld — plus an equal-pay
+    pair and a bare offer, so the set holds the situations a real batch does:
+    full intervals, partial ones, no salary, nothing known, and equal readings.
+    """
+    out: list[Candidate] = []
+    for variant in range(3):
+        for offer_id, salary, scores in _FIXTURE:
+            kept = {k: v for k, v in scores.items() if k != "commute"}
+            if variant == 1:
+                kept.pop("mentoring", None)
+            out.append(
+                Candidate(
+                    offer_id=f"{offer_id}:v{variant}",
+                    salary_per_month=None if variant == 2 and salary is not None else salary,
+                    scores=kept,
+                    unknown=frozenset(n for n in _FIXTURE_DIMENSIONS if n not in kept),
+                )
+            )
+    out.append(Candidate("sha256:" + "a" * 64, 3000.0, {}, frozenset(_FIXTURE_DIMENSIONS)))
+    out.append(Candidate("sha256:" + "b" * 64, 3000.0, {}, frozenset(_FIXTURE_DIMENSIONS)))
+    out.append(Candidate("sha256:" + "c" * 64, None, {}, frozenset(_FIXTURE_DIMENSIONS)))
+    return out
+
+
+def measure_order() -> dict[str, Any]:
+    """T242's numbers: the fraction of offers ordered by id rather than by a reading.
+
+    Every offer has a priced dimension unknown, so none has a total. The audit
+    re-derives each interval from the candidates, so it does not trust the
+    ranking's own labels. `violation_detected_when_planted` strips the
+    published ties and incomparable pairs, so the id order reads as a
+    preference, and must raise the count, or the zero proves nothing.
+    """
+    candidates = _unknown_everywhere_candidates()
+    ranking = rank(
+        candidates,
+        dimensions=_FIXTURE_DIMENSIONS,
+        revision=ProfileRevision(rows=len(candidates), sha256="0" * 64),
+        weights=_FIXTURE_WEIGHTS,
+        at="2026-08-24T00:00:00Z",
+    )
+    priced = priced_dimensions(_FIXTURE_WEIGHTS)
+    audit = ordering_defects(ranking, candidates, priced)
+    planted = ordering_defects({**ranking, "ties": [], "incomparable": []}, candidates, priced)
+    readings = [entry["reading"] for entry in ranking["order_basis"].values()]
+    return {
+        "offers": audit["offers"],
+        "offers_with_a_total": len(ranking["salary_equivalent_total"]),
+        "offers_ordered_by_id": audit["offers_ordered_by_id"],
+        "fraction_ordered_by_id": audit["offers_ordered_by_id"] / audit["offers"],
+        "inversions": audit["inversions"],
+        "readings_used": sorted(set(readings)),
+        "incomparable_pairs_reported": len(ranking["incomparable"]),
+        "violation_detected_when_planted": int(planted["offers_ordered_by_id"] > 0),
+    }
+
+
+def write_order_evidence(evidence: Path = DEFAULT_T242_EVIDENCE_PATH) -> dict[str, Any]:
+    measured = measure_order()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Measure T18's Pareto frontier.")
     parser.add_argument("evidence", nargs="?", default=str(DEFAULT_EVIDENCE_PATH), type=Path)
@@ -951,6 +1156,12 @@ def _main(argv: list[str]) -> int:
 
     # T79 rides beside T18 rather than replacing it — one module, two gates,
     # two evidence files, as the task requires.
+    ordered = write_order_evidence(args.evidence.parent / "T242.json")
+    print(f"fraction_ordered_by_id: {ordered['fraction_ordered_by_id']} (== 0)")
+    if ordered["fraction_ordered_by_id"] != 0 or not ordered["violation_detected_when_planted"]:
+        print("an offer was ordered by id, or the audit could not rise", file=sys.stderr)
+        return 1
+
     shown = write_exclusion_evidence(args.evidence.parent / "T79.json")
     print(
         "excluded_offers_shown_without_a_reason: "

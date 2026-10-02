@@ -168,15 +168,14 @@ def test_an_offer_missing_a_priced_dimension_has_no_total_rather_than_a_short_on
     assert ranking["unknown_dimensions"]["sha256:bb"] == ["commute", "mentoring"]
 
 
-def test_an_offer_with_no_total_sorts_after_the_ones_that_have_one() -> None:
-    """A missing total is not a high one, and never a low one either.
+def test_an_offer_with_no_total_is_ordered_by_its_interval_and_labelled() -> None:
+    """A missing total is not a high one, and never a low one either (T242).
 
-    It sorts last because there is nothing to compare it on, and it is kept
-    because dropping it would be the collapse this module refuses everywhere
-    else. The candidate sees it below the comparable offers, labelled with
-    what the advert did not say.
+    It is placed by the interval its unknowns allow: here the best the unknown
+    dimensions could do (2700) is still below the offer that has a total
+    (3000), so it sits below it, and it is kept and labelled `interval`.
     """
-    quiet = _candidate("sha256:aa", 9000.0, remote=1.0)
+    quiet = _candidate("sha256:aa", 3000.0, remote=-1.0)
     modest = _candidate("sha256:bb", 3000.0, remote=0.0, commute=0.0, mentoring=0.0)
     ranking = rank(
         [quiet, modest],
@@ -186,6 +185,8 @@ def test_an_offer_with_no_total_sorts_after_the_ones_that_have_one() -> None:
         at="2026-08-24T09:00:00Z",
     )
     assert ranking["pareto"] == ["sha256:bb", "sha256:aa"]
+    assert ranking["order_basis"]["sha256:aa"]["reading"] == "interval"
+    assert ranking["order_basis"]["sha256:bb"]["reading"] == "total"
 
 
 def test_a_dimension_cannot_be_both_scored_and_unknown() -> None:

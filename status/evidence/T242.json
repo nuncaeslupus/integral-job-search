@@ -1,0 +1,14 @@
+{
+  "fraction_ordered_by_id": 0.0,
+  "incomparable_pairs_reported": 17,
+  "inversions": 0,
+  "offers": 21,
+  "offers_ordered_by_id": 0,
+  "offers_with_a_total": 0,
+  "readings_used": [
+    "interval",
+    "known_part",
+    "none"
+  ],
+  "violation_detected_when_planted": 1
+}
