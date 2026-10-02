@@ -1,5 +1,33 @@
 # Session handover
 
+## 00013. T224–T233 seeded from a candidate session (test-mode 658fcce2)
+
+- **Ten tasks, files and plan rows only; each gate is set in its own PR.** All from one real
+  sourcing-and-ranking round on 2026-10-02, in which the candidate was shown adverts he had
+  discarded the day before:
+  - **T224** (`t-bf1b62e6`): one advert is stored once per search. The offer id hashes the text, a
+    list row's text differs between searches, so 139 canonical URLs are stored more than once (378
+    extra copies of 2,840) across eight boards.
+  - **T225** (`t-9ae82a8e`): `partition` holds back only an offer's own status, so a copy of a
+    ruled-out advert is presented again.
+  - **T226** (`t-3b63a806`): a list shown with no `present()` row and a discard heard with no
+    `rule_out` leave no trace, and nothing notices.
+  - **T227** (`t-809b3b10`): an exclusion matches any mention — "Background in FinTech" as a
+    nice-to-have, "ticket restaurant" as a perk.
+  - **T228** (`t-ecf39b24`): no exclusion by employer.
+  - **T229** (`t-37ea22aa`): a skill the candidate lacks cannot be ruled out by requirement.
+  - **T230** (`t-fb6256ab`): 68 stored offers fail `load_offer` on `salary.period`.
+  - **T231** (`t-3c5c74f0`): the owner's session-kind rule — candidate by default, repo when the
+    conversation starts with `[[…]]` keys or asks for repo work.
+  - **T232** (`t-a3e7a771`): step 7 does not warn that the browser asks permission for multiple
+    downloads.
+  - **T233** (`t-85ace98b`): the ranked view should be the default after sourcing, and a ranking
+    short of an input should name it.
+- **Not seeded, already open:** the paste guard reading a long typed turn as a paste is #498; it
+  swallowed an act-now note again in this session.
+- **Numbers were taken twice before this landed.** The seed was first cut as T217–T226 against a
+  stale `origin/main`; fetch and read the plan's last row immediately before numbering.
+
 ## 00012. T221 handed to #608's session; owner decisions recorded; T216 picked up
 
 - **#604 closed, #603 closed as a duplicate.** This session seeded its own "T220" for #598's F6
