@@ -1,5 +1,18 @@
 # Session handover
 
+## 00016. Ranking the sent applications found the ranker gives no order; T242–T246 seeded
+
+- **What was asked.** In the same candidate session (test-mode 658fcce2), the candidate asked for their
+  eleven sent applications ordered by what suits them, in two lists (published pay / none), with an
+  act-now note: anything that keeps the project from sorting correctly is a design flaw to seed.
+- **What the ranker did.** `rank()` returned all eleven on the Pareto front with no salary-equivalent
+  total, because both priced dimensions were unknown on every offer; the order was the `offer_id` hash
+  tie-break. The candidate's three most recent stored rankings had totals for 1 of 35, 0 of 12 and 0 of 81.
+  The order the candidate got was the session's own judgement, and they were told so.
+- **Seeded:** T242 (hash order), T243 (only two dimensions priced), T244 (fit never enters the order),
+  T245 (stack fit reads only the master CV), T246 (pay unconverted / stated band stored as none).
+  T242 is the one to take first: without it the other four have no order to move.
+
 ## 00015. Candidate session 658fcce2 closed; T240–T241 seeded
 
 - **The session is closed.** It was a candidate session in test mode: one sourcing round, three
