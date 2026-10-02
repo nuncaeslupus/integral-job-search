@@ -2,11 +2,11 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 10534,
+  "description_chars_total": 9171,
   "skills_counted": 35,
-  "headroom_chars": 466,
+  "headroom_chars": 1829,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 2534,
+  "overage_against_upstream_default": 1171,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -17,103 +17,103 @@
     },
     {
       "skill": "coverage-gaps",
-      "description_chars": 401,
-      "listing_chars": 418
+      "description_chars": 223,
+      "listing_chars": 240
     },
     {
       "skill": "dep-upgrade",
-      "description_chars": 386,
-      "listing_chars": 401
+      "description_chars": 258,
+      "listing_chars": 273
     },
     {
       "skill": "design",
-      "description_chars": 257,
-      "listing_chars": 267
+      "description_chars": 245,
+      "listing_chars": 255
     },
     {
       "skill": "execution",
-      "description_chars": 219,
-      "listing_chars": 232
+      "description_chars": 205,
+      "listing_chars": 218
     },
     {
       "skill": "explore-idea",
-      "description_chars": 256,
-      "listing_chars": 272
+      "description_chars": 212,
+      "listing_chars": 228
     },
     {
       "skill": "gate-check",
-      "description_chars": 384,
-      "listing_chars": 398
+      "description_chars": 244,
+      "listing_chars": 258
     },
     {
       "skill": "github",
-      "description_chars": 383,
-      "listing_chars": 393
+      "description_chars": 249,
+      "listing_chars": 259
     },
     {
       "skill": "har",
-      "description_chars": 366,
-      "listing_chars": 373
+      "description_chars": 236,
+      "listing_chars": 243
     },
     {
       "skill": "init",
-      "description_chars": 248,
-      "listing_chars": 256
+      "description_chars": 237,
+      "listing_chars": 245
     },
     {
       "skill": "mutmut-report",
-      "description_chars": 379,
-      "listing_chars": 396
+      "description_chars": 239,
+      "listing_chars": 256
     },
     {
       "skill": "pin-check",
-      "description_chars": 355,
-      "listing_chars": 368
+      "description_chars": 250,
+      "listing_chars": 263
     },
     {
       "skill": "pypi-release",
-      "description_chars": 326,
-      "listing_chars": 342
+      "description_chars": 247,
+      "listing_chars": 263
     },
     {
       "skill": "python-bootstrap",
-      "description_chars": 357,
-      "listing_chars": 377
+      "description_chars": 228,
+      "listing_chars": 248
     },
     {
       "skill": "queue-add",
-      "description_chars": 109,
-      "listing_chars": 122
+      "description_chars": 128,
+      "listing_chars": 141
     },
     {
       "skill": "queue-next",
-      "description_chars": 247,
-      "listing_chars": 261
+      "description_chars": 223,
+      "listing_chars": 237
     },
     {
       "skill": "queue-status",
-      "description_chars": 181,
-      "listing_chars": 197
+      "description_chars": 174,
+      "listing_chars": 190
     },
     {
       "skill": "review",
-      "description_chars": 204,
-      "listing_chars": 214
+      "description_chars": 202,
+      "listing_chars": 212
     },
     {
       "skill": "session-end",
-      "description_chars": 340,
-      "listing_chars": 355
+      "description_chars": 260,
+      "listing_chars": 275
     },
     {
       "skill": "ship",
-      "description_chars": 195,
-      "listing_chars": 203
+      "description_chars": 186,
+      "listing_chars": 194
     },
     {
       "skill": "specify",
-      "description_chars": 255,
-      "listing_chars": 266
+      "description_chars": 239,
+      "listing_chars": 250
     },
     {
       "skill": "step-00-identify",

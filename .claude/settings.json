@@ -32,6 +32,15 @@
             "command": "bash tools/bootstrap_hook.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/compact_resume.sh"
+          }
+        ],
+        "matcher": "compact"
       }
     ],
     "PostToolUse": [
@@ -49,6 +58,15 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/reader_hook.sh"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}\"/claude-arsenal/bin/compact_resume.sh record"
           }
         ],
         "matcher": "Write|Edit|MultiEdit"

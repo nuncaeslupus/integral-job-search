@@ -4,6 +4,7 @@
 import argparse
 import contextlib
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -769,6 +770,10 @@ _MARK_PROMPT_HOOK = "claude-arsenal/bin/mark_skill_workshop_loaded_from_prompt.s
 # settings hook is the only kind that reaches a cloud session. It keys on the
 # path, so a spec or plan another plugin's skill wrote gets the reminder too.
 _READER_HOOK = "claude-arsenal/bin/reader_hook.sh"
+# Also beside it: after compaction, re-injects the active task's Resume notes and
+# `git status`, the state a summary loses first. Silent when there are no notes.
+# Its `record` mode, on edits, remembers which notes file each session is on.
+_COMPACT_HOOK = "claude-arsenal/bin/compact_resume.sh"
 
 
 def _hook_command(script: str) -> str:
@@ -1297,6 +1302,8 @@ def _register_gate_hook(repo_path: Path) -> None:
         ("PostToolUse", "Skill", _MARK_HOOK),
         ("PostToolUse", "Write|Edit|MultiEdit", _READER_HOOK),
         ("UserPromptSubmit", None, _MARK_PROMPT_HOOK),
+        ("SessionStart", "compact", _COMPACT_HOOK),
+        ("PostToolUse", "Write|Edit|MultiEdit", f"{_COMPACT_HOOK} record"),
     ]
     changed = False
     for event, matcher, command in wanted:
@@ -1320,7 +1327,7 @@ def _register_gate_hook(repo_path: Path) -> None:
     if changed:
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-        print("  settings.json: registered the skill-edit gate and the spec/plan reader hook")
+        print("  settings.json: registered the skill-edit gate and the reader/resume hooks")
 
 
 def _retire_plugin_declaration(repo_path: Path) -> None:
@@ -1639,7 +1646,7 @@ def _upsert_bare_key(config: Path, key: str, value: str) -> None:
         if re.search(rf"^\s*{re.escape(key)}\s*=", text, re.MULTILINE):
             text = re.sub(
                 rf"^\s*{re.escape(key)}\s*=.*$",
-                f"{key} = {value}",
+                lambda _: f"{key} = {value}",
                 text,
                 count=1,
                 flags=re.MULTILINE,
@@ -1670,6 +1677,15 @@ def _record_queue_automation(config: Path, value: str) -> None:
     _upsert_bare_key(config, "queue-automation", value)
 
 
+def _shipped_shas(source: Path) -> set[str]:
+    """Content hashes of every shipped version of `source`, from `<source>.shipped`."""
+    try:
+        lines = source.with_name(source.name + ".shipped").read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return {ln.strip() for ln in lines.splitlines() if ln.strip() and not ln.startswith("#")}
+
+
 def _install_queue_workflow(repo_path: Path, arsenal: Path, silent: bool = False) -> None:
     """Install .github/workflows/arsenal-queue.yml, and say plainly what it does.
 
@@ -1695,7 +1711,11 @@ def _install_queue_workflow(repo_path: Path, arsenal: Path, silent: bool = False
                        `true` to opt in again.
 
     A workflow the user has edited is left alone — clobbering local changes on
-    every session start is how vendored files lose people's trust.
+    every session start is how vendored files lose people's trust. "Differs from
+    the shipped copy" is not the test for that, though: an older shipped version
+    differs too, so every upstream fix used to stop at every existing install
+    (#470). A copy that matches a version listed in `<workflow>.shipped` is one
+    nobody edited, and is refreshed.
     """
     source = arsenal / "workflows" / _QUEUE_WORKFLOW
     if not source.is_file():
@@ -1710,9 +1730,16 @@ def _install_queue_workflow(repo_path: Path, arsenal: Path, silent: bool = False
     if target.exists():
         if setting is None:
             _record_queue_automation(config, "true")
-        if _content_sha(source) == _content_sha(target):
+        target_sha = _content_sha(target)
+        if _content_sha(source) == target_sha:
             if not silent:
                 print(f"  .github/workflows/{_QUEUE_WORKFLOW}: up to date")
+        elif target_sha in _shipped_shas(source):
+            shutil.copy2(source, target)
+            print(
+                f"  .github/workflows/{_QUEUE_WORKFLOW}: refreshed — it was an unedited "
+                "older shipped version. Commit it with the bundle update."
+            )
         else:
             print(
                 f"  .github/workflows/{_QUEUE_WORKFLOW}: differs from the shipped version "
@@ -2156,6 +2183,93 @@ def init_workspace(
     print(f"\ninit: workspace {workspace!r} ready at {ws_dir.relative_to(repo_path)}")
 
 
+# The manual review command each known bot answers to, offered by the setup
+# interview for the bots in `review-bots`. "request-reviewer" is not a comment:
+# review_sources.py requests the bot as a reviewer instead.
+KNOWN_BOT_TRIGGERS = {
+    "coderabbitai[bot]": "@coderabbitai review",
+    "gemini-code-assist[bot]": "/gemini review",
+    "claude[bot]": "@claude review",
+    "copilot-pull-request-reviewer[bot]": "request-reviewer",
+}
+
+# Setup-interview answers: flag dest -> config key. Each key already has a
+# default in arsenal_config.py, so an unanswered question writes nothing.
+_INTERVIEW_KEYS = {
+    "autonomy": "autonomy",
+    "verification": "verification",
+    "review_budget_min": "review-budget-min",
+    "bot_wait_min": "bot-wait-min",
+    "bot_triggers": "bot-triggers",
+}
+
+
+def _arsenal_config() -> Any:
+    """The bundle's arsenal_config module: one source for enums and defaults."""
+    path = _BUNDLE_DIR / "scripts" / "arsenal_config.py"
+    spec = importlib.util.spec_from_file_location("arsenal_config", path)
+    if spec is None or spec.loader is None:
+        sys.exit(f"init: cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _interview_answers(args: argparse.Namespace) -> dict[str, str]:
+    """Validated interview flags as {config key: TOML value}; empty when skipped."""
+    answers: dict[str, str] = {}
+    for dest, key in _INTERVIEW_KEYS.items():
+        raw = getattr(args, dest)
+        if raw is None:
+            continue
+        if key in ("autonomy", "verification"):
+            allowed = _arsenal_config().ENUMS[key]
+            if raw not in allowed:
+                sys.exit(f"init: --{key} must be one of {', '.join(sorted(allowed))}, got {raw!r}")
+            answers[key] = json.dumps(raw, ensure_ascii=False)
+        elif key in ("review-budget-min", "bot-wait-min"):
+            if raw < 1:
+                sys.exit(f"init: --{key} must be an integer >= 1, got {raw}")
+            answers[key] = str(raw)
+        elif key == "bot-triggers":
+            entries = [e.strip() for e in raw.split(",") if e.strip()]
+            for entry in entries:
+                login, sep, comment = entry.partition("=")
+                if not sep or not login.strip() or not comment.strip():
+                    sys.exit(f'init: --bot-triggers entries are "login=comment", got {entry!r}')
+            # ensure_ascii=False: JSON escapes non-BMP characters as surrogate
+            # pairs, which TOML rejects; the characters themselves are valid.
+            answers[key] = "[" + ", ".join(json.dumps(e, ensure_ascii=False) for e in entries) + "]"
+        else:
+            answers[key] = json.dumps(raw, ensure_ascii=False)
+    return answers
+
+
+def _record_interview(repo_path: Path, answers: dict[str, str]) -> None:
+    """Write the interview answers into arsenal/config.toml, above any table."""
+    config = _home(repo_path) / "config.toml"
+    for key, value in answers.items():
+        _upsert_bare_key(config, key, value)
+        print(f"  config.toml: {key} = {value}")
+
+
+def suggest_bot_triggers(repo_path: Path) -> int:
+    """Print `login=command` for each configured review bot with a known command."""
+    cfg = _arsenal_config()
+    try:
+        values, _ = cfg.load(repo_path)
+    except cfg.ConfigError as exc:
+        print(f"init: {exc}", file=sys.stderr)
+        return 2
+    rows = [
+        f"{bot}={KNOWN_BOT_TRIGGERS[bot]}"
+        for bot in values["review-bots"]
+        if bot in KNOWN_BOT_TRIGGERS
+    ]
+    print(",".join(rows))
+    return 0
+
+
 def _parse_sections(raw: str | None) -> list[str] | None:
     """`--sections a,b` -> ["a", "b"]. An unknown name is fatal, not ignored.
 
@@ -2237,9 +2351,45 @@ def main() -> None:
         action="store_true",
         help='Do not protect the default branch on GitHub; records branch-protection = "off".',
     )
+    # The setup interview: /init asks, then passes the answers here. A flag left
+    # out writes nothing, so the key keeps its default. Values are checked
+    # against arsenal_config.ENUMS, loaded only when a flag is given.
+    p.add_argument(
+        "--autonomy",
+        metavar="ask-often|ask-when-blocked|autonomous",
+        help="How often a session stops to ask the user; written as `autonomy`.",
+    )
+    p.add_argument(
+        "--verification",
+        metavar="fast|balanced|strict",
+        help="How deep local verification goes; written as `verification`.",
+    )
+    p.add_argument(
+        "--review-budget-min", type=int, help="Minutes per review round; written to config."
+    )
+    p.add_argument(
+        "--bot-wait-min",
+        type=int,
+        help="Minutes to wait on a silent review bot; written to config.",
+    )
+    p.add_argument(
+        "--bot-triggers",
+        metavar="LOGIN=COMMENT,...",
+        help="Manual review command per bot; written as the `bot-triggers` list.",
+    )
+    p.add_argument(
+        "--suggest-bot-triggers",
+        action="store_true",
+        help="Print the known trigger for each bot in review-bots, as a --bot-triggers value. "
+        "Writes nothing.",
+    )
     args = p.parse_args()
 
     repo_path = Path(args.repo_path).resolve()
+    if args.suggest_bot_triggers:
+        raise SystemExit(suggest_bot_triggers(repo_path))
+    # Validated before the install runs, so a bad answer writes nothing at all.
+    interview = _interview_answers(args)
     bundle_override = Path(args.bundle_dir) if args.bundle_dir else None
 
     # Read-only, and answered before anything else: this is what the session-start
@@ -2268,8 +2418,9 @@ def main() -> None:
             allow_stale=args.allow_stale,
             branch_protection=not args.no_branch_protection,
         )
+        installed = True
     else:
-        init_base(
+        installed = init_base(
             repo_path,
             bundle_override,
             silent=args.silent,
@@ -2279,6 +2430,8 @@ def main() -> None:
             allow_stale=args.allow_stale,
             branch_protection=not args.no_branch_protection,
         )
+    if installed and interview:
+        _record_interview(repo_path, interview)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ bin/check_skill_workshop_loaded.sh
 bin/check_update.sh
 bin/claim_review.sh
 bin/claim_task.sh
+bin/compact_resume.sh
 bin/detect_surface.sh
 bin/fast_gate.sh
 bin/gate_run.sh
@@ -25,6 +26,7 @@ bin/outline.sh
 bin/reader_hook.sh
 bin/rebase_stack.sh
 bin/record_isolation.sh
+bin/record_skill_load.sh
 bin/rescue_snapshot.sh
 bin/statusline_capture.sh
 bin/worker_postcheck.sh
@@ -57,7 +59,9 @@ scripts/pr_audit.py
 scripts/query_status.py
 scripts/queue_hooks.py
 scripts/reader_check.py
+scripts/review_sources.py
 scripts/task_select.py
 scripts/usage_report.py
 sections.json
 workflows/arsenal-queue.yml
+workflows/arsenal-queue.yml.shipped
