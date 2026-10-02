@@ -65,6 +65,16 @@ the repo's own tooling, never by hand. Use `reader-steps` or `reader-process`
 rather than `reader` unless you changed both: `reader` stamps a fresh date into
 the document you did not touch.
 
+## A reader for a heading-less document (a letter, a message) goes through the wrapper
+
+`create_reader.py` cuts sections at `##` headings, so a cover letter is one
+section and one comment box. For any candidate-facing document, run
+`uv run python -m integral.reader_sections --input <doc>.md --output-dir <dir>`
+instead: it takes the same arguments, writes a one-section-per-paragraph copy to a
+scratch directory, and calls the vendored generator on that. A document with two or
+more headings is passed through unchanged, so specs and plans are unaffected. The
+original file is never rewritten, so there is no headed copy to keep in sync (T184).
+
 ## The skill listing budget lives in `arsenal/config.toml`
 
 `integral.skill_budget` and `skill-workshop`'s `audit_library.py` both read that
