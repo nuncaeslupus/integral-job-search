@@ -510,7 +510,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T239 | A lesson learned inside one candidate's session has no route into the process every candidate gets (test-mode 658fcce2) | 5 | M | — | `candidate_session_corrections_left_untriaged == 0` | gate set in its own PR | ☐ |
 | T240 | A candidate cannot see their sent applications as one board (test-mode 658fcce2) | 5 | M | T241 | `candidates_without_an_applications_board == 0` | gate set in its own PR | ☐ |
 | T241 | Reports and dashboards have no shared visual style (test-mode 658fcce2) | 10 | S | — | `html_pages_outside_the_shared_style == 0` | gate set in its own PR | ☐ |
-| T242 | The ranker returns hash order when a priced dimension is unknown everywhere (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☐ |
+| T242 | The ranker returns hash order when a priced dimension is unknown everywhere (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☑ |
 | T243 | Only two dimensions are priced, so what a candidate said never moves the order (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☐ |
 | T244 | Whether a candidate can do the job never enters the ranking (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☐ |
 | T245 | Stack fit reads only the master CV, which misses work told in conversation (test-mode 658fcce2) | 10 | S | — | `metric == 0` | gate set in its own PR | ☐ |

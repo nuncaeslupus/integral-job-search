@@ -466,6 +466,9 @@ def rank(
         "flagged": flagged,
         "facets": _facets(ordered, by_id, dimensions, totals),
         "salary_equivalent_total": totals,
+        # T242: which reading put each offer where it is, and which offers the
+        # ranker could not tell apart. See `order_readings`.
+        **order_readings(ordered, by_id, totals, set(dimensions)),
         "unknown_dimensions": {
             offer_id: sorted(by_id[offer_id].unknown & set(dimensions))
             for offer_id in ordered
@@ -477,6 +480,115 @@ def rank(
             offer_id: dict(stack[offer_id]) for offer_id in ordered if offer_id in stack
         }
     return ranking
+
+
+def order_readings(
+    ordered: Sequence[str],
+    by_id: Mapping[str, Candidate],
+    totals: Mapping[str, float],
+    dimensions: set[str],
+) -> dict[str, Any]:
+    """T242: name the reading behind each position, and report ties as ties.
+
+    Three readings exist, strongest first: the full salary-equivalent `total`;
+    the advert's `salary` when a priced dimension is unknown so no total exists
+    (unknown stays unknown — it is not scored 0.0 and the total is not
+    pretended); and `none`, an offer with neither. The final `offer_id` sort is
+    a tie-break for a stable page and **never a preference**, so every group of
+    offers whose reading is equal — and every `none` offer, which has no
+    reading to be equal or unequal with — is listed under `ties`, and the
+    `none` ones also under `unordered`.
+    """
+    basis: dict[str, dict[str, Any]] = {}
+    groups: dict[tuple[str, float], list[str]] = {}
+    unordered: list[str] = []
+    for offer_id in ordered:
+        candidate = by_id[offer_id]
+        missing = sorted(candidate.unknown & dimensions)
+        if offer_id in totals:
+            reading, value = "total", totals[offer_id]
+        elif candidate.salary_per_month is not None:
+            reading, value = "salary", candidate.salary_per_month
+        else:
+            basis[offer_id] = {"reading": "none", "value": None, "unknown": missing}
+            unordered.append(offer_id)
+            continue
+        basis[offer_id] = {"reading": reading, "value": value, "unknown": missing}
+        groups.setdefault((reading, value), []).append(offer_id)
+    ties: list[dict[str, Any]] = [
+        {
+            "offer_ids": sorted(ids),
+            "reading": reading,
+            "reason": f"equal {reading} ({value:g}); listed in id order, which is not a preference",
+        }
+        for (reading, value), ids in groups.items()
+        if len(ids) > 1
+    ]
+    if len(unordered) > 1:
+        ties.append(
+            {
+                "offer_ids": sorted(unordered),
+                "reading": "none",
+                "reason": "no total and no published salary; the ranker cannot order these",
+            }
+        )
+    return {"order_basis": basis, "ties": ties, "unordered": sorted(unordered)}
+
+
+def ordering_defects(ranking: Mapping[str, Any]) -> dict[str, int]:
+    """Audit a published ranking's order against its own stated readings.
+
+    Re-derived from the published `pareto` and `order_basis`, not from the
+    pass that built them: `unreported_ties` are offers sharing a reading with
+    another but absent from every tie group (so the id order reads as a
+    preference), `unlabelled` are offers with no stated reading at all, and
+    `inversions` are pairs on the same reading printed against its value.
+    `offers_ordered_by_id` is their union.
+    """
+    pareto = list(ranking["pareto"])
+    basis = ranking.get("order_basis", {})
+    tied = {offer_id for tie in ranking.get("ties", ()) for offer_id in tie["offer_ids"]}
+    unlabelled = {o for o in pareto if o not in basis}
+    keys = {
+        o: (basis[o]["reading"], basis[o]["value"])
+        for o in pareto
+        if o in basis and basis[o]["reading"] != "none"
+    }
+    counts: dict[tuple[str, Any], int] = {}
+    for key in keys.values():
+        counts[key] = counts.get(key, 0) + 1
+    unreported = {o for o, key in keys.items() if counts[key] > 1 and o not in tied}
+    unreported |= {o for o in pareto if o in basis and basis[o]["reading"] == "none"} - tied
+    inversions: set[str] = set()
+    for i, first in enumerate(pareto):
+        for second in pareto[i + 1 :]:
+            a, b = keys.get(first), keys.get(second)
+            if a and b and a[0] == b[0] and a[1] < b[1]:
+                inversions |= {first, second}
+    bad = unlabelled | unreported | inversions
+    return {
+        "offers": len(pareto),
+        "unlabelled": len(unlabelled),
+        "unreported_ties": len(unreported),
+        "inversions": len(inversions),
+        "offers_ordered_by_id": len(bad),
+    }
+
+
+def rank_named(
+    candidates: Sequence[Candidate], offer_ids: Sequence[str], **kwargs: Any
+) -> dict[str, Any]:
+    """T242: rank exactly the offers named (say, those already applied to).
+
+    A name that matches no candidate is an error rather than a silent omission:
+    a ranking of ten when eleven were asked for would read as complete.
+    """
+    wanted = list(dict.fromkeys(offer_ids))
+    known = {candidate.offer_id: candidate for candidate in candidates}
+    missing = [offer_id for offer_id in wanted if offer_id not in known]
+    if missing:
+        raise RankingError(f"no candidate for the named offers: {missing}")
+    return rank([known[offer_id] for offer_id in wanted], **kwargs)
 
 
 def _pay_before_the_alphabet(
