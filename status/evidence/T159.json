@@ -271,7 +271,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4734,
+      "line": 4761,
       "population": 15
     },
     {
@@ -337,7 +337,7 @@
     {
       "module": "lifecycle",
       "name": "MINIMUM_SCENARIOS",
-      "line": 999,
+      "line": 1107,
       "population": 78
     },
     {

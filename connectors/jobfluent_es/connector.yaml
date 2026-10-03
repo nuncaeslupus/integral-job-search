@@ -53,6 +53,9 @@ last_verified: "2026-08-30"
 # is only needed to *apply*, and those endpoints are the `/*/external…` ones
 # robots.txt disallows and this connector never touches.
 auth: none
+# T224. `?result=N` is the advert's position in the search that listed it, so the
+# same advert carries a different query on every search. Not identity.
+identity_query: []
 
 list:
   # Real pagination, for once: `<link rel="next">` in the head points at

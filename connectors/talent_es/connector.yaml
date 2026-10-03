@@ -6,6 +6,9 @@ locale: es
 version: "1.0.0"
 last_verified: "2026-09-21"
 auth: none
+# T224. The advert url is `/view?id=<n>` and `id` IS the identity: 183 canonical urls
+# were 183 distinct adverts. Keep it, drop every other parameter.
+identity_query: [id]
 
 list:
   # `l=` is not optional. `https://es.talent.com/jobs?k=python` answers 307 to

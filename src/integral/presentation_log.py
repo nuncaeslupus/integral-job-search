@@ -51,7 +51,12 @@ from typing import Any
 
 from integral.feedback import DecisionResult, record_decision
 from integral.identity import ProfileStore
-from integral.lifecycle import LifecycleRecord, load_lifecycle_offer
+from integral.lifecycle import (
+    LifecycleRecord,
+    copies_among,
+    load_lifecycle_offer,
+    stored_identities,
+)
 from integral.offers import Offer
 from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
 
@@ -71,6 +76,10 @@ PASS_OVER_THRESHOLD = 2
 #: Statuses that mean the candidate has ruled on this advert already, so it is
 #: not "passed over" — it is settled, in one direction or the other.
 _RULED = frozenset({"shortlisted", "applied", "screened_out", "rejected", "archived"})
+
+#: The two statuses `partition` withholds. One definition, because T224 reads it
+#: for the offer itself and for every other stored copy of the same advert.
+_RULED_OUT = ("screened_out", "rejected")
 
 
 class PresentationError(Exception):
@@ -201,14 +210,37 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     # through: an offer stored *before* they ruled its topic out is not touched
     # by `source()`, and would otherwise be shown with the exclusion on file.
     exclusions = load_exclusions(store)
+    identities = stored_identities(store)
+    shown: dict[str, str] = {}
     for offer_id in offer_ids:
         loaded = _loaded(store, offer_id)
-        if loaded is not None and loaded[0].status in ("screened_out", "rejected"):
+        # T224. A rule-out recorded against one stored copy of an advert covers
+        # every other copy: the offer id hashes text, which a list row changes on
+        # every search, so the same advert was stored under several ids and only
+        # one of them carried the verdict. Read-time, not a migration: the copies
+        # stay as the board served them and the verdict follows the advert.
+        ruled_copy = next(
+            (
+                copy
+                for copy in copies_among(identities, offer_id)
+                if (other := _loaded(store, copy)) is not None and other[0].status in _RULED_OUT
+            ),
+            None,
+        )
+        identity = identities.get(offer_id)
+        if loaded is not None and loaded[0].status in _RULED_OUT:
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
+        elif ruled_copy is not None:
+            held.append(Withheld(offer_id, reason_for(store, ruled_copy) or "ruled out earlier"))
+        elif identity is not None and identity in shown:
+            # The same advert twice in one batch is one advert shown once.
+            held.append(Withheld(offer_id, "el mismo anuncio ya está en esta lista"))
         elif loaded is not None and (topics := ruled_out_by(candidate_of(loaded[0]), exclusions)):
             held.append(Withheld(offer_id, f"es de un tema que descartaste ({', '.join(topics)})"))
         else:
             show.append(offer_id)
+            if identity is not None:
+                shown[identity] = offer_id
     return show, held
 
 
