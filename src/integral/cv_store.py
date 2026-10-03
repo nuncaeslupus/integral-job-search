@@ -264,6 +264,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from integral.candidate import LANGUAGE_PATTERN, Level
 from integral.decline import DeclineError, DeclineLedger, Entry
 from integral.identity import IdentityError, ProfileStore, create_profile
+from integral.photo_extract import extract_photo
 from integral.profile import EVIDENCE_ID, EvidenceLog
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -850,6 +851,8 @@ class ImportResult:
     blocks_added: int
     detail: str
     unextracted: tuple[str, ...] = ()
+    # T183: file name under `cv/source/` of the photo taken from the CV, if any.
+    photo: str | None = None
 
     @property
     def complete(self) -> bool:
@@ -1162,6 +1165,12 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
         RawBlock(text=content, provenance=(DocumentSpan(source_file=doc_id, start=start, end=end),))
         for start, end, content in spans
     )
+    photo_name: str | None = None
+    if suffix == ".pdf":
+        photo = extract_photo(path)
+        if photo is not None:
+            photo_name = f"{doc_id}.photo.png"
+            _atomic_write(store, photo, "cv", "source", photo_name)
     master = load_master(store)
     master = master.model_copy(update={"raw_blocks": (*master.raw_blocks, *blocks)})
     write_master(store, master)
@@ -1172,6 +1181,7 @@ def import_document(store: ProfileStore, path: Path) -> ImportResult:
             blocks_added=len(blocks),
             detail=f"{len(blocks)} paragraph(s) imported from {path.name} as {doc_id}",
             unextracted=unextracted_fields(text),
+            photo=photo_name,
         )
     )
 
