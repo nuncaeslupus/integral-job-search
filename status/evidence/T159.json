@@ -5,12 +5,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3503
+      "line": 3507
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3498
+      "line": 3502
     },
     {
       "module": "approval",
@@ -100,7 +100,7 @@
     {
       "module": "generate",
       "name": "GENERATION_CAP",
-      "line": 77
+      "line": 88
     },
     {
       "module": "interview",
@@ -554,6 +554,7 @@
     "test_mode.PASTE_CHARS",
     "trait_sufficiency.MINIMUM_TRAITS",
     "verified_gate.MINIMUM_CONTRACTS",
+    "voice._EXCERPT",
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
