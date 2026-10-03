@@ -48,7 +48,6 @@ from integral.connector_procedure import (  # noqa: E402
     CLIENTS,
     second_reader_verdict,
 )
-from integral.second_reader import SecondReaderError  # noqa: E402
 from integral.robots import USER_AGENT, Robots  # noqa: E402
 
 def fetch(url: str, headers: dict[str, str]) -> tuple[int | None, int, str]:
@@ -112,7 +111,7 @@ def second_reader_standing(robots_text: str, urls: list[str]) -> tuple[str, str,
         verdict = second_reader_verdict(
             robots_text, urls, reader=reader, paths=[request_target(u) for u in urls]
         )
-    except SecondReaderError as error:  # a reader that declined is not a reader that agreed
+    except Exception as error:  # a reader that declined or failed is not one that agreed
         return reader, f"not run - {error}", "single_parser"
     if verdict.startswith("competent"):
         return reader, verdict, "two_parsers_agreed"

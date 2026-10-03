@@ -143,3 +143,56 @@ def test_a_target_the_reader_declines_is_no_agreement_and_does_not_crash(
     )
     assert standing == "single_parser"
     assert verdict.startswith("not run")
+
+
+ROBOTS_API = "User-agent: *\nDisallow: /api\n"
+API_URLS = ["https://h.test/jobs", "https://h.test/api/v1"]
+
+
+def test_a_newly_registered_default_reader_is_the_one_called_and_its_verdict_decides(
+    probe: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A reader swap is a new name in READERS plus the constant pointing at it. The
+    # reader must actually be called, and what it says -- not CPython's parser under
+    # its name -- must set the standing.
+    calls: list[tuple[str, str]] = []
+
+    def always_allow(text: str, agent: str, target: str) -> bool:
+        calls.append((agent, target))
+        return True
+
+    monkeypatch.setitem(connector_policy.READERS, "spy.allow", always_allow)
+    monkeypatch.setattr(connector_policy, "DEFAULT_SECOND_READER", "spy.allow")
+    reader, verdict, standing = probe.second_reader_standing(ROBOTS_API, API_URLS)
+    assert reader == "spy.allow"
+    assert [target for _, target in calls] == ["/jobs", "/api/v1"]
+    # The stdlib would refuse /api/v1 here; the spy does not, so no agreement.
+    assert (standing, verdict.startswith("RAN AND COULD NOT REFUSE")) == ("single_parser", True)
+
+    refusing_api: list[str] = []
+
+    def refuses_api(text: str, agent: str, target: str) -> bool:
+        refusing_api.append(target)
+        return not target.startswith("/api")
+
+    monkeypatch.setitem(connector_policy.READERS, "spy.refuse", refuses_api)
+    monkeypatch.setattr(connector_policy, "DEFAULT_SECOND_READER", "spy.refuse")
+    # A file the stdlib and the repo reader both allow entirely: only the spy refuses.
+    _, _, standing = probe.second_reader_standing("User-agent: *\nDisallow: /zzz\n", API_URLS)
+    assert (standing, refusing_api) == ("two_parsers_agreed", ["/jobs", "/api/v1"])
+
+
+def test_a_default_reader_that_raises_is_single_parser(
+    probe: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called: list[str] = []
+
+    def explodes(text: str, agent: str, target: str) -> bool:
+        called.append(target)
+        raise RuntimeError("reader broke")
+
+    monkeypatch.setitem(connector_policy.READERS, "spy.raise", explodes)
+    monkeypatch.setattr(connector_policy, "DEFAULT_SECOND_READER", "spy.raise")
+    _, verdict, standing = probe.second_reader_standing(ROBOTS_API, API_URLS)
+    assert called, "the registered reader was never called"
+    assert (standing, verdict.startswith("not run")) == ("single_parser", True)
