@@ -170,6 +170,13 @@ class Step(BaseModel):
     # with free-text capture — S1, S2, T30, S7 — is unaffected); only the
     # capture gate that actually cares about this field fails on it.
     accepts_candidate_free_text: StrictBool | None = None
+    # T220: whether the candidate can rule a kind of work out in this step's
+    # rows ("stop showing me banks" at feedback, "nada de apuestas" at
+    # reactions). `integral.sourcing_exclusions` reads the steps its backfill
+    # lists from here, so a step added later is a declaration beside the step,
+    # not an edit to a tuple nobody remembers. `None` is undeclared and is caught
+    # by `integral.sourcing_exclusions`'s own gate when the step takes free text.
+    states_refusals: StrictBool | None = None
     gate: Gate
     reentry_events: list[str]
     # §3.1's declarations, moved out of the prose code block so the graph can be

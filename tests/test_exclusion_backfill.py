@@ -696,3 +696,74 @@ def test_a_pinned_field_in_the_dimension_files_is_still_not_acknowledgeable(
         assert "reach" not in se.acknowledgeable_dimensions()
     finally:
         se.acknowledgeable_dimensions.cache_clear()
+
+
+# T220: refusals stated in steps 5, 6 and 10 — measured on #598's head, each row
+# was skipped and the candidate kept seeing what they had refused. The steps are
+# read from the process spec's `states_refusals`, never listed in the module.
+
+_OFFER_ABOUT = {"kind": "offer", "id": f"sha256:{'0' * 64}"}
+
+#: step, row kind, words, the exclusion that records it — the three measured rows.
+_LATER_STEP_REFUSALS = [
+    ("feedback", "reaction", "no me enseñéis más bancos", ("sector:bancos", "bancos", ("bank",))),
+    ("reactions", "reaction", "nada de apuestas", ("sector:apuestas", "apuestas", ("betting",))),
+    (
+        "preferences",
+        "statement",
+        "no quiero consultoras",
+        ("sector:consultoras", "consultoras", ("consultancy",)),
+    ),
+]
+
+
+@pytest.mark.parametrize(("step", "kind", "words", "recorded"), _LATER_STEP_REFUSALS)
+def test_a_refusal_in_a_later_step_is_listed_until_recorded(
+    root: Path, step: str, kind: str, words: str, recorded: tuple[str, str, tuple[str, ...]]
+) -> None:
+    store = _profile(root, [_row(1, step, words, kind=kind)])
+    listed = unrecorded_statements(store)
+    assert [(r.evidence_id, r.step) for r in listed] == [("ev-000001", step)]
+    warning = backfill_warning(store)
+    assert warning is not None and warning.startswith("WARNING") and "ev-000001" in warning
+    about, quote, terms = recorded
+    record_exclusion(store, Exclusion(about=about, stated_at_cycle=1, words=quote, terms=terms))
+    assert unrecorded_statements(store) == ()
+    assert backfill_warning(store) is None
+
+
+@pytest.mark.parametrize("kind", ["statement", "episode", "reaction"])
+def test_a_refusal_in_an_unrelated_step_is_still_skipped(root: Path, kind: str) -> None:
+    store = _profile(root, [_row(1, "history", "no quiero consultoras", kind=kind)])
+    assert unrecorded_statements(store) == ()
+    assert backfill_warning(store) is None
+
+
+@pytest.mark.parametrize(("step", "kind", "words", "recorded"), _LATER_STEP_REFUSALS)
+def test_a_reaction_to_one_advert_is_not_a_topic_refusal(
+    root: Path, step: str, kind: str, words: str, recorded: tuple[str, str, tuple[str, ...]]
+) -> None:
+    # The choice, pinned both ways: the same words, once about one advert (skipped:
+    # no `record` could close it) and once unattached (listed).
+    attached = _profile(root / "a", [_row(1, step, words, kind=kind, about=_OFFER_ABOUT)])
+    assert unrecorded_statements(attached) == ()
+    free = _profile(root / "b", [_row(1, step, words, kind=kind)])
+    assert [r.evidence_id for r in unrecorded_statements(free)] == ["ev-000001"]
+
+
+def test_the_backfill_steps_are_the_ones_the_spec_declares() -> None:
+    from integral.process_spec import load_steps
+
+    steps = load_steps().steps
+    assert set(se.statement_steps()) == {s.id for s in steps if s.states_refusals}
+    # The three the task names, plus step 0 and 2 — and never the story or trait steps.
+    assert set(se.statement_steps()) == {
+        "identify",
+        "constraints",
+        "reactions",
+        "preferences",
+        "feedback",
+    }
+    # A step taking free text about the candidate must say whether it can state a
+    # refusal: an undeclared one would be skipped exactly as steps 5, 6 and 10 were.
+    assert [s.id for s in steps if s.states_refusals is None] == []
