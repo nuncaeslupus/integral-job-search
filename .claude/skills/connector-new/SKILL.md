@@ -167,10 +167,26 @@ d = parse_detail_page(c, (p/'fixture/detail.html').read_text()) if c.detail else
 print(build_offer(c, list_fields=rows[0], detail_fields=d, url='https://…'))"
 ```
 
-Then `make host-gate`. Two committed counts move when a package lands and both
-must be **checked, not bumped**: `connector_runs_evaluated` (T72) and
-`robots_adjudications_without_a_competent_second_reader` (T116). If a third
-moves, that is a finding — something else is package-sensitive.
+Then `make host-gate`. Several committed evidence keys move when a package lands,
+and this skill names no number of them: a count in prose has no last element and
+goes stale the next time a census gains a key. Decide each move by the rule below.
+
+- **Truthful** — the key moves by an amount you can derive from the package you
+  added. A census of packages moves by +1 per package. A per-phrase outcome (for
+  example `Run.steered`, `boards_consulted`, `plain_requests_made`) records one
+  `BoardOutcome` per phrase, so it moves by +N for N phrases: correct, and it reads
+  as alarming. A record about the package's own robots adjudication or provenance
+  moves because the package brought one.
+- **A finding** — a move you cannot derive from the package: the wrong size, a key
+  that has no reason to depend on connectors, a key that moved in the wrong
+  direction, or one that moved when a new package was *not* added.
+- **Checked, not bumped.** Regenerate with `make evidence` and read the diff; never
+  edit a committed number to make a gate pass, and never trust a stated count of
+  how many keys "should" move.
+
+To see which keys can be package-sensitive, derive them rather than recall them:
+`uv run python -m integral.repo_gate --list-evidence-modules` lists every module that
+writes evidence, and each module's measurement says what it counts.
 
 ## Step 7 — run it against the live board, not its fixture
 
