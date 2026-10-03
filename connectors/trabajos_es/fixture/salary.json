@@ -31,7 +31,8 @@
     },
     "29": {
       "verdict": "refused",
-      "why": "The card prints `9 € - 13 €` beside `Autonomo Freelance` and states no period at all, so the unit of these two figures is unknown. A band with no period is bounded as annual, 9-13 is outside `salary_recovery._BOUNDS['year']`, and `build_offer` refuses it on the connector route as the recovery route does: an unlabelled 9-13 shown as a wage, with its unit deleted, is worse than none."
+      "why": "The card prints `9 € - 13 €` beside `Autonomo Freelance` and states no period at all, so the unit of these two figures is unknown. A band with no period is bounded as annual, 9-13 is outside `salary_recovery._BOUNDS['year']`, and `build_offer` refuses it on the connector route as the recovery route does: an unlabelled 9-13 shown as a wage, with its unit deleted, is worse than none.",
+      "card_states_no_period": true
     }
   }
 }

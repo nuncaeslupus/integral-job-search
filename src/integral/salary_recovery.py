@@ -425,6 +425,45 @@ _BOUNDS: dict[SalaryPeriod, tuple[float, float]] = {
     "hour": (3.0, 1_000.0),
 }
 
+#: How many units of a currency make one unit of the scale `_BOUNDS` is written
+#: in (a euro, a dollar, a pound — the three this module's text route reads).
+#: T214: `_BOUNDS` is blind to currency, and a rupee is about a hundredth of a
+#: euro, so every INR band `foorilla_en` prints (`INR 1500K-2800K`) sat above
+#: the annual ceiling and was refused as a misparse. The bound moves with the
+#: currency's scale rather than widening for everyone: a global 100M ceiling
+#: would admit a `EUR 5,000,000` misparse. **A currency absent from this table
+#: has no bound at all**, and `bounds_for` answers `None` — a figure in a
+#: currency whose scale nobody wrote down is not shown, not shown on the euro
+#: scale. Only currencies already scale 1 are listed at 1; INR is the one that
+#: moves.
+_CURRENCY_SCALE: dict[str, float] = {
+    "EUR": 1.0,
+    "USD": 1.0,
+    "GBP": 1.0,
+    "PLN": 1.0,
+    "CHF": 1.0,
+    "SEK": 1.0,
+    "NOK": 1.0,
+    "DKK": 1.0,
+    "CAD": 1.0,
+    "AUD": 1.0,
+    "BRL": 1.0,
+    "RON": 1.0,
+    "INR": 100.0,
+}
+
+
+def bounds_for(period: SalaryPeriod | None, currency: str | None) -> tuple[float, float] | None:
+    """The `(low, high)` a real wage in `currency` looks like, or `None` when it
+    cannot be bounded: a period `_BOUNDS` has no entry for, or a currency
+    `_CURRENCY_SCALE` does not list. A period of `None` is bounded as annual.
+    """
+    base = _BOUNDS.get(period or "year")
+    scale = _CURRENCY_SCALE.get((currency or "").strip().upper())
+    if base is None or scale is None:
+        return None
+    return base[0] * scale, base[1] * scale
+
 
 def _currency_of(match: re.Match[str]) -> str | None:
     for group in ("pre", "post"):
@@ -674,9 +713,11 @@ def _band_defect(salary: Salary) -> str | None:
         return f"zero is not a wage: {salary!r}"
     if salary.min is not None and salary.max is not None and salary.min > salary.max:
         return f"a floor above its own ceiling: {salary!r}"
-    bounds = _BOUNDS.get(salary.period or "year")
-    if bounds is None:
+    if salary.period is not None and salary.period not in _BOUNDS:
         return f"a period this module cannot bound: {salary.period!r}"
+    bounds = bounds_for(salary.period, salary.currency)
+    if bounds is None:
+        return f"a currency this module cannot bound: {salary.currency!r}"
     low, high = bounds
     if any(figure < low or figure > high for figure in figures):
         return f"outside what a real {salary.period or 'annual'} wage looks like: {salary!r}"

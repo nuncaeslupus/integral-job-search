@@ -65,6 +65,7 @@ from integral.connectors import (
     Connector,
     _json_documents,
     _numbers_in,
+    _outside_annual_bound,
     _take,
     compile_path,
     compile_selector,
@@ -228,6 +229,44 @@ class RowVerdict:
     #: Every number the row's own card prints, read by the engine's `_numbers_in`.
     #: What a waived card's pinned figures are held against.
     card_numbers: frozenset[float] = frozenset()
+    #: True when a money window of the row's own card carries a word that names
+    #: a pay period (`_PERIOD_WORD`). A refusal that says "the card states no
+    #: period" is held against this: it stands only while the card really says
+    #: none, so a board that starts printing `/ h` turns the waiver into a
+    #: counted refusal instead of leaving a declaration nothing checks.
+    card_mentions_period: bool = False
+
+
+#: A word that names a pay period, or the `/` and `per` that introduce one. Wide
+#: on purpose: this decides whether a "the card states no period" waiver may
+#: stand, and the unsafe error is a waiver standing over a card that does.
+_PERIOD_WORD = re.compile(
+    r"/|\bper\b|\b(?:h|hr|hrs|hour\w*|day|daily|week\w*|month\w*|year\w*|annual\w*|annum|p\.?a\.?)\b",
+    re.IGNORECASE,
+)
+
+#: A declared refusal whose reason names the annual bound or a missing period.
+#: Case-sensitive on purpose: `Period` capitalised is the type name in a reason
+#: about a cadence the vocabulary cannot represent (jobsacuk's per-module rate),
+#: which is a different refusal from a period nobody read.
+_BOUND_OR_PERIOD = re.compile(
+    r"_BOUNDS|bounded as annual|annual wage|\bno period\b|\bperiod `take`|normalize_period"
+)
+
+
+def _refused_for_bound_or_period(declared: dict[str, Any], verdict: RowVerdict) -> bool:
+    """Whether this declared refusal is one the bound or a period `take` could
+    still fix, by its own stated reason (T214).
+
+    The one refusal that stays — a card that states no period at all (trabajos
+    `9 € - 13 €`) — is exempt only if it says so with `card_states_no_period`
+    **and** the audit finds no period word in the card's money windows. The
+    declaration alone would be the author's word about the card.
+    """
+    why = declared.get("why")
+    if not (isinstance(why, str) and _BOUND_OR_PERIOD.search(why)):
+        return False
+    return not (declared.get("card_states_no_period") is True and not verdict.card_mentions_period)
 
 
 def _money_contexts(text: str) -> tuple[str, ...]:
@@ -334,6 +373,9 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
                 card=card_band(list_text),
                 card_single=card_figure(list_text),
                 card_numbers=frozenset(_numbers_in(_flat(list_text))),
+                card_mentions_period=any(
+                    _PERIOD_WORD.search(window) for window in _money_contexts(list_text)
+                ),
                 detail_supplies_salary=route == "detail"
                 and detail is not None
                 and any(key.startswith("salary") for key in detail),
@@ -439,6 +481,7 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
     wildcard_rows = 0
     substituted_rows = 0
     uncompared: list[str] = []
+    refused_for_bound_or_period = 0
     declared_uncomparable = 0
     distinct_verdicts: set[tuple[Any, ...]] = set()
     rows_measured = 0
@@ -481,6 +524,9 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                     if declared is not None and declared.get("verdict") == "refused":
                         refused_rows += 1
                         package_refused += 1
+                        refused_for_bound_or_period += _refused_for_bound_or_period(
+                            declared, verdict
+                        )
                     else:
                         unread.append(f"{package} [{verdict.index}]: {verdict.list_publishes[0]}")
                     continue
@@ -492,7 +538,17 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                     continue
                 read_rows += 1
                 package_read += 1
-                if _declared_band(declared) != verdict.card:
+                if _outside_annual_bound(None, verdict.card[2], verdict.card[0], verdict.card[1]):
+                    # The shared detail page is one advert's, so the engine's
+                    # read says nothing about this card. The card's band still
+                    # has to clear the bound the connector route applies to a
+                    # band with no period, in its OWN currency: a read the
+                    # engine would refuse is not a read.
+                    mismatched.append(
+                        f"{package} [{verdict.index}]: the card publishes {verdict.card}, "
+                        "and the connector route's bound refuses it"
+                    )
+                elif _declared_band(declared) != verdict.card:
                     mismatched.append(
                         f"{package} [{verdict.index}]: the card publishes {verdict.card}, "
                         f"the entry declares {_declared_band(declared)}"
@@ -561,6 +617,7 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                 wildcard_rows += by_wildcard
                 refused_rows += 1
                 package_refused += 1
+                refused_for_bound_or_period += _refused_for_bound_or_period(declared, verdict)
                 continue
             unread.append(f"{package} [{verdict.index}]: {verdict.publishes[0]}")
         boards[package] = {"read": package_read, "refused": package_refused}
@@ -570,6 +627,7 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
         "boards_that_publish_a_salary_we_do_not_read": boards_unread,
         "salary_rows_read": read_rows,
         "salary_rows_refused": refused_rows,
+        "salary_rows_refused_for_bound_or_period": refused_for_bound_or_period,
         "salary_expectation_mismatches": len(mismatched),
         "packages_measured": len(boards),
         "rows_measured": rows_measured,
@@ -591,14 +649,14 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
 #: leaves the floor where it was, so the gate stays green and the diff has to
 #: say out loud that nothing new is being read.
 #:
-#: The population is 78 — the number of *distinct verdicts* read, each one a
+#: The population is 80 — the number of *distinct verdicts* read, each one a
 #: `(package, min, max, currency, period)` tuple out of the committed entries.
 #: It is not a row count: rows minus wildcard rows still counts fifty identical
 #: entries as fifty, and reverting to a plain row count left every test green
 #: (second-reader round 2, R2). Three points of slack is the repository's margin
 #: for a fixed in-repo collection.
-#: arsenal-floor-margin: MINIMUM_DISTINCT_SALARY_VERDICTS_READ value=75 population=78
-MINIMUM_DISTINCT_SALARY_VERDICTS_READ = 75
+#: arsenal-floor-margin: MINIMUM_DISTINCT_SALARY_VERDICTS_READ value=77 population=80
+MINIMUM_DISTINCT_SALARY_VERDICTS_READ = 77
 
 
 #: The denominator under the whole measurement: how many connector packages

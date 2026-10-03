@@ -1132,6 +1132,7 @@ Take = Literal[
     "range_low",
     "range_high",
     "currency",
+    "period",
     "last_text_node",
     "html_text",
     "escaped_html_text",
@@ -1258,7 +1259,19 @@ def _take(take: Take, value: str) -> str | None:
         # One currency, or none. A text naming two is a conversion or a
         # comparison, and either way nobody can say which one the pay is in.
         return seen.pop() if len(seen) == 1 else None
+    if take == "period":
+        # The word the card puts after `/` or `per` (`105 - 115 PLN / h`), and
+        # only a word `normalize_period`'s closed table already accepts. One
+        # distinct word or none: `/ h` beside `/ month` is two readings, and
+        # two readings mean no reading. Returned as the board's own word, so
+        # the one place a word becomes a period stays `normalize_period`.
+        words = {w.casefold() for w in _PERIOD_AFTER_SLASH.findall(value)}
+        words = {w for w in words if normalize_period(w) is not None}
+        return words.pop() if len(words) == 1 else None
     return value
+
+
+_PERIOD_AFTER_SLASH = re.compile(r"(?:/|\bper\b)\s*([A-Za-z]+)(?![A-Za-z])", re.IGNORECASE)
 
 
 def _number_text(number: float) -> str:
@@ -3956,7 +3969,7 @@ def _declares(connector: Connector, field: str) -> bool:
     return False
 
 
-def _outside_annual_bound(period: str | None, *figures: float | None) -> bool:
+def _outside_annual_bound(period: str | None, currency: str | None, *figures: float | None) -> bool:
     """A band with no period is bounded as annual — the rule `salary_recovery`
     already applies to a recovered band (`_band_defect`), now on the connector
     route too. `Salary(period=None)` is unlabelled on the card and uncomparable
@@ -3964,12 +3977,28 @@ def _outside_annual_bound(period: str | None, *figures: float | None) -> bool:
     `105 - 115 PLN` with the `/ h` left unread would be shown as the employer's
     own annual-looking number with its unit deleted. A connector whose board
     states the period declares `salary_period` and is unaffected.
+
+    T214: the bound is the currency's own (`salary_recovery.bounds_for`), so an
+    INR band is not refused for being a hundred times a euro one, and a
+    currency whose scale is not on record is refused outright. A band that
+    names **no** currency keeps the base scale — `usajobs_en` is the one
+    package that maps a band and declares none.
     """
     if period is not None:
         return False
-    from integral.salary_recovery import _BOUNDS  # late: salary_recovery imports this module
+    from integral.salary_recovery import bounds_for  # late: salary_recovery imports this module
 
-    low, high = _BOUNDS["year"]
+    # A board sends its own spelling (`€`, `eur`, or the code `take: currency`
+    # already resolved, `BRL`); `_CURRENCIES` says which code that is, and a
+    # spelling it does not list is a currency nobody can scale.
+    code: str | None = "EUR"
+    if currency and _present(currency):
+        token = currency.strip().upper()
+        code = _CURRENCIES.get(token) or (token if token in _CURRENCIES.values() else None)
+    bounds = bounds_for(None, code)
+    if bounds is None:
+        return any(figure is not None for figure in figures)
+    low, high = bounds
     return any(figure is not None and not low <= figure <= high for figure in figures)
 
 
@@ -4045,7 +4074,7 @@ def build_offer(
         if not _present(currency) and _declares(connector, "salary_currency"):
             pass  # a stated, unreadable currency — no salary at all
         elif (minimum is not None or maximum is not None) and not _outside_annual_bound(
-            period, minimum, maximum
+            period, currency, minimum, maximum
         ):
             salary = Salary(
                 min=minimum,
