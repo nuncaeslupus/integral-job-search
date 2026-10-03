@@ -64,7 +64,9 @@ Offered per offer. Declining generates nothing and leaves the offer `shortlisted
 
 `cv/generated/<offer_id>/v<N>/` — CV and letter, versioned, plus a manifest of which store entries each claim came from. On send, `applications/<offer_id>/` records what went and when, immutable thereafter.
 
-Each version also gets `carta.html` and `cv.html`, rendered from the Markdown by `integral.application_render.render_document(markdown, title=..., kind="letter"|"cv", photo=<optional bytes>, photo_mime=..., lang=...)` — one printable file each (A4, inline style, photo as a `data:` URI). The Markdown is the source; never edit the HTML by hand, regenerate it.
+Each version also gets `carta.html` and `cv.html`, rendered from the Markdown by `integral.application_render.render_document(markdown, title=..., kind="letter"|"cv", photo=<optional bytes>, photo_mime=..., lang=..., palette=<optional BrandPalette>)` — one printable file each (A4, inline style, photo as a `data:` URI). The Markdown is the source; never edit the HTML by hand, regenerate it.
+
+**Colours are the employer's own.** Measure the employer site's colours (count the elements carrying each computed colour), call `integral.brand_palette.extract_palette({colour: count})`, pass the result as `palette=` to `render_document`, and append `trazabilidad_section(palette, site_url)` to `trazabilidad.md` so the measurement is on record. The palette keeps the exact brand accent for rules and a darkened variant (at least 4.5:1 on the paper) for text; if the site cannot be read it falls back to a neutral palette and says so. Never pick a brand colour by guess.
 
 ## Boundary
 

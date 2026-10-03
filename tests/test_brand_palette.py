@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import colorsys
+import re
+from dataclasses import replace
 
 import pytest
 
+from integral.application_render import CSS as BASE_CSS
 from integral.application_render import render_document
 from integral.brand_palette import (
     AA_TEXT,
@@ -228,16 +231,86 @@ def test_trazabilidad_records_the_measurement_and_which_colour_is_which() -> Non
 # --- the document ------------------------------------------------------------
 
 
-def test_palette_reaches_the_document_without_adding_an_at_rule() -> None:
+def parse_blocks(sheet: str) -> list[tuple[str, dict[str, str]]]:
+    """Flat ``selector { prop: value; }`` blocks; fails on leftovers (at-rule, nesting)."""
+    text = re.sub(r"/\*.*?\*/", "", sheet, flags=re.S)
+    blocks = []
+    rest = text
+    for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", text):
+        decls = {}
+        for part in m.group(2).split(";"):
+            if ":" in part:
+                name, _, value = part.partition(":")
+                decls[name.strip().lower()] = value.strip().lower()
+        blocks.append((m.group(1).strip(), decls))
+        rest = rest.replace(m.group(0), "", 1)
+    assert rest.strip() == "", f"unparsed CSS (at-rule or nesting?): {rest!r}"
+    return blocks
+
+
+def themed_css(palette: BrandPalette) -> str:
+    """The stylesheet ``render_document`` emits with this palette, minus the base CSS."""
+    html_out = render_document("# H\n\n## S\n\ntext", title="t", palette=palette)
+    emitted = html_out.split("<style>\n", 1)[1].split("</style>", 1)[0]
+    assert emitted.startswith(BASE_CSS)
+    return emitted[len(BASE_CSS) :]
+
+
+def test_text_colours_are_ink_or_the_aa_variant_and_rules_carry_the_brand() -> None:
+    for samples in (DOMMA, JUST_FAILS, GREEN, NO_PAPER):
+        palette = extract_palette(samples)
+        assert palette.text_hex != palette.decorative_hex
+        blocks = parse_blocks(themed_css(palette))
+        assert blocks
+        for selector, decls in blocks:
+            for prop, value in decls.items():
+                if prop == "color":  # text colour: only ink or the AA variant
+                    assert value in (to_hex(palette.ink), palette.text_hex), (selector, value)
+                    assert oracle_ratio(value, to_hex(palette.paper)) >= AA_TEXT
+                if value == palette.decorative_hex:  # the exact brand colour: rules only
+                    assert re.fullmatch(r"border(-[a-z]+)*-color", prop), (selector, prop)
+                if prop == "background":
+                    assert value == to_hex(palette.paper)
+        # headings really are coloured, and rules really carry the brand colour
+        by_sel = {sel: decls for sel, decls in blocks}
+        assert by_sel["h1, h3"]["color"] == palette.text_hex
+        assert by_sel["h2"]["color"] == palette.text_hex
+        assert by_sel["h2"]["border-bottom-color"] == palette.decorative_hex
+        assert by_sel["body"]["color"] == to_hex(palette.ink)
+        assert by_sel["body"]["print-color-adjust"] == "exact"
+
+
+def test_palette_reaches_the_document_without_an_at_rule_or_nesting() -> None:
     palette = extract_palette(DOMMA)
     base = render_document("# H\n\n## S\n\ntext", title="t")
     themed = render_document("# H\n\n## S\n\ntext", title="t", palette=palette)
     assert base != themed
-    assert palette.text_hex in themed and palette.decorative_hex in themed
-    extra = css(palette)
-    assert "@" not in extra and "{" not in extra.replace("{", "", extra.count("{"))
-    assert extra.count("{") == extra.count("}")
+    assert "@" not in css(palette)
+    parse_blocks(css(palette))  # raises on anything but flat blocks
     assert render_document("# H", title="t", palette=None) == render_document("# H", title="t")
+
+
+def test_colour_spellings() -> None:
+    assert parse_colour("#ec5") == (0xEE, 0xCC, 0x55)
+    assert parse_colour("#EC504E") == parse_colour("#ec504e") == (236, 80, 78)
+    assert parse_colour("RGB(236, 80, 78)") == (236, 80, 78)
+    assert extract_palette({"#FFFFFF": 5, "#111111": 9, "#EC504E": 3}).decorative_hex == "#ec504e"
+
+
+def test_palette_validates_itself() -> None:
+    good = extract_palette(DOMMA)
+    fields = {f: getattr(good, f) for f in good.__dataclass_fields__}
+    assert replace(good, source="site") == good
+    for field, value in [
+        ("accent_text", (236, 80, 78)),  # 3.6:1 on cream: below AA
+        ("ink", (256, 0, 0)),
+        ("paper", (-1, 0, 0)),
+        ("accent", (1, 2)),
+        ("accent", (1.5, 2, 3)),
+        ("source", "guessed"),
+    ]:
+        with pytest.raises(ValueError):
+            BrandPalette(**{**fields, field: value})
 
 
 def test_palette_is_a_value_object() -> None:

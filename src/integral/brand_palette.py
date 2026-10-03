@@ -134,6 +134,24 @@ class BrandPalette:
     accent_text: RGB  # text: >= AA_TEXT on paper
     measured: tuple[tuple[str, int], ...] = ()  # (hex, element count), most frequent first
 
+    def __post_init__(self) -> None:
+        if self.source not in ("site", "neutral"):
+            raise ValueError(f"source must be 'site' or 'neutral', not {self.source!r}")
+        for name in ("ink", "paper", "accent", "accent_text"):
+            value = getattr(self, name)
+            ok = (
+                isinstance(value, tuple)
+                and len(value) == 3
+                and all(
+                    isinstance(c, int) and not isinstance(c, bool) and 0 <= c <= 255 for c in value
+                )
+            )
+            if not ok:
+                raise ValueError(f"{name} must be three channels in 0..255, not {value!r}")
+        ratio = contrast_ratio(self.accent_text, self.paper)
+        if ratio < AA_TEXT:
+            raise ValueError(f"accent_text is {ratio:.2f}:1 on paper, below AA {AA_TEXT}:1")
+
     @property
     def decorative_hex(self) -> str:
         return to_hex(self.accent)
