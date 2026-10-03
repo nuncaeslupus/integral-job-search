@@ -33,13 +33,13 @@ from __future__ import annotations
 
 import json
 import sys
-import urllib.robotparser
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from integral import second_reader
+from integral import connector_policy
 from integral.robots import USER_AGENT
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -85,17 +85,23 @@ def second_reader_verdict(
     demonstrably did — this gate contradicting the ledger over a reader neither
     of them used.
 
-    The stdlib takes full URLs, the new reader takes request paths, so both are
-    passed and each is given the form it reads.
+    Each reader is dispatched through `connector_policy.READERS` and handed request
+    paths (derived from `urls` when `paths` is not given); an unregistered name is
+    reported as not run, never answered by some other reader.
     """
     if not urls:
         return "not run — no path given"
-    if reader == second_reader.NAME:
-        verdicts = [second_reader.allows(robots_text, USER_AGENT, path) for path in (paths or [])]
-    else:
-        parser = urllib.robotparser.RobotFileParser()
-        parser.parse(robots_text.splitlines())
-        verdicts = [parser.can_fetch(USER_AGENT, url) for url in urls]
+    ask = connector_policy.READERS.get(reader)
+    if ask is None:
+        return f"not run — {reader!r} is not a reader this repository registers"
+    if paths is None:
+        paths = [
+            (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+            for parts in map(urllib.parse.urlsplit, urls)
+        ]
+    # Every reader is called through the registry, over request targets: a reader
+    # added to `READERS` is the one asked, never CPython's under another name.
+    verdicts = [ask(robots_text, USER_AGENT, path) for path in paths]
     if not verdicts or all(verdicts):
         return INCOMPETENT
     return f"competent — refused {verdicts.count(False)} of {len(verdicts)} path(s)"
