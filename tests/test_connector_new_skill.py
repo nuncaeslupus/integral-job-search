@@ -41,10 +41,6 @@ SKILL = REPO / ".claude" / "skills" / "connector-new" / "SKILL.md"
 #: differ from it, and separately no number may be claimed at all.
 CLAIMED_BY_THE_OLD_SKILL = 2
 
-#: The host the added package fetches from, written into its manifest, its meta and
-#: its robots row alike, so the row names the host the package actually reads (T144).
-HOST = "zzprobe.example"
-
 
 def _words(text: str) -> list[str]:
     return re.split(r"\s+", text.strip())
@@ -69,75 +65,116 @@ _COMPOUND = rf"(?:{'|'.join(_TENS)})(?:[- ](?:{'|'.join(_UNITS[1:10])}))?"
 #: of an identifier (`T72`), which the lookbehind and `\b` exclude.
 _WORDS = "|".join([*_UNITS, *_ORDINALS, *_LARGE, *_QUANTIFIERS])
 _NUMBER = rf"(?:(?<![+\-\w])\d+\b|\b(?:{_COMPOUND}|{_WORDS})\b)"
-_THING = r"(?:keys?|counts?|measurements?|figures?)"
-#: Words that may sit between the number and the thing without breaking the link
-#: ("two committed evidence counts"), except the ones that start a new noun phrase.
-_BREAKS = {"and", "or", "per", "by", "each", "package", "packages", "connector", "connectors"}
-_NUMBER_THEN_THING = re.compile(
-    rf"{_NUMBER}(?P<gap>(?:\s+[\w`-]+){{0,2}}?)\s+(?:of\s+)?{_THING}\b", re.IGNORECASE
-)
-#: "Else", "other", "third", "beyond", "besides", "more than" next to "finding": the
-#: shape of "if anything else moves, that is a finding", which implies a closed set
-#: without ever writing a number.
-_FINDING_WITH_A_BOUNDARY = re.compile(
-    r"(?=.*\bfindings?\b)(?=.*\b(?:else|other|others|third|beyond|besides|more\s+than)\b)",
+#: Step 6 is the one section that used to carry the tally, and the rule for it is
+#: closed: its prose contains no number token at all. Not "no number near a noun", which
+#: a window and a noun list let through ("Sixteen of the committed evidence keys",
+#: "Sixteen connector keys", "values", "entries", "16 findings") — none at all.
+_BOUNDARY = re.compile(
+    r"\b(?:else|other|others|additional|extra|further|another|third|beyond|besides|more\s+than)\b",
     re.IGNORECASE,
 )
+_VERDICT = re.compile(r"\b(?:findings?|defects?|problems?|bugs?|errors?)\b", re.IGNORECASE)
 
 
-def _numbered_thing(sentence: str) -> bool:
-    for found in _NUMBER_THEN_THING.finditer(sentence):
-        words = re.findall(r"[\w`-]+", found.group("gap").lower())
-        if not _BREAKS.intersection(words):
-            return True
-    return False
+def step_6_prose(text: str) -> str:
+    """Step 6's body with its heading and its code fences removed."""
+    start = text.index("## Step 6")
+    end = text.index("\n## ", start + 1)
+    body = text[start:end].split("\n", 1)[1]
+    return re.sub(r"```.*?```", "", body, flags=re.DOTALL)
+
+
+def number_tokens(prose: str) -> list[str]:
+    return re.findall(_NUMBER, prose, flags=re.IGNORECASE)
 
 
 def census_claims(text: str) -> list[str]:
-    """Sentences that put a number on how many keys move, or fence the set closed."""
-    flat = re.sub(r"\s+", " ", text)
-    sentences = re.split(r"(?<=[.!?;])\s+", flat)
-    return [s for s in sentences if _numbered_thing(s) or _FINDING_WITH_A_BOUNDARY.search(s)]
+    """What Step 6 says that tallies the moved keys or fences the set closed."""
+    prose = re.sub(r"\s+", " ", step_6_prose(text))
+    found = [f"number token {token!r}" for token in number_tokens(prose)]
+    for sentence in re.split(r"(?<=[.!?;])\s+", prose):
+        if _BOUNDARY.search(sentence) and _VERDICT.search(sentence):
+            found.append(sentence)
+    return found
+
+
+def evidence_key_names() -> set[str]:
+    """Every committed evidence key spelled like an identifier, read off the records."""
+    keys: set[str] = set()
+    for path in (REPO / "status" / "evidence").glob("*.json"):
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(document, dict):
+            keys.update(key for key in document if "_" in key)
+    return keys
+
+
+def _step_6_saying(text: str, sentence: str) -> str:
+    """The skill with one more sentence appended to Step 6's prose."""
+    end = text.index("\n## ", text.index("## Step 6") + 1)
+    return f"{text[:end]}\n{sentence}\n{text[end:]}"
 
 
 def test_the_skill_names_no_census_of_moved_keys() -> None:
-    assert census_claims(SKILL.read_text(encoding="utf-8")) == []
+    text = SKILL.read_text(encoding="utf-8")
+    assert census_claims(text) == []
 
 
-@pytest.mark.parametrize(
-    "claim",
-    [
-        "Two committed counts move when a package lands.",
-        "If a third moves, that is a finding.",
-        "Exactly 7 keys move for one package.",
-        "three evidence keys change when a connector is added",
-        "Only two counts move, and both must be checked.",
-        "Sixteen keys move when a package lands.",
-        "Both committed counts move; if anything else moves, that is a finding.",
-        "Only `X` and `Y` move; any other key that moves is a finding.",
-        "The package moves 7 keys.",
-        "Expect a couple of counts to change.",
-        "More than two keys are findings.",
-        "A third moving key means something else is package-sensitive.",
-        "Twenty-one keys move.",
-    ],
-)
-def test_the_census_detector_recognises_the_shape_of_the_claim(claim: str) -> None:
-    assert census_claims(claim)
+def test_step_6_names_no_committed_evidence_key() -> None:
+    start = SKILL.read_text(encoding="utf-8")
+    body = start[start.index("## Step 6") : start.index("\n## Step 7")]
+    keys = evidence_key_names()
+    assert len(keys) > 20, "the committed records were not read"
+    assert sorted(key for key in keys if key in body) == []
+
+
+REVIEWED_REWORDINGS = [
+    "Two committed counts move when a package lands.",
+    "If a third moves, that is a finding.",
+    "Exactly 7 keys move for one package.",
+    "three evidence keys change when a connector is added",
+    "Only two counts move, and both must be checked.",
+    "Sixteen keys move when a package lands.",
+    "Both committed counts move; if anything else moves, that is a finding.",
+    "Only `X` and `Y` move; any other key that moves is a finding.",
+    "The package moves 7 keys.",
+    "Expect a couple of counts to change.",
+    "More than two keys are findings.",
+    "A third moving key means something else is package-sensitive.",
+    "Twenty-one keys move.",
+    "Sixteen of the committed evidence keys move.",
+    "Sixteen connector keys move.",
+    "The package adds twelve entries.",
+    "Several values change.",
+    "16 findings are expected.",
+    "Treat any additional move as a defect.",
+]
+
+
+@pytest.mark.parametrize("sentence", REVIEWED_REWORDINGS)
+def test_every_reviewed_rewording_is_flagged_inside_step_6(sentence: str) -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    assert census_claims(text) == []
+    assert census_claims(_step_6_saying(text, sentence))
 
 
 @pytest.mark.parametrize(
     "rule",
     [
         "A key that moves by the package's own contribution is truthful.",
-        "Each connector is one package, and keys move by +1 per package.",
+        "Each connector is a package, and keys move by +1 per package.",
         "A per-phrase outcome moves by +N for N phrases.",
         "A finding is a move you cannot derive from the package.",
         "Find which keys are package-sensitive with the registry, then explain each move.",
     ],
 )
-def test_the_census_detector_leaves_the_rule_alone(rule: str) -> None:
-    assert census_claims(rule) == []
+def test_the_rule_can_be_added_to_step_6_without_being_flagged(rule: str) -> None:
+    assert census_claims(_step_6_saying(SKILL.read_text(encoding="utf-8"), rule)) == []
+
+
+def test_a_number_outside_step_6_is_not_this_tests_business() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    assert number_tokens(text), "the rest of the skill has numbered steps; the scope is Step 6"
+    assert census_claims(text) == []
 
 
 def _git(root: Path, *args: str) -> None:
@@ -197,18 +234,18 @@ def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
 
 
 def _add_a_package(root: Path) -> None:
-    """One new package: a clone of an existing one, with its robots adjudication."""
+    """One new package: a clone of an existing one, with its robots adjudication.
+
+    It keeps the template's real hosts. A reserved host such as `zzprobe.example` made
+    the package fail to build, which moved T53, T110, T113, T144 and T171 for a reason
+    that is the probe's fault and not a package's.
+    """
     template, package = "lever_en", "zzprobe_en"
     shutil.copytree(root / "connectors" / template, root / "connectors" / package)
     manifest = root / "connectors" / package / "connector.yaml"
     declared = manifest.read_text(encoding="utf-8")
     assert "\nsite: lever\n" in declared  # the loader requires `site` to match the name
-    manifest.write_text(
-        declared.replace("\nsite: lever\n", "\nsite: zzprobe\n").replace("lever.co", HOST),
-        encoding="utf-8",
-    )
-    meta = root / "connectors" / package / "meta.yaml"
-    meta.write_text(meta.read_text(encoding="utf-8").replace("lever.co", HOST), encoding="utf-8")
+    manifest.write_text(declared.replace("\nsite: lever\n", "\nsite: zzprobe\n"), encoding="utf-8")
     ledger = root / "connectors" / "robots-adjudications.yaml"
     text = ledger.read_text(encoding="utf-8")
     at = text.index(f"    package: connectors/{template}\n")
@@ -217,7 +254,7 @@ def _add_a_package(root: Path) -> None:
     end = len(text) if end == -1 else end + 1
     block = text[start:end]
     assert block.count(template) >= 2
-    clone = block.replace(template, package).replace("lever.co", HOST)
+    clone = block.replace(template, package)
     ledger.write_text(text[:end] + clone + text[end:], encoding="utf-8")
     _git(root, "add", "-A")
 
@@ -236,6 +273,16 @@ def _moved_keys(
     return moved
 
 
+#: A package that builds and conforms moves none of these (reviewer-measured on a broken
+#: probe: contract violations 0 to 1, a package listed as no longer building).
+VALID_PACKAGE_LEAVES_ALONE = (
+    ("T53.json", "connector_contract_violations"),
+    ("T110.json", "packages_that_no_longer_build"),
+    ("T110.json", "legal_shapes_refused"),
+    ("T144.json", "not_conforming"),
+)
+
+
 def test_a_new_package_moves_more_keys_than_the_skill_ever_claimed() -> None:
     with tempfile.TemporaryDirectory(prefix="t197-") as scratch:
         root = Path(scratch)
@@ -245,4 +292,9 @@ def test_a_new_package_moves_more_keys_than_the_skill_ever_claimed() -> None:
         after = _regenerate_evidence(root)
     moved = _moved_keys(before, after)
     assert before, "no committed evidence was read, so nothing was measured"
+    # The probe is a *valid* package. If it were broken, these would move and the count
+    # below would measure a package that does not build, not one that lands.
+    for record, key in VALID_PACKAGE_LEAVES_ALONE:
+        assert key in before[record] and key in after[record], (record, key)
+        assert f"{record}:{key}" not in moved, f"the probe package is not valid: {record}:{key}"
     assert len(moved) > CLAIMED_BY_THE_OLD_SKILL, moved

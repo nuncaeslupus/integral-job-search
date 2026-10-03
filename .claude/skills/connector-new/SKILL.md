@@ -168,21 +168,20 @@ print(build_offer(c, list_fields=rows[0], detail_fields=d, url='https://…'))"
 ```
 
 Then `make host-gate`. Committed evidence keys move when a package lands, and this
-skill names no number of them: a count in prose has no last element and
-goes stale the next time a census gains a key. Decide each move by the rule below.
+skill states no tally of them: a tally in prose has no last element and goes stale the
+next time a measurement gains a key. Decide each move by the rule below.
 
 - **Truthful** — the key moves by an amount you can derive from the package you
-  added. A census of packages moves by +1 per package. A per-phrase outcome (for
-  example `boards_consulted`, `plain_requests_made`) records one
-  `BoardOutcome` per phrase, so it moves by +N for N phrases: correct, and it reads
-  as alarming. A record about the package's own robots adjudication or provenance
-  moves because the package brought one.
-- **A finding** — a move you cannot derive from the package: the wrong size, a key
-  that has no reason to depend on connectors, a key that moved in the wrong
-  direction, or one that moved when a new package was *not* added.
-- **Checked, not bumped.** Regenerate with `make evidence` and read the diff; never
-  edit a committed number to make a gate pass, and never trust a stated count of
-  how many keys "should" move.
+  added. A census of packages moves by +1 per package. A per-phrase outcome records a
+  `BoardOutcome` per phrase, so it moves by +N for N phrases: correct, and it reads as
+  alarming. A record about the package's own robots adjudication or provenance moves
+  because the package brought its own.
+- **A finding** — a move you cannot derive from the package: the wrong size, a key that
+  has no reason to depend on connectors, a key that moved in the wrong direction, or a
+  key that moved when no package was added.
+- **Checked, not bumped.** Regenerate with `make evidence` and read the diff; never edit
+  a committed number to make a gate pass, and never trust a stated tally of how many
+  keys "should" move.
 
 To see which keys can be package-sensitive, derive them rather than recall them:
 `uv run python -m integral.repo_gate --list-evidence-modules` lists every module that
