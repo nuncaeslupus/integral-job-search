@@ -28,7 +28,7 @@ from integral.fit import (
 )
 from integral.identity import ProfileStore, create_profile
 from integral.profile import ProfileRevision
-from integral.rank import FIT_DIMENSIONS, Candidate, RankingError, rank
+from integral.rank import FIT_DIMENSIONS, Candidate, RankingError, point_band, rank
 
 REV = ProfileRevision(rows=1, sha256="0" * 64)
 DIMS = ("remote", *FIT_DIMENSIONS)
@@ -54,7 +54,11 @@ def cand(
     remote: float = 0.5,
 ) -> Candidate:
     base = Candidate(
-        offer_id=offer_id, salary_per_month=salary, scores={"remote": remote}, unknown=unknown
+        offer_id=offer_id,
+        salary_per_month=salary,
+        scores={"remote": remote},
+        unknown=unknown,
+        pay=point_band(salary, "EUR"),
     )
     return with_fit(base, reading)
 
@@ -341,7 +345,11 @@ def _offer(
     store.write_json({"id": offer_id, "title": title, "text": text}, "offers", f"{offer_id}.json")
     store.write_json({"offer_id": offer_id, "scores": scores}, "extractions", f"{offer_id}.json")
     return Candidate(
-        offer_id=offer_id, salary_per_month=3000.0, scores={"remote": 0.5}, unknown=frozenset()
+        offer_id=offer_id,
+        salary_per_month=3000.0,
+        scores={"remote": 0.5},
+        unknown=frozenset(),
+        pay=point_band(3000.0, "EUR"),
     )
 
 
@@ -364,13 +372,16 @@ MASTER = {
 }
 
 
-def _run(store: ProfileStore, cands: list[Candidate]) -> dict[str, Any]:
+def _run(
+    store: ProfileStore, cands: list[Candidate], currency: str | None = None
+) -> dict[str, Any]:
     return rank(
         fit_candidates(store, cands),
         dimensions=DIMS,
         revision=REV,
         weights=None,
         at="t",
+        currency=currency,  # `profile/constraints.json`'s, as step 9 passes it
     )
 
 
@@ -458,3 +469,59 @@ def test_a_plain_title_states_no_level() -> None:
 def test_a_candidate_with_no_dated_history_has_no_held_level(tmp_path: Path) -> None:
     store = _store(tmp_path, {"languages": []})
     assert abilities_from_store(store) == CandidateAbility()
+
+
+@pytest.mark.parametrize("currency", [None, "EUR"])
+def test_step_nine_keeps_the_pay_band_so_t246_accepts_it(
+    tmp_path: Path, currency: str | None
+) -> None:
+    store = _store(tmp_path, MASTER)
+    c = _offer(store, "p", "Dev", "Python.", [])
+    (fitted,) = fit_candidates(store, [c])
+    assert fitted.pay == c.pay and fitted.salary_per_month == c.salary_per_month
+    assert _run(store, [c], currency)["pareto"] == ["p"]
+
+
+def test_fit_does_not_launder_a_point_with_no_band(tmp_path: Path) -> None:
+    store = _store(tmp_path, MASTER)
+    bare = replace(_offer(store, "p", "Dev", "Python.", []), pay=None)
+    with pytest.raises(RankingError):
+        _run(store, [bare], "EUR")
+
+
+def test_the_fit_axes_never_grant_a_dominance_the_old_rule_refuses() -> None:
+    """What the old rule refuses: a worse non-fit axis, or an unknown one.
+
+    Fit may supply the strict improvement (equal otherwise, better fit), never
+    cover for a loss elsewhere or for silence on a non-fit dimension.
+    """
+    from itertools import product
+
+    from integral.rank import dominates
+
+    readings = [
+        read_fit(silent(replace(GOOD, **w), d), ME)
+        for w in ({}, *({n: WORSE[n]} for n in OFFER_FIELDS))
+        for d in DEAD_SETS
+    ]
+    cands = [
+        cand(f"c{i}", r, salary=s, remote=rem, unknown=frozenset(u))
+        for i, r in enumerate(readings)
+        for s, rem in ((2000.0, 0.1), (5000.0, 0.9))
+        for u in ((), ("commute",))
+    ]
+    cands = [
+        c if "commute" in c.unknown else replace(c, scores={**c.scores, "commute": 0.5})
+        for c in cands
+    ]
+    dims = (*DIMS, "commute")
+    checked = granted = 0
+    for a, b in product(cands, repeat=2):
+        checked += 1
+        if not dominates(a, b, dims):
+            continue
+        granted += 1
+        assert not (a.unknown | b.unknown) & {"commute"}
+        assert a.salary_per_month >= b.salary_per_month  # type: ignore[operator]
+        assert a.scores["remote"] >= b.scores["remote"]
+    assert checked > 1000 and granted > 0
