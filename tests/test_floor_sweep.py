@@ -1213,8 +1213,8 @@ def test_the_live_tree_has_zero_findings() -> None:
     assert measured["floors_swept"] >= floor_sweep.MINIMUM_FLOORS_SWEPT
 
 
-def test_main_exits_zero_on_the_live_tree() -> None:
-    assert floor_sweep._main([str(Path("/tmp/floor_sweep_test_evidence.json"))]) == 0
+def test_main_exits_zero_on_the_live_tree(tmp_path: Path) -> None:
+    assert floor_sweep._main([str(tmp_path / "T159.json")]) == 0
 
 
 def test_main_exits_one_on_a_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4034,7 +4034,7 @@ def _count_analyses(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
     return calls
 
 
-def test_no_test_in_this_file_rewrites_the_live_evidence_the_key_hashes() -> None:
+def test_no_test_in_this_file_rewrites_the_live_evidence_the_key_hashes(tmp_path: Path) -> None:
     """The deterministic form of the xdist race: calling `_main` and the prose
     writer at their defaults must leave every file under `status/evidence/`
     untouched (mtime and bytes), because a worker reading one mid-rewrite keys a
@@ -4042,7 +4042,7 @@ def test_no_test_in_this_file_rewrites_the_live_evidence_the_key_hashes() -> Non
     evidence = floor_sweep._evidence_dir()
     before = {p.name: (p.stat().st_mtime_ns, p.read_bytes()) for p in evidence.glob("*.json")}
     assert len(before) >= 100
-    floor_sweep._main(["/tmp/floor_sweep_race_probe.json"])
+    floor_sweep._main([str(tmp_path / "T159.json")])
     floor_sweep.write_prose_clearance_evidence(floor_sweep.DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH)
     after = {p.name: (p.stat().st_mtime_ns, p.read_bytes()) for p in evidence.glob("*.json")}
     assert after == before

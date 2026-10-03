@@ -560,13 +560,21 @@ def test_deliberately_broken_surface_drops_coverage_below_one(tmp_path: Path) ->
     assert "feedback" not in details["captured_after_break"]
 
 
-def test_cli_exits_nonzero_when_coverage_is_below_one(tmp_path: Path) -> None:
+def test_cli_exits_nonzero_when_coverage_is_below_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`_main`'s own contract: `profile_capture_coverage != 1.0` is a
     violation, and a violation is exit code 1 — proven here over the same
     broken-driver scenario the deliberate-break test exercises, not asserted
     by reading the source."""
+    from integral import profile_capture
     from integral.profile_capture import _main
 
+    # `_main` also records S12.json at a fixed path; keep it off the committed file (#671).
+    real_s12 = profile_capture.write_step_declaration_evidence
+    monkeypatch.setattr(
+        profile_capture, "write_step_declaration_evidence", lambda: real_s12(tmp_path / "S12.json")
+    )
     evidence_path = tmp_path / "T28-broken.json"
     # `_main` always measures the *real* drivers (the CLI has no hook to
     # substitute a broken one — that would defeat the point of a gate). What

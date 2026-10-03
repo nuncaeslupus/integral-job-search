@@ -618,9 +618,22 @@ def test_write_evidence_writes_the_measured_json(tmp_path: Path) -> None:
     assert on_disk["intake_field_provenance"] == 1.0
 
 
-def test_cli_exits_zero_when_the_real_scenarios_pass(tmp_path: Path) -> None:
+def _keep_t97_off_the_committed_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """`_main` also records T97.json at a fixed path; a test must not rewrite it (#671)."""
+    from integral import cv_store
+
+    real = cv_store.write_read_reporting_evidence
+    monkeypatch.setattr(
+        cv_store, "write_read_reporting_evidence", lambda: real(tmp_path / "T97.json")
+    )
+
+
+def test_cli_exits_zero_when_the_real_scenarios_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from integral.cv_store import _main
 
+    _keep_t97_off_the_committed_file(monkeypatch, tmp_path)
     evidence_path = tmp_path / "S4.json"
     exit_code = _main(["prog", "--write-evidence", str(evidence_path)])
     assert exit_code == 0
@@ -703,6 +716,7 @@ def test_cli_exits_nonzero_when_intake_field_provenance_is_below_one(
         }
 
     monkeypatch.setattr(cv_store, "probe_intake", broken_probe)
+    _keep_t97_off_the_committed_file(monkeypatch, tmp_path)
     evidence_path = tmp_path / "S4-broken.json"
     exit_code = _main(["prog", "--write-evidence", str(evidence_path)])
 
@@ -729,6 +743,7 @@ def test_cli_exits_three_when_too_few_checks_ran(
         }
 
     monkeypatch.setattr(cv_store, "probe_intake", thin_probe)
+    _keep_t97_off_the_committed_file(monkeypatch, tmp_path)
     exit_code = _main(["prog", "--write-evidence", str(tmp_path / "S4-thin.json")])
     assert exit_code == 3
 

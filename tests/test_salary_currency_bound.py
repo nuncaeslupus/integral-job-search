@@ -286,8 +286,15 @@ def test_the_no_period_waiver_does_not_stand_over_a_spanish_period_word(
     assert measured["salary_rows_refused_for_bound_or_period"] == 1, (phrase, measured)
 
 
-def test_a_non_zero_key_fails_the_audit_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_non_zero_key_fails_the_audit_exit_code(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     real = measure()
+    # `_main` records T200.json; keep that off the committed file (#671).
+    write_real = connector_salary_audit.write_evidence
+    monkeypatch.setattr(
+        connector_salary_audit, "write_evidence", lambda: write_real(tmp_path / "T200.json")
+    )
     assert connector_salary_audit._main(["audit"]) == 0
     monkeypatch.setattr(
         connector_salary_audit,
