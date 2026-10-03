@@ -1,5 +1,18 @@
 # Session handover
 
+## 00017. Candidate session 453a5c19 closed; T247–T252 seeded
+
+- **What it was.** A candidate session in test mode: checking a board's emailed recommendations,
+  adding five search terms, and one all-terms, all-boards sourcing round (419 new, 8 presentable).
+- **What it found.** The candidate called the results too senior and too infrastructure-heavy, and
+  recognised most of what was shown as already seen or applied to. A level and stack filter was
+  applied by a scratch script, since his weights price neither (T243, T244 already cover that).
+- **Seeded, all confirmed by the owner's act-now note:** T247 (alert emails as a source, with
+  permission each time), T248 (grow terms from found adverts), T249 (explicit question then record,
+  in every step), T250 (never re-show seen or applied adverts), T251 (search every term on every
+  board; ceiling per board after reach), T252 (link to the advert, not the application form).
+  T250 is the one the candidate felt most.
+
 ## 00016. Ranking the sent applications found the ranker gives no order; T242–T246 seeded
 
 - **What was asked.** In the same candidate session (test-mode 658fcce2), the candidate asked for their

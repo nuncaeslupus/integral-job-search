@@ -515,6 +515,12 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T244 | Whether a candidate can do the job never enters the ranking (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☐ |
 | T245 | Stack fit reads only the master CV, which misses work told in conversation (test-mode 658fcce2) | 10 | S | — | `metric == 0` | gate set in its own PR | ☑ |
 | T246 | Pay enters the ranking unconverted, and a stated band can be stored as none (test-mode 658fcce2) | 10 | S | — | `metric == 0` | gate set in its own PR | ☐ |
+| T247 | A candidate's job-alert emails are never read as a source, and reading them has no permission step (test-mode 453a5c19) | 5 | M | — | `job_alert_emails_read_without_a_recorded_permission == 0` | gate set in its own PR | ☐ |
+| T248 | Search terms never grow from the adverts a search finds (test-mode 453a5c19) | 5 | M | — | `aim_terms_proposed_from_found_adverts_without_candidate_approval == 0` | gate set in its own PR | ☐ |
+| T249 | Asking an explicit question and recording the answer is left to the session instead of required by every step (test-mode 453a5c19) | 5 | M | — | `steps_without_an_explicit_question_and_record_rule == 0` | gate set in its own PR | ☐ |
+| T250 | Adverts the candidate has already been shown or applied to are presented again as new (test-mode 453a5c19) | 5 | M | — | `offers_presented_as_new_that_were_already_shown_or_applied_to == 0` | gate set in its own PR | ☐ |
+| T251 | Only the first six aim terms are searched, so most of a candidate's terms never reach any board (test-mode 453a5c19) | 5 | M | — | `aim_terms_never_searched_on_a_steered_board == 0` | gate set in its own PR | ☐ |
+| T252 | An offer's link can be the application form instead of the advert (test-mode 453a5c19) | 10 | S | — | `offers_presented_whose_url_is_an_application_form == 0` | gate set in its own PR | ☐ |
 
 ### Divergences
 
