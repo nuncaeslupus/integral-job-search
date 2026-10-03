@@ -220,7 +220,7 @@ def _read_jsonl(store: ProfileStore, filename: str) -> list[dict[str, Any]]:
 
 def traceability(store: ProfileStore) -> dict[str, Any]:
     """T21's gate: the fraction of claims that name a row really in the log."""
-    known = {row.id for row in EvidenceLog(store).effective_rows()}
+    known = {row.id for row in EvidenceLog(store).effective()}
     claims = _claims(store)
     orphans = orphaned_reasons(store)
 
