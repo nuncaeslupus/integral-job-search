@@ -64,7 +64,7 @@ _COMPOUND = rf"(?:{'|'.join(_TENS)})(?:[- ](?:{'|'.join(_UNITS[1:10])}))?"
 #: A digit run is not a number when it is the amount of a move (`+1`, `-3`) or part
 #: of an identifier (`T72`), which the lookbehind and `\b` exclude.
 _WORDS = "|".join([*_UNITS, *_ORDINALS, *_LARGE, *_QUANTIFIERS])
-_NUMBER = rf"(?:(?<![+\-\w])\d+\b|\b(?:{_COMPOUND}|{_WORDS})\b)"
+_NUMBER = rf"(?:(?<![+\-\w])\d+(?:st|nd|rd|th)?\b|\b(?:{_COMPOUND}|{_WORDS})\b)"
 #: Step 6 is the one section that used to carry the tally, and the rule for it is
 #: closed: its prose contains no number token at all. Not "no number near a noun", which
 #: a window and a noun list let through ("Sixteen of the committed evidence keys",
@@ -73,14 +73,21 @@ _BOUNDARY = re.compile(
     r"\b(?:else|other|others|additional|extra|further|another|third|beyond|besides|more\s+than)\b",
     re.IGNORECASE,
 )
-_VERDICT = re.compile(r"\b(?:findings?|defects?|problems?|bugs?|errors?)\b", re.IGNORECASE)
+
+
+def step_6_span(text: str) -> str:
+    """Everything from Step 6's heading up to Step 7's: the one boundary every check uses.
+
+    Not "up to the next `##`": a section inserted between the two would then sit outside
+    both checks. Step 7 is the section that follows in the skill, so the boundary is it.
+    """
+    start = text.index("## Step 6")
+    return text[start : text.index("\n## Step 7", start)]
 
 
 def step_6_prose(text: str) -> str:
-    """Step 6's body with its heading and its code fences removed."""
-    start = text.index("## Step 6")
-    end = text.index("\n## ", start + 1)
-    body = text[start:end].split("\n", 1)[1]
+    """The span without its heading and its code fences."""
+    body = step_6_span(text).split("\n", 1)[1]
     return re.sub(r"```.*?```", "", body, flags=re.DOTALL)
 
 
@@ -92,9 +99,7 @@ def census_claims(text: str) -> list[str]:
     """What Step 6 says that tallies the moved keys or fences the set closed."""
     prose = re.sub(r"\s+", " ", step_6_prose(text))
     found = [f"number token {token!r}" for token in number_tokens(prose)]
-    for sentence in re.split(r"(?<=[.!?;])\s+", prose):
-        if _BOUNDARY.search(sentence) and _VERDICT.search(sentence):
-            found.append(sentence)
+    found += [f"boundary word {word!r}" for word in _BOUNDARY.findall(prose)]
     return found
 
 
@@ -110,8 +115,14 @@ def evidence_key_names() -> set[str]:
 
 def _step_6_saying(text: str, sentence: str) -> str:
     """The skill with one more sentence appended to Step 6's prose."""
-    end = text.index("\n## ", text.index("## Step 6") + 1)
+    end = text.index("\n## Step 7")
     return f"{text[:end]}\n{sentence}\n{text[end:]}"
+
+
+def _a_section_between_6_and_7(text: str, sentence: str) -> str:
+    """The skill with a new `##` section, carrying `sentence`, between Steps 6 and 7."""
+    end = text.index("\n## Step 7")
+    return f"{text[:end]}\n\n## Step 6b — afterwards\n\n{sentence}\n{text[end:]}"
 
 
 def test_the_skill_names_no_census_of_moved_keys() -> None:
@@ -120,8 +131,7 @@ def test_the_skill_names_no_census_of_moved_keys() -> None:
 
 
 def test_step_6_names_no_committed_evidence_key() -> None:
-    start = SKILL.read_text(encoding="utf-8")
-    body = start[start.index("## Step 6") : start.index("\n## Step 7")]
+    body = step_6_span(SKILL.read_text(encoding="utf-8"))
     keys = evidence_key_names()
     assert len(keys) > 20, "the committed records were not read"
     assert sorted(key for key in keys if key in body) == []
@@ -147,6 +157,10 @@ REVIEWED_REWORDINGS = [
     "Several values change.",
     "16 findings are expected.",
     "Treat any additional move as a defect.",
+    "Anything else is suspicious.",
+    "Any other key that moves is a red flag.",
+    "Move number 3rd means a bug.",
+    "The 3rd key to move is suspect.",
 ]
 
 
@@ -155,6 +169,12 @@ def test_every_reviewed_rewording_is_flagged_inside_step_6(sentence: str) -> Non
     text = SKILL.read_text(encoding="utf-8")
     assert census_claims(text) == []
     assert census_claims(_step_6_saying(text, sentence))
+
+
+@pytest.mark.parametrize("sentence", REVIEWED_REWORDINGS)
+def test_a_census_in_a_section_between_steps_6_and_7_is_flagged_too(sentence: str) -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    assert census_claims(_a_section_between_6_and_7(text, sentence))
 
 
 @pytest.mark.parametrize(
