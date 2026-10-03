@@ -8,12 +8,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "lineno": 3503
+      "lineno": 3507
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "lineno": 3498
+      "lineno": 3502
     },
     {
       "module": "approval",
@@ -103,7 +103,7 @@
     {
       "module": "generate",
       "name": "GENERATION_CAP",
-      "lineno": 86
+      "lineno": 88
     },
     {
       "module": "interview",

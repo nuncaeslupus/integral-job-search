@@ -546,6 +546,9 @@ class Payload(Strict):
     episodes: tuple[str, ...] = ()
     contact_details: dict[str, str] = Field(default_factory=dict)
     undecidable_episodes: tuple[str, ...] = ()
+    # T147: what the candidate is told about stored voice preferences with this
+    # package, carried so a caller that skips the skill's paragraph still shows it.
+    voice_notice: str = ""
 
 
 def payload_digest(payload: Payload) -> str:
@@ -765,6 +768,7 @@ def prepare(
         episodes=tuple(approval.text for approval in approvals.episodes),
         contact_details=details.stated(),
         undecidable_episodes=tuple(measured["undecidable_episodes"]),
+        voice_notice=manifest.voice_notice,
     )
     _atomic_write_json(store, payload.model_dump(mode="json"), *where, "payload.json")
     return payload

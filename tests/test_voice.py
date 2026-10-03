@@ -28,15 +28,15 @@ from integral.cv_store import (
 )
 from integral.generate import _CLAIMABLE, GenerationError, generate, read_manifest
 from integral.identity import ProfileStore, create_profile
-from integral.profile import EvidenceLog, rebuild
+from integral.profile import EvidenceLog, Kind, rebuild
 from integral.retraction import retract, unretract
 from integral.voice import (
     SEEDS,
     VoiceError,
     VoicePreference,
-    _quote_folds,
     decode_preference,
     encode_preference,
+    is_invisible,
     measure,
     notice,
     record,
@@ -401,21 +401,72 @@ def test_the_record_command_refuses_a_root_inside_a_work_tree(
 
 CF = [chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c)) == "Cf"]
 
+# Characters Unicode itself names as rendering as nothing, found by NAME rather
+# than by the rule under test, so the population is independent of `is_invisible`.
+_INVISIBLE_NAMES = frozenset(
+    {
+        "SOFT HYPHEN",
+        "COMBINING GRAPHEME JOINER",
+        "WORD JOINER",
+        "ZERO WIDTH SPACE",
+        "ZERO WIDTH NON-JOINER",
+        "ZERO WIDTH JOINER",
+        "ZERO WIDTH NO-BREAK SPACE",
+        "HANGUL FILLER",
+        "HANGUL CHOSEONG FILLER",
+        "HANGUL JUNGSEONG FILLER",
+        "HALFWIDTH HANGUL FILLER",
+        "FUNCTION APPLICATION",
+        "INVISIBLE TIMES",
+        "INVISIBLE SEPARATOR",
+        "INVISIBLE PLUS",
+    }
+)
+NAMED_INVISIBLE = [
+    chr(c)
+    for c in range(sys.maxunicode + 1)
+    if unicodedata.name(chr(c), "") in _INVISIBLE_NAMES
+    or "VARIATION SELECTOR" in unicodedata.name(chr(c), "")
+]
 
-def _is_quote_mark(code: int) -> bool:
-    name = unicodedata.name(chr(code), "")
-    if unicodedata.category(chr(code)) in {"Ll", "Lu", "Lt", "Lo"}:
-        return False  # a letter that merely contains an apostrophe is not a mark
-    words = name.split()
-    return "APOSTROPHE" in name or ("SINGLE" in words and "QUOTATION" in words)
+# Looked up by name, so the list does not restate the code's own rule.
+SINGLE_MARKS = [
+    unicodedata.lookup(name)
+    for name in (
+        "RIGHT SINGLE QUOTATION MARK",
+        "LEFT SINGLE QUOTATION MARK",
+        "SINGLE HIGH-REVERSED-9 QUOTATION MARK",
+        "MODIFIER LETTER APOSTROPHE",
+        "FULLWIDTH APOSTROPHE",
+        "PRIME",
+        "ARMENIAN APOSTROPHE",
+        "ACUTE ACCENT",
+        "GRAVE ACCENT",
+        "MODIFIER LETTER PRIME",
+    )
+]
+DOUBLE_MARKS = [
+    unicodedata.lookup(name)
+    for name in (
+        "LEFT DOUBLE QUOTATION MARK",
+        "RIGHT DOUBLE QUOTATION MARK",
+        "DOUBLE LOW-9 QUOTATION MARK",
+        "FULLWIDTH QUOTATION MARK",
+    )
+]
 
 
-APOSTROPHES = [chr(c) for c in range(sys.maxunicode + 1) if _is_quote_mark(c)]
-
-
-def test_the_format_character_and_apostrophe_populations_are_not_trivial() -> None:
+def test_the_invisible_and_quote_populations_are_not_trivial() -> None:
     assert len(CF) > 20 and "\u200b" in CF and "\u00ad" in CF
-    assert len(APOSTROPHES) >= 8 and "\u2019" in APOSTROPHES
+    assert {"\u034f", "\ufe0f", "\u3164", "\u200b", "\u00ad"} <= set(NAMED_INVISIBLE)
+    assert len(SINGLE_MARKS) == 10 and "\u2032" in SINGLE_MARKS and "\u201c" in DOUBLE_MARKS
+
+
+def test_every_character_unicode_names_as_blank_is_treated_as_invisible() -> None:
+    missed = [hex(ord(ch)) for ch in NAMED_INVISIBLE if not is_invisible(ch)]
+    assert not missed, missed
+    assert all(is_invisible(ch) for ch in CF)
+    assert not any(is_invisible(ch) for ch in "aZ 0-'\u2019\u00e9")
 
 
 def _sentimental(store: ProfileStore) -> list[VoicePreference]:
@@ -423,10 +474,19 @@ def _sentimental(store: ProfileStore) -> list[VoicePreference]:
     return [record(EvidenceLog(store), seed[0], seed[1], at=AT)]
 
 
-def test_a_typographic_apostrophe_does_not_dodge_the_sentiment_rule(store: ProfileStore) -> None:
+def test_a_typographic_single_mark_does_not_dodge_the_sentiment_rule(store: ProfileStore) -> None:
     prefs = _sentimental(store)
-    for mark in APOSTROPHES:
+    for mark in SINGLE_MARKS:
         assert violations(f"It{mark}s also personal.", prefs), hex(ord(mark))
+
+
+def test_the_prime_and_double_quote_folds_are_pinned(store: ProfileStore) -> None:
+    prefs = _sentimental(store)
+    assert violations("It\u2032s also personal.", prefs)  # PRIME has no "apostrophe" in its name
+    quoted = [record(EvidenceLog(store), "No scare quotes.", (r'"hi"',), at=AT)]
+    for mark in DOUBLE_MARKS:
+        assert violations(f"say {mark}hi{mark} now", quoted), hex(ord(mark))
+    assert not violations("say hi now", quoted)
 
 
 def test_the_spec_sentence_with_a_curly_apostrophe_is_withheld_by_generate(
@@ -439,17 +499,61 @@ def test_the_spec_sentence_with_a_curly_apostrophe_is_withheld_by_generate(
     assert any(draft in o.text for o in manifest.omissions)
 
 
-def test_an_invisible_character_does_not_dodge_a_rule_inside_or_between_words(
-    store: ProfileStore,
-) -> None:
+def test_an_invisible_character_never_hides_a_phrase_from_violations(store: ProfileStore) -> None:
     author = [record(EvidenceLog(store), ENFORCEABLE[2][0], ENFORCEABLE[2][1], at=AT)]
     term = [record(EvidenceLog(store), ENFORCEABLE[4][0], ENFORCEABLE[4][1], at=AT)]
-    for mark in CF:
-        if ord(mark) in _quote_folds():
-            continue  # U+E0027 and U+E0022 are Cf characters *and* visible quotes once folded
+    for mark in {*CF, *NAMED_INVISIBLE}:
         assert violations(f"I{mark}automated it", author), hex(ord(mark))
         assert violations(f"I {mark}automated it", author), hex(ord(mark))
         assert violations(f"dra{mark}wspec", term), hex(ord(mark))
+
+
+# The round-2 reviewer's probes, and lines mixing a between-words invisible with
+# an inside-a-word one, which no fixed pair of readings catches.
+MIXED = [
+    "I\u200bauto\u200dmated a good deal of my team's tasks with AI.",
+    "I\u200bautomated a good deal of my team's tasks with AI.",
+    "I auto\u034fmated it",
+    "I\ufe0f automated it",
+    "I\u3164automated it",
+]
+
+
+@pytest.mark.parametrize("draft", MIXED)
+def test_a_mixed_invisible_line_is_withheld_by_generate_and_recorded(
+    store: ProfileStore, draft: str
+) -> None:
+    record(EvidenceLog(store), ENFORCEABLE[2][0], ENFORCEABLE[2][1], at=AT)
+    manifest = generate(store, _master_with("experience", draft), offer_id="o", advert="x")
+    assert draft not in _documents(store, "o", manifest.version)
+    (omission,) = manifest.omissions
+    assert draft in omission.text
+    assert "invisible" in omission.reason
+
+
+@pytest.mark.parametrize(
+    ("seed", "draft"),
+    [
+        (3, "It is close\u200b to my he\u00adart."),
+        (3, "close\u200bto my heart"),
+        (4, "draws\ufe0fpec"),
+    ],
+)
+def test_the_reviewers_other_probes_are_withheld(
+    store: ProfileStore, seed: int, draft: str
+) -> None:
+    record(EvidenceLog(store), ENFORCEABLE[seed][0], ENFORCEABLE[seed][1], at=AT)
+    manifest = generate(store, _master_with("experience", draft), offer_id="o", advert="x")
+    assert draft not in _documents(store, "o", manifest.version)
+
+
+def test_an_invisible_character_costs_nothing_when_no_preference_can_check_it(
+    store: ProfileStore,
+) -> None:
+    record(EvidenceLog(store), SEEDS[-1][0], (), at=AT)  # advisory only
+    draft = "Built a diagram\u200b tool."
+    manifest = generate(store, _master_with("experience", draft), offer_id="o", advert="x")
+    assert draft in _documents(store, "o", manifest.version)
 
 
 def test_the_contraction_form_of_a_stored_phrasing_is_caught(store: ProfileStore) -> None:
@@ -458,25 +562,32 @@ def test_the_contraction_form_of_a_stored_phrasing_is_caught(store: ProfileStore
     assert violations("without worrying whether they\u2019re perfectly structured", prefs)
 
 
-def test_an_invisible_character_cannot_hide_a_phrase_from_generate(store: ProfileStore) -> None:
-    _ = [record(EvidenceLog(store), ENFORCEABLE[2][0], ENFORCEABLE[2][1], at=AT)]
-    draft = "I\u200bautomated a good deal of my team's tasks."
-    manifest = generate(store, _master_with("experience", draft), offer_id="o", advert="x")
-    assert draft not in _documents(store, "o", manifest.version)
-
-
 # ---------------------------------------------------------------------------
 # O2 and O4
 
 
-@pytest.mark.parametrize("heading", ["Experience", "Summary", "Education", "Skills"])
+@pytest.mark.parametrize(
+    ("heading", "section"),
+    [
+        ("Experience", "experience"),
+        ("Summary", "headline"),
+        ("Education", "education"),
+        ("Skills", "skills"),
+    ],
+)
 def test_a_section_heading_that_breaks_a_preference_refuses(
-    store: ProfileStore, heading: str
+    store: ProfileStore, heading: str, section: str
 ) -> None:
     record(EvidenceLog(store), "No such heading.", (rf"\b{heading}\b",), at=AT)
     with pytest.raises(GenerationError):
-        generate(store, _master_with("experience", "ok"), offer_id="o", advert="x")
+        generate(store, _master_with(section, "ok"), offer_id="o", advert="ok")
     assert not store.path("cv", "generated", "o").exists()
+
+
+def test_a_heading_the_cv_does_not_emit_cannot_refuse_it(store: ProfileStore) -> None:
+    record(EvidenceLog(store), "No such heading.", (r"\bcertifications\b",), at=AT)
+    manifest = generate(store, _master_with("experience", "ok"), offer_id="o", advert="x")
+    assert "ok" in _documents(store, "o", manifest.version)
 
 
 def test_one_candidates_preferences_never_reach_another(tmp_path: Path) -> None:
@@ -495,3 +606,58 @@ def test_one_candidates_preferences_never_reach_another(tmp_path: Path) -> None:
     assert seed[2] in _documents(bob, "o", for_bob.version)
     assert for_bob.voice_applied == () and len(for_bob.voice_unreadable) == 1
     assert [p.row_id for p in stored_preferences(EvidenceLog(bob))] == []
+
+
+# ---------------------------------------------------------------------------
+# B4, O6, O7
+
+
+def test_record_for_a_handle_nobody_identified_is_refused_and_writes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    code = voice_main(
+        ["voice", "record", "--id", "ghost", "--input-dir", str(empty), "--statement", "No X"]
+    )
+    assert code == 2
+    assert not (empty / "ghost").exists()
+    assert "voice:" in capsys.readouterr().err
+    assert voice_main(["voice", "notice", "--id", "ghost", "--input-dir", str(empty)]) == 2
+    assert not (empty / "ghost").exists()
+
+
+@pytest.mark.parametrize("kind", ["statement", "constraint", "episode", "outcome"])
+def test_an_unreadable_row_of_any_kind_is_listed(store: ProfileStore, kind: Kind) -> None:
+    log = EvidenceLog(store)
+    row = log.append(
+        recorded_at=AT, step="preferences", kind=kind, text="prose", source="conversation"
+    )
+    assert [u.row_id for u in unreadable_preferences(log)] == [row.id]
+
+
+def test_the_notice_travels_with_the_manifest(store: ProfileStore) -> None:
+    log = EvidenceLog(store)
+    _prose_rows(log)
+    record(log, "No sentiment.", (r"\bpassion",), at=AT)
+    manifest = generate(store, _master_with("experience", "ok"), offer_id="o", advert="x")
+    assert manifest.voice_notice == notice(manifest.voice_applied, manifest.voice_unreadable)
+    assert manifest.voice_notice.startswith("8 stored, 1 applied, 7 unreadable:")
+    assert read_manifest(store, "o", manifest.version).voice_notice == manifest.voice_notice
+
+
+def test_the_notice_travels_with_the_approval_payload(store: ProfileStore) -> None:
+    from integral.approval import PersonalDetails, prepare, read_payload
+
+    log = EvidenceLog(store)
+    _prose_rows(log)
+    payload = prepare(
+        store,
+        _master_with("experience", "ok"),
+        offer_id="o",
+        advert="x",
+        recipient="hiring team",
+        details=PersonalDetails(full_name="Ada Lovelace", email="ada@example.invalid"),
+    )
+    assert payload.voice_notice.startswith("7 stored, 0 applied, 7 unreadable:")
+    assert read_payload(store, "o", 1).voice_notice == payload.voice_notice

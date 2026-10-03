@@ -28,13 +28,20 @@ wrong one that silently governs every document is worse than the correction it
 saved.
 
 **A stored correction that cannot be read is shown, never dropped.** Any
-`statement` row under `step: "preferences"` that is not in voice-preference form
+non-`reaction` row under `step: "preferences"` that is not in voice-preference form
 (the shape a prose backfill leaves) is listed by id in the notice and in the
 manifest as *unreadable*: "N stored, M applied, K unreadable". It is not guessed
 at or migrated from its phrasing, because a rule inferred from a sentence that
 was meant as something else is the wrong preference silently governing every
 document. Re-record it with `python -m integral.voice record`, or retract it to
 dismiss it. Step 6's forced choices are `reaction` rows, so they never count.
+
+**A line with an invisible character is not trusted.** Whether a zero-width
+space stands for a space or for nothing is the matcher's guess, and a mix of
+both in one line defeats any fixed pair of readings. So under any enforceable
+preference an entry holding a `Default_Ignorable_Code_Point` or `Cf` character
+is left out and recorded as an omission ("contains invisible characters"), so
+the candidate can clean the source. Nothing is repaired.
 
 **`forbid` is a floor on what is caught, not a definition of the preference.**
 A paraphrase the patterns do not name gets through; the statement the candidate
@@ -206,28 +213,54 @@ def _quote_folds() -> dict[int, str]:
     return folds
 
 
-def _strip_format(text: str, replacement: str) -> str:
-    return "".join(replacement if unicodedata.category(ch) == "Cf" else ch for ch in text)
+# `Default_Ignorable_Code_Point`, Unicode 15.0 DerivedCoreProperties.txt: the
+# closed set the standard names as "renders as nothing". `unicodedata` has no
+# accessor for it, so the ranges are vendored (inclusive). It is not a subset of
+# `Cf` (variation selectors and the Hangul fillers are `Mn` and `Lo`), and `Cf`
+# is not a subset of it (U+0600 ARABIC NUMBER SIGN is visible), so the rule uses
+# the union: anything either definition says may vanish.
+_DEFAULT_IGNORABLE: tuple[tuple[int, int], ...] = (
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
 
 
-def _views(text: str) -> tuple[str, ...]:
-    """The forms of `text` a rule is matched against.
+def is_invisible(ch: str) -> bool:
+    """Whether `ch` may render as nothing: `Default_Ignorable_Code_Point` or `Cf`."""
+    code = ord(ch)
+    return unicodedata.category(ch) == "Cf" or any(
+        lo <= code <= hi for lo, hi in _DEFAULT_IGNORABLE
+    )
 
-    NFKC, every `Cf` (format) character removed or turned into a space, quotes
-    folded to ASCII, whitespace collapsed. Two views, because an invisible
-    character can stand either *inside* a word (a soft hyphen in `drawspec`) or
-    *between* two (a zero-width space for the space in `I automated`): removing
-    it only fixes the first and replacing it only the second. A violation is a
-    match in either view.
-    """
-    views = []
-    for replacement in ("", " "):
-        # Fold first: U+E0027 TAG APOSTROPHE is itself a `Cf` character.
-        folded = unicodedata.normalize("NFKC", text).translate(_quote_folds())
-        folded = _strip_format(folded, replacement)
-        folded = unicodedata.normalize("NFKC", folded).translate(_quote_folds())
-        views.append(re.sub(r"\s+", " ", folded))
-    return tuple(views)
+
+def contains_invisible(text: str) -> bool:
+    """Whether `text` holds an invisible character, raw or once NFKC has folded it."""
+    return any(is_invisible(ch) for ch in text) or any(
+        is_invisible(ch) for ch in unicodedata.normalize("NFKC", text)
+    )
+
+
+def _view(text: str) -> str:
+    """The form of `text` a rule is matched against: NFKC, quotes folded, spaces collapsed."""
+    # Fold before NFKC as well as after: NFKC turns U+00B4 into a space plus a
+    # combining accent, which would leave nothing for the second fold to see.
+    folded = unicodedata.normalize("NFKC", text.translate(_quote_folds())).translate(_quote_folds())
+    return re.sub(r"\s+", " ", folded)
 
 
 def _compile(pattern: str) -> re.Pattern[str]:
@@ -310,28 +343,39 @@ class VoiceUnreadable(Strict):
 
 
 def unreadable_preferences(log: EvidenceLog) -> tuple[VoiceUnreadable, ...]:
-    """Live `statement` rows under the preferences step that did not decode.
+    """Live rows under the preferences step, other than `reaction`, that did not decode.
 
     The discriminator is stated rather than inferred: step 6 records its forced
-    choices as `reaction` rows, so a `statement` row in this step is a
-    correction in the candidate's own words, and one that is not in
-    voice-preference form is one nothing applies. A retracted row is not live
+    choices as `reaction` rows, and nothing else belongs in this step but a
+    correction in the candidate's own words, which may have been backfilled as
+    any kind (a `constraint` is as plausible as a `statement`). One that is not
+    in voice-preference form is one nothing applies. A retracted row is not live
     and is not listed, which is how a candidate dismisses one.
     """
     return tuple(
         VoiceUnreadable(row_id=row.id, text=row.text)
         for row in log.effective_rows()
-        if row.step == VOICE_STEP and row.kind == "statement" and decode_preference(row) is None
+        if row.step == VOICE_STEP and row.kind != "reaction" and decode_preference(row) is None
     )
 
 
 def violations(text: str, preferences: Iterable[VoicePreference]) -> list[VoicePreference]:
-    """Which preferences `text` breaks. Advisory preferences never appear."""
-    views = _views(text)
+    """Which preferences `text` breaks. Advisory preferences never appear.
+
+    A line holding an invisible character breaks **every** enforceable
+    preference. Hiding a phrase takes a per-character choice (delete this one
+    inside a word, make that one a space between words), and no fixed set of
+    views covers every mix, so rather than guess which reading the candidate
+    would give it the line is not trusted. Fail-closed by construction: the
+    cost is a withheld entry, recorded as an omission, not a phrase let through.
+    """
+    invisible = contains_invisible(text)
+    view = _view(text)
     return [
         pref
         for pref in preferences
-        if any(_compile(pattern).search(view) for pattern in pref.forbid for view in views)
+        if pref.forbid
+        and (invisible or any(_compile(pattern).search(view) for pattern in pref.forbid))
     ]
 
 
@@ -481,7 +525,9 @@ def _cli(argv: list[str]) -> int:
             command.add_argument("--at", default=None, help="ISO date; default today")
     args = parser.parse_args(argv)
     try:
-        log = EvidenceLog(_store_for(args.handle, args.input_dir, args.dev))
+        store = _store_for(args.handle, args.input_dir, args.dev)
+        store.identity()  # a handle nobody identified is refused before anything is written
+        log = EvidenceLog(store)
         if args.command == "record":
             at = args.at or datetime.date.today().isoformat()
             pref = record(log, args.statement, args.forbid, at=at)

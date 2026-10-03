@@ -69,6 +69,8 @@ from integral.voice import (
     VoicePreference,
     VoiceUnreadable,
     applied,
+    contains_invisible,
+    notice,
     stored_preferences,
     unreadable_preferences,
     violations,
@@ -171,6 +173,9 @@ class Manifest(Strict):
     voice_applied: tuple[VoiceApplied, ...] = ()
     # Stored corrections nothing could read: shown with every package, never dropped.
     voice_unreadable: tuple[VoiceUnreadable, ...] = ()
+    # The sentence the candidate sees with the package, rendered once here so a
+    # caller that never reads the skill's paragraph still carries it.
+    voice_notice: str = ""
 
 
 def render_entry(section: str, entry: SourcedEntry) -> str:
@@ -267,7 +272,13 @@ def _voice_filter(
                 section=section,
                 entry_index=index,
                 text=text,
-                reason="voice preference: " + "; ".join(p.statement for p in broken),
+                reason=(
+                    "voice preference: contains invisible characters, which cannot be "
+                    "checked against: "
+                    if contains_invisible(text)
+                    else "voice preference: "
+                )
+                + "; ".join(p.statement for p in broken),
             )
         )
     return kept, omitted
@@ -396,11 +407,24 @@ def generate(
     """
     episode_picks = _episode_picks(master, _approved_episodes)
     preferences = stored_preferences(EvidenceLog(store))
-    for line in (*sorted(_SCAFFOLD), *_HEADINGS.values()):
+    for line in sorted(_SCAFFOLD):
         if violations(line, preferences):
             # No entry to leave out: refusing is the only way not to emit it.
             raise GenerationError(
                 f"the fixed line {line!r} breaks a stored voice preference — "
+                "nothing was written; retract the preference or change the line"
+            )
+    chosen, omissions = _select(master, advert, asks)
+    chosen, voice_omissions = _voice_filter(master, chosen, preferences)
+    episode_picks, episode_omissions = _voice_filter(master, episode_picks, preferences)
+    omissions = [*omissions, *voice_omissions, *episode_omissions]
+    # Only the headings this CV actually emits: a preference forbidding a word
+    # that a section the CV does not have is titled must not refuse it.
+    for section in _CLAIMABLE:
+        heading = _HEADINGS[section]
+        if any(name == section for name, _ in chosen) and violations(heading, preferences):
+            raise GenerationError(
+                f"the fixed line {heading!r} breaks a stored voice preference — "
                 "nothing was written; retract the preference or change the line"
             )
     version = next_version(store, offer_id)
@@ -425,12 +449,9 @@ def generate(
             "version; nothing was written, and a fresh call will take the next one"
         ) from exc
 
-    chosen, omissions = _select(master, advert, asks)
-    chosen, voice_omissions = _voice_filter(master, chosen, preferences)
-    episode_picks, episode_omissions = _voice_filter(master, episode_picks, preferences)
-    omissions = [*omissions, *voice_omissions, *episode_omissions]
     cv_lines, cv_claims = _cv_lines(master, chosen)
     letter_lines, letter_claims = _letter_lines(master, chosen + episode_picks)
+    unreadable = unreadable_preferences(EvidenceLog(store))
     manifest = Manifest(
         offer_id=offer_id,
         version=version,
@@ -438,7 +459,8 @@ def generate(
         omissions=tuple(omissions),
         gaps=tuple(sorted({ask for ask in asks if not _holds(master, ask)})),
         voice_applied=applied(preferences),
-        voice_unreadable=unreadable_preferences(EvidenceLog(store)),
+        voice_unreadable=unreadable,
+        voice_notice=notice(applied(preferences), unreadable),
     )
 
     _atomic_write_text(store, "\n".join(cv_lines).rstrip("\n") + "\n", *where, "cv.md")
