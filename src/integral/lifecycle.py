@@ -491,7 +491,7 @@ def advert_identity(url: str | None, source: str) -> str | None:
     """
     if not url or not url.strip():
         return None
-    return restrict_query(canonicalize_url(url), identity_query_for(source))
+    return restrict_query(canonicalize_url(url), identity_query_for(url, source))
 
 
 def offer_identity(offer: Offer) -> str | None:

@@ -170,7 +170,7 @@ def test_talent_keeps_the_id_that_is_its_identity() -> None:
 
 def test_a_source_no_connector_declares_keeps_the_whole_query() -> None:
     url = "https://example.test/job?id=7&x=1"
-    assert identity_query_for("manual") is None
+    assert identity_query_for("https://example.test/job", "manual") is None
     assert advert_identity(url, "manual") == canonicalize_url(url)
     assert advert_identity(None, "manual") is None
     assert advert_identity("  ", "manual") is None
@@ -390,3 +390,83 @@ def test_the_identity_cache_notices_a_file_that_changed_on_disk(store: ProfileSt
     path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
     other = _offer(connector, url, "b")
     assert collect_offer(store, other, at=NOW).added_as_new
+
+
+# --- the board the url belongs to decides, not the offer's source (F1) -------
+
+PASTED_SOURCES = ["manual", "web_search"]
+
+
+@pytest.mark.parametrize("source", PASTED_SOURCES)
+@pytest.mark.parametrize("site", SITES)
+def test_a_pasted_copy_has_the_identity_of_the_connectors_copy(site: str, source: str) -> None:
+    for url in sorted(set(_fixture_urls(_by_site(site))))[:5] or [_advert_url(_by_site(site), 0)]:
+        assert advert_identity(url, source) == advert_identity(url, site)
+
+
+@pytest.mark.parametrize("source", PASTED_SOURCES)
+@pytest.mark.parametrize("site", DECLARED)
+def test_a_ruled_out_pasted_copy_covers_the_connectors_copy(
+    site: str, source: str, store: ProfileStore
+) -> None:
+    connector = _by_site(site)
+    url = _advert_url(connector, 0)
+    pasted = Offer(
+        id=compute_offer_id("pasted"),
+        source=source,
+        url=_with_params(url, zzsearch="1"),
+        text="pasted",
+    )
+    collect_offer(store, pasted, at=NOW)
+    rule_out(store, pasted.id, "no", at=NOW)
+    mine = _offer(connector, _with_params(url, zzsearch="2"), "the connector's row")
+    outcome = collect_offer(store, mine, at=LATER)
+    assert not outcome.added_as_new
+    assert outcome.duplicate_of == pasted.id
+    # and the other way round, for a copy already stored the old way
+    legacy = _offer(connector, _with_params(url, zzsearch="3"), "stored before")
+    save_lifecycle_offer(store, legacy, track_new_offer(legacy, at=NOW))
+    assert partition(store, [legacy.id])[0] == []
+
+
+def test_a_url_no_connector_names_falls_back_to_its_source() -> None:
+    # `source` is the fallback, not the rule: a host nobody declares keeps the query.
+    url = "https://unlisted.example/job?id=1&r=2"
+    assert advert_identity(url, "manual") == canonicalize_url(url)
+
+
+# --- case of a parameter name is not identity (F3) ---------------------------
+
+
+def test_a_parameter_name_in_another_case_is_the_same_advert() -> None:
+    upper = "https://es.talent.com/view?ID=5"
+    assert advert_identity(upper, "talent") == advert_identity(
+        "https://es.talent.com/view?id=5", "talent"
+    )
+    assert restrict_query("https://h.test/p?ID=5&x=1", ("id",)) == "https://h.test/p?id=5"
+
+
+# --- a refused duplicate is reported as the copy that is stored (F6) ---------
+
+
+def test_a_stimulus_refused_as_a_copy_is_returned_as_the_stored_copy(store: ProfileStore) -> None:
+    from integral.reaction_elicit import PERMITTED_LIVE_SOURCES, SOURCE_HOSTS, collect_stimuli
+
+    site = next(s for s in DECLARED if s in PERMITTED_LIVE_SOURCES)
+    host = sorted(SOURCE_HOSTS[site])[0]
+    base = f"https://{host}/es/empleos/x-barcelona-cc1"
+
+    def live(text: str, url: str) -> Offer:
+        return Offer(
+            id=compute_offer_id(text),
+            source=site,
+            url=url,
+            fetched_at=NOW,
+            text=text,
+        )
+
+    first = live("first row", base + "?result=1")
+    second = live("second row", base + "?result=2")
+    assert collect_stimuli(store, [first], at=NOW) == [first.id]
+    assert collect_stimuli(store, [second], at=LATER) == [first.id]
+    assert second.id not in _stored_ids(store)

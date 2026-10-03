@@ -411,8 +411,10 @@ def collect_stimuli(store: ProfileStore, offers: Iterable[Offer], *, at: str) ->
         check_stimulus(offer)
     stored = []
     for offer in batch:
-        collect_offer(store, offer, at=at)
-        stored.append(offer.id)
+        outcome = collect_offer(store, offer, at=at)
+        # T224. A stimulus refused as another copy of a stored advert was not
+        # written under its own id; the id that is stored is the one to return.
+        stored.append(outcome.duplicate_of or offer.id)
     return stored
 
 
