@@ -17,6 +17,7 @@ from integral.rank import (
     DEFAULT_T242_EVIDENCE_PATH,
     Candidate,
     RankingError,
+    _reference_interval,
     measure_order,
     ordering_defects,
     priced_dimensions,
@@ -97,7 +98,16 @@ def test_overlapping_intervals_are_reported_as_incomparable_not_as_a_preference(
     ranking = run(cands)
     assert ranking["pareto"] == ["b", "a"]
     assert ranking["incomparable"] == [
-        {"offer_ids": ["b", "a"], "reason": "incomparable: intervals overlap"}
+        {
+            "offer_id": "b",
+            "cannot_be_ordered_against": ["a"],
+            "reason": "incomparable: intervals overlap",
+        },
+        {
+            "offer_id": "a",
+            "cannot_be_ordered_against": ["b"],
+            "reason": "incomparable: intervals overlap",
+        },
     ]
     assert audit(ranking, cands)["offers_ordered_by_id"] == 0
     stripped = {**ranking, "incomparable": []}
@@ -142,7 +152,8 @@ def test_no_salary_but_a_known_priced_dimension_still_has_a_reading() -> None:
     paid = cand("b", 2000.0, remote=1.0, commute=1.0)
     ranking = run([quiet, paid])
     assert ranking["order_basis"]["a"]["reading"] == "known_part"
-    assert ranking["order_basis"]["a"]["high"] is None
+    assert ranking["order_basis"]["a"]["high"] is None  # no upper bound, ever
+    assert ranking["order_basis"]["a"]["low"] == 800.0  # the known lower part
     assert ranking["unordered"] == []
     # T138: not a low salary — it keeps the alphabet's slot beside its twin
     assert ranking["pareto"] == ["a", "b"]
@@ -181,3 +192,86 @@ def test_the_measured_fraction_is_zero_and_the_audit_can_rise() -> None:
 
 def test_the_committed_evidence_matches_what_the_code_measures_now() -> None:
     assert json.loads(DEFAULT_T242_EVIDENCE_PATH.read_text(encoding="utf-8")) == measure_order()
+
+
+def pairs_of(ranking: dict[str, Any]) -> set[frozenset[str]]:
+    return {
+        frozenset((e["offer_id"], o))
+        for e in ranking["incomparable"]
+        for o in e["cannot_be_ordered_against"]
+    }
+
+
+def test_n2_overlap_is_reported_for_every_pair_not_only_neighbours() -> None:
+    """Chain a 2200-3800, b 1700-3300, c 1200-2800, d 700-2300: a/c and b/d overlap too."""
+    cands = [cand("a", 3000.0), cand("b", 2500.0), cand("c", 2000.0), cand("d", 1500.0)]
+    ranking = run(cands)
+    assert ranking["pareto"] == ["a", "b", "c", "d"]
+    pairs = pairs_of(ranking)
+    assert frozenset("ac") in pairs
+    assert frozenset("bd") in pairs
+    assert audit(ranking, cands)["offers_ordered_by_id"] == 0
+    stripped = {**ranking, "incomparable": []}
+    assert audit(stripped, cands)["unreported"] == 4
+
+
+def test_n2_an_inversion_across_an_unbounded_offer_is_caught() -> None:
+    """x 1200-2800 printed above z 4200-5800, an unbounded k between: not adjacent."""
+    x = cand("x", 2000.0)
+    z = cand("z", 5000.0)
+    k = cand("k", None, remote=1.0, commute=1.0)
+    ranking = run([x, z, k])
+    wrong = {**ranking, "pareto": ["x", "k", "z"]}
+    assert audit(wrong, [x, z, k])["inversions"] >= 1
+
+
+def test_n1_an_offer_with_no_salary_and_no_twin_is_incomparable_with_every_neighbour() -> None:
+    k = cand("k", None, remote=1.0, commute=1.0)
+    cands = [cand("a", 3000.0), cand("b", 4000.0), cand("c", 5000.0), k]
+    ranking = run(cands)
+    (entry,) = [e for e in ranking["incomparable"] if e["offer_id"] == "k"]
+    assert sorted(entry["cannot_be_ordered_against"]) == ["a", "b", "c"]
+    assert ranking["order_basis"]["k"]["high"] is None
+    assert audit(ranking, cands)["offers_ordered_by_id"] == 0
+    # stripping k's marks makes the audit rise: they are what keeps k's slot honest
+    kept = [
+        {**e, "cannot_be_ordered_against": [o for o in e["cannot_be_ordered_against"] if o != "k"]}
+        for e in ranking["incomparable"]
+        if e["offer_id"] != "k"
+    ]
+    assert audit({**ranking, "incomparable": kept}, cands)["unreported"] > 0
+
+
+def test_reference_interval_is_independent_and_agrees_with_the_producer_on_cases() -> None:
+    priced = priced_dimensions(WEIGHTS)
+    for c in (
+        cand("a", 3000.0),
+        cand("b", 2000.0, remote=1.0),
+        cand("c", 2000.0, remote=1.0, commute=1.0),
+    ):
+        i = salary_interval(c, priced)
+        assert _reference_interval(c, priced) == (i.low, i.high)
+    k = cand("k", None, remote=1.0)
+    assert _reference_interval(k, priced) == (400.0, float("inf"))
+    assert _reference_interval(cand("n", None), priced) == (-float("inf"), float("inf"))
+
+
+def test_the_audit_flags_an_interval_that_scored_an_unknown_as_zero() -> None:
+    cands = [cand("a", 3000.0), cand("b", 4000.0)]
+    ranking = run(cands)
+    basis = {
+        k: {**v, "low": v["value"], "high": v["value"]} for k, v in ranking["order_basis"].items()
+    }
+    assert audit({**ranking, "order_basis": basis}, cands)["mismatched"] == 2
+
+
+def test_each_planted_violation_moves_the_evidence() -> None:
+    measured = measure_order()
+    assert measured["mixed_offers_with_a_total"] > 0
+    assert measured["mixed_fraction_ordered_by_id"] == 0
+    assert measured["planted"] == {
+        "stripped_tie": 1,
+        "stripped_incomparable": 1,
+        "inversion": 1,
+        "unknown_as_zero": 1,
+    }

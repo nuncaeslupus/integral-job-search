@@ -37,7 +37,7 @@ of 35 offers had a total, and none of 12 and none of 81 did. Each was presented 
 ## Acceptance gate
 
 ```bash
-uv run --extra dev --extra collect pytest tests/test_rank_order_readings.py tests/test_rank.py -q
+uv run --extra dev --extra collect pytest tests/test_rank_order_readings.py tests/test_rank.py tests/test_pay_dominance.py -q
 uv run python -m integral.rank
-python3 -c "import json,sys; m=json.load(open('status/evidence/T242.json')); sys.exit(0 if m['fraction_ordered_by_id']==0 and m['offers']>=12 and m['offers_with_a_total']==0 and m['violation_detected_when_planted']==1 else 1)"
+python3 -c "import json,sys; m=json.load(open('status/evidence/T242.json')); sys.exit(0 if m['fraction_ordered_by_id']==0 and m['offers']>=12 and m['offers_with_a_total']==0 and m['violation_detected_when_planted']==1 and m['mixed_offers_with_a_total']>0 and m['mixed_fraction_ordered_by_id']==0 else 1)"
 ```
