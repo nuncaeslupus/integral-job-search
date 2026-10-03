@@ -24,7 +24,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `ranking` for t
 
 Extractions for the live offers, and `profile/constraints.json`. Weights are optional: without them the ranking is L1 and says so.
 
-**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` (every dimension with evidence is priced or named as unpriced, T243); `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T219).
+**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` (every dimension with evidence is priced or named as unpriced, T243); `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T219) and `integral.fit` (T244).
 
 ## Protocol — the manner, not the mechanism
 
@@ -61,7 +61,7 @@ change the level, so the CV stays true for an application document.
 from integral.stack_fit import fits_for_store, summary_line
 
 stack = fits_for_store(store, offer_ids)
-ranking = rank(candidates, ..., stack=stack)       # carried under `stack_fit`, moves nothing
+ranking = rank(candidates, ..., stack=stack)       # carried under `stack_fit` for the card
 line = summary_line(stack[offer_id])               # the card's stack line, from data
 ```
 
@@ -75,6 +75,27 @@ line = summary_line(stack[offer_id])               # the card's stack line, from
 - When the candidate states a level or an aversion, record it as a `statement` row with
   `skill=SkillStance(...)`, their words in `text`. The next ranking reads it.
 - `unknown` means the advert named no technology — say so; it is not a fit.
+
+## Whether they can do the job moves the order (T244)
+
+Three readings against the candidate enter the ranking as their own axes: the stack
+(`stack_fit`), the level the advert asks for against the last role held (the CV's titles), and
+the advert's English against the CV's English level. Each is a shortfall, never a bonus, and
+each is unknown on its own when the advert (or the profile) is silent — an advert that states
+nothing about the level is not a match, and the others still compare.
+
+```python
+from integral.fit import fit_candidates
+from integral.rank import FIT_DIMENSIONS
+
+candidates = fit_candidates(store, candidates)             # the three components, or an admitted unknown
+ranking = rank(candidates, dimensions=[*dims, *FIT_DIMENSIONS], ...)
+```
+
+- Only a level the rules stage read from the advert counts; a model-stage level is how a plain
+  title becomes "mid", which is silence. Say "the advert doesn't say" for an unknown component.
+- Dominance compares the components both offers state; the order breaks a tie between offers
+  that state the same ones. Fit is never priced — what it is worth against money is T10's.
 
 ## What the candidate said is priced, or named as unpriced (T243)
 

@@ -195,6 +195,12 @@ def from_extraction(
     )
 
 
+#: T244: the three fit components `integral.fit` carries, one dimension each.
+#: `integral.fit` asserts at import that these are `FitReading`'s fields.
+FIT_DIMENSIONS = ("fit_stack", "fit_seniority", "fit_english")
+_PAIRWISE = frozenset(FIT_DIMENSIONS)
+
+
 def dominates(
     a: Candidate,
     b: Candidate,
@@ -218,13 +224,21 @@ def dominates(
     """
     if a.salary_per_month is None or b.salary_per_month is None:
         return False
-    if any(name in a.unknown or name in b.unknown for name in dimensions):
+    if any(name in a.unknown or name in b.unknown for name in dimensions if name not in _PAIRWISE):
         return False
+    # T244: a fit component is compared where both sides state it and never
+    # blocks a claim by being silent, so adding the axes can only withhold a
+    # dominance the others made — never grant one, never hide one behind silence.
+    compared = [
+        name
+        for name in dimensions
+        if name not in _PAIRWISE or (name not in a.unknown and name not in b.unknown)
+    ]
 
     way = signs or {}
     pairs = [(a.salary_per_month, b.salary_per_month)] + [
         (way.get(name, 1.0) * a.scores[name], way.get(name, 1.0) * b.scores[name])
-        for name in dimensions
+        for name in compared
     ]
     return all(mine >= theirs for mine, theirs in pairs) and any(
         mine > theirs for mine, theirs in pairs
@@ -567,8 +581,10 @@ def rank(
 
     `stack` is T219's `integral.stack_fit.fits_for_store`: the candidate's CV
     and stated skills against each offer's named technologies. It is carried
-    under `stack_fit` for the offers shown and moves nothing — stated, not
-    scored, because pricing a stack match is a preference T10 does not hold.
+    under `stack_fit` for the offers shown. It does not move the order here; step 9
+    also hands it to `integral.fit.fit_candidates` (T244), which turns it, the
+    advert's stated seniority and English, and the CV into the `FIT_DIMENSIONS`
+    axes. Pass `dimensions=[*dims, *FIT_DIMENSIONS]` for those to be read.
 
     `profile_revision` carries T6's whole `{rows, sha256}` rather than the
     spec example's bare digest, matching `annotation.Annotation`: the row
@@ -988,36 +1004,36 @@ def _pay_before_the_alphabet(
     return result
 
 
-#: The dimension `integral.fit` carries the fit reading under.
-FIT_DIMENSION = "fit"
-
-
 def _fit_before_the_alphabet(
     ordered: Sequence[str],
     ordering: Mapping[str, float],
     salaries: Mapping[str, float],
     by_id: Mapping[str, Candidate],
 ) -> list[str]:
-    """T244: inside one (primary bucket, pay) tie, offers with a known fit take
-    the same slots back in descending order of it.
+    """T244: inside one (primary bucket, pay, stated components) tie, offers
+    take the same slots back in descending order of their fit.
 
     Same shape as `_pay_before_the_alphabet`, and for its reason: an offer whose
-    fit is unknown keeps the slot it had and is not moved, because an unknown fit
-    is not a poor one and not a good one. Slots are permuted only among offers
-    that share the bucket and the salary (or the lack of one), so the pay rule is
-    never undone.
+    fit is unknown keeps the slot it had. Offers are compared only when they state
+    the *same* fit components, so two adverts silent on English still order by the
+    stack and level they both state, and no offer is ordered by a component the
+    other left unsaid. Slots are permuted only inside the group, so the pay rule
+    is never undone.
     """
     result = list(ordered)
-    groups: dict[tuple[float, float | None], list[int]] = {}
+    groups: dict[tuple[float, float | None, frozenset[str]], list[int]] = {}
     for index, offer_id in enumerate(result):
-        if FIT_DIMENSION in by_id[offer_id].scores:
-            key = (ordering.get(offer_id, float("-inf")), salaries.get(offer_id))
+        stated = frozenset(n for n in FIT_DIMENSIONS if n in by_id[offer_id].scores)
+        if stated:
+            key = (ordering.get(offer_id, float("-inf")), salaries.get(offer_id), stated)
             groups.setdefault(key, []).append(index)
+
+    def fit(offer_id: str) -> float:
+        scores = by_id[offer_id].scores
+        return sum(scores[n] for n in FIT_DIMENSIONS if n in scores)
+
     for slots in groups.values():
-        by_fit = sorted(
-            (result[i] for i in slots),
-            key=lambda o: (-by_id[o].scores[FIT_DIMENSION], o),
-        )
+        by_fit = sorted((result[i] for i in slots), key=lambda o: (-fit(o), o))
         for index, offer_id in zip(slots, by_fit, strict=True):
             result[index] = offer_id
     return result

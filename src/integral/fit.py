@@ -1,4 +1,4 @@
-"""T244 — whether the candidate can do the job, as one axis of the ranking.
+"""T244 — whether the candidate can do the job, as three axes of the ranking.
 
 Three things the project already measured were never compared with the person
 they were measured for: the technologies an advert names (`stack_fit`), the
@@ -6,49 +6,60 @@ level it asks for (`seniority_expectation`) and the English it demands
 (`english_demand`). A Staff role naming five technologies the CV lacks ranked
 exactly as a mid role the candidate could start on Monday.
 
-**Each component is a shortfall in `[-1, 0]`, and a surplus earns nothing.**
-Being senior for a mid role or fluent for a role that needs none is not "can do
-this without trouble" — it is a different question, and paying a bonus for it
-would be a preference nobody stated. `0` is "no gap", never "a good match".
+**Each component is its own dimension** — `fit_stack`, `fit_seniority`,
+`fit_english` — a shortfall in `[-1, 0]`, or unknown on its own. Two adverts
+that are both silent on English still compare on the stack and the level they
+both state; one unknown component never erases the others. The ranker reads
+them pairwise (`rank.PAIRWISE_DIMENSIONS`): dominance compares the components
+known on both sides and is never *blocked* by one that is not, and the tiebreak
+orders only offers that state the same components.
 
-**The reading is the mean of the three, so it is monotone in every one.**
-Improving any component never lowers it, which is the property the ranking is
-held to. A `min` would tie two offers that differ only in a component that is
-not the weakest, and the order would then claim nothing about a real difference.
+**A surplus earns nothing.** Being senior for a mid role or fluent for a role
+that needs none is a different question from "can do this without trouble".
+`0` is "no gap", never "a good match".
 
-**Unknown stays unknown, per component and for the whole.** An advert that
-names no technology, states no level, or demands no language level has said
-nothing, and neither has a profile that records no level. Any unknown component
-makes the whole reading unknown: there is no score, so the candidate carries
-`fit` in `unknown` and `rank` claims nothing about it in either direction. The
-alternative — averaging the known components — would let a silent advert read as
-a good fit by omission, a bonus disguised as data.
+**Unknown stays unknown, per component.** An advert that names no technology,
+states no level, or asks for no language level has said nothing, and neither has
+a profile that records no level. A *silent* advert is not a match, and it earns
+no bonus: it carries the component in `unknown` and `rank` claims nothing about
+it. Only a statement the rules stage read counts — a model-stage value for
+`seniority_expectation` is the "plain practitioner title" default the
+dimension's own tell describes, which is silence read as a level.
 
-What this module does not do is decide what fit is worth against money. It is an
-axis (dominance reads it) and a tiebreak (`rank._fit_before_the_alphabet`), never
-a price: that is a preference, and it lives in T10's weights.
+What this module does not do is decide what fit is worth against money. These
+are axes and a tiebreak, never a price: that is a preference, and it lives in
+T10's weights.
+
+**What the profile records.** `cv/master.json` holds one `level` per language,
+not a spoken and a written one, so both inputs are filled from it; the type
+takes them separately for the day the profile records them.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, replace
-from typing import Any
+import json
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, fields, replace
+from functools import lru_cache
+from typing import Any, get_args
 
 from integral.candidate import LEVEL_ORDER, Level
-from integral.rank import FIT_DIMENSION, Candidate, RankingError
-
-#: The dimension name the reading is carried under in `Candidate.scores`.
-FIT = FIT_DIMENSION
+from integral.cv_store import load_master
+from integral.dimensions import Dimension, load_dimensions
+from integral.extraction import NormalisedAd, cue_findings
+from integral.identity import ProfileStore
+from integral.rank import FIT_DIMENSIONS, Candidate, RankingError
+from integral.stack_fit import fits_for_store
 
 #: `seniority_expectation`'s own rungs run 0.2 (junior) to 0.8 (senior).
 _SENIORITY_SPAN = 0.8 - 0.2
 
-#: `english_demand` is `[0, 1]` and `Level` runs `none`..`native`; the demand is
-#: read as that fraction of the ladder.
-_TOP_RUNG = max(LEVEL_ORDER.values())
+#: The English a demand needs, as a `Level`: nothing asked, then conversational
+#: ("B1-B2", 0.6), then professional ("C1/fluent", and every value above 0.6).
+#: The lowest level that satisfies the rung — a C1 speaker meets "fluent".
+_PROFESSIONAL = LEVEL_ORDER["professional"]
 
-_SHORTFALL_BUCKETS = ("missing", "averse", "weak")
+_SHORTFALL_BUCKETS = ("missing", "weak")  # `averse` is a preference, not a lack
 _ALL_BUCKETS = ("match", "used", "weak", "averse", "missing")
 
 
@@ -78,12 +89,14 @@ class FitReading:
     seniority: float | None
     english: float | None
 
-    @property
-    def score(self) -> float | None:
-        parts = (self.stack, self.seniority, self.english)
-        if any(part is None for part in parts):
-            return None
-        return sum(part for part in parts if part is not None) / len(parts)
+    def components(self) -> dict[str, float | None]:
+        """`{dimension: shortfall}`, the names derived from the fields."""
+        return {f"fit_{f.name}": getattr(self, f.name) for f in fields(self)}
+
+
+# One closed rule: the dimension names `rank` reads pairwise are the fields here.
+if tuple(FitReading(None, None, None).components()) != FIT_DIMENSIONS:  # pragma: no cover
+    raise RankingError("rank.FIT_DIMENSIONS does not match FitReading's fields")
 
 
 def _stack(fit: Mapping[str, Any] | None) -> float | None:
@@ -102,12 +115,18 @@ def _seniority(demand: float | None, held: float | None) -> float | None:
     return -min(1.0, max(0.0, demand - held) / _SENIORITY_SPAN)
 
 
+def _required_level(demand: float) -> int:
+    if demand <= 0:
+        return 0
+    return LEVEL_ORDER["conversational"] if demand <= 0.6 else _PROFESSIONAL
+
+
 def _english(demand: float | None, spoken: Level | None, written: Level | None) -> float | None:
     if demand is None or spoken is None or written is None:
         return None
     # The job runs in both modes, so the weaker one is the one that limits.
     have = min(LEVEL_ORDER[spoken], LEVEL_ORDER[written])
-    return -min(1.0, max(0.0, demand * _TOP_RUNG - have) / _TOP_RUNG)
+    return -min(1.0, max(0, _required_level(demand) - have) / _PROFESSIONAL)
 
 
 def read_fit(offer: OfferDemand, me: CandidateAbility) -> FitReading:
@@ -119,10 +138,98 @@ def read_fit(offer: OfferDemand, me: CandidateAbility) -> FitReading:
 
 
 def with_fit(candidate: Candidate, reading: FitReading) -> Candidate:
-    """The candidate with `fit` accounted for: a score, or an admitted unknown."""
-    if FIT in candidate.scores or FIT in candidate.unknown:
-        raise RankingError(f"{candidate.offer_id} already accounts for {FIT!r}")
-    score = reading.score
-    if score is None:
-        return replace(candidate, unknown=candidate.unknown | {FIT})
-    return replace(candidate, scores={**candidate.scores, FIT: score})
+    """The candidate with every component accounted for: a score, or an admitted unknown."""
+    scores = dict(candidate.scores)
+    unknown = set(candidate.unknown)
+    for name, value in reading.components().items():
+        if name in scores or name in unknown:
+            raise RankingError(f"{candidate.offer_id} already accounts for {name!r}")
+        if value is None:
+            unknown.add(name)
+        else:
+            scores[name] = value
+    return replace(candidate, scores=scores, unknown=frozenset(unknown))
+
+
+# ---------------------------------------------------------------------------
+# step 9's path: the store in, candidates with fit out
+
+
+@lru_cache(maxsize=1)
+def _dimensions() -> dict[str, Dimension]:
+    return {d.id: d for d in load_dimensions()}
+
+
+def _held_seniority(title: str) -> float | None:
+    """The level a job title states, by the same cues an advert is read with.
+
+    A plain title ("Developer") states none and stays unknown — it is not "mid".
+    """
+    found: list[float] = []
+    for language in ("en", "es", "ca"):
+        ad = NormalisedAd(offer_id="cv", language=language, text=title)
+        score = cue_findings(ad, _dimensions()["seniority_expectation"])
+        if score is not None and score.value > 0:
+            found.append(score.value)
+    return max(found) if found else None
+
+
+def abilities_from_store(store: ProfileStore) -> CandidateAbility:
+    """`cv/master.json` as `CandidateAbility`: the last role held and English."""
+    master = load_master(store)
+    # The last held role: any with no end date is current; otherwise the latest end.
+    jobs = list(master.experience)
+    current = [job for job in jobs if job.end is None]
+    last = current or (
+        [job for job in jobs if job.end == max(j.end or "" for j in jobs)] if jobs else []
+    )
+    levels = [lv for job in last if (lv := _held_seniority(job.title)) is not None]
+    english = [LEVEL_ORDER[e.level] for e in master.languages if e.language == "en"]
+    best: Level | None = None
+    if english:
+        best = get_args(Level)[max(english)]  # `LEVEL_ORDER` is the enumeration of this
+    return CandidateAbility(
+        seniority=max(levels) if levels else None,
+        spoken=best,
+        written=best,
+    )
+
+
+def _stated(scores: Iterable[Mapping[str, Any]], dimension: str) -> float | None:
+    """A value the rules stage read from the advert, or `None`.
+
+    A model-stage value is not taken: for these two dimensions it is how a plain
+    title or a missing mention becomes a level. A negated reading is a denial
+    ("English not required"), which is a demand of zero.
+    """
+    for score in scores:
+        if score.get("dimension") == dimension and score.get("provenance") == "rules":
+            return max(0.0, float(score["value"]))
+    return None
+
+
+def demands_from_store(store: ProfileStore, offer_ids: Sequence[str]) -> dict[str, OfferDemand]:
+    stacks = fits_for_store(store, offer_ids)
+    demands: dict[str, OfferDemand] = {}
+    for offer_id in offer_ids:
+        path = store.path("extractions", f"{offer_id}.json")
+        payload = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        scores = payload.get("scores") if isinstance(payload, dict) else None
+        scores = scores if isinstance(scores, list) else []
+        demands[offer_id] = OfferDemand(
+            stack=stacks.get(offer_id),
+            seniority=_stated(scores, "seniority_expectation"),
+            english=_stated(scores, "english_demand"),
+        )
+    return demands
+
+
+def fit_candidates(store: ProfileStore, candidates: Sequence[Candidate]) -> list[Candidate]:
+    """Step 9: every candidate with its three fit components accounted for.
+
+    Rank with `dimensions=[*dims, *FIT_DIMENSIONS]` — `rank.rankable_dimensions`
+    does not add them.
+    """
+    me = abilities_from_store(store)
+    demands = demands_from_store(store, [c.offer_id for c in candidates])
+    return [with_fit(c, read_fit(demands[c.offer_id], me)) for c in candidates]
