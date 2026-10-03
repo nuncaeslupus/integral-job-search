@@ -101,21 +101,58 @@ def test_walking_every_window_leaves_the_stored_aim_as_it_was(store: ProfileStor
         assert sorted(covered) == sorted(full.terms)
 
 
-def test_a_slice_handed_in_as_the_aim_does_not_replace_the_stored_one(
-    store: ProfileStore,
-) -> None:
-    """The old caller's move - pass the remainder as the aim - must not shorten it."""
+def test_a_changed_aim_at_offset_zero_replaces_the_stored_one(store: ProfileStore) -> None:
+    """F1: the one writer. A changed aim that is searched must be saved too."""
+    save_aim(store, Aim(state="stated", terms=("python developer",)))
+    changed = Aim(state="stated", terms=("data engineer", "analytics engineer"))
+    _run(store, changed)
+    assert load_aim(store) == changed
+
+
+def test_a_continuation_never_writes_even_with_a_different_aim(store: ProfileStore) -> None:
     full = Aim(state="stated", terms=_terms(PHRASE_CEILING + 3))
     save_aim(store, full)
-    _run(store, Aim(state="stated", terms=full.terms[PHRASE_CEILING:]))
-    assert load_aim(store) == full
+    before = store.read_json("search", "aim.json")
+    other = Aim(state="stated", terms=_terms(2 * PHRASE_CEILING)[::-1])
+    _run(store, other, PHRASE_CEILING)
+    assert store.read_json("search", "aim.json") == before
 
 
-def test_a_first_search_still_records_the_aim(store: ProfileStore) -> None:
+def test_a_corrupt_stored_aim_does_not_stop_a_first_pass_or_a_continuation(
+    store: ProfileStore,
+) -> None:
+    """F3: the writer need not read the store at all."""
+    aim = Aim(state="stated", terms=_terms(PHRASE_CEILING + 1))
+    store.write_json(["not", "an", "aim"], "search", "aim.json")
+    _run(store, aim, PHRASE_CEILING)  # continuation: reads nothing
+    _run(store, aim)  # first pass: overwrites
+    assert load_aim(store) == aim
+
+
+def test_a_first_search_records_the_aim_in_an_empty_store(store: ProfileStore) -> None:
     """The reason the write existed: a session that ends badly must not lose it."""
     aim = Aim(state="stated", terms=("python", "developer"))
+    assert not store.exists("search", "aim.json")
     _run(store, aim)
     assert load_aim(store) == aim
+
+
+@pytest.mark.parametrize(
+    "offset", [1, PHRASE_CEILING - 1, PHRASE_CEILING + 1, 2 * PHRASE_CEILING - 1]
+)
+def test_an_offset_that_is_not_a_whole_window_is_refused(store: ProfileStore, offset: int) -> None:
+    """F5: offset=3 would search phrases 3-8 after 0-5, twice over."""
+    with pytest.raises(ValueError):
+        _run(store, Aim(state="stated", terms=_terms(4 * PHRASE_CEILING)), offset)
+
+
+@pytest.mark.parametrize("n", [0, 1, PHRASE_CEILING])
+def test_an_offset_past_the_last_phrase_is_refused_not_reported_as_no_terms(
+    store: ProfileStore, n: int
+) -> None:
+    """F4: it would fall through to an unsteered "no terms are recorded" run."""
+    with pytest.raises(ValueError):
+        _run(store, Aim(state="stated", terms=_terms(n)), PHRASE_CEILING)
 
 
 def test_unsearched_is_what_lies_past_the_window(store: ProfileStore) -> None:
@@ -126,10 +163,12 @@ def test_unsearched_is_what_lies_past_the_window(store: ProfileStore) -> None:
     assert _run(store, aim, 2 * PHRASE_CEILING).unsearched == ()
 
 
-def test_a_negative_offset_is_refused_not_wrapped(store: ProfileStore) -> None:
-    """`terms[-1:]` would silently search the last phrase and report the rest."""
+@pytest.mark.parametrize("offset", [-1, -PHRASE_CEILING])
+def test_a_negative_offset_is_refused_not_wrapped(store: ProfileStore, offset: int) -> None:
+    """`terms[-6:0]` is empty and `terms[-1:]` is the last phrase: both silently wrong.
+    A negative *multiple* of the ceiling is the case the modulo alone lets through."""
     with pytest.raises(ValueError):
-        _run(store, Aim(state="stated", terms=_terms(3)), -1)
+        _run(store, Aim(state="stated", terms=_terms(3)), offset)
 
 
 def test_browser_urls_follows_the_same_window() -> None:

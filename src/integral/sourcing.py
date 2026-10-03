@@ -826,6 +826,17 @@ def matches_aim(item: dict[str, str], phrases: Sequence[str]) -> bool:
 _pause = time.sleep
 
 
+def _check_offset(aim: Aim, offset: int) -> None:
+    """Windows tile the phrases only if every offset is a whole window in."""
+    if offset < 0 or offset % PHRASE_CEILING:
+        raise ValueError(f"offset must be a non-negative multiple of {PHRASE_CEILING}: {offset}")
+    if offset and offset >= len(aim.terms):
+        raise ValueError(
+            f"offset {offset} is past the end of the {len(aim.terms)} phrase(s): "
+            "every phrase was already searched"
+        )
+
+
 def _connector_of(package: Package, directory: Path) -> Connector:
     return load_connector(directory / package.name)
 
@@ -860,14 +871,14 @@ def source(
     the **full** aim again with `offset=PHRASE_CEILING` (then twice that, ...)
     and the window `aim.terms[offset:offset + PHRASE_CEILING]` is searched.
     Never pass the remainder as if it were the aim: a slice is not what the
-    candidate said. This function does not replace a stored aim at all - it
-    records one only when none is stored yet, so no sequence of calls can
-    shorten what the candidate's step saved.
+    candidate said. `source()` stays the one writer of the aim: it records the
+    aim it was given exactly when `offset == 0`. A pass with `offset > 0` is a
+    continuation and never writes, so a slice cannot reach the store and a
+    changed aim at offset 0 is still saved.
     """
-    from integral.search_terms import load_aim, save_aim  # circular at module scope
+    from integral.search_terms import save_aim  # circular at module scope
 
-    if offset < 0:
-        raise ValueError(f"offset must not be negative: {offset}")
+    _check_offset(aim, offset)
 
     directory = directory or DEFAULT_CONNECTORS_DIR
     adjudicator = Robots() if robots is None else robots
@@ -877,11 +888,11 @@ def source(
     # has to be called separately is one that is skipped exactly when the
     # session ends badly, which is when it was most needed.
     #
-    # T237: record, never replace. The first version saved whatever it was
-    # handed, so the second pass over the terms past the ceiling - called with
-    # the remainder - overwrote the candidate's aim with a slice of it. A
-    # stored aim is changed by the step that heard the change (`save_aim`).
-    if aim.terms and not load_aim(store).terms:
+    # T237: only the first pass writes. The second pass over the terms past the
+    # ceiling used to be called with the remainder, which overwrote the
+    # candidate's aim with a slice of it; continuations (`offset > 0`) carry
+    # the full aim and never write, so the store is not read or touched.
+    if aim.terms and offset == 0:
         save_aim(store, aim)
     run = Run(unsearched=aim.terms[offset + PHRASE_CEILING :])
     # What went unasked is the *difference*, never a branch per bucket. A branch
@@ -956,6 +967,7 @@ def browser_urls(
     boards, robots adjudicated the same way first: the candidate's browser is
     never sent to a path the tool itself may not read.
     """
+    _check_offset(aim, offset)
     directory = directory or DEFAULT_CONNECTORS_DIR
     adjudicator = Robots() if robots is None else robots
     phrases = aim.terms[offset : offset + PHRASE_CEILING]
