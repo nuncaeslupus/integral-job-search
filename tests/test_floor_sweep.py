@@ -4308,25 +4308,70 @@ def test_patching_any_module_global_misses_the_cache(
 def test_freed_patches_never_reuse_a_cached_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
     """B1: a function's `repr` is its address, and a freed patch's address is
     reused by the next one. N distinct patches of one helper, each freed and
-    collected before the next, must yield N analyses, not fewer."""
+    collected before the next, must yield N analyses, not fewer -- for a module
+    global and for a member of EVERY class the module defines (derived from
+    `_keyed_inputs()`, not listed), since the references an entry keeps alive must
+    cover class members as well as globals."""
     calls = _stub_analysis(monkeypatch)
 
     def analyse() -> dict[str, Any]:
         calls.append(1)
         return {}
 
-    original = floor_sweep._classify_floor
-    rounds = 60
-    for _ in range(rounds):
-        with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(
-                floor_sweep,
-                "_classify_floor",
-                lambda *args, _o=original, **kwargs: _o(*args, **kwargs),
-            )
-            floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
-        gc.collect()
-    assert len(calls) == rounds
+    targets: list[tuple[Any, str, Any]] = [
+        (floor_sweep, "_classify_floor", floor_sweep._classify_floor)
+    ]
+    seen_classes: set[Any] = set()
+    for owner, attr, value in _keyed_inputs():
+        if (
+            owner is not floor_sweep
+            and owner not in seen_classes
+            and isinstance(value, types.FunctionType)
+            and not attr.startswith("__")
+        ):
+            seen_classes.add(owner)
+            targets.append((owner, attr, value))
+    classes = {
+        value
+        for _, _, value in _keyed_inputs()
+        if isinstance(value, type) and value.__module__ == floor_sweep.__name__
+    }
+    # Denominator: every class with a plain method is covered, and the named one is.
+    assert len(seen_classes) >= 3
+    assert (floor_sweep.EvidencePinnedFloor, "as_dict") in {(o, a) for o, a, _ in targets}
+    assert seen_classes <= classes
+    rounds = 40
+    for owner, attr, original in targets:
+        calls.clear()
+        for _ in range(rounds):
+            with pytest.MonkeyPatch.context() as patch:
+                patch.setattr(owner, attr, lambda *args, _o=original, **kwargs: _o(*args, **kwargs))
+                floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
+            gc.collect()
+        assert len(calls) == rounds, (owner, attr)
+
+
+def test_every_keyed_value_is_one_the_key_reads_exactly() -> None:
+    """Closed rule behind `_input_repr`: no keyed value hides a compiled pattern
+    inside an object whose `repr` would truncate it (a namespace, a dataclass, any
+    default-repr holder). Containers are walked by the key itself, and a container
+    mutated in place is re-read on the next call, because the key is rebuilt from
+    the live objects every time, so it cannot go stale that way."""
+
+    def hides_a_pattern(value: Any) -> bool:
+        if isinstance(value, re.Pattern):
+            return False
+        if isinstance(value, (tuple, list, set, frozenset)):
+            return any(hides_a_pattern(item) for item in value)
+        if isinstance(value, dict):
+            return any(hides_a_pattern(k) or hides_a_pattern(v) for k, v in value.items())
+        return "re.compile(" in repr(value)
+
+    checked = 0
+    for owner, attr, value in _keyed_inputs():
+        assert not hides_a_pattern(value), _label(owner, attr)
+        checked += 1
+    assert checked >= 150
 
 
 def test_a_pattern_edited_past_its_repr_cutoff_misses_the_cache(
@@ -4349,6 +4394,8 @@ def test_a_pattern_edited_past_its_repr_cutoff_misses_the_cache(
     shapes = (
         lambda pattern: pattern,
         lambda pattern: (pattern,),
+        lambda pattern: [pattern],
+        lambda pattern: {pattern},
         lambda pattern: {"k": frozenset({pattern})},
     )
     for shape in shapes:
