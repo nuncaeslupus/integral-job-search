@@ -38,6 +38,7 @@ from integral.rank import (
     PayBand,
     RankingError,
     dominance_violations,
+    point_band,
     priced_by,
     priced_dimensions,
     rank,
@@ -220,7 +221,9 @@ def test_not_handing_over_the_traits_is_not_an_empty_report() -> None:
 
 
 def test_rank_carries_the_report_and_the_sources() -> None:
-    offer = Candidate(offer_id="o", salary_per_month=3000.0, scores={"remote": 1.0})
+    offer = Candidate(
+        offer_id="o", salary_per_month=3000.0, pay=point_band(3000.0, "EUR"), scores={"remote": 1.0}
+    )
     ranking = rank(
         [offer],
         dimensions=["remote"],
@@ -237,7 +240,9 @@ def test_rank_carries_the_report_and_the_sources() -> None:
 
 def test_a_stated_price_on_an_unranked_dimension_needs_rankable_dimensions() -> None:
     weights = {"stated_part_worths": {"b": {"salary_equivalent_per_month": 1.0, "currency": "EUR"}}}
-    offer = Candidate(offer_id="o", salary_per_month=1.0, scores={"a": 0.0, "b": 0.0})
+    offer = Candidate(
+        offer_id="o", salary_per_month=1.0, pay=point_band(1.0, "EUR"), scores={"a": 0.0, "b": 0.0}
+    )
     with pytest.raises(RankingError):
         rank([offer], dimensions=["a"], revision=REV, weights=weights, at="t", currency="EUR")
     dims = rankable_dimensions(["a"], weights, "EUR")
@@ -251,8 +256,18 @@ def test_a_stated_price_on_an_unranked_dimension_needs_rankable_dimensions() -> 
 
 def _two_offers(dim: str) -> list[Candidate]:
     return [
-        Candidate(offer_id="high", salary_per_month=3000.0, scores={dim: 1.0}),
-        Candidate(offer_id="low", salary_per_month=3000.0, scores={dim: -1.0}),
+        Candidate(
+            offer_id="high",
+            salary_per_month=3000.0,
+            pay=point_band(3000.0, "EUR"),
+            scores={dim: 1.0},
+        ),
+        Candidate(
+            offer_id="low",
+            salary_per_month=3000.0,
+            pay=point_band(3000.0, "EUR"),
+            scores={dim: -1.0},
+        ),
     ]
 
 
@@ -444,7 +459,9 @@ def _band_offers() -> list[Candidate]:
             scores={},
             pay=PayBand(low=2500.0, high=3500.0, currency="EUR"),
         ),
-        Candidate(offer_id="point", salary_per_month=2800.0, scores={}),
+        Candidate(
+            offer_id="point", salary_per_month=2800.0, pay=point_band(2800.0, "EUR"), scores={}
+        ),
     ]
 
 
@@ -495,7 +512,9 @@ def test_t138_behaves_exactly_as_without_statements_whatever_is_stated(
 
 def test_a_usd_statement_with_currency_eur_does_not_raise_and_is_skipped() -> None:
     weights = {**stated_part_worths([_stated("x", cur="USD")], {})}
-    offer = Candidate(offer_id="o", salary_per_month=1.0, scores={"x": 0.5})
+    offer = Candidate(
+        offer_id="o", salary_per_month=1.0, pay=point_band(1.0, "EUR"), scores={"x": 0.5}
+    )
     ranking = rank(
         [offer],
         dimensions=["x"],
@@ -512,7 +531,7 @@ def test_a_usd_statement_with_currency_eur_does_not_raise_and_is_skipped() -> No
 
 def test_no_currency_known_has_its_own_reason_not_another_currency() -> None:
     weights = {**stated_part_worths([_stated("x", cur="USD")], {})}
-    offer = Candidate(offer_id="o", salary_per_month=1.0, scores={})
+    offer = Candidate(offer_id="o", salary_per_month=1.0, pay=point_band(1.0, "EUR"), scores={})
     ranking = rank(
         [offer], dimensions=[], revision=REV, weights=weights, at="t", traits=_traits(x=1)
     )
@@ -526,7 +545,7 @@ def test_with_no_fit_and_no_currency_nothing_stated_is_adopted() -> None:
     assert resolved is not None and "currency" not in resolved
     assert resolved["stated_part_worths"] == {}
     assert resolved["stated_skipped"] == {"x": "no_currency"}
-    offer = Candidate(offer_id="o", salary_per_month=1.0, scores={})
+    offer = Candidate(offer_id="o", salary_per_month=1.0, pay=point_band(1.0, "EUR"), scores={})
     ranking = rank([offer], dimensions=[], revision=REV, weights=weights, at="t")
     assert ranking["currency"] is None and ranking["level"] == "L1"
 
@@ -559,6 +578,7 @@ def test_a_stated_driver_is_marked_stated_and_a_fitted_one_is_not() -> None:
     offer = Candidate(
         offer_id="o",
         salary_per_month=1.0,
+        pay=point_band(1.0, "EUR"),
         scores={"f": 1.0, "s": 1.0},
         spans={"f": ("fitted words",), "s": ("stated words",)},
     )
@@ -623,12 +643,14 @@ def _two_offers_with_pay() -> list[Candidate]:
         Candidate(
             offer_id="A",
             salary_per_month=3300.0,
+            pay=point_band(3300.0, "EUR"),
             scores={"english_demand": 1.0},
             spans={"english_demand": ("C1 English",)},
         ),
         Candidate(
             offer_id="B",
             salary_per_month=3000.0,
+            pay=point_band(3000.0, "EUR"),
             scores={"english_demand": 0.0},
             spans={"english_demand": ("no English",)},
         ),
@@ -661,8 +683,18 @@ def test_the_audit_refuses_when_stated_prices_exist_and_no_currency_is_given(
 ) -> None:
     _, raw = _raw_stated_profile(tmp_path)
     offers = [
-        Candidate(offer_id="A", salary_per_month=3000.0, scores={"english_demand": 1.0}),
-        Candidate(offer_id="B", salary_per_month=3000.0, scores={"english_demand": 0.0}),
+        Candidate(
+            offer_id="A",
+            salary_per_month=3000.0,
+            pay=point_band(3000.0, "EUR"),
+            scores={"english_demand": 1.0},
+        ),
+        Candidate(
+            offer_id="B",
+            salary_per_month=3000.0,
+            pay=point_band(3000.0, "EUR"),
+            scores={"english_demand": 0.0},
+        ),
     ]
     forged = {
         "pareto": ["A"],
