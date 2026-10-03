@@ -24,7 +24,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `understanding`
 
 New or changed offers to read, and a dimension model that loads and validates. A model that fails validation stops this step rather than extracting against a broken vocabulary.
 
-**Reads:** `offers/*.json`; `dimensions/*.yaml`; previous extractions. For the local annotation pass only: `profile/constraints.json` and `profile/weights.json` — read on this machine and never sent with the advert.
+**Reads:** `offers/*.json` (loop over the store with `integral.offers.load_offers`, which skips and reports an unreadable record rather than aborting, T230); `dimensions/*.yaml`; previous extractions. For the local annotation pass only: `profile/constraints.json` and `profile/weights.json` — read on this machine and never sent with the advert.
 
 ## Protocol — the manner, not the mechanism
 

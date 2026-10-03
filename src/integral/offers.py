@@ -62,8 +62,9 @@ import hashlib
 import json
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -294,22 +295,122 @@ def connect_manual(
 
 def save_offer(store: ProfileStore, offer: Offer) -> Path:
     """Write `offer` at `offers/<id>.json`, where `step_runtime`'s `offers`
-    detector (`has_any_under("offers")`) looks for it."""
+    detector (`has_any_under("offers")`) looks for it.
+
+    T230 write guard: the record is re-validated from its own dump before it
+    touches disk. `Offer` is a frozen pydantic model, but `model_construct`
+    skips validation, and a stored `salary.period` of `YEAR` is exactly what
+    that route would write — 68 such records were found unloadable. Refusing
+    here keeps the read-path leniency below from being the only thing between
+    a variant spelling and the disk."""
+    try:
+        Offer.model_validate(offer.model_dump(mode="json"))
+    except ValidationError as exc:
+        raise OfferError(f"refusing to store offer {offer.id!r}: {exc}") from exc
     return store.write_json(offer.model_dump(mode="json"), "offers", f"{offer.id}.json")
+
+
+def canonical_period(raw: object) -> str | None:
+    """A stored `salary.period` spelling mapped to a `SalaryPeriod` member, or
+    `None` when it has no mapping. Never guesses: `None` means the caller must
+    refuse the record, not drop the period.
+
+    One vocabulary (T230 F1): this delegates to `salary_period.normalize_period`,
+    the table T170 made the only mapping from a board's word to a member, and
+    which the backfill migration also uses. A second table here would let a
+    spelling load on read yet have its salary dropped by the migration (or the
+    reverse). The import is lazy because `salary_period` imports this module."""
+    if not isinstance(raw, str):
+        return None
+    from integral.salary_period import normalize_period
+
+    return normalize_period(raw)
+
+
+def _normalise_stored_period(raw: Any, name: str) -> Any:
+    """Read-path only: map a variant `salary.period` spelling, or refuse."""
+    if not isinstance(raw, dict):
+        return raw
+    salary = raw.get("salary")
+    if not isinstance(salary, dict) or salary.get("period") is None:
+        return raw
+    period = salary["period"]
+    if period in get_args(SalaryPeriod):
+        return raw
+    canonical = canonical_period(period)
+    if canonical is None:
+        raise OfferError(
+            f"{name} has unmappable salary.period {period!r}: not a SalaryPeriod spelling"
+        )
+    return {**raw, "salary": {**salary, "period": canonical}}
 
 
 def load_offer(store: ProfileStore, offer_id: str) -> Offer:
     """Read one offer back from a candidate's tree, raising `OfferError` on
     anything that does not fit — a missing file, a hand-edited record that no
-    longer validates."""
+    longer validates. A variant `salary.period` spelling (T230) is read as its
+    canonical member; one the closed rule does not cover is refused by name."""
     try:
         raw = store.read_json("offers", f"{offer_id}.json")
     except IdentityError as exc:
         raise OfferError(str(exc)) from exc
+    raw = _normalise_stored_period(raw, f"offers/{offer_id}.json")
     try:
         return Offer.model_validate(raw)
     except ValidationError as exc:
         raise OfferError(f"offers/{offer_id}.json is not a valid offer: {exc}") from exc
+
+
+@dataclass(frozen=True)
+class SkippedOffer:
+    offer_id: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class OfferScan:
+    offers: tuple[Offer, ...]
+    skipped: tuple[SkippedOffer, ...]
+
+
+UNREADABLE_LOG = "_unreadable.jsonl"
+
+
+def load_offers(store: ProfileStore, *, record: bool = False) -> OfferScan:
+    """Every readable offer in the store; one bad record never aborts the loop.
+
+    A record that cannot be loaded is skipped and reported in `skipped` with
+    its reason. `record=True` also writes them to `offers/_unreadable.jsonl`
+    (removing a stale one when none remain), so the skip is on disk, not only
+    in a return value a caller may drop."""
+    offers: list[Offer] = []
+    skipped: list[SkippedOffer] = []
+    directory = store.path("offers")
+    if directory.is_dir():
+        for path in sorted(directory.glob("*.json")):
+            if path.name.startswith("_"):
+                continue
+            try:
+                offers.append(load_offer(store, path.stem))
+            except (OfferError, OSError, ValueError, RecursionError) as exc:
+                # Not only `OfferError`: a non-UTF-8 file (`UnicodeDecodeError`),
+                # a directory named `*.json` (`IsADirectoryError`) and deeply
+                # nested JSON (`RecursionError`) each escape `load_offer`.
+                skipped.append(SkippedOffer(path.stem, f"{type(exc).__name__}: {exc}"))
+    if record and directory.is_dir():
+        if skipped:
+            store.write_text(
+                "".join(
+                    json.dumps({"offer_id": s.offer_id, "reason": s.reason}, ensure_ascii=False)
+                    + "\n"
+                    for s in skipped
+                ),
+                "offers",
+                UNREADABLE_LOG,
+            )
+        else:
+            store.path("offers", UNREADABLE_LOG).unlink(missing_ok=True)
+    return OfferScan(tuple(offers), tuple(skipped))
 
 
 # ---------------------------------------------------------------------------
