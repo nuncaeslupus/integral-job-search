@@ -514,7 +514,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T243 | Only two dimensions are priced, so what a candidate said never moves the order (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☐ |
 | T244 | Whether a candidate can do the job never enters the ranking (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☐ |
 | T245 | Stack fit reads only the master CV, which misses work told in conversation (test-mode 658fcce2) | 10 | S | — | `metric == 0` | gate set in its own PR | ☑ |
-| T246 | Pay enters the ranking unconverted, and a stated band can be stored as none (test-mode 658fcce2) | 10 | S | — | `metric == 0` | gate set in its own PR | ☐ |
+| T246 | Pay enters the ranking unconverted, and a stated band can be stored as none (test-mode 658fcce2) | 10 | S | — | `unconverted_pay_reaching_rank == 0` | gate set in its own PR | ☑ |
 
 ### Divergences
 

@@ -283,9 +283,10 @@ def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None)
     much it pays, and a point outside its band would order by a number the
     advert contradicts.
 
-    Only a band in the ranking's currency is checked: one in another currency
-    is deliberately incomparable here (no rate with a date and a source lives
-    in this repository), so it constrains nothing and is not required to.
+    A band in another currency than the ranking's, **with a point reading**, is
+    refused (T246): it used to be skipped as incomparable, which let its bare
+    number reach the sort beside figures in the ranking's own unit. One with no
+    point is silent to the sort, so it stays incomparable and is let through.
     Checked once, here, where the currency is known — `require_coverage`'s
     reason, one axis over.
 
@@ -302,7 +303,20 @@ def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None)
     """
     for candidate in candidates:
         band = candidate.pay
-        if band is None or (currency is not None and band.currency != currency):
+        if band is None:
+            continue
+        if currency is not None and band.currency != currency:
+            # T246: the sort orders on `salary_per_month`, which carries no
+            # currency, so a point beside a band in another one would be compared
+            # as if it were this one. A foreign band with no point is silent to
+            # the sort and stays incomparable; `integral.pay_normalise` is what
+            # converts a point into the ranking's currency before it gets here.
+            if candidate.salary_per_month is not None:
+                raise RankingError(
+                    f"{candidate.offer_id} is ranked at {candidate.salary_per_month} against a "
+                    f"{band.currency} band in a {currency} ranking — convert it first, "
+                    "never compare it as is"
+                )
             continue
         salary = candidate.salary_per_month
         if salary is None:

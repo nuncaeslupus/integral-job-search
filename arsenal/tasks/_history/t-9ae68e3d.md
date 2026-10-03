@@ -3,6 +3,7 @@ id: t-9ae68e3d
 title: "T246: Pay enters the ranking unconverted, and a stated band can be stored as none"
 label: "T246: normalise pay for ranking"
 priority: 10
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2). The owner's instruction for this round: the
@@ -29,13 +30,19 @@ basis for comparison at all.
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
+```gate
+unconverted_pay_reaching_rank == 0
+evidence: status/evidence/T246.json
+key: unconverted_pay_reaching_rank
+```
 
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run --extra dev pytest tests/test_pay_normalise.py tests/test_pay_dominance.py tests/test_rank.py -q
+uv run --extra dev python -m integral.pay_normalise
+python3 -c "import json,sys; m=json.load(open('status/evidence/T246.json')); sys.exit(0 if m['unconverted_pay_reaching_rank']==0 and m['offers_checked']>=5 and m['unconverted_detected_when_planted']==1 else 1)"
 ```
+
+The `bash` block regenerates `status/evidence/T246.json` and checks its denominator and that
+the audit can rise; the `gate` block asserts the metric. The no-published-pay choice is the
+second option the task allows: the offer is ordered among the unpaid ones and the ranking
+says so (`unpaid_offers`), with no estimate.
