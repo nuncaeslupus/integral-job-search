@@ -86,6 +86,10 @@ _TABLE: dict[str, SalaryPeriod] = {
     "week": "week",
     "day": "day",
     "hour": "hour",
+    # T214: `h`, the abbreviation `connectors/nofluffjobs_en`'s cards print
+    # (`105 - 115 PLN / h`, fixture/list.html). `take: period` cuts the word
+    # out of the card; this row is what lets it read as `hour`.
+    "h": "hour",
     # Lever's Postings API reference documents `salaryRange.interval` as an
     # enum of per-year-salary/per-hour-wage/per-month-salary/per-day-wage/
     # per-week-salary/semi-month-salary/bi-month-salary/bi-week-salary/
@@ -196,6 +200,14 @@ CONTRACT_CASES: tuple[PeriodContract, ...] = (
         "month",
         'connectors/justjoin_en/fixture/detail.html: "unitText": "MONTH"',
         connector="justjoin_en",
+    ),
+    PeriodContract(
+        "nofluffjobs",
+        "h",
+        "hour",
+        "connectors/nofluffjobs_en/fixture/list.html: `<nfj-posting-item-salary>` "
+        "prints `105 \u2013 115 PLN / h` and `35 \u2013 43 USD / h`",
+        connector="nofluffjobs_en",
     ),
     PeriodContract(
         "schema.org unitText",

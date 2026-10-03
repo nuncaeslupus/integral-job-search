@@ -83,19 +83,15 @@ list:
     # constructs a `Salary` only when a number survived, so the row keeps its
     # band inside `text` and claims nothing.
     #
-    # KNOWN CEILING — no period, and both readable rows are hourly. The grammar
-    # has no `take` that cuts a period out of free text and `h` is not a word
-    # `normalize_period`'s closed table accepts, so this connector cannot
-    # declare `salary_period`. A band with no period is bounded as annual on
-    # every route (`build_offer`, as `salary_recovery._band_defect` does for a
-    # recovered one), and `105 – 115` / `35 – 43` fall outside it: these two
-    # rows are REFUSED, with the reason written in `fixture/salary.json`, and
-    # they read again the day a period `take` exists. They used to read with
-    # `period=None`, which `bulk_filter._below_pay_floor` skips and
-    # `presentation` prints with no unit — an hourly wage shown as a bare
-    # number. The other hazard stands for whoever wires it: `pay_dominance`
-    # compares on currency alone, so a periodless band that did get through
-    # would rank an hourly PLN band against a monthly one.
+    # The period (T214). `take: period` cuts the word after the card's `/` out
+    # of the same text (`105 – 115 PLN / h` -> `h`), and `h` is a member of
+    # `salary_period.normalize_period`'s closed table, so those two rows read as
+    # `hour` instead of being refused for having no period. A card whose period
+    # is not a word that table knows (or names two) yields no period, and a
+    # band with no period is bounded as annual, so it is still refused rather
+    # than shown with its unit deleted. The other hazard stands for whoever
+    # wires it: `pay_dominance` compares on currency alone, so an hourly PLN
+    # band must never be ranked against a monthly one without the period.
     salary_min:
       css: "nfj-posting-item-salary"
       take: range_low
@@ -105,3 +101,6 @@ list:
     salary_currency:
       css: "nfj-posting-item-salary"
       take: currency
+    salary_period:
+      css: "nfj-posting-item-salary"
+      take: period

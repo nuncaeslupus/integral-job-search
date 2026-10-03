@@ -1,11 +1,12 @@
 {
   "boards_that_publish_a_salary_we_do_not_read": 0,
-  "salary_rows_refused": 12,
+  "salary_rows_refused": 10,
+  "salary_rows_refused_for_bound_or_period": 0,
   "salary_expectation_mismatches": 0,
   "rows_adjudicated_by_a_wildcard": 7,
   "rows_read_through_a_substituted_detail": 47,
   "rows_read_whose_card_money_was_not_compared": 0,
   "rows_read_with_a_declared_uncomparable_card": 5,
-  "distinct_salary_verdicts_read_at_least": 75,
+  "distinct_salary_verdicts_read_at_least": 77,
   "packages_measured_at_least": 24
 }
