@@ -360,11 +360,14 @@ def test_a_reaction_stimulus_on_a_ruled_out_topic_is_withheld_before_step_five_s
 
     record_exclusion(store, _platform())
     ids = []
-    for text in ("Platform engineering for a payments team. " * 3, "Logistics data team. " * 3):
+    # Two adverts, so two urls: one url is one advert (T224), whatever its text.
+    for n, text in enumerate(
+        ("Platform engineering for a payments team. " * 3, "Logistics data team. " * 3)
+    ):
         offer = Offer(
             id=compute_offer_id(text),
             source="remotive",
-            url="https://remotive.com/ad/1",
+            url=f"https://remotive.com/ad/{n}",
             fetched_at=AT,
             text=text,
             status="new",

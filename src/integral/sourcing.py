@@ -1279,8 +1279,10 @@ def _one_board(
                 excluded += 1
                 excluded_because.append(f"{offer.title or offer.id} ({', '.join(ruled_out)})")
                 continue
-            collected.append(offer.id)
             outcome = collect_offer(store, offer, at=at)
+            # T224. A refused duplicate was never stored under this id; the
+            # fetch record names the copy that is.
+            collected.append(outcome.duplicate_of or offer.id)
             if outcome.added_as_new:
                 added += 1
         _record_fetch(

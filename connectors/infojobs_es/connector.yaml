@@ -103,6 +103,9 @@ last_verified: "2026-09-10"
 # Listings and full advert bodies are served to an anonymous client; only
 # applying needs an account, and this connector never applies.
 auth: none
+# T224. `applicationOrigin`, `page` and `sortBy` describe the search that listed the
+# advert; the advert is the `of-<id>` path segment. Not identity.
+identity_query: []
 
 list:
   # T173. See the section above: a plain request is refused, a real browser is

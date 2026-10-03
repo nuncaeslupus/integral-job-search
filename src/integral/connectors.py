@@ -3343,6 +3343,17 @@ class Connector(Strict):
     #: permits a given advert url is a separate question, answered per url at
     #: fetch time by `sourcing._may_fetch`; this field is only about provenance.
     serves_from: tuple[str, ...] = ()
+    #: T224. Which query parameters of an advert url are part of the advert's
+    #: **identity**. `None` (undeclared) keeps the whole query, as
+    #: `lifecycle.canonicalize_url` always has. `()` declares that nothing in
+    #: the query names the advert (JobFluent's `?result=21` is a list position),
+    #: so the identity is the url without it. `("id",)` keeps only that
+    #: parameter (talent.com's advert is `/view?id=<n>`). Declared per
+    #: connector, never inferred: dropping an identity parameter merges two
+    #: adverts into one and hides the second, so the declaration is a claim
+    #: about the board and `tests/test_advert_identity.py` re-checks it against
+    #: every committed fixture.
+    identity_query: tuple[str, ...] | None = None
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3389,6 +3400,22 @@ class Connector(Strict):
                     "nowhere — no advert is served from it"
                 )
         return hosts
+
+    @field_validator("identity_query")
+    @classmethod
+    def _identity_query_names_are_parameter_names(
+        cls, names: tuple[str, ...] | None
+    ) -> tuple[str, ...] | None:
+        # A validator, never a repair: a name that is not already a lowercase,
+        # non-blank parameter name could never match the key it was meant for,
+        # and a parameter that silently fails to match is dropped from the
+        # identity — the merge this field exists to make deliberate.
+        for name in names or ():
+            if not name or name != name.strip().lower() or "=" in name or "&" in name:
+                raise ValueError(
+                    f"identity_query: {name!r} is not a lowercase query-parameter name"
+                )
+        return names
 
     @model_validator(mode="after")
     def _something_produces_the_offer_text(self) -> Connector:

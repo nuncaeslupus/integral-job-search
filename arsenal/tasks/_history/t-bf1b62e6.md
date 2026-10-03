@@ -3,6 +3,7 @@ id: t-bf1b62e6
 title: "T224: One advert is stored once per search: 139 canonical URLs are stored more than once, so a ruled-out advert comes back under a new id"
 label: "T224: One advert is stored"
 priority: 5
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2).
@@ -18,13 +19,7 @@ keeps it; a per-connector rule must not drop it.
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run pytest tests/test_advert_identity.py -q
 ```
+
