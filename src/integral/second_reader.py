@@ -962,7 +962,8 @@ REPO_MATCHER_CASES_CLOSED_BY_T151 = (
 #: `precedence_shifts_when_a_path_octet_is_encoded`) and OPENED two, which is
 #: the fact this pin exists to make visible rather than to hide: emitting a
 #: region-ambiguous run in both spellings for allows as well as disallows is
-#: reading (c), and these two rows are (P). See
+#: reading (c), and these two rows are (P). **D-30 then settled (P) in
+#: `integral.robots`, and these three rows left the tuple below.** See
 #: `wildcard_region_spelling_readings_diverge` for both readings by name.
 #:
 #: Not this task's gate, and not folded into one. `repo_matcher_verdicts_against_
@@ -971,12 +972,21 @@ REPO_MATCHER_CASES_CLOSED_BY_T151 = (
 #: with an unmeasured population and a metric that is wrong are different
 #: failures and the fix for the first is to measure, not to relabel.
 REPO_MATCHER_REGRESSION_DISAGREEMENTS: tuple[str, ...] = (
-    "a_wildcard_allow_does_not_outrank_a_matching_disallow",
-    "a_wildcard_allow_reaching_an_encoded_query_does_not_rescue_a_refusal",
     "rules_under_an_empty_user_agent_line_are_not_dropped",
     "a_byte_order_mark_does_not_disable_the_file",
     "a_fragment_marker_is_data_not_a_delimiter",
     "a_mixed_spelling_rule_matches_no_offered_spelling",
+)
+
+#: The three rows that left `REPO_MATCHER_REGRESSION_DISAGREEMENTS` when D-30
+#: settled reading (P) in `integral.robots`, kept by name for the reason
+#: `REPO_MATCHER_CASES_CLOSED_BY_T151` is: emptying a pin must not be achievable
+#: by deleting the rows that filled it. The pin test re-runs each through
+#: `integral.robots` and requires this table's own verdict, two of them being
+#: fail-open before D-30 (the repo matcher permitted what the table refuses).
+REPO_MATCHER_CASES_CLOSED_BY_D30 = (
+    "a_wildcard_allow_does_not_outrank_a_matching_disallow",
+    "a_wildcard_allow_reaching_an_encoded_query_does_not_rescue_a_refusal",
     "wildcard_region_spelling_readings_diverge",
 )
 
@@ -1386,7 +1396,8 @@ REGRESSION_CASES: tuple[Case, ...] = (
     #   an ambiguity resolved into a permission is a fail-open. So specificity
     #   has a single well-defined pattern length, and `Allow: /*/x` never
     #   reaches a `%2F` in a query at all.
-    # * **(c)** — the one `integral.robots` takes since T151. A run behind a `*`
+    # * **(c)** — the one `integral.robots` took from T151 until D-30 replaced it.
+    #   A run behind a `*`
     #   whose region the pattern leaves open is emitted in BOTH canonical
     #   spellings, for allows and disallows alike, and precedence is scored on
     #   whichever one matched. So `Allow: /*/x` does reach the query, weighing 6
@@ -1400,8 +1411,9 @@ REGRESSION_CASES: tuple[Case, ...] = (
     # the task that settles it.
     #
     # This table keeps (P), which is the FAIL-CLOSED side here, per the same
-    # rule cases 24 and 25 follow. What `integral.robots` answers is recorded by
-    # `REPO_MATCHER_REGRESSION_DISAGREEMENTS` below rather than argued away.
+    # rule cases 24 and 25 follow. **D-30 settled it: `integral.robots` now takes
+    # (P) as well**, so the two matchers agree on this row and it is no longer in
+    # `REPO_MATCHER_REGRESSION_DISAGREEMENTS`.
     Case(
         id="wildcard_region_spelling_readings_diverge",
         robots_txt="User-agent: *\nDisallow: /a*\nAllow: /*/x\n",
@@ -1426,11 +1438,11 @@ REGRESSION_CASES: tuple[Case, ...] = (
         direction=FAIL_OPEN_RISK,
         confidence="LOW",
         confidence_note=(
-            "the divergence is the point, and it is live: `integral.robots` answers "
-            "ALLOW here and is pinned as doing so. A matcher answering ALLOW has taken "
-            "reading (c) and is not necessarily wrong — report it as a reading "
-            "disagreement and make the repo pick one deliberately, in writing, rather "
-            "than changing either module to match the other."
+            "D-30 settled this: the repository takes (P) and both matchers answer "
+            "DISALLOW here (`REPO_MATCHER_CASES_CLOSED_BY_D30`). The row stays LOW because "
+            "§2.2.2's own text is Undefined for it, and a matcher answering ALLOW has "
+            "taken reading (c) — the fail-open one, rejected on that ground. See "
+            "`integral.matcher_readings` for the derivation and the recorded cost."
         ),
     ),
 )

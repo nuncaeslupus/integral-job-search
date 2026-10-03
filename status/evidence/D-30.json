@@ -1,0 +1,12 @@
+{
+  "matcher_reading_divergences_unrecorded": 0,
+  "matcher_reading_divergences": 0,
+  "divergences_robots_more_permissive": 0,
+  "divergences_second_reader_more_permissive": 0,
+  "triples_compared_at_least": 70000,
+  "contested_triples_at_least": 25200,
+  "recorded_divergences": 0,
+  "recorded_cost_triples_held": true,
+  "unrecorded_examples": [],
+  "gate_status": "measured"
+}

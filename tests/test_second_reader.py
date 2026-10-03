@@ -278,7 +278,8 @@ def test_the_implementer_table_is_run_against_the_repo_matcher_too_and_pinned() 
     is what a zero there is worth. `REGRESSION_CASES` is a table of RFC-derived
     verdicts too, and nothing ever ran `integral.robots` against it. So the
     metric read a truthful **0** while the primary matcher disagreed with seven
-    rows of the other table, six of them fail-open — an honest number over an
+    rows of the other table, six of them fail-open (D-30 later closed three) — an honest
+    number over an
     unmeasured population, which is the exact defect this module exists to
     catch, met one table over.
 
@@ -311,35 +312,27 @@ def test_the_implementer_table_is_run_against_the_repo_matcher_too_and_pinned() 
         assert record["expected"] == case.expected
 
 
-def test_the_divergence_between_the_two_matchers_is_pinned_and_live() -> None:
-    """The reading disagreement itself, kept measured while it waits for a task.
+def test_the_two_matchers_take_one_reading_and_the_closed_rows_stay_closed() -> None:
+    """D-30 settled the reading disagreement, and a pin on the settlement.
 
-    `integral.robots` emits a region-ambiguous run in BOTH canonical spellings,
-    for allows as well as disallows, and scores precedence on whichever matched
-    — reading (c). This module canonicalises the rule once and widens the
-    TARGET instead, one-directionally, so an ambiguity is never resolved into a
-    permission — reading (P). §2.2.2 returns Undefined for a contest involving a
-    wildcard rule, so its text chooses neither, and is un-silent that a crawler
-    must choose one.
-
-    Deferring that choice to a task is right; deferring it with **nothing
-    observing the gap** is what this repository built LOW-confidence contested
-    cases to avoid. So the archetype is committed, the reading this table takes
-    is the fail-closed one, and both halves are asserted live: if either module
-    moves, this fails rather than the divergence quietly closing or widening.
+    Both matchers take (P): a rule is canonicalised once, as written, and only
+    the TARGET is offered extra spellings, to a `Disallow` alone — an ambiguity
+    is never resolved into a permission. `integral.robots` used to take (c)
+    (emit the ambiguous run in both spellings for allows too, weigh whichever
+    matched). The three rows that were pinned as disagreeing are named in
+    `REPO_MATCHER_CASES_CLOSED_BY_D30` and must still agree, so emptying the pin
+    cannot be achieved by deleting them.
     """
-    case = next(
-        c for c in sr.REGRESSION_CASES if c.id == "wildcard_region_spelling_readings_diverge"
-    )
-    assert case.confidence == "LOW"
-    assert "(P)" in case.why and "(c)" in case.why, "a contested row must name both readings"
-    assert case.expected == cases.DISALLOW_VERDICT, "this table takes the fail-closed reading"
-
-    # (P), here: the allow reaches no spelling this reader offers it.
-    assert sr.allows(case.robots_txt, case.agent, case.path) is False
-    # (c), there: it reaches the query and outweighs the disallow.
-    assert robots.allows_text(case.robots_txt, case.agent, case.path) is True
-    assert case.id in sr.REPO_MATCHER_REGRESSION_DISAGREEMENTS
+    by_id = {case.id: case for case in sr.REGRESSION_CASES}
+    for case_id in sr.REPO_MATCHER_CASES_CLOSED_BY_D30:
+        case = by_id[case_id]
+        assert case.expected == cases.DISALLOW_VERDICT
+        assert sr.allows(case.robots_txt, case.agent, case.path) is False
+        assert robots.allows_text(case.robots_txt, case.agent, case.path) is False, case_id
+        assert case_id not in sr.REPO_MATCHER_REGRESSION_DISAGREEMENTS
+    contested = by_id["wildcard_region_spelling_readings_diverge"]
+    assert contested.confidence == "LOW"
+    assert "(P)" in contested.why and "(c)" in contested.why, "a contested row must name both"
 
 
 def test_a_low_confidence_regression_row_states_its_argument() -> None:
@@ -358,7 +351,7 @@ def test_a_low_confidence_regression_row_states_its_argument() -> None:
 def test_the_regression_table_floor_tracks_the_table() -> None:
     """A pin over a table that may silently shrink is not a pin.
 
-    `REPO_MATCHER_REGRESSION_DISAGREEMENTS` names seven rows of
+    `REPO_MATCHER_REGRESSION_DISAGREEMENTS` names four rows of
     `REGRESSION_CASES`; deleting those rows empties the set and satisfies the
     pin. The floor is what stops that, and it sat at 6 while the table carried
     18 — a floor that could not catch a table losing two thirds of itself.

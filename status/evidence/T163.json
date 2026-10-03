@@ -3,7 +3,7 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 46,
+  "unpinnable_floors_cleared_by_marker_restatement": 48,
   "marker_restatement_cleared": [
     {
       "module": "approval",
@@ -126,6 +126,16 @@
       "lineno": 97
     },
     {
+      "module": "matcher_readings",
+      "name": "MINIMUM_CONTESTED_TRIPLES",
+      "lineno": 214
+    },
+    {
+      "module": "matcher_readings",
+      "name": "MINIMUM_TRIPLES",
+      "lineno": 206
+    },
+    {
       "module": "naming",
       "name": "MINIMUM_SCANNED",
       "lineno": 229
@@ -236,7 +246,7 @@
       "lineno": 590
     }
   ],
-  "marker_restatement_scenarios_checked": 46,
+  "marker_restatement_scenarios_checked": 48,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 86
+  "scenarios_checked_at_least": 88
 }
