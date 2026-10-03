@@ -64,7 +64,15 @@ from integral.cv_store import (
 )
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
-from integral.voice import VoiceApplied, VoicePreference, applied, stored_preferences, violations
+from integral.voice import (
+    VoiceApplied,
+    VoicePreference,
+    VoiceUnreadable,
+    applied,
+    stored_preferences,
+    unreadable_preferences,
+    violations,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T45.json"
@@ -161,6 +169,8 @@ class Manifest(Strict):
     # T147: every stored voice preference this generation applied, so the
     # candidate can see what governed the document and retract a wrong one.
     voice_applied: tuple[VoiceApplied, ...] = ()
+    # Stored corrections nothing could read: shown with every package, never dropped.
+    voice_unreadable: tuple[VoiceUnreadable, ...] = ()
 
 
 def render_entry(section: str, entry: SourcedEntry) -> str:
@@ -386,7 +396,7 @@ def generate(
     """
     episode_picks = _episode_picks(master, _approved_episodes)
     preferences = stored_preferences(EvidenceLog(store))
-    for line in sorted(_SCAFFOLD):
+    for line in (*sorted(_SCAFFOLD), *_HEADINGS.values()):
         if violations(line, preferences):
             # No entry to leave out: refusing is the only way not to emit it.
             raise GenerationError(
@@ -428,6 +438,7 @@ def generate(
         omissions=tuple(omissions),
         gaps=tuple(sorted({ask for ask in asks if not _holds(master, ask)})),
         voice_applied=applied(preferences),
+        voice_unreadable=unreadable_preferences(EvidenceLog(store)),
     )
 
     _atomic_write_text(store, "\n".join(cv_lines).rstrip("\n") + "\n", *where, "cv.md")

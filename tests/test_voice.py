@@ -11,6 +11,8 @@ pass.
 from __future__ import annotations
 
 import json
+import sys
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -31,12 +33,15 @@ from integral.retraction import retract, unretract
 from integral.voice import (
     SEEDS,
     VoiceError,
+    VoicePreference,
+    _quote_folds,
     decode_preference,
     encode_preference,
     measure,
     notice,
     record,
     stored_preferences,
+    unreadable_preferences,
     violations,
 )
 from integral.voice import _main as voice_main
@@ -158,11 +163,11 @@ def test_the_notice_counts_and_lists_and_marks_advisory(store: ProfileStore) -> 
     log = EvidenceLog(store)
     prefs = [record(log, s[0], s[1], at=AT) for s in SEEDS]
     text = notice(prefs)
-    assert text.splitlines()[0] == f"applied {len(SEEDS)} of your stored preferences:"
+    assert text.splitlines()[0] == f"{len(SEEDS)} stored, {len(SEEDS)} applied, 0 unreadable:"
     for pref in prefs:
         assert pref.statement in text
     assert text.count("advisory") == 1
-    assert notice([]) == "applied 0 of your stored preferences"
+    assert notice([]) == "0 stored, 0 applied, 0 unreadable"
 
 
 def test_a_scaffold_line_that_breaks_a_preference_refuses_and_writes_nothing(
@@ -283,3 +288,210 @@ def test_the_command_writes_evidence_only_where_told(tmp_path: Path) -> None:
     assert voice_main(["voice", str(target)]) == 0
     written = json.loads(target.read_text(encoding="utf-8"))
     assert written["voice_preference_defects"] == 0
+
+
+# ---------------------------------------------------------------------------
+# B1 - a stored correction nothing can read is shown, never dropped
+
+# The seven corrections as a prose backfill leaves them: statements in the
+# preferences step whose text is the candidate's own sentence.
+PROSE = [f"Style correction {n}: {seed[0]}" for n, seed in enumerate(SEEDS, start=1)]
+
+
+def _prose_rows(log: EvidenceLog) -> list[str]:
+    return [
+        log.append(
+            recorded_at=AT, step="preferences", kind="statement", text=text, source="conversation"
+        ).id
+        for text in PROSE
+    ]
+
+
+def test_prose_corrections_are_listed_as_unreadable_not_dropped(store: ProfileStore) -> None:
+    log = EvidenceLog(store)
+    ids = _prose_rows(log)
+    assert stored_preferences(log) == ()
+    unreadable = unreadable_preferences(log)
+    assert [u.row_id for u in unreadable] == ids
+    text = notice([], unreadable)
+    assert text.splitlines()[0] == "7 stored, 0 applied, 7 unreadable:"
+    for row_id, prose in zip(ids, PROSE, strict=True):
+        assert row_id in text and prose[:60] in text
+
+
+def test_the_manifest_carries_the_unreadable_rows_into_every_package(store: ProfileStore) -> None:
+    log = EvidenceLog(store)
+    ids = _prose_rows(log)
+    good = record(log, "No sentiment.", (r"\bpassion",), at=AT)
+    manifest = generate(store, _master_with("experience", "ok"), offer_id="o", advert="x")
+    assert [u.row_id for u in manifest.voice_unreadable] == ids
+    assert [a.row_id for a in manifest.voice_applied] == [good.row_id]
+    assert read_manifest(store, "o", manifest.version) == manifest
+    head = notice(manifest.voice_applied, manifest.voice_unreadable).splitlines()[0]
+    assert head == "8 stored, 1 applied, 7 unreadable:"
+
+
+def test_only_statements_in_the_preferences_step_can_be_unreadable(store: ProfileStore) -> None:
+    log = EvidenceLog(store)
+    log.append(
+        recorded_at=AT, step="preferences", kind="reaction", text='{"a":1}', source="conversation"
+    )
+    log.append(recorded_at=AT, step="intake", kind="statement", text="prose", source="conversation")
+    assert unreadable_preferences(log) == ()
+
+
+def test_a_retracted_unreadable_row_is_dismissed(store: ProfileStore) -> None:
+    log = EvidenceLog(store)
+    first, *_ = _prose_rows(log)
+    retract(log, first, at=AT)
+    assert first not in {u.row_id for u in unreadable_preferences(log)}
+    assert len(unreadable_preferences(log)) == len(PROSE) - 1
+
+
+def _cli(root: Path, *extra: str) -> int:
+    return voice_main(["voice", *extra, "--id", "ada", "--input-dir", str(root)])
+
+
+def test_the_record_command_stores_a_preference_that_generation_applies(
+    store: ProfileStore, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seed = ENFORCEABLE[2]
+    code = _cli(
+        store.root,
+        "record",
+        "--statement",
+        seed[0],
+        "--forbid",
+        seed[1][0],
+        "--at",
+        AT,
+    )
+    assert code == 0
+    assert "1 stored, 1 applied, 0 unreadable" in capsys.readouterr().out
+    manifest = generate(store, _master_with("experience", seed[2]), offer_id="o", advert="x")
+    assert seed[2] not in _documents(store, "o", manifest.version)
+
+
+def test_the_record_command_refuses_a_bad_pattern_and_writes_nothing(
+    store: ProfileStore, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _cli(store.root, "record", "--statement", "s", "--forbid", "(") == 2
+    assert EvidenceLog(store).rows() == []
+    assert "voice:" in capsys.readouterr().err
+
+
+def test_the_notice_command_shows_unreadable_rows(
+    store: ProfileStore, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ids = _prose_rows(EvidenceLog(store))
+    assert _cli(store.root, "notice") == 0
+    out = capsys.readouterr().out
+    assert "7 stored, 0 applied, 7 unreadable" in out and ids[0] in out
+
+
+def test_the_record_command_refuses_a_root_inside_a_work_tree(
+    store: ProfileStore, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo_inside = Path(__file__).resolve().parent
+    assert _cli(repo_inside, "record", "--statement", "s") == 2
+
+
+# ---------------------------------------------------------------------------
+# B2 - invisible characters and typographic quotes do not dodge a rule
+
+CF = [chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c)) == "Cf"]
+
+
+def _is_quote_mark(code: int) -> bool:
+    name = unicodedata.name(chr(code), "")
+    if unicodedata.category(chr(code)) in {"Ll", "Lu", "Lt", "Lo"}:
+        return False  # a letter that merely contains an apostrophe is not a mark
+    words = name.split()
+    return "APOSTROPHE" in name or ("SINGLE" in words and "QUOTATION" in words)
+
+
+APOSTROPHES = [chr(c) for c in range(sys.maxunicode + 1) if _is_quote_mark(c)]
+
+
+def test_the_format_character_and_apostrophe_populations_are_not_trivial() -> None:
+    assert len(CF) > 20 and "\u200b" in CF and "\u00ad" in CF
+    assert len(APOSTROPHES) >= 8 and "\u2019" in APOSTROPHES
+
+
+def _sentimental(store: ProfileStore) -> list[VoicePreference]:
+    seed = ENFORCEABLE[3]
+    return [record(EvidenceLog(store), seed[0], seed[1], at=AT)]
+
+
+def test_a_typographic_apostrophe_does_not_dodge_the_sentiment_rule(store: ProfileStore) -> None:
+    prefs = _sentimental(store)
+    for mark in APOSTROPHES:
+        assert violations(f"It{mark}s also personal.", prefs), hex(ord(mark))
+
+
+def test_the_spec_sentence_with_a_curly_apostrophe_is_withheld_by_generate(
+    store: ProfileStore,
+) -> None:
+    _sentimental(store)
+    draft = "It\u2019s also personal: I care about this field."
+    manifest = generate(store, _master_with("experience", draft), offer_id="o", advert="x")
+    assert draft not in _documents(store, "o", manifest.version)
+    assert any(draft in o.text for o in manifest.omissions)
+
+
+def test_an_invisible_character_does_not_dodge_a_rule_inside_or_between_words(
+    store: ProfileStore,
+) -> None:
+    author = [record(EvidenceLog(store), ENFORCEABLE[2][0], ENFORCEABLE[2][1], at=AT)]
+    term = [record(EvidenceLog(store), ENFORCEABLE[4][0], ENFORCEABLE[4][1], at=AT)]
+    for mark in CF:
+        if ord(mark) in _quote_folds():
+            continue  # U+E0027 and U+E0022 are Cf characters *and* visible quotes once folded
+        assert violations(f"I{mark}automated it", author), hex(ord(mark))
+        assert violations(f"I {mark}automated it", author), hex(ord(mark))
+        assert violations(f"dra{mark}wspec", term), hex(ord(mark))
+
+
+def test_the_contraction_form_of_a_stored_phrasing_is_caught(store: ProfileStore) -> None:
+    seed = ENFORCEABLE[1]
+    prefs = [record(EvidenceLog(store), seed[0], seed[1], at=AT)]
+    assert violations("without worrying whether they\u2019re perfectly structured", prefs)
+
+
+def test_an_invisible_character_cannot_hide_a_phrase_from_generate(store: ProfileStore) -> None:
+    _ = [record(EvidenceLog(store), ENFORCEABLE[2][0], ENFORCEABLE[2][1], at=AT)]
+    draft = "I\u200bautomated a good deal of my team's tasks."
+    manifest = generate(store, _master_with("experience", draft), offer_id="o", advert="x")
+    assert draft not in _documents(store, "o", manifest.version)
+
+
+# ---------------------------------------------------------------------------
+# O2 and O4
+
+
+@pytest.mark.parametrize("heading", ["Experience", "Summary", "Education", "Skills"])
+def test_a_section_heading_that_breaks_a_preference_refuses(
+    store: ProfileStore, heading: str
+) -> None:
+    record(EvidenceLog(store), "No such heading.", (rf"\b{heading}\b",), at=AT)
+    with pytest.raises(GenerationError):
+        generate(store, _master_with("experience", "ok"), offer_id="o", advert="x")
+    assert not store.path("cv", "generated", "o").exists()
+
+
+def test_one_candidates_preferences_never_reach_another(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    ada = ProfileStore(root, create_profile(root, "Ada L", handle="ada", language="en").handle)
+    bob = ProfileStore(root, create_profile(root, "Bob K", handle="bob", language="en").handle)
+    seed = ENFORCEABLE[2]
+    record(EvidenceLog(ada), seed[0], seed[1], at=AT)
+    EvidenceLog(bob).append(
+        recorded_at=AT, step="preferences", kind="statement", text="prose", source="conversation"
+    )
+    master = _master_with("experience", seed[2])
+    for_ada = generate(ada, master, offer_id="o", advert="x")
+    for_bob = generate(bob, master, offer_id="o", advert="x")
+    assert len(for_ada.voice_applied) == 1 and for_ada.voice_unreadable == ()
+    assert seed[2] in _documents(bob, "o", for_bob.version)
+    assert for_bob.voice_applied == () and len(for_bob.voice_unreadable) == 1
+    assert [p.row_id for p in stored_preferences(EvidenceLog(bob))] == []

@@ -100,7 +100,7 @@
     {
       "module": "generate",
       "name": "GENERATION_CAP",
-      "line": 78
+      "line": 86
     },
     {
       "module": "interview",
@@ -553,6 +553,7 @@
     "test_mode.PASTE_CHARS",
     "trait_sufficiency.MINIMUM_TRAITS",
     "verified_gate.MINIMUM_CONTRACTS",
+    "voice._EXCERPT",
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",

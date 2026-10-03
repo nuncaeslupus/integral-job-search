@@ -27,8 +27,22 @@ list). A preference inferred from one irritated sentence can be wrong, and a
 wrong one that silently governs every document is worse than the correction it
 saved.
 
+**A stored correction that cannot be read is shown, never dropped.** Any
+`statement` row under `step: "preferences"` that is not in voice-preference form
+(the shape a prose backfill leaves) is listed by id in the notice and in the
+manifest as *unreadable*: "N stored, M applied, K unreadable". It is not guessed
+at or migrated from its phrasing, because a rule inferred from a sentence that
+was meant as something else is the wrong preference silently governing every
+document. Re-record it with `python -m integral.voice record`, or retract it to
+dismiss it. Step 6's forced choices are `reaction` rows, so they never count.
+
+**`forbid` is a floor on what is caught, not a definition of the preference.**
+A paraphrase the patterns do not name gets through; the statement the candidate
+reads is the definition, and the patterns are only what can be checked.
+
 **The rule `generate` enforces is closed, not enumerated.** Every rendered
-line, scaffold included, is matched against every live preference's `forbid`.
+line, scaffold and section headings included, is matched against every live
+preference's `forbid`.
 An entry that violates is left out of both documents and recorded as an
 `Omission` naming the preference, so the candidate can say it was the wrong
 call; a scaffold line that violates refuses the generation outright, because
@@ -45,6 +59,9 @@ retracted must restore it.
 
 from __future__ import annotations
 
+import argparse
+import datetime
+import functools
 import json
 import re
 import sys
@@ -56,7 +73,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from integral.profile import EvidenceLog, EvidenceRow
+from integral.identity import IdentityError, ProfileStore
+from integral.profile import EvidenceLog, EvidenceRow, ProfileError
+from integral.state_home import StateHomeRefused, ensure_outside_a_work_tree, profiles_root
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T147.json"
@@ -91,7 +110,7 @@ SEEDS: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
     ),
     (
         "Say 'without worrying too much about their structure', never 'perfectly structured'.",
-        (r"\bwhether\s+(?:they|it|these)\s+(?:are|is)\s+perfectly\s+structured\b",),
+        (r"\bwhether\s+(?:they|it|these)\s*(?:are|is|'re|'s)\s+perfectly\s+structured\b",),
         "I share notes without worrying whether they are perfectly structured.",
         "I share notes without worrying too much about their structure.",
     ),
@@ -109,7 +128,7 @@ SEEDS: tuple[tuple[str, tuple[str, ...], str, str], ...] = (
             r"\bpassion(?:ate)?\b",
         ),
         "It is also personal: this field is close to my heart.",
-        "This field is where I have spent the last six years.",
+        "This field is where I have spent my working life.",
     ),
     (
         "Nothing unintelligible in the CV, even when true.",
@@ -160,9 +179,55 @@ class VoiceApplied(Strict):
     enforced: bool
 
 
-def _normalise(text: str) -> str:
-    """NFKC plus collapsed whitespace: a width variant or double space cannot dodge a rule."""
-    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text))
+@functools.lru_cache(maxsize=1)
+def _quote_folds() -> dict[int, str]:
+    """Every code point Unicode itself names an apostrophe or a quotation mark.
+
+    Derived from the character database rather than listed: a word processor's
+    U+2019, a keyboard's modifier apostrophe U+02BC, a prime U+2032 and a
+    fullwidth U+FF07 are all "apostrophe" by name, and the next variant added to
+    Unicode is covered without anyone remembering it. Single marks fold to `'`,
+    double ones to `"`.
+    """
+    folds: dict[int, str] = {0x60: "'", 0xB4: "'"}  # grave and acute accents, typed as apostrophes
+    for code in range(0x110000):
+        name = unicodedata.name(chr(code), "")
+        if not name:
+            continue
+        if unicodedata.category(chr(code)) in {"Ll", "Lu", "Lt", "Lo"}:
+            continue  # a letter that merely contains an apostrophe (U+0149) is not a mark
+        words = name.split()
+        if "APOSTROPHE" in name or ("SINGLE" in words and "QUOTATION" in words):
+            folds[code] = "'"
+        elif "QUOTATION" in words and "MARK" in words:
+            folds[code] = '"'
+        elif "PRIME" in words and not {"DOUBLE", "TRIPLE", "QUADRUPLE", "REVERSED"} & set(words):
+            folds[code] = "'"
+    return folds
+
+
+def _strip_format(text: str, replacement: str) -> str:
+    return "".join(replacement if unicodedata.category(ch) == "Cf" else ch for ch in text)
+
+
+def _views(text: str) -> tuple[str, ...]:
+    """The forms of `text` a rule is matched against.
+
+    NFKC, every `Cf` (format) character removed or turned into a space, quotes
+    folded to ASCII, whitespace collapsed. Two views, because an invisible
+    character can stand either *inside* a word (a soft hyphen in `drawspec`) or
+    *between* two (a zero-width space for the space in `I automated`): removing
+    it only fixes the first and replacing it only the second. A violation is a
+    match in either view.
+    """
+    views = []
+    for replacement in ("", " "):
+        # Fold first: U+E0027 TAG APOSTROPHE is itself a `Cf` character.
+        folded = unicodedata.normalize("NFKC", text).translate(_quote_folds())
+        folded = _strip_format(folded, replacement)
+        folded = unicodedata.normalize("NFKC", folded).translate(_quote_folds())
+        views.append(re.sub(r"\s+", " ", folded))
+    return tuple(views)
 
 
 def _compile(pattern: str) -> re.Pattern[str]:
@@ -237,13 +302,36 @@ def stored_preferences(log: EvidenceLog) -> tuple[VoicePreference, ...]:
     return tuple(pref for pref in found if pref is not None)
 
 
+class VoiceUnreadable(Strict):
+    """A stored correction in the preferences step that is not in voice-preference form."""
+
+    row_id: str = Field(min_length=1)
+    text: str
+
+
+def unreadable_preferences(log: EvidenceLog) -> tuple[VoiceUnreadable, ...]:
+    """Live `statement` rows under the preferences step that did not decode.
+
+    The discriminator is stated rather than inferred: step 6 records its forced
+    choices as `reaction` rows, so a `statement` row in this step is a
+    correction in the candidate's own words, and one that is not in
+    voice-preference form is one nothing applies. A retracted row is not live
+    and is not listed, which is how a candidate dismisses one.
+    """
+    return tuple(
+        VoiceUnreadable(row_id=row.id, text=row.text)
+        for row in log.effective_rows()
+        if row.step == VOICE_STEP and row.kind == "statement" and decode_preference(row) is None
+    )
+
+
 def violations(text: str, preferences: Iterable[VoicePreference]) -> list[VoicePreference]:
     """Which preferences `text` breaks. Advisory preferences never appear."""
-    flat = _normalise(text)
+    views = _views(text)
     return [
         pref
         for pref in preferences
-        if any(_compile(pattern).search(flat) for pattern in pref.forbid)
+        if any(_compile(pattern).search(view) for pattern in pref.forbid for view in views)
     ]
 
 
@@ -254,16 +342,33 @@ def applied(preferences: Iterable[VoicePreference]) -> tuple[VoiceApplied, ...]:
     )
 
 
-def notice(preferences: Sequence[VoiceApplied | VoicePreference]) -> str:
-    """The sentence the candidate sees, and the list behind it."""
-    if not preferences:
-        return "applied 0 of your stored preferences"
-    head = f"applied {len(preferences)} of your stored preferences"
+_EXCERPT = 100
+
+
+def notice(
+    preferences: Sequence[VoiceApplied | VoicePreference],
+    unreadable: Sequence[VoiceUnreadable] = (),
+) -> str:
+    """What the candidate sees with every package: counts, then every row by name.
+
+    `N stored, M applied, K unreadable` — stored is the sum, so a correction the
+    candidate gave can never be missing from the count. Each unreadable row is
+    listed with its id so it can be re-recorded or retracted.
+    """
+    head = (
+        f"{len(preferences) + len(unreadable)} stored, "
+        f"{len(preferences)} applied, {len(unreadable)} unreadable"
+    )
     lines = [
-        f"  - {p.statement}" + ("" if p.enforced else " (advisory, not checked)")
+        f"  - applied: {p.statement}" + ("" if p.enforced else " (advisory, not checked)")
         for p in preferences
     ]
-    return "\n".join([head + ":", *lines])
+    lines += [
+        f"  - unreadable {u.row_id}, not applied: {u.text[:_EXCERPT]!r} "
+        "(re-record it with `python -m integral.voice record`, or retract it)"
+        for u in unreadable
+    ]
+    return "\n".join([head + ":", *lines]) if lines else head
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +456,46 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+def _store_for(handle: str, input_dir: str | None, dev: bool) -> ProfileStore:
+    """The candidate's store, resolved through the same containment rule as every step."""
+    flag = True if dev else None
+    root = (
+        ensure_outside_a_work_tree(input_dir, source="--input-dir", dev=flag)
+        if input_dir
+        else profiles_root(dev=flag)
+    )
+    return ProfileStore(root, handle)
+
+
+def _cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="python -m integral.voice")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("record", "notice"):
+        command = sub.add_parser(name)
+        command.add_argument("--id", required=True, dest="handle")
+        command.add_argument("--input-dir", default=None)
+        command.add_argument("--dev", action="store_true")
+        if name == "record":
+            command.add_argument("--statement", required=True)
+            command.add_argument("--forbid", action="append", default=[])
+            command.add_argument("--at", default=None, help="ISO date; default today")
+    args = parser.parse_args(argv)
+    try:
+        log = EvidenceLog(_store_for(args.handle, args.input_dir, args.dev))
+        if args.command == "record":
+            at = args.at or datetime.date.today().isoformat()
+            pref = record(log, args.statement, args.forbid, at=at)
+            print(json.dumps({"recorded": pref.row_id, "enforced": pref.enforced}))
+        print(notice(applied(stored_preferences(log)), unreadable_preferences(log)))
+    except (VoiceError, StateHomeRefused, IdentityError, ProfileError) as exc:
+        print(f"voice: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def _main(argv: list[str]) -> int:
+    if len(argv) > 1 and argv[1] in ("record", "notice"):
+        return _cli(argv[1:])
     args = [arg for arg in argv[1:] if not arg.startswith("--")]
     measured = write_evidence(Path(args[0]) if args else DEFAULT_EVIDENCE_PATH)
     print(json.dumps(measured, ensure_ascii=False))
