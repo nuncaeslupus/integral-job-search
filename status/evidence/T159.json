@@ -100,7 +100,7 @@
     {
       "module": "generate",
       "name": "GENERATION_CAP",
-      "line": 74
+      "line": 76
     },
     {
       "module": "interview",
@@ -273,7 +273,7 @@
     {
       "module": "cv_store",
       "name": "MINIMUM_READ_CHECKS",
-      "line": 1931,
+      "line": 1934,
       "population": 16
     },
     {

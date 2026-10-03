@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from integral.feedback import traceability
+from integral.cv_store import (
+    ConversationTurn,
+    CVMaster,
+    Education,
+    measure_provenance,
+    write_master,
+)
+from integral.feedback import traceability as fb_traceability
+from integral.generate import generate, render_entry, retracted_claims_still_traced, traceability
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog, EvidenceRow, rebuild
 
@@ -87,18 +96,82 @@ def test_a_withdrawn_value_never_reads_as_current_beside_a_restored_one(tmp_path
     assert gone not in live
 
 
+def _education_master(store: ProfileStore, turn_id: str) -> CVMaster:
+    master = CVMaster(
+        education=(
+            Education(
+                qualification="Diploma en Nutrició",
+                institution="Uni",
+                provenance=(ConversationTurn(evidence_id=turn_id),),
+            ),
+        )
+    )
+    write_master(store, master)
+    return master
+
+
+def _step11(
+    store: ProfileStore, master: CVMaster, offer: str = "o-1"
+) -> tuple[str, dict[str, Any]]:
+    manifest = generate(store, master, offer_id=offer, advert="x", asks=())
+    line = render_entry("education", master.education[0])
+    return line, traceability(store, master, offer, manifest.version)
+
+
 def test_a_claim_tracing_to_a_retracted_row_is_refused(tmp_path: Path) -> None:
+    """Step 11 (T45), in a section that is not `episodes`."""
+    store, log = _log(tmp_path)
+    _add(log, "Diploma en Dietètica")
+    wrong = _add(log, "Diploma en Nutrició")
+    master = _education_master(store, wrong.id)
+
+    line, live = _step11(store, master)
+    assert live["claims_untraced"] == []  # control: backed while live
+
+    _add(log, "no", retracts=wrong.id)
+    line, measured = _step11(store, master)
+    assert any(line in untraced for untraced in measured["claims_untraced"])
+    assert measured["cv_generation_traceability"] < 1.0
+
+
+def test_a_claim_whose_retraction_was_retracted_traces_again(tmp_path: Path) -> None:
+    store, log = _log(tmp_path)
+    row = _add(log, "Diploma en Nutrició")
+    master = _education_master(store, row.id)
+    for depth in range(1, 6):
+        _add(log, "flip", retracts=_chain_tip(log, row.id))
+        _, measured = _step11(store, master, f"o-{depth}")
+        assert (measured["claims_untraced"] == []) is (depth % 2 == 0), depth
+
+
+def _chain_tip(log: EvidenceLog, row_id: str) -> str:
+    """The newest retraction stacked on `row_id` (or the row itself)."""
+    tip = row_id
+    for row in log.rows():
+        if row.retracts == tip:
+            tip = row.id
+    return tip
+
+
+def test_provenance_coverage_drops_for_a_retracted_turn(tmp_path: Path) -> None:
+    store, log = _log(tmp_path)
+    row = _add(log, "Diploma en Nutrició")
+    master = _education_master(store, row.id)
+    assert measure_provenance(store, master).coverage == 1.0
+    _add(log, "no", retracts=row.id)
+    assert measure_provenance(store, master).coverage < 1.0
+
+
+def test_the_step_10_check_refuses_a_retracted_citation_too(tmp_path: Path) -> None:
     store, log = _log(tmp_path)
     row = _add(log, "Aprendí Rust por mi cuenta.", kind="episode")
     rebuild(store)
-    assert traceability(store)["untraced"] == []
-
+    assert fb_traceability(store)["untraced"] == []
     _add(log, "no", retracts=row.id)
-    # Derived files are stale on purpose: they still cite the withdrawn row.
-    measured = traceability(store)
-    assert measured["feedback_traceability"] < 1.0
-    assert any(row.id in problem for problem in measured["untraced"])
+    assert any(row.id in p for p in fb_traceability(store)["untraced"])
 
-    # Withdraw the withdrawal: the same citation traces again, no restatement.
-    _add(log, "oops", retracts=log.rows()[-1].id)
-    assert traceability(store)["untraced"] == []
+
+def test_the_gate_measurement_counts_no_claim_on_a_retracted_row() -> None:
+    measured = retracted_claims_still_traced()
+    assert measured["claims_tracing_to_a_retracted_row"] == 0
+    assert measured["retraction_probe_live_claims_traced"] == 2

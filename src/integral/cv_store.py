@@ -1441,7 +1441,8 @@ def _resolves(store: ProfileStore, item: DocumentSpan | ConversationTurn) -> str
     A `DocumentSpan` resolves only if its source text exists and the span is
     within bounds; a `ConversationTurn` resolves only if its id is a row that
     is really in `profile/evidence.jsonl` — existence is checked against the
-    log itself (`EvidenceLog.rows`), never merely against the id's shape.
+    log itself (`EvidenceLog.rows`), never merely against the id's shape, and a
+    row a retraction currently suppresses no longer resolves.
     """
     if isinstance(item, DocumentSpan):
         parts = ("cv", "source", f"{item.source_file}.txt")
@@ -1454,9 +1455,11 @@ def _resolves(store: ProfileStore, item: DocumentSpan | ConversationTurn) -> str
                 f"{item.source_file!r} ({length} chars)"
             )
         return None
-    known_ids = {row.id for row in EvidenceLog(store).rows()}
-    if item.evidence_id not in known_ids:
+    log = EvidenceLog(store)
+    if item.evidence_id not in {row.id for row in log.rows()}:
         return f"evidence row {item.evidence_id!r} is not in this profile's evidence.jsonl"
+    if item.evidence_id in log.suppressed_ids():
+        return f"evidence row {item.evidence_id!r} has been retracted"
     return None
 
 

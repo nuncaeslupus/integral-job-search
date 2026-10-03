@@ -48,6 +48,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from integral.cv_store import (
     Certification,
+    ConversationTurn,
     CVMaster,
     Education,
     Episode,
@@ -61,6 +62,7 @@ from integral.cv_store import (
     write_master,
 )
 from integral.identity import ProfileStore, create_profile
+from integral.profile import EvidenceLog
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T45.json"
@@ -423,10 +425,21 @@ def traceability(
     # still succeeded — so an extra copy of a true sentence was a free line the
     # gate could not see. Each on-disk line consumes one row's worth of backing.
     backed: Counter[tuple[str, str]] = Counter()
+    # A claim is backed only by what the candidate still stands behind: an entry
+    # whose conversation turn has been retracted (and not un-retracted) is a
+    # withdrawn value, whatever section it sits in. `suppressed_ids` resolves
+    # chains of any depth, so a restored turn backs its claim again.
+    log = EvidenceLog(store)
+    withdrawn = log.suppressed_ids() if log.exists() else frozenset()
     for claim in read_manifest(store, offer_id, version).claims:
         entries = _entries(master, claim.section)
-        if claim.entry_index < len(entries) and (
-            render_entry(claim.section, entries[claim.entry_index]) == claim.text
+        if (
+            claim.entry_index < len(entries)
+            and render_entry(claim.section, entries[claim.entry_index]) == claim.text
+            and not any(
+                isinstance(item, ConversationTurn) and item.evidence_id in withdrawn
+                for item in entries[claim.entry_index].provenance
+            )
         ):
             backed[(claim.document, claim.text)] += 1
 
@@ -473,6 +486,79 @@ DEFAULT_FIXTURE_MASTER = _REPO_ROOT / "tests" / "fixtures" / "generation" / "mas
 _FIXTURE_ASKS: tuple[str, ...] = ("PostgreSQL", "Python", "Kubernetes", "Salesforce")
 
 
+def retracted_claims_still_traced() -> dict[str, int]:
+    """`claims_tracing_to_a_retracted_row`: step 11 must not cite a withdrawn turn.
+
+    Two education entries are said in conversation, then the wrong one is
+    retracted, and a second twin is retracted and the retraction itself retracted
+    (so it is live again). Generation runs over the real `generate`/`traceability`
+    path. The count is claim lines that traceability calls *backed* although the
+    turn behind them is withdrawn; the restored twin is the control that the
+    check has not simply started refusing everything.
+    """
+    master_entries: dict[str, str] = {}
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch) / "profiles"
+        identity = create_profile(root, "Retraction Probe", handle="probe", language="en")
+        store = ProfileStore(root, identity.handle)
+        log = EvidenceLog(store)
+        ids: dict[str, str] = {}
+        for name in ("right", "wrong", "restored"):
+            ids[name] = log.append(
+                recorded_at="2026-08-24T09:00:00Z",
+                step="history",
+                kind="statement",
+                text=f"Diploma {name}",
+                source="conversation",
+            ).id
+        withdrawn = log.append(
+            recorded_at="2026-08-24T09:00:00Z",
+            step="any",
+            kind="retraction",
+            text="no",
+            source="conversation",
+            retracts=ids["wrong"],
+        )
+        first = log.append(
+            recorded_at="2026-08-24T09:00:00Z",
+            step="any",
+            kind="retraction",
+            text="no",
+            source="conversation",
+            retracts=ids["restored"],
+        )
+        log.append(
+            recorded_at="2026-08-24T09:00:00Z",
+            step="any",
+            kind="retraction",
+            text="oops",
+            source="conversation",
+            retracts=first.id,
+        )
+        assert withdrawn.retracts == ids["wrong"]
+        master = CVMaster(
+            education=tuple(
+                Education(
+                    qualification=f"Diploma {name}",
+                    institution="Uni",
+                    provenance=(ConversationTurn(evidence_id=ids[name]),),
+                )
+                for name in ("right", "wrong", "restored")
+            )
+        )
+        write_master(store, master)
+        manifest = generate(store, master, offer_id="probe-1", advert="x", asks=())
+        measured = traceability(store, master, "probe-1", manifest.version)
+        untraced = {line.split(": ", 1)[1] for line in measured["claims_untraced"]}
+        for name, entry in zip(("right", "wrong", "restored"), master.education, strict=True):
+            master_entries[name] = render_entry("education", entry)
+        backed = {name for name, line in master_entries.items() if line not in untraced}
+    return {
+        "claims_tracing_to_a_retracted_row": int("wrong" in backed),
+        "retraction_probe_live_claims_traced": len(backed & {"right", "restored"}),
+    }
+
+
 def measure(
     fixture_master: Path = DEFAULT_FIXTURE_MASTER,
     store_path: Path | None = None,
@@ -513,6 +599,7 @@ def measure(
         "claims_unused": sorted(unused),
         "adverts_generated": len(ads),
         "gaps_named": gaps_named,
+        **retracted_claims_still_traced(),
     }
 
 
@@ -541,6 +628,12 @@ def _main(argv: list[str]) -> int:
     # `== 1.0`, not "no untraced lines". A run that generated nothing at all
     # scores `None` with an empty untraced list, and exiting 0 on that would
     # report a gate met by a generator that produced no document.
+    if measured["claims_tracing_to_a_retracted_row"] != 0:
+        print("a claim traces to a retracted row", file=sys.stderr)
+        return 1
+    if measured["retraction_probe_live_claims_traced"] != 2:
+        print("the retraction probe's live claims no longer trace", file=sys.stderr)
+        return 1
     if measured["cv_generation_traceability"] != 1.0:
         print(
             f"cv_generation_traceability is {measured['cv_generation_traceability']!r}, not 1.0",
