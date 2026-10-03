@@ -44,9 +44,11 @@ import json
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from integral.dimensions import load_dimensions
 from integral.identity import ProfileStore, create_profile
 from integral.profile import (
     EvidenceLog,
@@ -56,7 +58,13 @@ from integral.profile import (
     StatedStrength,
     rebuild,
 )
-from integral.rank import Candidate, priced_dimensions, rank, rankable_dimensions
+from integral.rank import (
+    Candidate,
+    priced_dimensions,
+    rank,
+    rankable_dimensions,
+    weights_for_currency,
+)
 from integral.weights import Choice, Package, encode_choice
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -65,9 +73,10 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T243.json"
 #: Thirty ontology ids, as many as the real session's traits carried evidence
 #: on. Named rather than read from `dimensions/` so a dimension added later
 #: cannot move the count. The task gate asserts the *measured*
-#: `trait_dimensions_with_evidence >= 30` read back from `traits.json`, not
-#: `len()` of this tuple, so a renamed id that stopped carrying evidence fails
-#: there instead of passing against its own list.
+#: `trait_dimensions_in_the_ontology >= 30`: evidence dimensions read back from
+#: `traits.json` that are real ids in `dimensions/`, not `len()` of this tuple,
+#: so an id that was renamed away (traits accept any string) stops counting and
+#: fails there instead of passing against its own list.
 SCENARIO_DIMENSIONS: tuple[str, ...] = (
     "ai_in_the_work",
     "ambition",
@@ -111,6 +120,15 @@ _AT = "2026-10-01T10:00:00Z"
 _PROBE_AXIS = "__probe__"
 
 
+class StatedPricingError(ValueError):
+    """A stated price cannot be recorded as given."""
+
+
+@lru_cache(maxsize=1)
+def ontology_ids() -> frozenset[str]:
+    return frozenset(d.id for d in load_dimensions())
+
+
 def record_stated_price(
     store: ProfileStore,
     *,
@@ -126,7 +144,14 @@ def record_stated_price(
 
     The route the step-09 skill uses when someone says "spoken English costs me"
     or "I want a mentor": their words go in `text`, what they mean in `price`.
+    A dimension that is not in `dimensions/` is refused: no extraction ever scores
+    it, so it would be reported as priced while moving no real offer.
     """
+    if dimension not in ontology_ids():
+        raise StatedPricingError(
+            f"{dimension!r} is not a dimension in dimensions/ — a price on it would "
+            "never move an offer; name the nearest real dimension instead"
+        )
     row = EvidenceLog(store).append(
         recorded_at=at,
         step=step,
@@ -161,21 +186,25 @@ def _probe_offers(dimension: str, priced: Mapping[str, float]) -> list[Candidate
     ]
 
 
-def moves_order(dimension: str, weights: Mapping[str, Any] | None) -> bool:
+def moves_order(
+    dimension: str, weights: Mapping[str, Any] | None, currency: str | None = None
+) -> bool:
     """Does the ranker order two offers apart that differ only on `dimension`?
 
     Read off `rank`'s own `order_basis`, never off `priced_by` or the report.
     Both probes carry the same salary and every other priced dimension unknown,
     so the known parts differ exactly when this dimension carries a price.
     """
-    priced = priced_dimensions(weights)
+    resolved = weights_for_currency(weights, currency)
+    priced = priced_dimensions(resolved)
     probes = _probe_offers(dimension, priced)
     ranking = rank(
         probes,
-        dimensions=rankable_dimensions([dimension, _PROBE_AXIS], weights),
+        dimensions=rankable_dimensions([dimension, _PROBE_AXIS], resolved),
         revision=ProfileRevision.of_nothing(),
         weights=weights,
         at=_AT,
+        currency=currency,
     )
     basis = ranking["order_basis"]
     return bool(basis["probe-high"]["value"] != basis["probe-low"]["value"])
@@ -185,6 +214,7 @@ def audit(
     traits: Mapping[str, Any],
     weights: Mapping[str, Any] | None,
     reported: Sequence[str] | None,
+    currency: str | None = None,
 ) -> dict[str, Any]:
     """Count the ways a ranking's report of unpriced traits is wrong.
 
@@ -197,9 +227,9 @@ def audit(
         if isinstance(entry, Mapping) and (entry.get("evidence_count") or 0) > 0
     )
     said = set(reported or ())
-    moving = {name for name in evidence if moves_order(name, weights)}
+    moving = {name for name in evidence if moves_order(name, weights, currency)}
     never_priced_never_reported = [n for n in evidence if n not in moving and n not in said]
-    reported_but_priced = sorted(name for name in said if moves_order(name, weights))
+    reported_but_priced = sorted(name for name in said if moves_order(name, weights, currency))
     reported_without_evidence = sorted(name for name in said if name not in set(evidence))
     return {
         "dimensions_with_evidence": len(evidence),
@@ -357,6 +387,9 @@ def measure() -> dict[str, Any]:
             honest["never_priced_and_never_reported"]
         ),
         "trait_dimensions_with_evidence": honest["dimensions_with_evidence"],
+        "trait_dimensions_in_the_ontology": len(
+            [n for n in traits["dimensions"] if n in ontology_ids()]
+        ),
         "dimensions_that_move_the_order": honest["dimensions_that_move_the_order"],
         "reported_unpriced_that_move_the_order": len(honest["reported_but_priced"]),
         "reported_unpriced_without_evidence": len(honest["reported_without_evidence"]),

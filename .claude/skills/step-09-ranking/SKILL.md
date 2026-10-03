@@ -82,14 +82,19 @@ The weights price only what step 6's choices reached; a candidate's traits can c
 evidence on thirty dimensions. Never rank on the weights alone and say nothing of the rest.
 
 ```python
-from integral.rank import rankable_dimensions
+from integral.rank import rankable_dimensions, weights_for_currency
 from integral.stated_pricing import pricing_inputs, record_stated_price
 
-traits, weights = pricing_inputs(store)           # rebuilt from the log
-dims = rankable_dimensions(dimensions, weights)   # a stated price is a ranked axis too
-ranking = rank(candidates, dimensions=dims, ..., weights=weights, traits=traits)
+traits, weights = pricing_inputs(store)                   # rebuilt from the log
+dims = rankable_dimensions(dimensions, weights, currency)  # a stated price is a ranked axis too
+ranking = rank(candidates, dimensions=dims, ..., weights=weights, traits=traits, currency=currency)
+explain(ranking, candidates, weights_for_currency(weights, currency))   # stated drivers say so
 ranking["unpriced_trait_dimensions"]               # {"checked", "dimensions", "reasons"}
 ```
+
+`currency` is the candidate's own (`profile/constraints.json`). A stated price in any other
+currency, or any stated price when no currency is known, is skipped and named (`stated_in_another_currency`) —
+a sentence never decides what the ranking is denominated in.
 
 - **Say the unpriced dimensions by name**, in the candidate's words for them, every time the
   list is non-empty: *"what you told me about spoken English doesn't move the order yet —

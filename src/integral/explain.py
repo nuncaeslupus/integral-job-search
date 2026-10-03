@@ -65,7 +65,7 @@ from pathlib import Path
 from typing import Any
 
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, priced_dimensions, rank, salary_equivalent_total
+from integral.rank import Candidate, priced_by, priced_dimensions, rank, salary_equivalent_total
 
 # §4.3's site is `integral.rank`; this module explains that formula's second
 # term rather than implementing a formula of its own, so it declares no
@@ -87,6 +87,7 @@ def drivers_for(candidate: Candidate, weights: Mapping[str, Any] | None) -> list
     resolve by something stable rather than by dict order.
     """
     priced = priced_dimensions(weights)
+    stated = set(priced_by(weights)["stated"])
     found: list[dict[str, Any]] = []
     for name in sorted(priced):
         if name not in candidate.scores:
@@ -105,6 +106,9 @@ def drivers_for(candidate: Candidate, weights: Mapping[str, Any] | None) -> list
                 "dimension": name,
                 "contribution_eur_month": contribution,
                 "evidence_span": spans[0] if spans else None,
+                # T243: a figure the candidate stated is not one their choices
+                # measured, and the card says which.
+                "source": "stated" if name in stated else "fitted",
             }
         )
     return sorted(found, key=lambda d: (-abs(d["contribution_eur_month"]), d["dimension"]))

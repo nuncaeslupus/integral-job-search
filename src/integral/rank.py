@@ -376,6 +376,56 @@ def _read_part_worths(weights: Mapping[str, Any] | None, key: str) -> dict[str, 
     return priced
 
 
+def _stated_in_force(weights: Mapping[str, Any] | None) -> dict[str, float]:
+    """Stated figures whose own currency is the weights' currency, and no others.
+
+    A statement's currency never sets the currency of anything: with no
+    top-level `currency` on the weights nothing stated is in force.
+    """
+    if not isinstance(weights, Mapping):
+        return {}
+    currency = weights.get("currency")
+    entries = weights.get("stated_part_worths")
+    if not isinstance(currency, str) or not isinstance(entries, Mapping):
+        return {}
+    in_force = {
+        name: part
+        for name, part in entries.items()
+        if isinstance(part, Mapping) and part.get("currency") == currency
+    }
+    return _read_part_worths({"stated_part_worths": in_force}, "stated_part_worths")
+
+
+def weights_for_currency(
+    weights: Mapping[str, Any] | None, currency: str | None
+) -> dict[str, Any] | None:
+    """B1: the weights as the ranking in `currency` may use them.
+
+    The ranking's currency is the fit's (when the choices priced anything) or the
+    caller's `currency=`, exactly as before stated prices existed. A stated price
+    whose currency differs — or any stated price when neither names a currency —
+    is moved to `stated_skipped` as `currency`; it is never priced and never
+    converted. When stated figures survive and no fit fixed a currency, the
+    result carries the caller's as `currency`, which `priced_dimensions` then
+    matches each figure against. Idempotent.
+    """
+    if not isinstance(weights, Mapping):
+        return None
+    fitted_priced = bool(_read_part_worths(weights, "part_worths"))
+    base = weights.get("currency") if fitted_priced else currency
+    base = base if isinstance(base, str) else None
+    entries = weights.get("stated_part_worths")
+    if not isinstance(entries, Mapping) or not entries:
+        return dict(weights)
+    keep = {n: p for n, p in entries.items() if base is not None and p.get("currency") == base}
+    skipped = dict(weights.get("stated_skipped") or {})
+    skipped.update({n: "currency" for n in entries if n not in keep})
+    resolved = {**weights, "stated_part_worths": keep, "stated_skipped": skipped}
+    if not fitted_priced and keep:
+        resolved["currency"] = base
+    return resolved
+
+
 def priced_dimensions(weights: Mapping[str, Any] | None) -> dict[str, float]:
     """`{dimension: euros per month per unit of score}` from `weights.json`.
 
@@ -389,16 +439,15 @@ def priced_dimensions(weights: Mapping[str, Any] | None) -> dict[str, float]:
     priced by the fitted one — measured beats said — which the weights file
     already enforces and this repeats, so a hand-built file cannot reverse it.
     """
-    stated = _read_part_worths(weights, "stated_part_worths")
-    fitted = _read_part_worths(weights, "part_worths")
-    return {**stated, **fitted}
+    return {**_stated_in_force(weights), **_read_part_worths(weights, "part_worths")}
 
 
 def dimension_signs(weights: Mapping[str, Any] | None) -> dict[str, float]:
     """T243: `-1.0` on each dimension the weights price negatively, `+1.0` on the rest priced.
 
-    Published on the ranking as `dimension_signs` so the audit re-derives
-    dominance the way the ranker did.
+    Published on the ranking as `dimension_signs` for a reader's benefit only.
+    `dominance_violations` never reads that copy: it derives the signs again
+    from the weights it is handed.
     """
     return {
         name: (-1.0 if euros < 0 else 1.0) for name, euros in priced_dimensions(weights).items()
@@ -408,14 +457,16 @@ def dimension_signs(weights: Mapping[str, Any] | None) -> dict[str, float]:
 def priced_by(weights: Mapping[str, Any] | None) -> dict[str, list[str]]:
     """T243: which dimensions are priced by choices and which by statements."""
     fitted = _read_part_worths(weights, "part_worths")
-    stated = _read_part_worths(weights, "stated_part_worths")
+    stated = _stated_in_force(weights)
     return {
         "fitted": sorted(fitted),
         "stated": sorted(name for name in stated if name not in fitted),
     }
 
 
-def rankable_dimensions(dimensions: Sequence[str], weights: Mapping[str, Any] | None) -> list[str]:
+def rankable_dimensions(
+    dimensions: Sequence[str], weights: Mapping[str, Any] | None, currency: str | None = None
+) -> list[str]:
     """T243: the ranked dimensions plus every dimension the weights price.
 
     `require_priced_dimensions_ranked` refuses a priced dimension the ranking
@@ -423,7 +474,8 @@ def rankable_dimensions(dimensions: Sequence[str], weights: Mapping[str, Any] | 
     said something would otherwise fail on the first statement. Build the
     candidates and call `rank` with this list.
     """
-    return [*dimensions, *sorted(set(priced_dimensions(weights)) - set(dimensions))]
+    priced = priced_dimensions(weights_for_currency(weights, currency))
+    return [*dimensions, *sorted(set(priced) - set(dimensions))]
 
 
 UNPRICED_NO_CHOICE = "no_choice_and_no_statement"
@@ -517,9 +569,13 @@ def rank(
     re-reading the log.
     """
     dimensions = tuple(dimensions)
+    weights = weights_for_currency(weights, currency)
     priced = priced_dimensions(weights)
-    weights_currency = (weights or {}).get("currency") if priced else None
-    if currency is not None and priced and weights_currency != currency:
+    fitted_priced = bool(_read_part_worths(weights, "part_worths"))
+    weights_currency = (weights or {}).get("currency") if fitted_priced else None
+    # Exactly main's guard: only a *fitted* price has a currency of its own to
+    # disagree with the caller's. A stated one is skipped upstream, never raised on.
+    if currency is not None and fitted_priced and weights_currency != currency:
         raise RankingError(
             f"the weights are in {weights_currency!r} and the ranking was asked for "
             f"{currency!r} — converting between them is not this module's guess to make"
@@ -990,7 +1046,12 @@ def excluded_offers_without_a_reason(ranking: Mapping[str, Any]) -> int:
     )
 
 
-def dominance_violations(ranking: Mapping[str, Any], candidates: Sequence[Candidate]) -> int:
+def dominance_violations(
+    ranking: Mapping[str, Any],
+    candidates: Sequence[Candidate],
+    weights: Mapping[str, Any] | None = None,
+    currency: str | None = None,
+) -> int:
     """Audit the published lists against the candidates that produced them.
 
     Deliberately not a by-product of `frontier`: a count the construction hands
@@ -1018,7 +1079,11 @@ def dominance_violations(ranking: Mapping[str, Any], candidates: Sequence[Candid
     """
     by_id = {candidate.offer_id: candidate for candidate in candidates}
     dimensions = tuple(ranking["dimensions"])
-    signs = ranking.get("dimension_signs") or {}
+    # B2: the signs come from the weights the ranking was made with (and the
+    # `currency=` it was asked for), never from the ranking under audit — a ranker
+    # that published wrong signs and built its frontier from them would otherwise
+    # pass its own audit. With no weights nothing is priced and there are none.
+    signs = dimension_signs(weights_for_currency(weights, currency))
     published = list(ranking["pareto"])
     collapsed = dict(ranking["dominated"])
     violations = 0
@@ -1119,7 +1184,7 @@ def measure() -> dict[str, Any]:
         weights=_FIXTURE_WEIGHTS,
         at="2026-08-24T00:00:00Z",
     )
-    violations = dominance_violations(ranking, candidates)
+    violations = dominance_violations(ranking, candidates, _FIXTURE_WEIGHTS)
 
     # Put every offer on the frontier, including the one the fixture collapses,
     # and the audit has to notice. Without this the gate would certify a
@@ -1127,6 +1192,7 @@ def measure() -> dict[str, Any]:
     planted = dominance_violations(
         {**ranking, "pareto": [offer_id for offer_id, _, _ in _FIXTURE], "dominated": {}},
         candidates,
+        _FIXTURE_WEIGHTS,
     )
 
     provisional = rank(
