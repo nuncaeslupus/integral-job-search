@@ -6,7 +6,10 @@
       "max": 65000.0,
       "currency": "€",
       "period": null,
-      "card_uncomparable": "The row's card is a JSON object: the band is two numeric fields (`salaryFrom`, `salaryTo`) and the currency a third (`currency`), with no figure written beside a currency token in the text, so neither `card_band` nor `card_figure` can cut it out. The declared read is the engine's own JSON read of those fields; it is the only comparison this row has, and it is counted rather than skipped."
+      "card_uncomparable": "The row's card is a JSON object: the band is two numeric fields (`salaryFrom`, `salaryTo`) and the currency a third (`currency`), with no figure written beside a currency token in the text, so neither `card_band` nor `card_figure` can cut it out. The declared read is the engine's own JSON read of those fields; it is the only comparison this row has, and it is counted rather than skipped.",
+      "card_figures": [
+        65000.0
+      ]
     },
     "1": {
       "verdict": "read",
@@ -14,7 +17,11 @@
       "max": 60000.0,
       "currency": "€",
       "period": null,
-      "card_uncomparable": "The row's card is a JSON object: the band is two numeric fields (`salaryFrom`, `salaryTo`) and the currency a third (`currency`), with no figure written beside a currency token in the text, so neither `card_band` nor `card_figure` can cut it out. The declared read is the engine's own JSON read of those fields; it is the only comparison this row has, and it is counted rather than skipped."
+      "card_uncomparable": "The row's card is a JSON object: the band is two numeric fields (`salaryFrom`, `salaryTo`) and the currency a third (`currency`), with no figure written beside a currency token in the text, so neither `card_band` nor `card_figure` can cut it out. The declared read is the engine's own JSON read of those fields; it is the only comparison this row has, and it is counted rather than skipped.",
+      "card_figures": [
+        45000.0,
+        60000.0
+      ]
     },
     "2": {
       "verdict": "read",
@@ -22,7 +29,11 @@
       "max": 75000.0,
       "currency": "€",
       "period": null,
-      "card_uncomparable": "The row's card is a JSON object: the band is two numeric fields (`salaryFrom`, `salaryTo`) and the currency a third (`currency`), with no figure written beside a currency token in the text, so neither `card_band` nor `card_figure` can cut it out. The declared read is the engine's own JSON read of those fields; it is the only comparison this row has, and it is counted rather than skipped."
+      "card_uncomparable": "The row's card is a JSON object: the band is two numeric fields (`salaryFrom`, `salaryTo`) and the currency a third (`currency`), with no figure written beside a currency token in the text, so neither `card_band` nor `card_figure` can cut it out. The declared read is the engine's own JSON read of those fields; it is the only comparison this row has, and it is counted rather than skipped.",
+      "card_figures": [
+        55000.0,
+        75000.0
+      ]
     }
   }
 }

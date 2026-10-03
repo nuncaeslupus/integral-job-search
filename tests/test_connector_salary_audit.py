@@ -21,6 +21,7 @@ from integral.connector_salary_audit import (
     _declared_for,
     _money_contexts,
     _packages,
+    _pin_holds,
     _single_figure_agrees,
     card_band,
     card_figure,
@@ -301,6 +302,10 @@ def test_the_record_commits_the_distinct_verdict_floor() -> None:
         ("USD 174,000-252,000 Mountain View", (174000.0, 252000.0, "USD")),
         ("EUR 40.000-50.000 Madrid", (40000.0, 50000.0, "EUR")),
         ("EUR 40.000-50.000 Kiel", (40000.0, 50000.0, "EUR")),
+        # B2: a non-ASCII letter ends the token too.
+        ("EUR 40.000-50.000 M\u00e1laga", (40000.0, 50000.0, "EUR")),
+        ("EUR 40.000-50.000 M\u00f3stoles", (40000.0, 50000.0, "EUR")),
+        ("EUR 40.000-50.000 \u00c1vila", (40000.0, 50000.0, "EUR")),
         # Escaped markup between the figures is not a reason to see no band.
         (
             "&lt;span&gt;$320,000&lt;/span&gt;&amp;mdash;&lt;span&gt;$405,000 USD&lt;/span&gt;",
@@ -395,6 +400,13 @@ def test_foorillas_rows_are_counted_as_read_through_a_substituted_detail() -> No
         ("Starting at $143,913 Per year (GS 14-15)", (143913.0, "USD")),
         ("18.000 \u20ac De duracion determinada", (18000.0, "EUR")),
         ("CAD 150K-190K Vancouver", None),  # a band is `card_band`'s, not a figure
+        # B3: a band written without a dash is not one figure.
+        ("\u20ac40.000 a 50.000", None),
+        ("Entre 30.000 y 40.000 \u20ac", None),
+        ("EUR 40.000 / 50.000", None),
+        ("EUR 40.000 hasta 50.000 por a\u00f1o", None),
+        # ...and a grade beside a salary still is one figure
+        ("Starting at $108,592 Per year (GS 14-15)", (108592.0, "USD")),
         ("USD 1K or EUR 3K", None),  # two figures: nothing to hold a read against
         ("GS 14-15, 12 staff", None),  # no currency
     ],
@@ -426,7 +438,7 @@ def test_no_row_that_reads_a_salary_leaves_its_card_money_uncompared() -> None:
     that carry a declared reason is exact so it cannot grow unseen."""
     measured = measure(_CONNECTORS)
     assert measured["rows_read_whose_card_money_was_not_compared"] == 0, measured["uncompared"]
-    assert measured["rows_read_with_a_declared_uncomparable_card"] == 4
+    assert measured["rows_read_with_a_declared_uncomparable_card"] == 5
     assert "rows_read_whose_card_money_was_not_compared" in record(measured)
 
 
@@ -456,7 +468,7 @@ def test_an_uncomparable_card_without_a_reason_is_counted_not_skipped(tmp_path: 
     directory = _edit_entry(tmp_path, "getmanfred_es", "0", card_uncomparable=_DROP)
     measured = measure(directory)
     assert measured["rows_read_whose_card_money_was_not_compared"] == 1
-    assert measured["rows_read_with_a_declared_uncomparable_card"] == 3
+    assert measured["rows_read_with_a_declared_uncomparable_card"] == 4
     assert any("getmanfred_es [0]" in entry for entry in measured["uncompared"])
 
 
@@ -481,3 +493,69 @@ def test_a_declared_read_must_match_the_one_figure_the_card_prints(
     declared: dict[str, object], agrees: bool
 ) -> None:
     assert _single_figure_agrees(declared, (42000.0, "CAD")) is agrees
+
+
+def _repoint_himalayas_max(tmp_path: Path) -> Path:
+    """The engine now reads 70-70 from the list row: its `salary_max` field is
+    pointed at `minSalary`. The card (JSON, `maxSalary` 90) is untouched."""
+    directory = _copy_connectors(tmp_path)
+    path = directory / "himalayas_en" / "connector.yaml"
+    text = path.read_text(encoding="utf-8")
+    assert "salary_max: maxSalary" in text
+    path.write_text(
+        text.replace("salary_max: maxSalary", "salary_max: minSalary"), encoding="utf-8"
+    )
+    return directory
+
+
+def test_an_engine_misread_copied_into_a_json_card_entry_is_red(tmp_path: Path) -> None:
+    """B1. himalayas_en row 0: a JSON card, `USD` more than 40 characters from a
+    digit, so `list_publishes` is empty and the row used to fall out of the card
+    check. Engine reads 70-70 and the entry is copied to match: must be red."""
+    directory = _repoint_himalayas_max(tmp_path)
+    path = directory / "himalayas_en" / "fixture" / "salary.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["rows"]["0"].update(min=70.0, max=70.0)
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    measured = measure(directory)
+    assert any("himalayas_en [0]" in entry for entry in measured["mismatches"]), measured
+
+
+def test_a_list_row_that_reads_money_is_counted_without_a_money_window(tmp_path: Path) -> None:
+    directory = _edit_entry(tmp_path, "himalayas_en", "0", card_uncomparable=_DROP)
+    measured = measure(directory)
+    assert measured["rows_read_whose_card_money_was_not_compared"] == 1
+    assert any("himalayas_en [0]" in entry for entry in measured["uncompared"])
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"card_figures": _DROP}, {"card_figures": []}, {"card_figures": [70.0, 91.0]}],
+)
+def test_a_waiver_must_pin_figures_that_are_on_the_card(
+    tmp_path: Path, changes: dict[str, object]
+) -> None:
+    directory = _edit_entry(tmp_path, "himalayas_en", "0", **changes)
+    measured = measure(directory)
+    assert measured["salary_expectation_mismatches"] >= 1, measured
+
+
+def test_the_cli_exits_nonzero_on_an_uncompared_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    clean = measure(_CONNECTORS)
+    dirty = {**clean, "rows_read_whose_card_money_was_not_compared": 1}
+    monkeypatch.setattr(connector_salary_audit, "write_evidence", lambda *a, **k: dirty)
+    assert connector_salary_audit._main(["audit"]) == 1
+    monkeypatch.setattr(connector_salary_audit, "write_evidence", lambda *a, **k: clean)
+    assert connector_salary_audit._main(["audit"]) == 0
+
+
+def test_a_pin_must_be_on_the_card_and_equal_the_read() -> None:
+    """`_pin_holds` directly: the entry and its pin may agree with each other and
+    with nothing the card prints, which only the on-the-card half can refuse."""
+    card = frozenset({70.0, 90.0})
+    assert _pin_holds({"min": 70.0, "max": 90.0}, [70.0, 90.0], card)
+    assert _pin_holds({"min": None, "max": 90.0}, [90.0], card)
+    assert not _pin_holds({"min": 70.0, "max": 91.0}, [70.0, 91.0], card)  # 91 not printed
+    assert not _pin_holds({"min": 70.0, "max": 70.0}, [70.0, 90.0], card)  # read is not the pin
+    assert not _pin_holds({"min": 70.0, "max": 90.0}, [], card)
+    assert not _pin_holds({"min": 70.0, "max": 90.0}, None, card)

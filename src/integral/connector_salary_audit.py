@@ -121,11 +121,11 @@ _CUR = _CONNECTOR_CURRENCY_TOKEN.pattern
 #: One figure as a card writes it: a currency token before or after (or neither),
 #: and a `K`/`M` only as a whole token — the text is upper-cased before it is
 #: sliced, so `MADRID` must not lend its `M` to the number in front of it.
-_FIGURE = rf"(?:{_CUR})?\s*\d[\d.,]*(?:\s*[KM](?![A-Z]))?\s*(?:{_CUR})?"
+_FIGURE = rf"(?:{_CUR})?\s*\d[\d.,]*(?:\s*[KM](?!\w))?\s*(?:{_CUR})?"
 _BAND_SLICE = re.compile(rf"{_FIGURE}\s*(?:[-\u2013\u2014]|\bTO\b)\s*{_FIGURE}")
 #: A lone figure with a currency token attached to it, either side.
 _SINGLE_SLICE = re.compile(
-    rf"(?:{_CUR})\s*\d[\d.,]*(?:\s*[KM](?![A-Z]))?|\d[\d.,]*(?:\s*[KM](?![A-Z]))?\s*(?:{_CUR})"
+    rf"(?:{_CUR})\s*\d[\d.,]*(?:\s*[KM](?!\w))?|\d[\d.,]*(?:\s*[KM](?!\w))?\s*(?:{_CUR})"
 )
 
 
@@ -159,8 +159,25 @@ def card_figure(text: str) -> tuple[float, str | None] | None:
     for match in _SINGLE_SLICE.finditer(flat):
         chunk = match.group(0)
         figures = _numbers_in(chunk)
-        if len(figures) == 1:
-            found.add((figures[0], _take("currency", chunk)))
+        if len(figures) != 1 or figures[0] <= 0:
+            continue
+        # A second figure of the same order of magnitude beside this one is a
+        # band written without a dash (`40.000 a 50.000`, `entre 30.000 y 40.000
+        # EUR`, `40.000 / 50.000`): reading it as one figure lets an engine that
+        # reads a single end pass. Refuse, so the row is counted instead. Small
+        # numbers (a grade `GS 14-15`, a count) are another order and do not.
+        low, high = max(0, match.start() - _WINDOW), match.end() + _WINDOW
+        before, after = flat[low : match.start()], flat[match.end() : high]
+        # A window edge that lands inside a token leaves half a number behind
+        # (`"DOCUMENTID": "88246` out of `882464100`), which is not on the card.
+        if low > 0:
+            before = before.split(" ", 1)[-1]
+        if high < len(flat):
+            after = after.rsplit(" ", 1)[0]
+        context = f"{before} {after}"
+        if any(0.1 <= other / figures[0] <= 10 for other in _numbers_in(context) if other > 0):
+            return None
+        found.add((figures[0], _take("currency", chunk)))
     return found.pop() if len(found) == 1 else None
 
 
@@ -208,6 +225,9 @@ class RowVerdict:
     card: tuple[float, float, str] | None = None
     #: The single-figure twin, by `card_figure` — set only when `card` is `None`.
     card_single: tuple[float, str | None] | None = None
+    #: Every number the row's own card prints, read by the engine's `_numbers_in`.
+    #: What a waived card's pinned figures are held against.
+    card_numbers: frozenset[float] = frozenset()
 
 
 def _money_contexts(text: str) -> tuple[str, ...]:
@@ -313,6 +333,7 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
                 list_publishes=_money_contexts(list_text),
                 card=card_band(list_text),
                 card_single=card_figure(list_text),
+                card_numbers=frozenset(_numbers_in(_flat(list_text))),
                 detail_supplies_salary=route == "detail"
                 and detail is not None
                 and any(key.startswith("salary") for key in detail),
@@ -375,6 +396,16 @@ def _single_figure_agrees(declared: dict[str, Any], card: tuple[float, str | Non
         and card_currency != declared_currency
     )
     return bounds == [figure] and not currency_clash
+
+
+def _pin_holds(declared: dict[str, Any], pinned: Any, card_numbers: frozenset[float]) -> bool:
+    """A waived card's figures: listed, all on the card, and the entry reads
+    exactly them (one bound or two)."""
+    if not isinstance(pinned, list) or not pinned:
+        return False
+    figures = sorted(float(x) for x in pinned)
+    bounds = sorted(b for b in (declared.get("min"), declared.get("max")) if b is not None)
+    return all(f in card_numbers for f in figures) and bounds == figures
 
 
 def _declared_band(declared: dict[str, Any]) -> tuple[Any, Any, Any]:
@@ -495,19 +526,28 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                             f"figure {verdict.card_single}, the entry declares "
                             f"{_declared_band(declared)}"
                         )
-                elif verdict.card is None and verdict.list_publishes:
+                elif verdict.card is None and (verdict.list_publishes or verdict.route == "list"):
                     # The card carries money the audit can read neither as a band
                     # nor as one figure. It is never skipped quietly: either the
                     # entry says so, with a reason, and the row is counted under
                     # its own exact key, or it lands in `uncompared`, the key
                     # this gate drives to zero.
                     reason = declared.get("card_uncomparable") if declared else None
-                    if isinstance(reason, str) and len(reason) >= _MIN_REASON:
-                        declared_uncomparable += 1
-                    else:
-                        uncompared.append(
-                            f"{package} [{verdict.index}]: {verdict.list_publishes[0]}"
+                    pinned = declared.get("card_figures") if declared else None
+                    where = (verdict.list_publishes or ("no figure beside a currency token",))[0]
+                    if not (isinstance(reason, str) and len(reason) >= _MIN_REASON):
+                        uncompared.append(f"{package} [{verdict.index}]: {where}")
+                    elif not _pin_holds(declared or {}, pinned, verdict.card_numbers):
+                        # A waiver is not a blanket: it pins the figures the
+                        # card prints, they must be on the card, and the read
+                        # must be exactly them.
+                        mismatched.append(
+                            f"{package} [{verdict.index}]: the waiver pins {pinned}, the card "
+                            f"prints {sorted(verdict.card_numbers)[:12]} and the entry reads "
+                            f"{_declared_band(declared or {})}"
                         )
+                    else:
+                        declared_uncomparable += 1
                 if declared is not None and declared.get("verdict") == "read":
                     distinct_verdicts.add(_verdict_key(package, declared))
                 continue
