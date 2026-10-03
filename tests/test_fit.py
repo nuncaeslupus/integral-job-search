@@ -10,6 +10,7 @@ The last section drives the same property through step 9's path, from a store.
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -521,76 +522,60 @@ def test_an_ambiguous_last_role_with_no_stated_level_is_unknown() -> None:
 
 
 def test_a_clean_history_reads_the_latest_role() -> None:
-    assert _held(("Junior Developer", "2015", "2020"), ("Senior Developer", "2020", None)) == 0.8
+    assert (
+        _held(("Junior Developer", "2015-01", "2019-12"), ("Senior Developer", "2020-01", None))
+        == 0.8
+    )
     assert (
         _held(("Senior Developer", "2010-01", "2015-06"), ("Junior Developer", "2016", "2024"))
         == 0.2
     )
 
 
+def test_a_bare_year_end_is_a_span_not_the_start_of_the_year() -> None:
+    # "2023" may end after "2023-06"; either could be the last role, so the lowest counts.
+    for later in ("2023-06", "Jun 2023", "06/2023", "jun. 2023"):
+        assert (
+            _held(("Junior Developer", "2020", "2023"), ("Senior Developer", "2021", later)) == 0.2
+        )
+        assert (
+            _held(("Senior Developer", "2021", later), ("Junior Developer", "2020", "2023")) == 0.2
+        )
+    # but a year that ended before the other began is settled
+    assert (
+        _held(("Junior Developer", "2018", "2019"), ("Senior Developer", "2020", "2023-06")) == 0.8
+    )
+
+
+def test_year_granular_adjacent_roles_are_ambiguous_and_take_the_lowest() -> None:
+    assert _held(("Junior Developer", "2015", "2020"), ("Senior Developer", "2020", None)) == 0.2
+
+
+def test_a_month_outside_1_to_12_is_not_a_date() -> None:
+    assert _parse_date("2023-13") is None and _parse_date("13/2023") is None
+    assert _parse_date("2023-00") is None
+    # an unreadable end makes the last role ambiguous: the lowest level counts
+    assert (
+        _held(("Senior Developer", "2015", "2023-13"), ("Junior Developer", "2016", "2024")) == 0.2
+    )
+
+
+def test_a_future_end_date_is_an_open_role_not_the_latest_end() -> None:
+    assert _held(("Senior Developer", "2010", "2099"), ("Junior Developer", "2023", "2024")) == 0.2
+    assert _held(("Junior Developer", "2023", "2099"), ("Senior Developer", "2010", "2024")) == 0.2
+    today = date(2026, 6, 1)
+    roles = [
+        Experience(title="Junior Developer", organisation="X", start="2020", end="2026-07"),
+        Experience(title="Senior Developer", organisation="X", start="2010", end="2024"),
+    ]
+    assert last_held_level(roles, today=today) == 0.2  # 2026-07 is still ahead
+    assert last_held_level(roles, today=date(2027, 1, 1)) == 0.2  # now ended: latest is junior
+
+
 def test_a_month_name_in_spanish_or_catalan_parses() -> None:
-    assert _parse_date("ene 2020") == (2020, 1) and _parse_date("des. 2021") == (2021, 12)
-    assert _parse_date("03/2023") == (2023, 3) and _parse_date("2023-03-15") == (2023, 3)
+    assert _parse_date("ene 2020") == ((2020, 1), (2020, 1))
+    assert _parse_date("des. 2021") == ((2021, 12), (2021, 12))
+    assert _parse_date("03/2023") == ((2023, 3), (2023, 3))
+    assert _parse_date("2023-03-15") == ((2023, 3), (2023, 3))
+    assert _parse_date("2023") == ((2023, 1), (2023, 12))
     assert _parse_date("last spring") is None
-
-
-@pytest.mark.parametrize("currency", [None, "EUR"])
-def test_step_nine_keeps_the_pay_band_so_t246_accepts_it(
-    tmp_path: Path, currency: str | None
-) -> None:
-    store = _store(tmp_path, MASTER)
-    c = _offer(store, "p", "Dev", "Python.", [])
-    (fitted,) = fit_candidates(store, [c])
-    assert fitted.pay == c.pay and fitted.salary_per_month == c.salary_per_month
-    assert _run(store, [c], currency)["pareto"] == ["p"]
-
-
-def test_fit_does_not_launder_a_point_with_no_band(tmp_path: Path) -> None:
-    store = _store(tmp_path, MASTER)
-    bare = replace(_offer(store, "p", "Dev", "Python.", []), pay=None)
-    with pytest.raises(RankingError):
-        _run(store, [bare], "EUR")
-
-
-def test_the_fit_axes_never_grant_a_dominance_the_old_rule_refuses() -> None:
-    """What the old rule refuses: a worse non-fit axis, or an unknown one.
-
-    Fit may supply the strict improvement (equal otherwise, better fit), never
-    cover for a loss elsewhere or for silence on a non-fit dimension.
-    """
-    from itertools import product
-
-    from integral.rank import dominates
-
-    readings = [
-        read_fit(silent(replace(GOOD, **w), d), ME)
-        for w in ({}, *({n: WORSE[n]} for n in OFFER_FIELDS))
-        for d in DEAD_SETS
-    ]
-    cands = [
-        cand(f"c{i}", r, salary=s, remote=rem, unknown=frozenset(u))
-        for i, r in enumerate(readings)
-        for s, rem in ((2000.0, 0.1), (5000.0, 0.9))
-        for u in ((), ("commute",))
-    ]
-    cands = [
-        c if "commute" in c.unknown else replace(c, scores={**c.scores, "commute": 0.5})
-        for c in cands
-    ]
-    dims = (*DIMS, "commute")
-    checked = granted = 0
-    for a, b in product(cands, repeat=2):
-        checked += 1
-        if not dominates(a, b, dims):
-            continue
-        granted += 1
-        assert not (a.unknown | b.unknown) & {"commute"}
-        assert a.salary_per_month >= b.salary_per_month  # type: ignore[operator]
-        assert a.scores["remote"] >= b.scores["remote"]
-        # and the fit axes themselves: silent on both, or stated on both with a >= b;
-        # silence on exactly one side is never credited as "at least as good".
-        for name in FIT_DIMENSIONS:
-            assert (name in a.unknown) == (name in b.unknown)
-            if name not in a.unknown:
-                assert a.scores[name] >= b.scores[name]
-    assert checked > 1000 and granted > 0

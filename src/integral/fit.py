@@ -41,6 +41,7 @@ import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
+from datetime import date
 from functools import lru_cache
 from typing import Any, get_args
 
@@ -188,35 +189,58 @@ _NUMERIC = re.compile(r"^(\d{1,2})[/.-](\d{4})$")
 _NAMED = re.compile(r"^([^\W\d_]+)\.?\s+(\d{4})$")
 
 
-def _parse_date(text: str) -> tuple[int, int] | None:
-    """`(year, month)` from the spellings a CV uses, or `None` when it cannot be read.
+Span = tuple[tuple[int, int], tuple[int, int]]  # ((year, month) earliest, latest)
 
-    A month-less year is month 0, so it sorts before any month of that year.
+
+def _point(year: int, month: int) -> Span:
+    return (year, month), (year, month)
+
+
+def _month(value: int | str) -> int | None:
+    month = int(value)
+    return month if 1 <= month <= 12 else None
+
+
+def _parse_date(text: str) -> Span | None:
+    """The span a CV date covers, or `None` when it cannot be read.
+
+    A bare year is the whole of it, January to December: "2023" does not say
+    which month, so it cannot be ordered against "2023-06". A month is a span of
+    one month. A month outside 1-12 is not a date.
     """
     text = text.strip()
     if match := _ISO.match(text):
-        return int(match[1]), int(match[2] or 0)
+        year = int(match[1])
+        if match[2] is None:
+            return (year, 1), (year, 12)
+        month = _month(match[2])
+        return None if month is None else _point(year, month)
     if match := _NUMERIC.match(text):
-        return int(match[2]), int(match[1])
+        month = _month(match[1])
+        return None if month is None else _point(int(match[2]), month)
     if (match := _NAMED.match(text)) and (month := _MONTHS.get(match[1].lower()[:3])):
-        return int(match[2]), month
+        return _point(int(match[2]), month)
     return None
 
 
-def last_held_level(experience: Sequence[Experience]) -> float | None:
+def last_held_level(experience: Sequence[Experience], *, today: date | None = None) -> float | None:
     """The level the CV supports for the last role held, never more than it supports.
 
-    Which role is last is read from dates parsed as dates, not compared as text.
-    Where it cannot be settled — several open roles, an open role that began
-    before a closed one ended, or a date that does not parse — every role that
-    could be the last is a candidate, and the answer is the **lowest** of them.
-    A candidate whose title states no level makes the answer unknown: it could be
-    the last role, and nothing says it was not junior.
+    Which role is last is read from dates parsed as dates, not compared as text,
+    and a date is a span (a bare year is January to December). Where the last
+    role cannot be settled — several open roles, an open role that may have begun
+    before a closed one ended, ends whose spans overlap the latest, a date that
+    does not parse — every role that could be the last is a candidate, and the
+    answer is the **lowest** of them. A candidate whose title states no level
+    makes the answer unknown: it could be the last role, and nothing says it was
+    not junior. An end date in the future is not an end: that role is open.
     """
     if not experience:
         return None
-    ended: dict[int, tuple[int, int]] = {}
-    started: dict[int, tuple[int, int]] = {}
+    now = today or date.today()
+    this_month = (now.year, now.month)
+    ended: dict[int, Span] = {}
+    started: dict[int, Span] = {}
     open_roles: list[int] = []
     ambiguous = False
     for index, job in enumerate(experience):
@@ -229,19 +253,21 @@ def last_held_level(experience: Sequence[Experience]) -> float | None:
             open_roles.append(index)
         elif (when := _parse_date(job.end)) is None:
             ambiguous = True
+        elif when[0] > this_month:
+            open_roles.append(index)
         else:
             ended[index] = when
     if ambiguous:
         candidates = set(range(len(experience)))
     elif open_roles:
-        known = [started[i] for i in open_roles if i in started]
+        known = [started[i][0] for i in open_roles if i in started]
         floor = min(known) if len(known) == len(open_roles) else None
         candidates = set(open_roles) | {
-            i for i, end in ended.items() if floor is None or end > floor
+            i for i, end in ended.items() if floor is None or end[1] > floor
         }
     else:
-        latest = max(ended.values())
-        candidates = {i for i, end in ended.items() if end == latest}
+        latest = max(end[0] for end in ended.values())
+        candidates = {i for i, end in ended.items() if end[1] >= latest}
     levels = [_held_seniority(experience[i].title) for i in sorted(candidates)]
     if any(level is None for level in levels):
         return None
