@@ -20,6 +20,7 @@ from integral.rank import (
     _reference_interval,
     measure_order,
     ordering_defects,
+    point_band,
     priced_dimensions,
     rank,
     rank_named,
@@ -41,6 +42,7 @@ def cand(i: str, salary: float | None, **scores: float) -> Candidate:
     return Candidate(
         offer_id=i,
         salary_per_month=salary,
+        pay=point_band(salary, "EUR"),
         scores=scores,
         unknown=frozenset(d for d in DIMS if d not in scores),
     )

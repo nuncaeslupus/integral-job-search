@@ -18,7 +18,7 @@ from typing import Any
 from integral import eligibility
 from integral.eligibility import Reading
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, measure_exclusions, rank
+from integral.rank import Candidate, measure_exclusions, point_band, rank
 
 
 def test_a_hard_gate_field_is_never_read_by_the_ranker() -> None:
@@ -69,9 +69,24 @@ def _ranking() -> dict[str, Any]:
     """Three offers, one of each verdict. The barred one pays the most, so a
     frontier that merely sorted it last would still put it first."""
     candidates = [
-        Candidate(offer_id=_BARRED, salary_per_month=9000.0, scores={"remote": 1.0}),
-        Candidate(offer_id=_FLAGGED, salary_per_month=3000.0, scores={"remote": 0.5}),
-        Candidate(offer_id=_CLEAR, salary_per_month=2000.0, scores={"remote": -1.0}),
+        Candidate(
+            offer_id=_BARRED,
+            salary_per_month=9000.0,
+            pay=point_band(9000.0, "EUR"),
+            scores={"remote": 1.0},
+        ),
+        Candidate(
+            offer_id=_FLAGGED,
+            salary_per_month=3000.0,
+            pay=point_band(3000.0, "EUR"),
+            scores={"remote": 0.5},
+        ),
+        Candidate(
+            offer_id=_CLEAR,
+            salary_per_month=2000.0,
+            pay=point_band(2000.0, "EUR"),
+            scores={"remote": -1.0},
+        ),
     ]
     return rank(
         candidates,
@@ -124,9 +139,19 @@ def test_a_dominated_flag_offer_is_still_retained() -> None:
     counting only the frontier would report it as dropped."""
     dominant = "sha256:" + "d" * 64
     candidates = [
-        Candidate(offer_id=dominant, salary_per_month=5000.0, scores={"remote": 1.0}),
+        Candidate(
+            offer_id=dominant,
+            salary_per_month=5000.0,
+            pay=point_band(5000.0, "EUR"),
+            scores={"remote": 1.0},
+        ),
         # Strictly worse on both axes, so `dominant` collapses it.
-        Candidate(offer_id=_FLAGGED, salary_per_month=3000.0, scores={"remote": 0.5}),
+        Candidate(
+            offer_id=_FLAGGED,
+            salary_per_month=3000.0,
+            pay=point_band(3000.0, "EUR"),
+            scores={"remote": 0.5},
+        ),
     ]
     ranking = rank(
         candidates,
