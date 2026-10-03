@@ -446,6 +446,7 @@
     "connector_policy.ADJUDICATIONS_AT_LEAST",
     "connector_salary_audit.MINIMUM_DISTINCT_SALARY_VERDICTS_READ",
     "connector_salary_audit.MINIMUM_PACKAGES_MEASURED",
+    "connector_salary_audit._MIN_REASON",
     "connector_salary_audit._WINDOW",
     "connector_transport.MINIMUM_CREDENTIAL_CASES",
     "connector_transport.MINIMUM_GET_PACKAGES",

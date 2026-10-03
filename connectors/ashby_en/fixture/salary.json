@@ -5,7 +5,12 @@
       "min": 30000.0,
       "max": 45000.0,
       "currency": "EUR",
-      "period": null
+      "period": null,
+      "card_uncomparable": "The posting publishes several compensation tiers in the one row (`compensationTierSummary` 'EUR 30K-45K, Multiple Ranges' and `compensationTiers` carrying further bands), so the card text holds more than one band and `card_band` correctly says nothing. The pinned figures are the summary band this entry reads; counted, not skipped.",
+      "card_figures": [
+        30000.0,
+        45000.0
+      ]
     },
     "1": {
       "verdict": "refused",

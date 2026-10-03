@@ -5,7 +5,12 @@
       "min": 70.0,
       "max": 90.0,
       "currency": "USD",
-      "period": "hour"
+      "period": "hour",
+      "card_uncomparable": "The row's card is a JSON object: the band is two numeric fields (`minSalary` 70, `maxSalary` 90) and the currency a third (`currency` USD) more than 40 characters from either, so no figure sits beside a currency token and neither `card_band` nor `card_figure` can cut it out. The pinned figures must be on the card and are what the entry reads; counted, not skipped.",
+      "card_figures": [
+        70.0,
+        90.0
+      ]
     }
   }
 }

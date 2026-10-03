@@ -56,6 +56,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
+from html import unescape
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,7 @@ from integral.connectors import (
     _CURRENCIES,
     Connector,
     _json_documents,
+    _numbers_in,
     _take,
     compile_path,
     compile_selector,
@@ -94,6 +96,10 @@ _FIXTURE_URL = "https://fixture.invalid/advert"
 #: from the other end of the card.
 _WINDOW = 40
 
+#: The shortest reason an entry may give for a card it declares uncomparable. A
+#: floor on prose is a proxy, and says so: it only stops a bare `"x"`.
+_MIN_REASON = 40
+
 #: Every currency this repository can recognise, longest token first, bounded by
 #: ASCII letters exactly as `connectors._CURRENCY_TOKEN` bounds them — `CAD`
 #: inside `CADENCE` is not money here either. Derived from the table rather than
@@ -112,9 +118,67 @@ _CURRENCY_TOKEN = re.compile(
 #: engine's own `_take` vocabulary (`range_low`, `range_high`, `currency`), so the
 #: audit reads money the way a connector's `take:` does and owns no parser.
 _CUR = _CONNECTOR_CURRENCY_TOKEN.pattern
-_BAND_SLICE = re.compile(
-    rf"(?:{_CUR})?\s*\d[\d.,]*\s*[KM]?\s*[-\u2013\u2014]\s*(?:{_CUR})?\s*\d[\d.,]*\s*[KM]?"
+#: One figure as a card writes it: a currency token before or after (or neither),
+#: and a `K`/`M` only as a whole token — the text is upper-cased before it is
+#: sliced, so `MADRID` must not lend its `M` to the number in front of it.
+_FIGURE = rf"(?:{_CUR})?\s*\d[\d.,]*(?:\s*[KM](?!\w))?\s*(?:{_CUR})?"
+_BAND_SLICE = re.compile(rf"{_FIGURE}\s*(?:[-\u2013\u2014]|\bTO\b)\s*{_FIGURE}")
+#: A lone figure with a currency token attached to it, either side.
+_SINGLE_SLICE = re.compile(
+    rf"(?:{_CUR})\s*\d[\d.,]*(?:\s*[KM](?!\w))?|\d[\d.,]*(?:\s*[KM](?!\w))?\s*(?:{_CUR})"
 )
+
+
+_TAG = re.compile(r"<[^>]*>")
+
+
+def _flat(text: str) -> str:
+    """The card's text as a reader sees it: entities decoded, tags dropped,
+    whitespace collapsed, upper-cased. A board that ships its advert as escaped
+    HTML (`&lt;span&gt;$320,000&lt;/span&gt;&amp;mdash;…`) prints a band the raw
+    string hides behind markup, and a card the slice cannot see is a card the
+    audit skips."""
+    decoded = unescape(text)
+    if "<" in decoded:
+        decoded = unescape(_TAG.sub(" ", decoded))
+    return " ".join(decoded.split()).upper()
+
+
+def card_figure(text: str) -> tuple[float, str | None] | None:
+    """`(figure, currency or None)` for a card that prints exactly one money
+    figure and no band, or `None`.
+
+    The single-figure twin of `card_band`: `CAD 42K`, `$143,913 Per year`. It
+    says nothing when the card prints a band (that is `card_band`'s) or two
+    different figures (nothing to hold a declared read against).
+    """
+    if card_band(text) is not None:
+        return None
+    flat = _flat(text)
+    found = set()
+    for match in _SINGLE_SLICE.finditer(flat):
+        chunk = match.group(0)
+        figures = _numbers_in(chunk)
+        if len(figures) != 1 or figures[0] <= 0:
+            continue
+        # A second figure of the same order of magnitude beside this one is a
+        # band written without a dash (`40.000 a 50.000`, `entre 30.000 y 40.000
+        # EUR`, `40.000 / 50.000`): reading it as one figure lets an engine that
+        # reads a single end pass. Refuse, so the row is counted instead. Small
+        # numbers (a grade `GS 14-15`, a count) are another order and do not.
+        low, high = max(0, match.start() - _WINDOW), match.end() + _WINDOW
+        before, after = flat[low : match.start()], flat[match.end() : high]
+        # A window edge that lands inside a token leaves half a number behind
+        # (`"DOCUMENTID": "88246` out of `882464100`), which is not on the card.
+        if low > 0:
+            before = before.split(" ", 1)[-1]
+        if high < len(flat):
+            after = after.rsplit(" ", 1)[0]
+        context = f"{before} {after}"
+        if any(0.1 <= other / figures[0] <= 10 for other in _numbers_in(context) if other > 0):
+            return None
+        found.add((figures[0], _take("currency", chunk)))
+    return found.pop() if len(found) == 1 else None
 
 
 def card_band(text: str) -> tuple[float, float, str] | None:
@@ -124,7 +188,7 @@ def card_band(text: str) -> tuple[float, float, str] | None:
     or states two different ones: the audit then has nothing to hold a declared
     read against, and says nothing rather than guess.
     """
-    flat = " ".join(text.split()).upper()
+    flat = _flat(text)
     found = set()
     for match in _BAND_SLICE.finditer(flat):
         chunk = match.group(0)
@@ -159,6 +223,11 @@ class RowVerdict:
     #: read alone: an entry that copies the code's output agrees with the code by
     #: construction, and only the card can say the code is wrong.
     card: tuple[float, float, str] | None = None
+    #: The single-figure twin, by `card_figure` — set only when `card` is `None`.
+    card_single: tuple[float, str | None] | None = None
+    #: Every number the row's own card prints, read by the engine's `_numbers_in`.
+    #: What a waived card's pinned figures are held against.
+    card_numbers: frozenset[float] = frozenset()
 
 
 def _money_contexts(text: str) -> tuple[str, ...]:
@@ -263,6 +332,8 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
                 salary=_as_record(offer.salary if offer is not None else None),
                 list_publishes=_money_contexts(list_text),
                 card=card_band(list_text),
+                card_single=card_figure(list_text),
+                card_numbers=frozenset(_numbers_in(_flat(list_text))),
                 detail_supplies_salary=route == "detail"
                 and detail is not None
                 and any(key.startswith("salary") for key in detail),
@@ -308,6 +379,35 @@ def _declared_for(
     return row, False
 
 
+def _single_figure_agrees(declared: dict[str, Any], card: tuple[float, str | None]) -> bool:
+    """Does an entry's read match the one figure its card prints?
+
+    Exactly one of `min`/`max` is set and it is that figure — which side is the
+    engine's call (a floor, a ceiling), the figure is the card's. The currency
+    is held only when both sides name one: usajobs' engine declares none for a
+    `$` card, which is a gap in what is read and not a disagreement about it.
+    """
+    figure, card_currency = card
+    bounds = [b for b in (declared.get("min"), declared.get("max")) if b is not None]
+    declared_currency = declared.get("currency")
+    currency_clash = (
+        card_currency is not None
+        and declared_currency is not None
+        and card_currency != declared_currency
+    )
+    return bounds == [figure] and not currency_clash
+
+
+def _pin_holds(declared: dict[str, Any], pinned: Any, card_numbers: frozenset[float]) -> bool:
+    """A waived card's figures: listed, all on the card, and the entry reads
+    exactly them (one bound or two)."""
+    if not isinstance(pinned, list) or not pinned:
+        return False
+    figures = sorted(float(x) for x in pinned)
+    bounds = sorted(b for b in (declared.get("min"), declared.get("max")) if b is not None)
+    return all(f in card_numbers for f in figures) and bounds == figures
+
+
 def _declared_band(declared: dict[str, Any]) -> tuple[Any, Any, Any]:
     return (declared.get("min"), declared.get("max"), declared.get("currency"))
 
@@ -338,6 +438,8 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
     refused_rows = 0
     wildcard_rows = 0
     substituted_rows = 0
+    uncompared: list[str] = []
+    declared_uncomparable = 0
     distinct_verdicts: set[tuple[Any, ...]] = set()
     rows_measured = 0
     boards: dict[str, dict[str, Any]] = {}
@@ -417,6 +519,35 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                         f"{package} [{verdict.index}]: the card publishes {verdict.card}, "
                         f"the entry declares {_declared_band(declared)}"
                     )
+                elif verdict.card is None and verdict.card_single is not None:
+                    if not _single_figure_agrees(declared, verdict.card_single):
+                        mismatched.append(
+                            f"{package} [{verdict.index}]: the card publishes the single "
+                            f"figure {verdict.card_single}, the entry declares "
+                            f"{_declared_band(declared)}"
+                        )
+                elif verdict.card is None and (verdict.list_publishes or verdict.route == "list"):
+                    # The card carries money the audit can read neither as a band
+                    # nor as one figure. It is never skipped quietly: either the
+                    # entry says so, with a reason, and the row is counted under
+                    # its own exact key, or it lands in `uncompared`, the key
+                    # this gate drives to zero.
+                    reason = declared.get("card_uncomparable") if declared else None
+                    pinned = declared.get("card_figures") if declared else None
+                    where = (verdict.list_publishes or ("no figure beside a currency token",))[0]
+                    if not (isinstance(reason, str) and len(reason) >= _MIN_REASON):
+                        uncompared.append(f"{package} [{verdict.index}]: {where}")
+                    elif not _pin_holds(declared or {}, pinned, verdict.card_numbers):
+                        # A waiver is not a blanket: it pins the figures the
+                        # card prints, they must be on the card, and the read
+                        # must be exactly them.
+                        mismatched.append(
+                            f"{package} [{verdict.index}]: the waiver pins {pinned}, the card "
+                            f"prints {sorted(verdict.card_numbers)[:12]} and the entry reads "
+                            f"{_declared_band(declared or {})}"
+                        )
+                    else:
+                        declared_uncomparable += 1
                 if declared is not None and declared.get("verdict") == "read":
                     distinct_verdicts.add(_verdict_key(package, declared))
                 continue
@@ -445,6 +576,9 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
         "rows_adjudicated_by_a_wildcard": wildcard_rows,
         "rows_read_through_a_substituted_detail": substituted_rows,
         "distinct_salary_verdicts_read": len(distinct_verdicts),
+        "rows_read_whose_card_money_was_not_compared": len(uncompared),
+        "rows_read_with_a_declared_uncomparable_card": declared_uncomparable,
+        "uncompared": tuple(uncompared),
         "unread": tuple(unread),
         "mismatches": tuple(mismatched),
     }
@@ -522,7 +656,7 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
     committed = {
         key: value
         for key, value in measured.items()
-        if key not in ("unread", "mismatches", "rows_measured")
+        if key not in ("unread", "mismatches", "rows_measured", "uncompared")
     }
     committed.pop("salary_rows_read")
     committed.pop("distinct_salary_verdicts_read")
@@ -595,10 +729,13 @@ def _main(argv: list[str]) -> int:
         print(f"connector_salary_audit: unread {entry}", file=sys.stderr)
     for entry in measured["mismatches"]:
         print(f"connector_salary_audit: mismatch {entry}", file=sys.stderr)
+    for entry in measured["uncompared"]:
+        print(f"connector_salary_audit: uncompared {entry}", file=sys.stderr)
     return (
         1
         if measured["boards_that_publish_a_salary_we_do_not_read"]
         or measured["salary_expectation_mismatches"]
+        or measured["rows_read_whose_card_money_was_not_compared"]
         else 0
     )
 

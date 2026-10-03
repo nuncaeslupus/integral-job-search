@@ -1193,7 +1193,7 @@ _CURRENCY_TOKEN = re.compile(
 #: optional magnitude suffix. Deliberately not anchored to a currency: boards
 #: write `€50.000`, `50.000€` and `50.000 EUR`, and the number is the same in
 #: all three.
-_NUMBER = re.compile(r"(\d[\d.,]*)\s*([KkMm])?")
+_NUMBER = re.compile(r"(\d[\d.,]*)\s*(?:([KkMm])(?!\w))?")
 
 #: `CAD 150K-190K` — foorilla.com's whole salary column is written this way, and
 #: reading it as 150 to 190 is the 1000x error `_as_float` exists to refuse,

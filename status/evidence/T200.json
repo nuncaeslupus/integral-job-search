@@ -4,6 +4,8 @@
   "salary_expectation_mismatches": 0,
   "rows_adjudicated_by_a_wildcard": 7,
   "rows_read_through_a_substituted_detail": 47,
+  "rows_read_whose_card_money_was_not_compared": 0,
+  "rows_read_with_a_declared_uncomparable_card": 5,
   "distinct_salary_verdicts_read_at_least": 75,
   "packages_measured_at_least": 24
 }
