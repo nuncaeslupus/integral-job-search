@@ -56,6 +56,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from platformdirs.macos import MacOS
+from platformdirs.windows import Windows
 from pydantic import BaseModel, ConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -202,13 +204,29 @@ def ensure_outside_a_work_tree(
     return resolved
 
 
+def _platform_default(env: Mapping[str, str]) -> Path:
+    """The last-resort store root for this OS. The two earlier tiers still win.
+
+    Linux keeps `~/.integral-job-search`; macOS and Windows take what
+    `platformdirs` names the user data dir for the app.
+    """
+    if sys.platform == "win32":
+        return Path(Windows(appname=APP_DIR, appauthor=False).user_data_dir)
+    if sys.platform == "darwin":
+        return Path(MacOS(appname=APP_DIR, appauthor=False).user_data_dir)
+    home = env.get("HOME", "").strip()
+    base = Path(home) if home else Path("~")
+    return base / f".{APP_DIR}"
+
+
 def candidate_root(
     *,
     env: Mapping[str, str] | None = None,
     dev: bool | None = None,
 ) -> Path:
     """The store root: `$INTEGRAL_HOME`, else `$XDG_DATA_HOME/integral-job-search`,
-    else `~/.integral-job-search` — never a path inside a git work tree.
+    else the per-OS default (`~/.integral-job-search` on Linux, the `platformdirs`
+    user data dir on macOS and Windows) — never a path inside a git work tree.
 
     `dev` overrides `$INTEGRAL_DEV` when given, so `--dev` on a command line is
     the same escape as the environment variable and neither is implicit.
@@ -222,9 +240,7 @@ def candidate_root(
         if xdg:
             root, source = Path(xdg) / APP_DIR, XDG_ENV
         else:
-            home = env.get("HOME", "").strip()
-            base = Path(home) if home else Path("~")
-            root, source = base / f".{APP_DIR}", "HOME"
+            root, source = _platform_default(env), "HOME"
 
     return ensure_outside_a_work_tree(root, source=source, env=env, dev=dev)
 
