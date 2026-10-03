@@ -7,24 +7,8 @@
   "misread_cases": [],
   "repo_matcher_verdicts_against_the_rfc": 0,
   "repo_matcher_disagreement_cases": [],
-  "repo_matcher_verdicts_against_the_implementer_table": 7,
+  "repo_matcher_verdicts_against_the_implementer_table": 4,
   "repo_matcher_regression_disagreement_cases": [
-    {
-      "id": "a_wildcard_allow_does_not_outrank_a_matching_disallow",
-      "section": "RFC 9309 §2.2.2 (implementer-derived)",
-      "expected": "DISALLOW",
-      "confidence": "HIGH",
-      "repo_matcher": "ALLOW",
-      "direction": "fail_open"
-    },
-    {
-      "id": "a_wildcard_allow_reaching_an_encoded_query_does_not_rescue_a_refusal",
-      "section": "RFC 9309 §2.2.2 (implementer-derived)",
-      "expected": "DISALLOW",
-      "confidence": "HIGH",
-      "repo_matcher": "ALLOW",
-      "direction": "fail_open"
-    },
     {
       "id": "rules_under_an_empty_user_agent_line_are_not_dropped",
       "section": "RFC 9309 §2.2 (implementer-derived)",
@@ -56,14 +40,6 @@
       "confidence": "HIGH",
       "repo_matcher": "DISALLOW",
       "direction": "fail_closed"
-    },
-    {
-      "id": "wildcard_region_spelling_readings_diverge",
-      "section": "RFC 9309 §2.2.2 (implementer-derived, contested)",
-      "expected": "DISALLOW",
-      "confidence": "LOW",
-      "repo_matcher": "ALLOW",
-      "direction": "fail_open"
     }
   ],
   "contested_readings_gating": [

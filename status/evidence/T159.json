@@ -123,6 +123,16 @@
       "line": 97
     },
     {
+      "module": "matcher_readings",
+      "name": "MINIMUM_CONTESTED_TRIPLES",
+      "line": 238
+    },
+    {
+      "module": "matcher_readings",
+      "name": "MINIMUM_TRIPLES",
+      "line": 230
+    },
+    {
       "module": "naming",
       "name": "MINIMUM_SCANNED",
       "line": 229
@@ -190,22 +200,22 @@
     {
       "module": "second_reader",
       "name": "FAIL_OPEN_CASES_AT_LEAST",
-      "line": 832
+      "line": 872
     },
     {
       "module": "second_reader",
       "name": "FIXTURES_AT_LEAST",
-      "line": 822
+      "line": 862
     },
     {
       "module": "second_reader",
       "name": "REGRESSION_CASES_AT_LEAST",
-      "line": 863
+      "line": 903
     },
     {
       "module": "second_reader",
       "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
-      "line": 849
+      "line": 889
     },
     {
       "module": "sourcing",
@@ -297,20 +307,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3447,
+      "line": 3449,
       "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3474,
+      "line": 3476,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3339,
-      "population": 89
+      "line": 3341,
+      "population": 91
     },
     {
       "module": "freshness",
@@ -546,6 +556,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 89,
+  "floors_swept_at_least": 91,
   "floors_arithmetically_checked_at_least": 36
 }

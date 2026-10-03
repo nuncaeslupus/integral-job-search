@@ -3336,7 +3336,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: **89 with T203**, whose `exclusion_live_round` module declares three floors
 #: (`MINIMUM_EXCLUDED_SERVED`, `MINIMUM_UNEXCLUDED_SERVED`,
 #: `MINIMUM_EXCLUSIONS_TRIPPED`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 89
+#: **91 with D-30**, whose `matcher_readings` declares two floors
+#: (`MINIMUM_TRIPLES`, `MINIMUM_CONTESTED_TRIPLES`). Still zero slack.
+MINIMUM_FLOORS_SWEPT = 91
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3777,7 +3779,9 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: `measure_prose_clearance()` against this branch.
 #: **86 with T203**: `exclusion_live_round`'s three floors each carry their own
 #: comment block and marker, so each is one more scenario. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 86
+#: **88 with D-30**: `matcher_readings`' two floors are two scenarios more
+#: between them, as measured by `measure_prose_clearance()`. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 88
 
 
 def measure_prose_clearance() -> dict[str, Any]:
