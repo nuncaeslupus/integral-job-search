@@ -186,6 +186,10 @@ def read_pay(offer: Offer, table: RateTable) -> PayReading:
     rate = table.rate_for(salary.currency)
     factor = months * (1.0 if rate is None else rate.per_unit)
     ends = [value for value in (salary.min, salary.max) if value is not None]
+    if not all(math.isfinite(value) and value >= 0 for value in ends):
+        raise PayNormaliseError(
+            f"{offer.id} states a figure that is not a finite, non-negative wage"
+        )
     low, high = min(ends) * factor, max(ends) * factor
     band = PayBand(low=low, high=high, currency=table.target)
     note = (
@@ -283,15 +287,22 @@ def _fixture() -> list[tuple[Offer, float | None]]:
     ]
 
 
-def _unconverted(table: RateTable) -> int:
-    """Offers whose ranked pay differs from the independently worked figure."""
-    wrong = 0
+def _audit(table: RateTable, *, settled: float | None = None) -> tuple[int, int]:
+    """`(offers whose ranked pay is wrong, offers the audit compared)`.
+
+    Compares every offer the ranking published, the frontier and the dominated
+    alike: a mis-converted offer must not escape by being collapsed. `settled`
+    gives every offer the same score on `remote`, which is what makes some of
+    them dominated (the lower payers), so that population is exercised.
+    """
     candidates: list[Candidate] = []
     expected: dict[str, float | None] = {}
     for offer, want in _fixture():
         candidate, _ = candidate_for(
             offer, _extraction(offer.id), dimensions=_DIMENSIONS, table=table
         )
+        if settled is not None:
+            candidate = replace(candidate, scores={"remote": settled}, unknown=frozenset())
         candidates.append(candidate)
         expected[offer.id] = want
     ranking = rank(
@@ -303,13 +314,19 @@ def _unconverted(table: RateTable) -> int:
         currency=table.target,
     )
     by_id = {c.offer_id: c for c in candidates}
-    for offer_id in ranking["pareto"]:
+    published = [*ranking["pareto"], *ranking["dominated"]]
+    wrong = 0
+    for offer_id in published:
         got, want = by_id[offer_id].salary_per_month, expected[offer_id]
         if (got is None) != (want is None) or (
             got is not None and want is not None and abs(got - want) > 1e-6
         ):
             wrong += 1
-    return wrong
+    return wrong, len(published)
+
+
+def _unconverted(table: RateTable) -> int:
+    return _audit(table)[0]
 
 
 def _planted_raw() -> int:
@@ -332,31 +349,39 @@ def _refusals() -> dict[str, int]:
         except PayNormaliseError:
             continue
         unrefused += 1
+    # What reaches `rank` itself, whatever door it came through: a point with no
+    # band, and a point beside a band in another currency, in a ranking whose
+    # currency is known. Each must be refused.
     foreign_band_accepted = 0
-    foreign = Candidate("f", 3000.0, {}, frozenset(_DIMENSIONS), pay=PayBand(3000, 3000, "USD"))
-    try:
-        rank(
-            [foreign],
-            dimensions=_DIMENSIONS,
-            revision=_REVISION,
-            weights=_WEIGHTS,
-            at="T246",
-            currency="EUR",
-        )
-        foreign_band_accepted = 1
-    except RankingError:
-        pass
+    for pay in (None, PayBand(3000, 3000, "USD")):
+        point = Candidate("f", 3000.0, {}, frozenset(_DIMENSIONS), pay=pay)
+        try:
+            rank(
+                [point],
+                dimensions=_DIMENSIONS,
+                revision=_REVISION,
+                weights=_WEIGHTS,
+                at="T246",
+                currency="EUR",
+            )
+            foreign_band_accepted += 1
+        except RankingError:
+            pass
     return {"unrefused": unrefused, "foreign_band_accepted": foreign_band_accepted}
 
 
 def measure() -> dict[str, Any]:
     refusals = _refusals()
-    wrong = _unconverted(_TABLE)
+    wrong, compared = _audit(_TABLE)
+    wrong_settled, compared_settled = _audit(_TABLE, settled=0.5)
     return {
         "unconverted_pay_reaching_rank": wrong
+        + wrong_settled
         + refusals["unrefused"]
         + refusals["foreign_band_accepted"],
-        "offers_checked": len(_fixture()),
+        # What the audit compared (frontier and dominated, both runs), not the
+        # number of fixture rows.
+        "offers_checked": compared + compared_settled,
         "unconverted_detected_when_planted": min(_planted_raw(), 1),
     }
 

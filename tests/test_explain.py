@@ -23,6 +23,7 @@ to prevent, arrived at through a metric instead of a missing command.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,7 @@ from integral.extraction import (
 )
 from integral.offers import Offer, compute_offer_id
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, from_extraction, rank
+from integral.rank import Candidate, from_extraction, point_band, rank
 
 _DIMENSIONS = ("commute", "mentoring", "remote")
 _WEIGHTS: dict[str, Any] = {
@@ -68,6 +69,7 @@ def _candidate(
     return Candidate(
         offer_id=offer_id,
         salary_per_month=salary,
+        pay=point_band(salary, "EUR"),
         scores=scores,
         unknown=frozenset(name for name in _DIMENSIONS if name not in scores),
         spans=spans if spans is not None else {name: (f"cue for {name}",) for name in scores},
@@ -243,7 +245,10 @@ def test_a_span_reaching_an_explanation_is_byte_identical_to_the_advert() -> Non
         ],
         unsettled=["commute", "mentoring"],
     )
-    candidate = from_extraction(extraction, dimensions=_DIMENSIONS, salary_per_month=3000.0)
+    candidate = replace(
+        from_extraction(extraction, dimensions=_DIMENSIONS, salary_per_month=3000.0),
+        pay=point_band(3000.0, "EUR"),
+    )
     weights = {**_WEIGHTS, "part_worths": {"remote": _WEIGHTS["part_worths"]["remote"]}}
     explanations = explain(_ranking([candidate], weights), [candidate], weights)
 

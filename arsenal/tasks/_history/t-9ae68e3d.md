@@ -39,7 +39,7 @@ key: unconverted_pay_reaching_rank
 ```bash
 uv run --extra dev pytest tests/test_pay_normalise.py tests/test_pay_dominance.py tests/test_rank.py -q
 uv run --extra dev python -m integral.pay_normalise
-python3 -c "import json,sys; m=json.load(open('status/evidence/T246.json')); sys.exit(0 if m['unconverted_pay_reaching_rank']==0 and m['offers_checked']>=5 and m['unconverted_detected_when_planted']==1 else 1)"
+python3 -c "import json,sys; m=json.load(open('status/evidence/T246.json')); sys.exit(0 if m['unconverted_pay_reaching_rank']==0 and m['offers_checked']>=10 and m['unconverted_detected_when_planted']==1 else 1)"
 ```
 
 The `bash` block regenerates `status/evidence/T246.json` and checks its denominator and that

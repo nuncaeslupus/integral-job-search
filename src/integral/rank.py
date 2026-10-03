@@ -164,6 +164,16 @@ class Candidate:
             raise RankingError(f"{sorted(overlap)} are both scored and unknown on {self.offer_id}")
 
 
+def point_band(salary: float | None, currency: str) -> PayBand | None:
+    """A point reading as the band whose ends coincide, in `currency` (T246).
+
+    `salary_per_month` has no unit of its own, so a point enters a ranking with
+    a known currency only beside a band in that currency; this is the band a
+    point salary *is* (`PayBand`'s docstring), for callers that hold one figure.
+    """
+    return None if salary is None else PayBand(salary, salary, currency)
+
+
 def from_extraction(
     extraction: OfferExtraction,
     *,
@@ -283,10 +293,12 @@ def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None)
     much it pays, and a point outside its band would order by a number the
     advert contradicts.
 
-    A band in another currency than the ranking's, **with a point reading**, is
-    refused (T246): it used to be skipped as incomparable, which let its bare
-    number reach the sort beside figures in the ranking's own unit. One with no
-    point is silent to the sort, so it stays incomparable and is let through.
+    **A point reading must carry the ranking's currency (T246).** When the
+    currency is known, a candidate with a `salary_per_month` and no band in that
+    currency is refused: the number has no unit of its own, so a bare point or a
+    point beside a foreign band would be sorted as if it were this one. A band
+    with no point is silent to the sort, so it stays incomparable and is let
+    through. This is a rule on what reaches the sort, not on one entry path.
     Checked once, here, where the currency is known — `require_coverage`'s
     reason, one axis over.
 
@@ -303,20 +315,23 @@ def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None)
     """
     for candidate in candidates:
         band = candidate.pay
-        if band is None:
-            continue
-        if currency is not None and band.currency != currency:
-            # T246: the sort orders on `salary_per_month`, which carries no
-            # currency, so a point beside a band in another one would be compared
-            # as if it were this one. A foreign band with no point is silent to
-            # the sort and stays incomparable; `integral.pay_normalise` is what
-            # converts a point into the ranking's currency before it gets here.
-            if candidate.salary_per_month is not None:
-                raise RankingError(
-                    f"{candidate.offer_id} is ranked at {candidate.salary_per_month} against a "
-                    f"{band.currency} band in a {currency} ranking — convert it first, "
-                    "never compare it as is"
-                )
+        # T246: when the ranking's currency is known, a point reading must
+        # arrive with its unit — a band in that currency. `salary_per_month`
+        # carries none, so a bare point (or one beside a band in another
+        # currency) would be compared as if it were this one. A band with no
+        # point is silent to the sort and stays incomparable (T138).
+        if (
+            currency is not None
+            and candidate.salary_per_month is not None
+            and (band is None or band.currency != currency)
+        ):
+            raise RankingError(
+                f"{candidate.offer_id} is ranked at {candidate.salary_per_month} with "
+                f"{'no band' if band is None else f'a {band.currency} band'} in a {currency} "
+                "ranking — convert it first (`integral.pay_normalise.candidate_for`), "
+                "never compare it as is"
+            )
+        if band is None or (currency is not None and band.currency != currency):
             continue
         salary = candidate.salary_per_month
         if salary is None:
@@ -1001,6 +1016,7 @@ def _fixture_candidates() -> list[Candidate]:
             salary_per_month=salary,
             scores=scores,
             unknown=frozenset(name for name in _FIXTURE_DIMENSIONS if name not in scores),
+            pay=point_band(salary, "EUR"),
         )
         for offer_id, salary, scores in _FIXTURE
     ]
@@ -1145,10 +1161,19 @@ def _unknown_everywhere_candidates() -> list[Candidate]:
                     salary_per_month=None if variant == 2 and salary is not None else salary,
                     scores=kept,
                     unknown=frozenset(n for n in _FIXTURE_DIMENSIONS if n not in kept),
+                    pay=None if variant == 2 else point_band(salary, "EUR"),
                 )
             )
-    out.append(Candidate("sha256:" + "a" * 64, 3000.0, {}, frozenset(_FIXTURE_DIMENSIONS)))
-    out.append(Candidate("sha256:" + "b" * 64, 3000.0, {}, frozenset(_FIXTURE_DIMENSIONS)))
+    for letter in "ab":
+        out.append(
+            Candidate(
+                "sha256:" + letter * 64,
+                3000.0,
+                {},
+                frozenset(_FIXTURE_DIMENSIONS),
+                pay=point_band(3000.0, "EUR"),
+            )
+        )
     out.append(Candidate("sha256:" + "c" * 64, None, {}, frozenset(_FIXTURE_DIMENSIONS)))
     return out
 
@@ -1162,6 +1187,7 @@ def _mixed_candidates() -> list[Candidate]:
             salary_per_month=salary,
             scores=dict(scores),
             unknown=frozenset(n for n in _FIXTURE_DIMENSIONS if n not in scores),
+            pay=point_band(salary, "EUR"),
         )
         for offer_id, salary, scores in _FIXTURE
     ]

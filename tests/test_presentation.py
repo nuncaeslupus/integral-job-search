@@ -36,7 +36,7 @@ from integral.presentation import (
     write_evidence,
 )
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, rank
+from integral.rank import Candidate, point_band, rank
 
 _DIMENSIONS = ("commute", "remote")
 _WEIGHTS: dict[str, Any] = {
@@ -68,6 +68,7 @@ def _candidate(offer: Offer, salary: float | None, scores: dict[str, float]) -> 
     return Candidate(
         offer_id=offer.id,
         salary_per_month=salary,
+        pay=point_band(salary, "EUR"),
         scores=scores,
         unknown=frozenset(name for name in _DIMENSIONS if name not in scores),
         spans={name: (f"the advert's words for {name}",) for name in scores},

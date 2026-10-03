@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import itertools
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, get_args
 
@@ -218,3 +219,54 @@ def test_the_committed_evidence_is_what_the_code_measures_now(tmp_path: Path) ->
     written = write_evidence(tmp_path / "T246.json")
     committed = json.loads(DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8"))
     assert committed == written == measure()
+
+
+def test_rank_refuses_a_bare_point_whatever_door_it_came_through() -> None:
+    """The rule is on what reaches `rank`: with a known currency, a point needs its unit."""
+    bare = Candidate("a", 3333.0, {}, frozenset(DIMS))
+    for pay in (None, PayBand(3333.0, 3333.0, "USD")):
+        with pytest.raises(RankingError, match="convert it first"):
+            rank(
+                [replace(bare, pay=pay)],
+                dimensions=DIMS,
+                revision=REV,
+                weights=WEIGHTS,
+                at="t",
+                currency="EUR",
+            )
+    # The same point beside a band in the ranking's currency is accepted.
+    rank(
+        [replace(bare, pay=PayBand(3333.0, 3333.0, "EUR"))],
+        dimensions=DIMS,
+        revision=REV,
+        weights=WEIGHTS,
+        at="t",
+        currency="EUR",
+    )
+
+
+def test_a_non_finite_or_negative_stated_figure_is_refused() -> None:
+    for bad in (float("nan"), float("inf"), float("-inf"), -5.0):
+        with pytest.raises(PayNormaliseError):
+            read_pay(offer("bad", sal(bad, bad, "EUR", "month")), TABLE)
+        with pytest.raises(PayNormaliseError):
+            read_pay(offer("bad", sal(1000, bad, "EUR", "month")), TABLE)
+
+
+def test_the_point_of_a_band_is_its_midpoint() -> None:
+    """60000-84000 USD a year is 4500-6300 EUR a month, whose midpoint is 5400."""
+    reading = read_pay(offer("mid", sal(60000, 84000, "USD", "year")), TABLE)
+    assert reading.per_month == pytest.approx(5400.0)
+
+
+def test_the_audit_compares_the_dominated_as_well_as_the_frontier() -> None:
+    from integral.pay_normalise import _audit
+
+    wrong, compared = _audit(TABLE, settled=0.5)
+    assert (wrong, compared) == (0, 5)
+    # A wrong rate is caught across both populations, not only the frontier.
+    bad = RateTable("EUR", (DatedRate("USD", 0.5, "2026-10-01", "planted"),))
+    wrong_bad, compared_bad = _audit(bad, settled=0.5)
+    assert compared_bad == 5 and wrong_bad == 3
+    measured = measure()
+    assert measured["offers_checked"] == 10

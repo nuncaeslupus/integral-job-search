@@ -36,6 +36,7 @@ from integral.rank import (
     Candidate,
     PayBand,
     RankingError,
+    point_band,
     rank,
     require_pay_coherence,
     require_priced_dimensions_ranked,
@@ -71,7 +72,7 @@ def _offer(
         salary_per_month=salary,
         scores=settled,
         unknown=frozenset(name for name in DIMENSIONS if name not in settled),
-        pay=pay,
+        pay=pay or point_band(salary, "EUR"),
     )
 
 

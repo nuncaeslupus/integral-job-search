@@ -65,7 +65,13 @@ from pathlib import Path
 from typing import Any
 
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, priced_dimensions, rank, salary_equivalent_total
+from integral.rank import (
+    Candidate,
+    point_band,
+    priced_dimensions,
+    rank,
+    salary_equivalent_total,
+)
 
 # §4.3's site is `integral.rank`; this module explains that formula's second
 # term rather than implementing a formula of its own, so it declares no
@@ -261,6 +267,7 @@ def _fixture_candidates(strip: str | None = None) -> list[Candidate]:
         Candidate(
             offer_id=offer_id,
             salary_per_month=salary,
+            pay=point_band(salary, "EUR"),
             scores=scores,
             unknown=frozenset(name for name in _FIXTURE_DIMENSIONS if name not in scores),
             spans={} if offer_id == strip else spans,
