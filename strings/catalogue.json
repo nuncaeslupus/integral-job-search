@@ -171,6 +171,18 @@
         "of": "b1b1bdb480c61d075300d9bff7d9cb69cf31695ea048e478facadf426e8d0fb0"
       }
     },
+    "stated_marker": {
+      "note": "T243: a card figure the candidate stated rather than chose; precedes the amount.",
+      "en": "stated",
+      "es": {
+        "text": "declarado",
+        "of": "12bb4b11b2dbc961ab5383572a98f68081a47e36ad20ec7cbf23b9b188f9e492"
+      },
+      "ca": {
+        "text": "declarat",
+        "of": "12bb4b11b2dbc961ab5383572a98f68081a47e36ad20ec7cbf23b9b188f9e492"
+      }
+    },
     "nothing_priced": {
       "note": "No drivers: nothing priced moved this offer, and saying so is a sentence.",
       "en": "Nothing the advert says has been priced yet, so there is no reason to give.",

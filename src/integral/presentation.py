@@ -270,7 +270,9 @@ def _matters(explanation: Mapping[str, Any] | None, language: str | None = None)
 
 def _phrase(driver: Mapping[str, Any], language: str | None = None) -> str:
     span = driver["evidence_span"] or f"{driver['dimension']} ({_t('wording_not_kept', language)})"
-    return f'"{span}" ({driver["contribution_eur_month"]:+,.0f} EUR/mo)'
+    # T243: a stated figure is marked as stated, never shown as a measured one.
+    marker = f"{_t('stated_marker', language)}: " if driver.get("source") == "stated" else ""
+    return f'"{span}" ({marker}{driver["contribution_eur_month"]:+,.0f} EUR/mo)'
 
 
 def _stack(fit: Mapping[str, Any] | None, language: str | None = None) -> str:

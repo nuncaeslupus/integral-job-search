@@ -383,6 +383,36 @@ part-worth utility; the weight of a dimension is the spread of its part-worths a
 Dividing by the salary attribute's part-worth converts any dimension to **salary-equivalent
 units**, which is what explanations quote.
 
+### 4.2a Stated prices — a coarse route, not a measurement (T243)
+
+A candidate's traits can carry evidence on dimensions step 6 never asked a choice about. Where
+they say what such a dimension is worth to them ("spoken English costs me", "I want a mentor"),
+the statement is recorded as a direction (`more` or `less`) and one of three strengths, and
+converted to a part-worth: **slight 100, clear 300, strong 800 per month per unit of score,
+negative for `less`**, in the candidate's currency.
+
+Limits, stated plainly:
+
+- **The rungs have no source.** They are round figures chosen to be coarse, not calibrated
+  against anyone's choices; the candidate was not asked for a number and could not give one.
+  They exist so that what was said can move an order at all, and they are replaced the moment a
+  fitted figure exists for the dimension (a fitted figure always outranks a stated one, and a
+  dimension the choices found negligible is not overridden by a sentence).
+- **They are kept apart from fitted figures** in `weights.json` (`stated_part_worths`), in the
+  ranking (`priced_by`) and on the card, where a stated driver reads "(stated: −800 EUR/mo)",
+  never as a measured salary-equivalent.
+- **A statement never sets a currency.** The ranking's currency is the fit's or the caller's; a
+  stated price in any other currency is skipped and named, never converted.
+- **Direction signs dominance.** A negative price makes the offer asking for less the better
+  one on that axis; an unpriced dimension keeps the older higher-is-better reading because its
+  direction is not known.
+- **Hard dimensions can be priced** (for example `english_demand`, `remote_arrangement`). Spec
+  §5.1 treats a hard dimension as a filter; pricing one expresses a preference about the level
+  that passes the filter and does not replace the filter. This was already true of fitted
+  figures and is stated here so the two routes read alike.
+- A dimension with evidence that nothing prices is named in the ranking
+  (`unpriced_trait_dimensions`), with the reason, rather than dropped.
+
 ### 4.3 Offer comparison — Pareto dominance, then salary-equivalent total
 
 Offer A **dominates** B when A is at least as good on every dimension and strictly better on
