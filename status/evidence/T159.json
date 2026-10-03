@@ -50,7 +50,7 @@
     {
       "module": "cv_store",
       "name": "MINIMUM_CHECKS",
-      "line": 301
+      "line": 302
     },
     {
       "module": "elicit_extract",
@@ -283,7 +283,7 @@
     {
       "module": "cv_store",
       "name": "MINIMUM_READ_CHECKS",
-      "line": 1934,
+      "line": 1944,
       "population": 16
     },
     {
@@ -510,6 +510,8 @@
     "pagination_capture.MINIMUM_DUPLICATE_KEY_PROBES",
     "pagination_capture.MINIMUM_URL_SIDE_PROBES",
     "pay.STALE_AFTER_DAYS",
+    "photo_extract.MIN_SHORT_SIDE",
+    "photo_extract._TIMEOUT_SECONDS",
     "plan_v2.MINIMUM_BOARD_SIZE",
     "plan_v2.MINIMUM_MERGED_TASKS",
     "presentation.DEFAULT_LIMIT",

@@ -5,6 +5,7 @@ priority: 10
 deps: [t-9c2e05d7]
 workspace: CANDIDATE
 tags: [step-11-application]
+status: merged
 ---
 
 ## Acceptance gate

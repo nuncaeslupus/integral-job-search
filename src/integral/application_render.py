@@ -21,6 +21,9 @@ import base64
 import html
 import re
 
+from integral.brand_palette import BrandPalette
+from integral.brand_palette import css as palette_css
+
 PHOTO_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
 KINDS = ("letter", "cv")
 
@@ -117,20 +120,25 @@ def render_document(
     photo: bytes | None = None,
     photo_mime: str = "image/jpeg",
     lang: str = "en",
+    palette: BrandPalette | None = None,
 ) -> str:
-    """One self-contained HTML document. ``photo`` is for the CV only; elsewhere it is refused."""
+    """One self-contained HTML document. ``photo`` is for the CV only; elsewhere it is refused.
+
+    ``palette`` (T182) adds plain colour declarations after the base CSS; none is an at-rule.
+    """
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}, not {kind!r}")
     if not _LANG.fullmatch(lang):
         raise ValueError(f"lang {lang!r} is not a language tag")
     if photo is not None and (kind != "cv" or not photo):
         raise ValueError("photo must be non-empty bytes and is only valid for kind='cv'")
+    extra_css = palette_css(palette) if palette else ""
     header = _photo_header(photo, photo_mime, title) if photo is not None and kind == "cv" else ""
     return (
         "<!doctype html>\n"
         f'<html lang="{lang}">\n<head>\n<meta charset="utf-8">\n'
         f'<meta http-equiv="Content-Security-Policy" content="{CSP}">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>{html.escape(title)}</title>\n<style>\n{CSS}</style>\n</head>\n"
+        f"<title>{html.escape(title)}</title>\n<style>\n{CSS}{extra_css}</style>\n</head>\n"
         f'<body class="{kind}">\n{header}{markdown_to_body(markdown)}\n</body>\n</html>\n'
     )
