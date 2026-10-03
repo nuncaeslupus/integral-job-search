@@ -444,6 +444,90 @@ def build_weights_payload(texts: Iterable[str]) -> dict[str, Any]:
     )
 
 
+#: T243: the register entry for the stated route (rungs, limits, hard dimensions).
+STATED_METHODS_REF = "METHODS.md#42a-stated-prices--a-coarse-route-not-a-measurement-t243"
+
+#: T243: what a stated strength is worth, in currency per month per unit of
+#: score. Coarse on purpose — three rungs, each a round figure — because the
+#: candidate said "this matters", not "this is worth 300 a month", and a finer
+#: table would pass a guess off as a measurement. It is the only place the
+#: figures live; `weights.json` records which rung produced each one.
+STATED_TIERS: Mapping[str, float] = {"slight": 100.0, "clear": 300.0, "strong": 800.0}
+
+#: T243: the sign. A part-worth is euros per unit of the advert's score on a
+#: dimension, so "more of this is better" is positive and "less" negative.
+STATED_SIGNS: Mapping[str, float] = {"more": 1.0, "less": -1.0}
+
+
+@dataclass(frozen=True)
+class Stated:
+    """One stated price, decoded from a `statement` row, in log order."""
+
+    dimension: str
+    direction: str
+    strength: str
+    currency: str
+    row_id: str
+
+
+def stated_part_worths(stated: Sequence[Stated], fitted: Mapping[str, Any]) -> dict[str, Any]:
+    """T243: the part-worths the candidate stated, to be merged into `weights.json`.
+
+    Returns `{}` when nothing was stated, so a profile that never priced a
+    trait in words keeps byte-identical derived files. Otherwise the keys are
+    `stated_part_worths` (`{dimension: {salary_equivalent_per_month, ...}}`),
+    and `stated_skipped` (`{dimension: reason}`). Each stated figure carries its
+    own `currency`. This function never writes a top-level `currency`: a
+    sentence does not decide what currency the ranking is in. That comes from
+    the fit or from the caller of `rank` (`rank.weights_for_currency`).
+
+    Three rules, each a statement about which number to trust:
+
+    - **Measured beats said.** A dimension already in the fitted `part_worths`
+      keeps the fitted figure, and one the choices found `negligible` is not
+      overridden by a sentence — both are skipped and named, not dropped.
+    - **The later statement wins.** Rows arrive in log order, so a candidate who
+      changes their mind is read as having changed it.
+    - **One currency, and it is not a statement's to choose.** When the choices
+      fixed one, a statement in another currency is skipped and named, because
+      adding two currencies is a number in neither. When no choice did, every
+      statement keeps its own currency and `rank` decides, so the order of the
+      statements can never change which dimensions are priced.
+
+    The stated figures live beside `part_worths`, not in it, because
+    `step_runtime._weights_fitted` reads a non-empty `part_worths` as "step 6 has
+    run" and a trait said in passing is not a round of choices.
+    """
+    if not stated:
+        return {}
+    latest: dict[str, Stated] = {}
+    for row in stated:
+        latest[row.dimension] = row
+    fitted_currency = fitted.get("currency")
+    measured = set((fitted.get("part_worths") or {}).keys())
+    fitted_priced = bool(measured) and isinstance(fitted_currency, str)
+    negligible = set(fitted.get("negligible") or ())
+    priced: dict[str, dict[str, Any]] = {}
+    skipped: dict[str, str] = {}
+    for dimension, row in sorted(latest.items()):
+        if dimension in measured:
+            skipped[dimension] = "fitted"
+        elif dimension in negligible:
+            skipped[dimension] = "negligible"
+        elif fitted_priced and row.currency != fitted_currency:
+            skipped[dimension] = "currency"
+        else:
+            priced[dimension] = {
+                "salary_equivalent_per_month": STATED_SIGNS[row.direction]
+                * STATED_TIERS[row.strength],
+                "direction": row.direction,
+                "strength": row.strength,
+                "currency": row.currency,
+                "evidence": row.row_id,
+            }
+    return {"stated_part_worths": priced, "stated_skipped": skipped}
+
+
 # One candidate's answers, fixed so the evidence is the same on any machine.
 # Written out rather than generated: a probe whose stimulus is drawn at
 # measurement time can be re-rolled until the number flatters the gate.

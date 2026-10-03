@@ -24,7 +24,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `ranking` for t
 
 Extractions for the live offers, and `profile/constraints.json`. Weights are optional: without them the ranking is L1 and says so.
 
-**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` where a dimension is trait-side; `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T219).
+**Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` (every dimension with evidence is priced or named as unpriced, T243); `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T219).
 
 ## Protocol — the manner, not the mechanism
 
@@ -95,6 +95,37 @@ line = summary_line(stack[offer_id])               # the card's stack line, from
 - When the candidate states a level or an aversion, record it as a `statement` row with
   `skill=SkillStance(...)`, their words in `text`. The next ranking reads it.
 - `unknown` means the advert named no technology — say so; it is not a fit.
+
+## What the candidate said is priced, or named as unpriced (T243)
+
+The weights price only what step 6's choices reached; a candidate's traits can carry
+evidence on thirty dimensions. Never rank on the weights alone and say nothing of the rest.
+
+```python
+from integral.rank import rankable_dimensions, weights_for_currency
+from integral.stated_pricing import pricing_inputs, record_stated_price
+
+traits, weights = pricing_inputs(store)                   # rebuilt from the log
+dims = rankable_dimensions(dimensions, weights, currency)  # a stated price is a ranked axis too
+ranking = rank(candidates, dimensions=dims, ..., weights=weights, traits=traits, currency=currency)
+explain(ranking, candidates, weights_for_currency(weights, currency))   # stated drivers say so
+ranking["unpriced_trait_dimensions"]               # {"checked", "dimensions", "reasons"}
+```
+
+`currency` is the candidate's own (`profile/constraints.json`). A stated price in any other
+currency, or any stated price when no currency is known, is skipped and named (`stated_in_another_currency`) —
+a sentence never decides what the ranking is denominated in.
+
+- **Say the unpriced dimensions by name**, in the candidate's words for them, every time the
+  list is non-empty: *"what you told me about spoken English doesn't move the order yet —
+  it's not priced."* `checked: false` means the traits were not handed over; fix the call.
+- **A stated trait is a route, not a quiz.** When they say "spoken English costs me" or "I want
+  a mentor", record it: `record_stated_price(store, dimension=..., direction="less"|"more",
+  strength="slight"|"clear"|"strong", currency=..., text=<their words>, at=now)`. No euro
+  figure is asked for; the rung becomes a coarse part-worth under `stated_part_worths`, and a
+  fitted one from step 6 outranks it. The next ranking moves.
+- `priced_by` says which dimensions were priced by choices and which by statements; say so when
+  a card's reason rests on a stated one.
 
 ## Record what was shown, and say what was held back
 

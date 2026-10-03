@@ -192,6 +192,10 @@ def _claims(store: ProfileStore) -> list[tuple[str, Sequence[str]]]:
     if weights.get("part_worths"):
         found.append(("weights.part_worths", weights.get("reaction_evidence") or ()))
 
+    # T243: a stated price is a derived value like any other and cites its row.
+    for name, entry in sorted((weights.get("stated_part_worths") or {}).items()):
+        found.append((f"weights.stated.{name}", (str((entry or {}).get("evidence") or ""),)))
+
     for line in _read_jsonl(store, "stories.jsonl"):
         story_id = line.get("id")
         # An episode is its own provenance: the derived row *is* the log row,
