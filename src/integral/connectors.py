@@ -1265,11 +1265,21 @@ def _take(take: Take, value: str) -> str | None:
         # distinct word or none: `/ h` beside `/ month` is two readings, and
         # two readings mean no reading. Returned as the board's own word, so
         # the one place a word becomes a period stays `normalize_period`.
+        # Working time is not pay: `40 h/week`, `2 days per week`. The recovery
+        # route's own `_WORKING_TIME` blanks the numbered forms; the bare
+        # `days per week` is blanked here.
+        from integral.salary_recovery import _WORKING_TIME  # late: circular import
+
+        value = _BARE_WORKING_TIME.sub(" ", _WORKING_TIME.sub(" ", value))
         words = {w.casefold() for w in _PERIOD_AFTER_SLASH.findall(value)}
         words = {w for w in words if normalize_period(w) is not None}
         return words.pop() if len(words) == 1 else None
     return value
 
+
+_BARE_WORKING_TIME = re.compile(
+    r"\b(?:h|hrs?|hours?|days?)\s*(?:/|per|a)\s*(?:week|wk)\b", re.IGNORECASE
+)
 
 _PERIOD_AFTER_SLASH = re.compile(r"(?:/|\bper\b)\s*([A-Za-z]+)(?![A-Za-z])", re.IGNORECASE)
 

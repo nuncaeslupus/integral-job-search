@@ -79,7 +79,7 @@ from integral.connectors import (
 from integral.connectors import (
     _CURRENCY_TOKEN as _CONNECTOR_CURRENCY_TOKEN,
 )
-from integral.salary_recovery import _WAGE_NOUN
+from integral.salary_recovery import _PERIODS, _UNBOUNDED_PERIOD, _WAGE_NOUN
 from integral.sourcing import _offer_from
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -237,13 +237,23 @@ class RowVerdict:
     card_mentions_period: bool = False
 
 
-#: A word that names a pay period, or the `/` and `per` that introduce one. Wide
-#: on purpose: this decides whether a "the card states no period" waiver may
-#: stand, and the unsafe error is a waiver standing over a card that does.
-_PERIOD_WORD = re.compile(
-    r"/|\bper\b|\b(?:h|hr|hrs|hour\w*|day|daily|week\w*|month\w*|year\w*|annual\w*|annum|p\.?a\.?)\b",
-    re.IGNORECASE,
-)
+#: What names a pay period on a card: `salary_recovery`'s own vocabulary in
+#: every language it reads (`por hora`, `al mes`, `la hora`, `/ h` ...), its
+#: refused-period forms (`weekly`), and the `/`, `per`, `por` that introduce
+#: one. Reused rather than listed, and wide on purpose: this decides whether a
+#: "the card states no period" waiver may stand, and the unsafe error is a
+#: waiver standing over a card that does. (#659 F2: the first version knew
+#: English only, over a Spanish board.)
+_PERIOD_INTRODUCER = re.compile(r"/|\bper\b|\bpor\b", re.IGNORECASE)
+
+
+def _mentions_period(window: str) -> bool:
+    return bool(
+        _PERIOD_INTRODUCER.search(window)
+        or _UNBOUNDED_PERIOD.search(window)
+        or any(pattern.search(window) for _, pattern in _PERIODS)
+    )
+
 
 #: A declared refusal whose reason names the annual bound or a missing period.
 #: Case-sensitive on purpose: `Period` capitalised is the type name in a reason
@@ -254,19 +264,24 @@ _BOUND_OR_PERIOD = re.compile(
 )
 
 
-def _refused_for_bound_or_period(declared: dict[str, Any], verdict: RowVerdict) -> bool:
+def _refused_for_bound_or_period(
+    declared: dict[str, Any], verdict: RowVerdict, reads_without_bound: bool = False
+) -> bool:
     """Whether this declared refusal is one the bound or a period `take` could
-    still fix, by its own stated reason (T214).
+    still fix (T214): the row reads with the bound disabled, or its own stated
+    reason names the bound or a missing period.
 
     The one refusal that stays — a card that states no period at all (trabajos
     `9 € - 13 €`) — is exempt only if it says so with `card_states_no_period`
     **and** the audit finds no period word in the card's money windows. The
     declaration alone would be the author's word about the card.
     """
-    why = declared.get("why")
-    if not (isinstance(why, str) and _BOUND_OR_PERIOD.search(why)):
+    if declared.get("card_states_no_period") is True and not verdict.card_mentions_period:
         return False
-    return not (declared.get("card_states_no_period") is True and not verdict.card_mentions_period)
+    # The property first (#659 F4): the row reads once the bound is off, so the
+    # bound is what refuses it. The reason's wording is the secondary check.
+    why = declared.get("why")
+    return reads_without_bound or bool(isinstance(why, str) and _BOUND_OR_PERIOD.search(why))
 
 
 def _money_contexts(text: str) -> tuple[str, ...]:
@@ -374,7 +389,7 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
                 card_single=card_figure(list_text),
                 card_numbers=frozenset(_numbers_in(_flat(list_text))),
                 card_mentions_period=any(
-                    _PERIOD_WORD.search(window) for window in _money_contexts(list_text)
+                    _mentions_period(window) for window in _money_contexts(list_text)
                 ),
                 detail_supplies_salary=route == "detail"
                 and detail is not None
@@ -382,6 +397,27 @@ def _verdicts(directory: Path) -> list[RowVerdict]:
             )
         )
     return verdicts
+
+
+def _reads_without_bound(directory: Path) -> frozenset[int]:
+    """The rows of one package that read a salary once the annual bound is off.
+
+    The property the key is about, measured rather than read off a declared
+    reason: a refused row that appears here is refused *by the bound*. A row's
+    period is not supplied separately because a stated period skips the bound
+    already, so this is the superset of both remedies. Only rows that read
+    **only** with the bound off count: a detail-route row the shared detail page
+    already reads is not refused by anything.
+    """
+    from integral import connectors
+
+    on = frozenset(v.index for v in _verdicts(directory) if v.salary is not None)
+    real = connectors._outside_annual_bound
+    connectors._outside_annual_bound = lambda *_a, **_k: False
+    try:
+        return frozenset(v.index for v in _verdicts(directory) if v.salary is not None) - on
+    finally:
+        connectors._outside_annual_bound = real
 
 
 def _expectations(directory: Path) -> dict[str, dict[str, Any]]:
@@ -492,6 +528,11 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
         expected = _expectations(directory)
         package_read = 0
         package_refused = 0
+        unbounded = (
+            _reads_without_bound(directory)
+            if any(row.get("verdict") == "refused" for row in expected.values())
+            else frozenset()
+        )
         for verdict in _verdicts(directory):
             rows_measured += 1
             declared, by_wildcard = _declared_for(expected, verdict)
@@ -525,7 +566,7 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                         refused_rows += 1
                         package_refused += 1
                         refused_for_bound_or_period += _refused_for_bound_or_period(
-                            declared, verdict
+                            declared, verdict, verdict.index in unbounded
                         )
                     else:
                         unread.append(f"{package} [{verdict.index}]: {verdict.list_publishes[0]}")
@@ -617,7 +658,9 @@ def measure(connectors_dir: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
                 wildcard_rows += by_wildcard
                 refused_rows += 1
                 package_refused += 1
-                refused_for_bound_or_period += _refused_for_bound_or_period(declared, verdict)
+                refused_for_bound_or_period += _refused_for_bound_or_period(
+                    declared, verdict, verdict.index in unbounded
+                )
                 continue
             unread.append(f"{package} [{verdict.index}]: {verdict.publishes[0]}")
         boards[package] = {"read": package_read, "refused": package_refused}
@@ -794,6 +837,7 @@ def _main(argv: list[str]) -> int:
         if measured["boards_that_publish_a_salary_we_do_not_read"]
         or measured["salary_expectation_mismatches"]
         or measured["rows_read_whose_card_money_was_not_compared"]
+        or measured["salary_rows_refused_for_bound_or_period"]
         else 0
     )
 

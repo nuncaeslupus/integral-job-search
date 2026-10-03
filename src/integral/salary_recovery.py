@@ -425,41 +425,42 @@ _BOUNDS: dict[SalaryPeriod, tuple[float, float]] = {
     "hour": (3.0, 1_000.0),
 }
 
-#: How many units of a currency make one unit of the scale `_BOUNDS` is written
-#: in (a euro, a dollar, a pound — the three this module's text route reads).
-#: T214: `_BOUNDS` is blind to currency, and a rupee is about a hundredth of a
-#: euro, so every INR band `foorilla_en` prints (`INR 1500K-2800K`) sat above
-#: the annual ceiling and was refused as a misparse. The bound moves with the
-#: currency's scale rather than widening for everyone: a global 100M ceiling
-#: would admit a `EUR 5,000,000` misparse. **A currency absent from this table
-#: has no bound at all**, and `bounds_for` answers `None` — a figure in a
-#: currency whose scale nobody wrote down is not shown, not shown on the euro
-#: scale. Only currencies already scale 1 are listed at 1; INR is the one that
-#: moves.
-_CURRENCY_SCALE: dict[str, float] = {
+#: Units of each currency per one euro, **approximate and rounded**, because the
+#: bound only has to be right to an order of magnitude: it separates a yearly
+#: wage from a monthly one (a factor of twelve) and a misparse from either.
+#: Source: the ECB euro foreign exchange reference rates, read at their level
+#: of early October 2026 and rounded to two significant figures; recorded by
+#: hand (no feed is called). T214 (second reader, #659 F1): the first version
+#: of this table was an enumeration that put PLN, SEK, NOK, DKK, BRL and RON at
+#: the euro scale, so a monthly `PLN 15000 - 20000` read as an annual wage.
+#: The bound is the euro bound times the rate, for every currency alike, so
+#: there is no scale to get wrong by omission. **A currency absent from this
+#: table has no bound at all** and `bounds_for` answers `None`: a figure in a
+#: currency nobody wrote a rate for is not shown on the euro scale.
+_UNITS_PER_EUR: dict[str, float] = {
     "EUR": 1.0,
-    "USD": 1.0,
-    "GBP": 1.0,
-    "PLN": 1.0,
-    "CHF": 1.0,
-    "SEK": 1.0,
-    "NOK": 1.0,
-    "DKK": 1.0,
-    "CAD": 1.0,
-    "AUD": 1.0,
-    "BRL": 1.0,
-    "RON": 1.0,
-    "INR": 100.0,
+    "USD": 1.1,
+    "GBP": 0.85,
+    "CHF": 0.95,
+    "CAD": 1.5,
+    "AUD": 1.6,
+    "PLN": 4.3,
+    "SEK": 11.0,
+    "NOK": 11.5,
+    "DKK": 7.5,
+    "BRL": 6.0,
+    "RON": 5.0,
+    "INR": 95.0,
 }
 
 
 def bounds_for(period: SalaryPeriod | None, currency: str | None) -> tuple[float, float] | None:
     """The `(low, high)` a real wage in `currency` looks like, or `None` when it
     cannot be bounded: a period `_BOUNDS` has no entry for, or a currency
-    `_CURRENCY_SCALE` does not list. A period of `None` is bounded as annual.
+    `_UNITS_PER_EUR` does not list. A period of `None` is bounded as annual.
     """
     base = _BOUNDS.get(period or "year")
-    scale = _CURRENCY_SCALE.get((currency or "").strip().upper())
+    scale = _UNITS_PER_EUR.get((currency or "").strip().upper())
     if base is None or scale is None:
         return None
     return base[0] * scale, base[1] * scale

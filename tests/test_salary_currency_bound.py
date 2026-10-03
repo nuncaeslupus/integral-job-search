@@ -8,6 +8,7 @@ one.
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -98,7 +99,7 @@ def test_the_recovery_route_bounds_by_currency_too() -> None:
     assert _band_defect(monthly) is None
     unknown = Salary(min=60_000, max=70_000, currency="JPY", period="year", stated=False)
     assert _band_defect(unknown) is not None
-    assert bounds_for("year", "INR") == (500_000.0, 100_000_000.0)
+    assert bounds_for("year", "INR") == (5_000.0 * 95.0, 1_000_000.0 * 95.0)
     assert bounds_for("year", "JPY") is None
     assert bounds_for("fortnight", "EUR") is None  # type: ignore[arg-type]
 
@@ -228,3 +229,109 @@ def test_the_audit_holds_an_inr_card_against_the_currency_aware_bound(
     inr = [m for m in measured["mismatches"] if m.startswith("foorilla_en") and "bound" in m]
     assert len(inr) >= 11, measured["mismatches"]
     assert connectors._outside_annual_bound is not blind
+
+
+# --- second-reader round (#659) ---
+
+#: Units per euro, written here independently of the table under test, and
+#: deliberately a little off it (about +-15%): the bound only needs the order of
+#: magnitude, and a test that copied the table would agree with it by
+#: construction.
+_RATES = {
+    "EUR": 1.0,
+    "USD": 1.15,
+    "GBP": 0.87,
+    "CHF": 0.93,
+    "CAD": 1.6,
+    "AUD": 1.7,
+    "PLN": 4.25,
+    "SEK": 10.9,
+    "NOK": 11.8,
+    "DKK": 7.46,
+    "BRL": 6.3,
+    "RON": 4.97,
+    "INR": 98.0,
+}
+
+
+def test_the_rate_table_covers_every_currency_the_connectors_can_name() -> None:
+    from integral.salary_recovery import _UNITS_PER_EUR
+
+    named = set(connectors._CURRENCIES.values())
+    assert set(_UNITS_PER_EUR) == named == set(_RATES)
+
+
+@pytest.mark.parametrize("currency", sorted(_RATES))
+def test_every_currency_separates_a_monthly_band_from_an_annual_one(currency: str) -> None:
+    """A monthly EUR 2,500-3,500 wage in this currency, with no period on the
+    card, is NOT an annual wage; EUR 40,000-60,000 is. One wrong scale in the
+    table (SEK at 1, PLN at 4 against a 10 table) fails exactly one case."""
+    rate = _RATES[currency]
+    monthly = (2_500 * rate, 3_500 * rate)
+    annual = (40_000 * rate, 60_000 * rate)
+    assert _salary(currency, round(monthly[0]), round(monthly[1])) is None, currency
+    assert _salary(currency, round(annual[0]), round(annual[1])) is not None, currency
+
+
+@pytest.mark.parametrize("phrase", ["por hora", "la hora", "al mes", "/ mes", "per hour"])
+def test_the_no_period_waiver_does_not_stand_over_a_spanish_period_word(
+    tmp_path: Path, phrase: str
+) -> None:
+    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
+    fixture = tmp_path / "connectors" / "trabajos_es" / "fixture"
+    html = (fixture / "list.html").read_text(encoding="utf-8")
+    card = "9 € - 13 €"
+    (fixture / "list.html").write_text(html.replace(card, f"{card} {phrase}"), encoding="utf-8")
+    measured = measure(tmp_path / "connectors")
+    assert measured["salary_rows_refused_for_bound_or_period"] == 1, (phrase, measured)
+
+
+def test_a_non_zero_key_fails_the_audit_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    real = measure()
+    assert connector_salary_audit._main(["audit"]) == 0
+    monkeypatch.setattr(
+        connector_salary_audit,
+        "measure",
+        lambda *a, **k: {**real, "salary_rows_refused_for_bound_or_period": 1},
+    )
+    assert connector_salary_audit._main(["audit"]) == 1
+
+
+def test_reverting_the_period_take_and_rewording_the_refusal_is_still_counted(
+    tmp_path: Path,
+) -> None:
+    """The key measures the property (the row reads once the bound is off), not
+    the wording of the declared reason (#659 F4)."""
+    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
+    package = tmp_path / "connectors" / "nofluffjobs_en"
+    yaml = (package / "connector.yaml").read_text(encoding="utf-8")
+    block = '    salary_period:\n      css: "nfj-posting-item-salary"\n      take: period\n'
+    assert block in yaml
+    (package / "connector.yaml").write_text(yaml.replace(block, ""), encoding="utf-8")
+    salary = package / "fixture" / "salary.json"
+    data = json.loads(salary.read_text(encoding="utf-8"))
+    for row in ("0", "2"):
+        data["rows"][row] = {
+            "verdict": "refused",
+            "why": "The card prints an hourly unit that this connector declines to interpret.",
+        }
+    salary.write_text(json.dumps(data), encoding="utf-8")
+    measured = measure(tmp_path / "connectors")
+    assert measured["salary_rows_refused_for_bound_or_period"] == 2, measured
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "4 000 PLN brutto, 40 h/week",
+        "2 days per week in office",
+        "days per week",
+        "4 000 PLN, 40 horas por semana",
+    ],
+)
+def test_take_period_does_not_read_working_time(text: str) -> None:
+    assert _take("period", text) is None
+
+
+def test_take_period_still_reads_pay_beside_working_time() -> None:
+    assert _take("period", "105 PLN / h, 40 h/week") == "h"
