@@ -15,11 +15,16 @@
 # not optional: state is lost when the container is reclaimed.
 set -eu
 
-# An inherited git environment can redirect every command below into some OTHER
-# repository (GIT_DIR is set inside hooks) and push the candidate's data there.
-# Only the author identity variables are kept.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_CEILING_DIRECTORIES GIT_NAMESPACE
+# An inherited git environment can redirect every command below: GIT_DIR into some
+# OTHER repository, GIT_CONFIG_PARAMETERS / GIT_CONFIG_COUNT into another push
+# URL or a foreign hook. Git itself exports these to children, so they really
+# arrive. The rule is closed, not a list: EVERY variable named GIT_* is dropped,
+# and the author identity (the only one this script wants) is captured first.
+author_name="${GIT_AUTHOR_NAME:-integral backup}"
+author_email="${GIT_AUTHOR_EMAIL:-backup@localhost}"
+for name in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  unset "$name"
+done
 
 dir="${1:-${INTEGRAL_HOME:-}}"
 if [ -z "$dir" ]; then
@@ -43,15 +48,17 @@ dir="$(cd "$dir" && pwd -P)"
 # linked-worktree `.git` is a FILE. Any `.git` above DIR, of either kind, refuses.
 p="$(dirname "$dir")"
 while :; do
-  if [ -e "$p/.git" ]; then
+  if [ -e "$p/.git" ] || [ -L "$p/.git" ]; then
     echo "backup_state_home: $dir is inside the repository at $p; refusing" >&2
     exit 2
   fi
   [ "$p" = "/" ] && break
   p="$(dirname "$p")"
 done
-if [ -e "$dir/.git" ] && [ ! -d "$dir/.git" ]; then
-  echo "backup_state_home: $dir/.git is not a directory; refusing" >&2
+# `-d` follows a symlink, so the link test comes first: a `.git` that is a link
+# (or a file) is somebody else's repository, never the state dir's own.
+if [ -L "$dir/.git" ] || { [ -e "$dir/.git" ] && [ ! -d "$dir/.git" ]; }; then
+  echo "backup_state_home: $dir/.git is not a real directory; refusing" >&2
   exit 2
 fi
 
@@ -60,16 +67,22 @@ fi
 git -C "$dir" add -A
 if ! git -C "$dir" diff --cached --quiet; then
   git -C "$dir" \
-    -c user.name="${GIT_AUTHOR_NAME:-integral backup}" \
-    -c user.email="${GIT_AUTHOR_EMAIL:-backup@localhost}" \
+    -c core.hooksPath=/dev/null \
+    -c user.name="$author_name" \
+    -c user.email="$author_email" \
     commit --quiet -m "backup $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "backup_state_home: committed in $dir"
 else
   echo "backup_state_home: nothing new to commit in $dir"
 fi
 
-if git -C "$dir" remote get-url origin >/dev/null 2>&1; then
-  git -C "$dir" push origin HEAD
+# Push to the URL named in the state repository's OWN config file, explicitly,
+# so no other config layer's `remote.origin.*` can choose the destination.
+cfg="$dir/.git/config"
+target="$(git config --file "$cfg" --get remote.origin.pushurl 2>/dev/null ||
+  git config --file "$cfg" --get remote.origin.url 2>/dev/null || true)"
+if [ -n "$target" ]; then
+  git -C "$dir" -c core.hooksPath=/dev/null push "$target" HEAD
 else
   echo "backup_state_home: no 'origin' remote; add a PRIVATE one to keep this off-machine" >&2
 fi

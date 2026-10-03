@@ -315,3 +315,145 @@ def test_injected_env_decides_the_os_default(
     root = candidate_root(env={var: "/injected"})
     assert root.parts[:2] == ("/", "injected")
     assert str(clean_env) not in str(root)
+
+
+def _decoy_cases(origin: Path, decoy: Path, hooks: Path) -> dict[str, dict[str, str]]:
+    return {
+        "parameters-pushurl": {"GIT_CONFIG_PARAMETERS": f"'remote.origin.pushurl'='{decoy}'"},
+        "count-pushurl": {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "remote.origin.pushurl",
+            "GIT_CONFIG_VALUE_0": str(decoy),
+        },
+        "parameters-pushinsteadof": {
+            "GIT_CONFIG_PARAMETERS": f"'url.{decoy}.pushinsteadof'='{origin}'"
+        },
+        "count-pushinsteadof": {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": f"url.{decoy}.pushInsteadOf",
+            "GIT_CONFIG_VALUE_0": str(origin),
+        },
+        "parameters-hookspath": {"GIT_CONFIG_PARAMETERS": f"'core.hookspath'='{hooks}'"},
+        "count-hookspath": {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "core.hooksPath",
+            "GIT_CONFIG_VALUE_0": str(hooks),
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "parameters-pushurl",
+        "count-pushurl",
+        "parameters-pushinsteadof",
+        "count-pushinsteadof",
+        "parameters-hookspath",
+        "count-hookspath",
+    ),
+)
+def test_inherited_git_config_cannot_redirect_the_push_or_run_hooks(
+    tmp_path: Path, case: str
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    state, origin = _repo_with_origin(tmp_path, "state")
+    decoy = tmp_path / "decoy.git"
+    subprocess.run(["git", "init", "--quiet", "--bare", "-b", "main", str(decoy)], check=True)
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    marker = tmp_path / "hook-ran"
+    for name in ("pre-commit", "pre-push", "commit-msg", "post-commit"):
+        hook = hooks / name
+        hook.write_text(f"#!/bin/sh\ntouch '{marker}'\n")
+        hook.chmod(0o755)
+    (state / "data").mkdir()
+    (state / "data" / "cv.json").write_text("{}")
+
+    done = _backup(state, home, extra_env=_decoy_cases(origin, decoy, hooks)[case])
+    assert done.returncode == 0, done.stderr
+
+    assert _git(origin, "rev-parse", "main").strip() == _git(state, "rev-parse", "HEAD").strip()
+    assert "data/cv.json" in _git(origin, "ls-tree", "-r", "--name-only", "main")
+    assert _git(decoy, "for-each-ref").strip() == ""
+    assert not marker.exists()
+
+
+def test_backup_refuses_a_dot_git_symlink_in_the_state_dir(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    other, other_origin = _repo_with_origin(tmp_path, "other")
+    before = (_commit_count(other), _commit_count(other_origin))
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "cv.json").write_text("{}")
+    (state / ".git").symlink_to(other / ".git")
+
+    done = _backup(state, home)
+
+    assert done.returncode == 2
+    assert (_commit_count(other), _commit_count(other_origin)) == before
+
+
+def test_backup_refuses_a_dot_git_symlink_above_the_state_dir(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    outer = tmp_path / "outer"
+    inner = outer / "state"
+    inner.mkdir(parents=True)
+    (outer / ".git").symlink_to(tmp_path / "nowhere")  # dangling on purpose
+    (inner / "x.txt").write_text("x")
+
+    done = _backup(inner, home)
+    assert done.returncode == 2
+    assert not (inner / ".git").exists()
+
+
+def test_backup_never_force_pushes_even_with_a_fresh_tracking_ref(tmp_path: Path) -> None:
+    """A stale `origin/main` makes a lease fail by itself; a fetched one must not help."""
+    home = tmp_path / "home"
+    home.mkdir()
+    state, origin = _repo_with_origin(tmp_path, "state")
+    rival = tmp_path / "rival"
+    subprocess.run(["git", "clone", "-q", str(origin), str(rival)], check=True)
+    (rival / "other.txt").write_text("theirs")
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "-C", str(rival), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(rival), *ident, "commit", "-q", "-m", "rival"], check=True)
+    subprocess.run(["git", "-C", str(rival), "push", "-q", "origin", "main"], check=True)
+    theirs = _git(origin, "rev-parse", "main").strip()
+    subprocess.run(["git", "-C", str(state), "fetch", "-q", "origin"], check=True)
+
+    (state / "mine.txt").write_text("mine")
+    done = _backup(state, home)
+
+    assert done.returncode != 0
+    assert _git(origin, "rev-parse", "main").strip() == theirs
+
+
+@pytest.mark.parametrize("via_local_config", (False, True))
+def test_hooks_in_the_state_repository_never_run(tmp_path: Path, via_local_config: bool) -> None:
+    """A hook is code; a restored or tampered state dir must not get to run it."""
+    home = tmp_path / "home"
+    home.mkdir()
+    state, origin = _repo_with_origin(tmp_path, "state")
+    marker = tmp_path / "hook-ran"
+    hooks = state / ".git" / "hooks"
+    if via_local_config:
+        hooks = tmp_path / "elsewhere"
+        hooks.mkdir()
+        subprocess.run(
+            ["git", "-C", str(state), "config", "core.hooksPath", str(hooks)], check=True
+        )
+    for name in ("pre-commit", "commit-msg", "post-commit", "pre-push"):
+        hook = hooks / name
+        hook.write_text(f"#!/bin/sh\ntouch '{marker}'\n")
+        hook.chmod(0o755)
+    (state / "mine.txt").write_text("mine")
+
+    done = _backup(state, home)
+    assert done.returncode == 0, done.stderr
+
+    assert _git(origin, "rev-parse", "main").strip() == _git(state, "rev-parse", "HEAD").strip()
+    assert not marker.exists()
