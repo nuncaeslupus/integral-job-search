@@ -99,7 +99,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from integral.candidate import FIELD_MODELS, ConstraintState
 from integral.decline import DeclineLedger
 from integral.identity import ProfileStore
-from integral.weights import WeightsError, build_weights_payload
+from integral.weights import Stated, WeightsError, build_weights_payload, stated_part_worths
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T6.json"
@@ -217,6 +217,29 @@ class SkillStance(Strict):
         return self
 
 
+StatedDirection = Literal["more", "less"]
+StatedStrength = Literal["slight", "clear", "strong"]
+
+
+class StatedPrice(Strict):
+    """T243: what the candidate said a dimension is worth to them, as data.
+
+    "Spoken English costs me" is `direction="less"` on `english_demand`;
+    "I want mentoring" is `direction="more"` on `mentoring_culture`. The
+    candidate is never asked for a euro figure, which they cannot give: the
+    coarse `strength` rung is converted by `integral.weights.STATED_TIERS` into
+    a part-worth that `weights.json` carries under `stated_part_worths`, apart
+    from the fitted ones, so a figure said is never read as a figure measured.
+    The dimension is the row's own single `dimensions` entry; `currency` is
+    here because a part-worth is a number in some currency and the log must
+    not guess which. The row's `text` keeps the candidate's words.
+    """
+
+    direction: StatedDirection
+    strength: StatedStrength
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+
+
 class EvidenceRow(Strict):
     """One row of `profile/evidence.jsonl` — process specification §4.1.
 
@@ -252,6 +275,8 @@ class EvidenceRow(Strict):
     about: EvidenceSubject | None = None
     # T219: set only on a `statement` about one technology — see `SkillStance`.
     skill: SkillStance | None = None
+    # T243: set only on a `statement` about one dimension — see `StatedPrice`.
+    price: StatedPrice | None = None
 
     @model_validator(mode="after")
     def _check(self) -> EvidenceRow:
@@ -271,6 +296,16 @@ class EvidenceRow(Strict):
             raise ValueError("occurred_precision without occurred_at says nothing")
         if self.skill is not None and self.kind != "statement":
             raise ValueError(f"only a statement row may carry a skill stance (kind={self.kind})")
+        if self.price is not None:
+            if self.kind != "statement":
+                raise ValueError(
+                    f"only a statement row may carry a stated price (kind={self.kind})"
+                )
+            if len(self.dimensions) != 1:
+                raise ValueError(
+                    "a stated price prices one dimension; the row names "
+                    f"{len(self.dimensions)} — say which one the candidate meant"
+                )
         return self
 
     def canonical(self) -> str:
@@ -389,6 +424,7 @@ class EvidenceLog:
         retracts: str | None = None,
         about: EvidenceSubject | None = None,
         skill: SkillStance | None = None,
+        price: StatedPrice | None = None,
     ) -> EvidenceRow:
         """Add one row. The only writer, and it never rewrites what is there."""
         if retracts is not None and not self._has(retracts):
@@ -407,6 +443,7 @@ class EvidenceLog:
             retracts=retracts,
             about=about,
             skill=skill,
+            price=price,
         )
         path = self.store.path(*EVIDENCE_PARTS)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -671,6 +708,20 @@ def _build_weights(log: EvidenceLog, rows: Sequence[EvidenceRow]) -> dict[str, A
         "part_worths": {},
         **fitted,
         "reaction_evidence": [row.id for row in reactions],
+        **stated_part_worths(
+            [
+                Stated(
+                    dimension=row.dimensions[0],
+                    direction=row.price.direction,
+                    strength=row.price.strength,
+                    currency=row.price.currency,
+                    row_id=row.id,
+                )
+                for row in rows
+                if row.price is not None
+            ],
+            fitted,
+        ),
     }
 
 

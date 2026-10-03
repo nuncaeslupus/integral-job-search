@@ -195,8 +195,21 @@ def from_extraction(
     )
 
 
-def dominates(a: Candidate, b: Candidate, dimensions: Sequence[str]) -> bool:
+def dominates(
+    a: Candidate,
+    b: Candidate,
+    dimensions: Sequence[str],
+    signs: Mapping[str, float] | None = None,
+) -> bool:
     """Whether `a` is at least as good everywhere and better somewhere.
+
+    `signs` (T243) says which way is better on a dimension: `-1` where the
+    candidate's price on it is negative ("spoken English costs me"), so the
+    offer asking for less English is the better one on that axis. A score is
+    the advert's level on a dimension, not a verdict, and treating a higher
+    level as better everywhere collapsed the very offer a priced dislike
+    prefers. A dimension absent from `signs` keeps the older reading (higher
+    is better) — the direction of an unpriced dimension is not known.
 
     Returns False the moment any axis is unknown on either side: the claim
     "at least as good on every dimension" cannot be made about a dimension
@@ -208,8 +221,10 @@ def dominates(a: Candidate, b: Candidate, dimensions: Sequence[str]) -> bool:
     if any(name in a.unknown or name in b.unknown for name in dimensions):
         return False
 
+    way = signs or {}
     pairs = [(a.salary_per_month, b.salary_per_month)] + [
-        (a.scores[name], b.scores[name]) for name in dimensions
+        (way.get(name, 1.0) * a.scores[name], way.get(name, 1.0) * b.scores[name])
+        for name in dimensions
     ]
     return all(mine >= theirs for mine, theirs in pairs) and any(
         mine > theirs for mine, theirs in pairs
@@ -319,7 +334,9 @@ def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None)
 
 
 def frontier(
-    candidates: Sequence[Candidate], dimensions: Sequence[str]
+    candidates: Sequence[Candidate],
+    dimensions: Sequence[str],
+    signs: Mapping[str, float] | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     """`(non-dominated ids, {dominated id: "dominated_by:<id>"})`.
 
@@ -332,7 +349,7 @@ def frontier(
     dominated: dict[str, str] = {}
     for mine in candidates:
         collapser = next(
-            (other for other in candidates if dominates(other, mine, dimensions)),
+            (other for other in candidates if dominates(other, mine, dimensions, signs)),
             None,
         )
         if collapser is None:
@@ -342,16 +359,10 @@ def frontier(
     return kept, dominated
 
 
-def priced_dimensions(weights: Mapping[str, Any] | None) -> dict[str, float]:
-    """`{dimension: euros per month per unit of score}` from T10's `weights.json`.
-
-    Read through one function rather than at each use, so the shape T10 writes
-    has a single reader here. A file with no part-worths yields `{}`, which is
-    what makes the ranking L1.
-    """
+def _read_part_worths(weights: Mapping[str, Any] | None, key: str) -> dict[str, float]:
     if not isinstance(weights, Mapping):
         return {}
-    part_worths = weights.get("part_worths")
+    part_worths = weights.get(key)
     if not isinstance(part_worths, Mapping):
         return {}
     priced: dict[str, float] = {}
@@ -363,6 +374,99 @@ def priced_dimensions(weights: Mapping[str, Any] | None) -> dict[str, float]:
             )
         priced[name] = float(part["salary_equivalent_per_month"])
     return priced
+
+
+def priced_dimensions(weights: Mapping[str, Any] | None) -> dict[str, float]:
+    """`{dimension: euros per month per unit of score}` from `weights.json`.
+
+    Read through one function rather than at each use, so the shape the weights
+    step writes has a single reader here. A file with no part-worths yields
+    `{}`, which is what makes the ranking L1.
+
+    T243: two sources, one reading. `part_worths` are T10's fitted figures;
+    `stated_part_worths` are the coarse figures a candidate's own statements
+    produce (`integral.weights.stated_part_worths`). A dimension in both is
+    priced by the fitted one — measured beats said — which the weights file
+    already enforces and this repeats, so a hand-built file cannot reverse it.
+    """
+    stated = _read_part_worths(weights, "stated_part_worths")
+    fitted = _read_part_worths(weights, "part_worths")
+    return {**stated, **fitted}
+
+
+def dimension_signs(weights: Mapping[str, Any] | None) -> dict[str, float]:
+    """T243: `-1.0` on each dimension the weights price negatively, `+1.0` on the rest priced.
+
+    Published on the ranking as `dimension_signs` so the audit re-derives
+    dominance the way the ranker did.
+    """
+    return {
+        name: (-1.0 if euros < 0 else 1.0) for name, euros in priced_dimensions(weights).items()
+    }
+
+
+def priced_by(weights: Mapping[str, Any] | None) -> dict[str, list[str]]:
+    """T243: which dimensions are priced by choices and which by statements."""
+    fitted = _read_part_worths(weights, "part_worths")
+    stated = _read_part_worths(weights, "stated_part_worths")
+    return {
+        "fitted": sorted(fitted),
+        "stated": sorted(name for name in stated if name not in fitted),
+    }
+
+
+def rankable_dimensions(dimensions: Sequence[str], weights: Mapping[str, Any] | None) -> list[str]:
+    """T243: the ranked dimensions plus every dimension the weights price.
+
+    `require_priced_dimensions_ranked` refuses a priced dimension the ranking
+    does not rank, so a caller that built its dimension list before a candidate
+    said something would otherwise fail on the first statement. Build the
+    candidates and call `rank` with this list.
+    """
+    return [*dimensions, *sorted(set(priced_dimensions(weights)) - set(dimensions))]
+
+
+UNPRICED_NO_CHOICE = "no_choice_and_no_statement"
+UNPRICED_NEGLIGIBLE = "negligible_in_choices"
+UNPRICED_CURRENCY = "stated_in_another_currency"
+
+
+def unpriced_trait_dimensions(
+    traits: Mapping[str, Any] | None, weights: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """T243: every trait dimension with evidence that the order cannot move on, by name.
+
+    `traits` is `traits.json`. A dimension is **unpriced** when the candidate
+    has evidence on it (`evidence_count > 0`) and `priced_dimensions` does not
+    hold it — whatever the reason, and the reason is named: no choice and no
+    statement, found negligible by the choices (a figure that could not be
+    separated is not a figure), or stated in a currency the weights are not in.
+    Before this, those dimensions were dropped without a word: a candidate whose
+    traits carried evidence on thirty dimensions was ranked on two, and the
+    ranking read as if it had used what they said.
+
+    `checked` is `False` when no `traits` was handed over, which says "nobody
+    looked" rather than reading as an empty list, i.e. as "nothing is missing".
+    """
+    if not isinstance(traits, Mapping):
+        return {"checked": False, "dimensions": [], "reasons": {}}
+    entries = traits.get("dimensions")
+    entries = entries if isinstance(entries, Mapping) else {}
+    priced = priced_dimensions(weights)
+    skipped = (weights or {}).get("stated_skipped") or {}
+    negligible = set((weights or {}).get("negligible") or ())
+    reasons: dict[str, str] = {}
+    for name, entry in sorted(entries.items()):
+        count = entry.get("evidence_count") if isinstance(entry, Mapping) else None
+        if not isinstance(count, int) or count <= 0 or name in priced:
+            continue
+        if skipped.get(name) == "currency":
+            reasons[name] = UNPRICED_CURRENCY
+        elif name in negligible:
+            reasons[name] = UNPRICED_NEGLIGIBLE
+        else:
+            reasons[name] = UNPRICED_NO_CHOICE
+    return {"checked": True, "dimensions": sorted(reasons), "reasons": reasons}
 
 
 def salary_equivalent_total(
@@ -392,8 +496,15 @@ def rank(
     currency: str | None = None,
     readings: Sequence[Reading] = (),
     stack: Mapping[str, Mapping[str, Any]] | None = None,
+    traits: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """`rankings/<run_id>.json` — spec §5.5, minus T19's `explanations`.
+
+    `traits` is `traits.json` (T243). The ranking names, under
+    `unpriced_trait_dimensions`, every dimension the candidate has evidence on
+    that the order cannot move on, and under `priced_by` which dimensions were
+    priced by choices and which by the candidate's own statements. Omitting it
+    is allowed and is recorded as `checked: false`, never as an empty list.
 
     `stack` is T219's `integral.stack_fit.fits_for_store`: the candidate's CV
     and stated skills against each offer's named technologies. It is carried
@@ -428,7 +539,8 @@ def rank(
     candidates = [candidate for candidate in candidates if candidate.offer_id not in barred]
     flagged = sorted({reading.offer_id for reading in readings if reading.verdict == "FLAG"})
 
-    kept, dominated = frontier(candidates, dimensions)
+    signs = dimension_signs(weights)
+    kept, dominated = frontier(candidates, dimensions, signs)
     by_id = {candidate.offer_id: candidate for candidate in candidates}
     totals = {
         offer_id: total
@@ -473,6 +585,10 @@ def rank(
         "flagged": flagged,
         "facets": _facets(ordered, by_id, dimensions, totals),
         "salary_equivalent_total": totals,
+        # T243: what moved the order, by source, and what said-but-unpriced did not.
+        "priced_by": priced_by(weights),
+        "dimension_signs": signs,
+        "unpriced_trait_dimensions": unpriced_trait_dimensions(traits, weights),
         # T242: which reading put each offer where it is, and which offers the
         # ranker could not tell apart. See `order_readings`.
         **order_readings(ordered, intervals),
@@ -902,6 +1018,7 @@ def dominance_violations(ranking: Mapping[str, Any], candidates: Sequence[Candid
     """
     by_id = {candidate.offer_id: candidate for candidate in candidates}
     dimensions = tuple(ranking["dimensions"])
+    signs = ranking.get("dimension_signs") or {}
     published = list(ranking["pareto"])
     collapsed = dict(ranking["dominated"])
     violations = 0
@@ -912,14 +1029,14 @@ def dominance_violations(ranking: Mapping[str, Any], candidates: Sequence[Candid
             violations += 1
             continue
         violations += any(
-            candidate.offer_id != offer_id and dominates(candidate, mine, dimensions)
+            candidate.offer_id != offer_id and dominates(candidate, mine, dimensions, signs)
             for candidate in candidates
         )
 
     for offer_id, note in collapsed.items():
         mine = by_id.get(offer_id)
         collapser = by_id.get(str(note).removeprefix(DOMINATED_BY))
-        if mine is None or collapser is None or not dominates(collapser, mine, dimensions):
+        if mine is None or collapser is None or not dominates(collapser, mine, dimensions, signs):
             violations += 1
 
     violations += len(set(published) & set(collapsed))
