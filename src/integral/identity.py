@@ -767,7 +767,85 @@ def hook_main(stdin_text: str, *, root: Path | None = None) -> tuple[int, str]:
     )
     if decision.allowed:
         return 0, ""
-    return 2, f"profile guard refused this call — {decision.reason}"
+    message = f"profile guard refused this call — {decision.reason}"
+    active = read_active_handle(
+        roster, session_id=session_id if isinstance(session_id, str) else None
+    )
+    return 2, message + _recovery_hint(
+        tool_name,
+        tool_input,
+        roster=roster,
+        active=active,
+        session_id=session_id if isinstance(session_id, str) else None,
+    )
+
+
+_SAFE_SESSION_ID = re.compile(r"^[\w.-]+$")
+
+
+def _handle_named_by(raw: str, roster: Path) -> Handle | None:
+    """The handle a path under `roster` belongs to, if it names one."""
+    root = Path(roster).resolve(strict=False)
+    candidate = Path(raw)
+    candidate = (candidate if candidate.is_absolute() else root.parent / candidate).resolve(
+        strict=False
+    )
+    try:
+        parts = candidate.relative_to(root).parts
+    except ValueError:
+        return None
+    return parts[0] if parts and HANDLE.match(parts[0]) else None
+
+
+def restore_command(handle: Handle, session_id: str) -> str:
+    """The one runnable line that re-identifies `handle` for `session_id`."""
+    _validate_handle(handle)
+    if not _SAFE_SESSION_ID.match(session_id):
+        raise IdentityError("session id is not shell-safe")
+    return (
+        'uv run python -c "from integral.identity import write_active_handle, '
+        f"default_profiles_root; write_active_handle(default_profiles_root(), '{handle}', "
+        f"session_id='{session_id}')\""
+    )
+
+
+def _recovery_hint(
+    tool_name: str,
+    tool_input: dict[str, Any],
+    *,
+    roster: Path,
+    active: Handle | None,
+    session_id: str | None,
+) -> str:
+    """What to append to a refusal so the session can fix it without a document.
+
+    Only when nobody is identified for this session: a refusal because the call
+    names *another* candidate's tree is the guard working, and handing out a
+    command that switches identity there would be an invitation. The command is
+    a suggestion for the session to run after confirming who the candidate is —
+    the guard still judges every later call itself.
+    """
+    if active is not None or not session_id:
+        return ""
+    lines: list[str] = []
+    handle = None
+    for raw in paths_in_tool_call(tool_name, tool_input):
+        handle = _handle_named_by(raw, roster)
+        if handle is not None:
+            break
+    if handle is not None and _SAFE_SESSION_ID.match(session_id):
+        lines.append(
+            "\nIf this is the candidate you are working with, restore the handle "
+            f"with: {restore_command(handle, session_id)}"
+        )
+    command = tool_input.get("command") if tool_name == "Bash" else None
+    if isinstance(command, str) and "write_active_handle" in command:
+        lines.append(
+            "\nThis command both restores the handle and touches profiles/, and the "
+            "guard judges the whole command before any of it runs, so run the "
+            "restore as its own call first."
+        )
+    return "".join(lines)
 
 
 # ---------------------------------------------------------------------------
