@@ -345,7 +345,9 @@ def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tasks: Path) -> tuple[
     """`_main` over `tasks`, writing its evidence somewhere disposable."""
     _read_the_board(monkeypatch, tasks, tmp_path)
     target = tmp_path / "D12.json"
-    return task_gate._main(["task_gate", "--write-evidence", str(target)]), target
+    argv = ["task_gate", "--write-evidence", str(target)]
+    argv += ["--write-t108-evidence", str(tmp_path / "T108.json")]
+    return task_gate._main(argv), target
 
 
 def test_a_healthy_synthetic_board_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -410,7 +412,15 @@ def test_a_sub_floor_run_leaves_an_existing_record_untouched(
     healthy.write_text('{"kept": true}\n', encoding="utf-8")
     before = healthy.read_bytes()
 
-    exit_code = task_gate._main(["task_gate", "--write-evidence", str(healthy)])
+    exit_code = task_gate._main(
+        [
+            "task_gate",
+            "--write-evidence",
+            str(healthy),
+            "--write-t108-evidence",
+            str(tmp_path / "T108.json"),
+        ]
+    )
 
     assert exit_code == 1
     assert healthy.read_bytes() == before

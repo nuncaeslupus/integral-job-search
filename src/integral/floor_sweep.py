@@ -2982,7 +2982,50 @@ def _classify_floor(
 #: (`src_dir`, `_THIS_FILE`, `_REPO_ROOT`) and the module's own globals as
 #: they are now (`_module_inputs`, R2-3). No bare `lru_cache`: any edit to
 #: any of those is a miss and re-analyses.
-_ANALYSES: dict[tuple[str, ...], dict[str, Any]] = {}
+#: Each entry also holds a strong reference to every value its key was built from
+#: (T223 B1): a callable's `repr` names its address, and once a patched function is
+#: freed CPython reuses that address, so a *different* function could produce an
+#: equal key and be served this entry. Keeping the values alive for the life of the
+#: entry makes an equal address mean the same object.
+_ANALYSES: dict[tuple[str, ...], tuple[dict[str, Any], tuple[object, ...]]] = {}
+
+
+def _input_repr(value: object) -> str:
+    """`repr(value)`, except a compiled pattern is keyed by its full source and
+    flags: `re.Pattern.__repr__` truncates the source at 200 characters, so an
+    edit past that point would leave the key unchanged (T223). Containers are
+    walked, so a pattern nested in a tuple, dict or set is keyed the same way."""
+    if isinstance(value, re.Pattern):
+        return repr((value.pattern, value.flags))
+    if isinstance(value, (tuple, list)):
+        return f"{type(value).__name__}({[_input_repr(item) for item in value]!r})"
+    if isinstance(value, (frozenset, set)):
+        return f"{type(value).__name__}({sorted(_input_repr(item) for item in value)!r})"
+    if isinstance(value, dict):
+        return f"dict({sorted((_input_repr(k), _input_repr(v)) for k, v in value.items())!r})"
+    return repr(value)
+
+
+def _module_items() -> list[tuple[str, object]]:
+    """(label, value) for every keyed input; the single place the population is
+    decided, shared by the key (`_module_inputs`) and the references an entry keeps
+    alive (`_live_inputs`)."""
+    items: list[tuple[str, object]] = []
+    for name, value in list(globals().items()):
+        if name.startswith("__") or name == "_ANALYSES" or isinstance(value, types.ModuleType):
+            continue
+        items.append((name, value))
+        if isinstance(value, type) and value.__module__ == __name__:
+            items.extend(
+                (f"{name}.{attr}", member)
+                for attr, member in vars(value).items()
+                if attr not in ("__dict__", "__weakref__")
+            )
+    return items
+
+
+def _live_inputs() -> tuple[object, ...]:
+    return tuple(value for _, value in _module_items())
 
 
 def _module_inputs() -> str:
@@ -2993,17 +3036,17 @@ def _module_inputs() -> str:
     function -- between two same-tree calls must not be served the earlier
     analysis. So the rule is closed over the module, never a name pattern: every
     global, functions included (a function's repr names its object, so patching
-    one changes the key), except imported modules, dunders and `_ANALYSES` itself,
-    which cannot be part of its own key."""
-    return repr(
-        sorted(
-            (name, repr(value))
-            for name, value in globals().items()
-            if not name.startswith("__")
-            and name != "_ANALYSES"
-            and not isinstance(value, types.ModuleType)
-        )
-    )
+    one changes the key; `_ANALYSES` entries keep those objects alive so an address
+    is never reused while an entry exists), except imported modules, dunders and
+    `_ANALYSES` itself, which cannot be part of its own key.
+
+    T223 (F6): the attributes of each class this module defines are keyed too, as
+    `Class.attr` (methods are read through the class: `EvidencePinnedFloor.as_dict`
+    runs inside the analysis). Only the two slots no caller can patch to a different
+    value (`__dict__`, `__weakref__`) are left out. Attributes of *other* modules'
+    objects (stdlib functions, imported classes) stay outside the key by design:
+    nothing here patches them, and their identity is not this module's input."""
+    return repr(sorted((label, _input_repr(value)) for label, value in _module_items()))
 
 
 def _content_digest(src_dir: Path) -> str:
@@ -3034,8 +3077,9 @@ def _analysed_once(
         _module_inputs(),
     )
     if key not in _ANALYSES:
-        _ANALYSES[key] = analyse()
-    return copy.deepcopy(_ANALYSES[key])
+        live = _live_inputs()
+        _ANALYSES[key] = (analyse(), live)
+    return copy.deepcopy(_ANALYSES[key][0])
 
 
 def measure(src_dir: Path = _SRC_DIR) -> dict[str, Any]:

@@ -2289,6 +2289,7 @@ def test_one_gate_failing_is_never_hidden_by_the_other_being_unmeasured(
     )
     monkeypatch.setattr(sourcing, "DEFAULT_EVIDENCE_PATH", tmp_path / "a.json")
     monkeypatch.setattr(sourcing, "DEFAULT_BROWSER_EVIDENCE_PATH", tmp_path / "b.json")
+    monkeypatch.setattr(sourcing, "FLOOD_EVIDENCE_PATH", tmp_path / "c.json")
     assert sourcing._main([]) == expected
 
 
