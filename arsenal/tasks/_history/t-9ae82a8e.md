@@ -3,6 +3,7 @@ id: t-9ae82a8e
 title: "T225: partition holds back only an offer's own status, so a copy of a ruled-out or already-shown advert is presented again"
 label: "T225: partition holds back only"
 priority: 10
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2).
@@ -12,13 +13,6 @@ Filed from a candidate session (test-mode 658fcce2).
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run pytest tests/test_sibling_hold_back.py tests/test_advert_identity.py tests/test_presentation_register.py -q
 ```
