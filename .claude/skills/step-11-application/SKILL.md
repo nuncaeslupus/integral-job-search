@@ -64,6 +64,8 @@ Offered per offer. Declining generates nothing and leaves the offer `shortlisted
 
 `cv/generated/<offer_id>/v<N>/` — CV and letter, versioned, plus a manifest of which store entries each claim came from. On send, `applications/<offer_id>/` records what went and when, immutable thereafter.
 
+Each version also gets `carta.html` and `cv.html`, rendered from the Markdown by `integral.application_render.render_document(markdown, title=..., kind="letter"|"cv", photo=<optional bytes>, photo_mime=..., lang=...)` — one printable file each (A4, inline style, photo as a `data:` URI). The Markdown is the source; never edit the HTML by hand, regenerate it.
+
 ## Boundary
 
 **Invite forward; never close by offering to end the session.** Leaving is always allowed and
