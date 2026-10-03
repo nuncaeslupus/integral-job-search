@@ -827,8 +827,15 @@ MINIMUM_FILES_FORMATTED = 300
 #: turning red on a legitimate deletion. The second reader recommended ~200; at
 #: 88% of today's count that trips on any routine removal of a couple of dozen
 #: files, which is the drift this task exists to remove, and it catches nothing
-#: 150 does not.
-MINIMUM_PYTHON_FILES_FORMATTED = 150
+#: 150 did not.
+#:
+#: **Raised to 200 by T182.** The test above that pins this floor needs it to exceed
+#: what is left when `src/` is lost, i.e. the non-`src/` Python files, and `tests/`
+#: grew to 151 of them, past 150: the floor was a number the tree had caught up with,
+#: so any further test file would have turned `make host-gate` red for a reason
+#: unrelated to the change. 200 is 72% of today's 276 (the other floors sit at 66-67%)
+#: and keeps both losses caught: no `src/` leaves 151, no `tests/` leaves 125.
+MINIMUM_PYTHON_FILES_FORMATTED = 200
 
 
 def record_formatting(measured: dict[str, Any]) -> dict[str, Any]:
