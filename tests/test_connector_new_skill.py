@@ -9,10 +9,13 @@ a session distrust correct work and pay to refute it, or edit something until th
 count matches.
 
 Two tests hold the remedy down. One reads the skill for the *shape* of the claim
-(a number, then "counts/keys move", or "a third is a finding"), not for today's
-wording. The other measures the fact that made the claim wrong — it adds a real
+(any English number, digit or vague quantifier next to a key/count noun, or a
+"finding" fenced by else/other/third/more than), not for today's wording. The other
+measures the fact that made the claim wrong — it adds a real
 package to a copy of the tree and counts how many committed keys move — so putting
-a number back is red whatever number it is.
+a number back is red; a census reworded to avoid every number and quantifier the
+detector knows is not, which is why the detector is a closed rule and not a list of
+phrasings.
 """
 
 from __future__ import annotations
@@ -38,34 +41,63 @@ SKILL = REPO / ".claude" / "skills" / "connector-new" / "SKILL.md"
 #: differ from it, and separately no number may be claimed at all.
 CLAIMED_BY_THE_OLD_SKILL = 2
 
-_NUMBER = (
-    r"(?:\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
-    r"first|second|third|fourth|fifth|sixth|seventh)"
+#: The host the added package fetches from, written into its manifest, its meta and
+#: its robots row alike, so the row names the host the package actually reads (T144).
+HOST = "zzprobe.example"
+
+
+def _words(text: str) -> list[str]:
+    return re.split(r"\s+", text.strip())
+
+
+_UNITS = _words(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+    "fourteen fifteen sixteen seventeen eighteen nineteen"
 )
-_MOVERS = r"(?:counts?|keys?|numbers?|figures?|measurements?|records?|values?)"
-_VERBS = r"(?:move|moves|moved|change|changes|changed|shift|shifts|shifted|drift|drifts)"
-_CENSUS_SHAPES = (
-    # "Two committed counts move", "exactly 7 keys move", "three evidence keys change".
-    re.compile(
-        rf"\b{_NUMBER}\s+(?:[\w-]+\s+){{0,3}}?{_MOVERS}\s+(?:[\w-]+\s+){{0,2}}?{_VERBS}\b",
-        re.IGNORECASE,
-    ),
-    # "if a third moves, that is a finding" / "a third key is a finding".
-    re.compile(
-        rf"\b{_NUMBER}\b[^.]{{0,40}}?\b(?:that|it|this)\s+is\s+a\s+finding\b"
-        rf"|\b{_NUMBER}\s+(?:[\w-]+\s+){{0,2}}?is\s+a\s+finding\b",
-        re.IGNORECASE,
-    ),
-    # "exactly N" / "only N" with a movement verb in the same sentence.
-    re.compile(rf"\b(?:exactly|only|just)\s+{_NUMBER}\b[^.]*?\b{_VERBS}\b", re.IGNORECASE),
+_TENS = ["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+_ORDINALS = _words(
+    "first second third fourth fifth sixth seventh eighth ninth tenth eleventh twelfth "
+    "thirteenth fourteenth fifteenth sixteenth seventeenth eighteenth nineteenth "
+    "twentieth thirtieth"
 )
+_LARGE = ["hundred", "thousand", "million", "dozen"]
+_QUANTIFIERS = ["both", "pair", "couple", "several", "few"]
+_COMPOUND = rf"(?:{'|'.join(_TENS)})(?:[- ](?:{'|'.join(_UNITS[1:10])}))?"
+#: Every English cardinal and ordinal, any digit run, and the vague quantifiers.
+#: A closed rule: a number is a number whether or not anyone thought to list it.
+#: A digit run is not a number when it is the amount of a move (`+1`, `-3`) or part
+#: of an identifier (`T72`), which the lookbehind and `\b` exclude.
+_WORDS = "|".join([*_UNITS, *_ORDINALS, *_LARGE, *_QUANTIFIERS])
+_NUMBER = rf"(?:(?<![+\-\w])\d+\b|\b(?:{_COMPOUND}|{_WORDS})\b)"
+_THING = r"(?:keys?|counts?|measurements?|figures?)"
+#: Words that may sit between the number and the thing without breaking the link
+#: ("two committed evidence counts"), except the ones that start a new noun phrase.
+_BREAKS = {"and", "or", "per", "by", "each", "package", "packages", "connector", "connectors"}
+_NUMBER_THEN_THING = re.compile(
+    rf"{_NUMBER}(?P<gap>(?:\s+[\w`-]+){{0,2}}?)\s+(?:of\s+)?{_THING}\b", re.IGNORECASE
+)
+#: "Else", "other", "third", "beyond", "besides", "more than" next to "finding": the
+#: shape of "if anything else moves, that is a finding", which implies a closed set
+#: without ever writing a number.
+_FINDING_WITH_A_BOUNDARY = re.compile(
+    r"(?=.*\bfindings?\b)(?=.*\b(?:else|other|others|third|beyond|besides|more\s+than)\b)",
+    re.IGNORECASE,
+)
+
+
+def _numbered_thing(sentence: str) -> bool:
+    for found in _NUMBER_THEN_THING.finditer(sentence):
+        words = re.findall(r"[\w`-]+", found.group("gap").lower())
+        if not _BREAKS.intersection(words):
+            return True
+    return False
 
 
 def census_claims(text: str) -> list[str]:
-    """Sentences in `text` that state how many committed keys move."""
+    """Sentences that put a number on how many keys move, or fence the set closed."""
     flat = re.sub(r"\s+", " ", text)
-    sentences = re.split(r"(?<=[.!?])\s+", flat)
-    return [s for s in sentences if any(shape.search(s) for shape in _CENSUS_SHAPES)]
+    sentences = re.split(r"(?<=[.!?;])\s+", flat)
+    return [s for s in sentences if _numbered_thing(s) or _FINDING_WITH_A_BOUNDARY.search(s)]
 
 
 def test_the_skill_names_no_census_of_moved_keys() -> None:
@@ -80,6 +112,14 @@ def test_the_skill_names_no_census_of_moved_keys() -> None:
         "Exactly 7 keys move for one package.",
         "three evidence keys change when a connector is added",
         "Only two counts move, and both must be checked.",
+        "Sixteen keys move when a package lands.",
+        "Both committed counts move; if anything else moves, that is a finding.",
+        "Only `X` and `Y` move; any other key that moves is a finding.",
+        "The package moves 7 keys.",
+        "Expect a couple of counts to change.",
+        "More than two keys are findings.",
+        "A third moving key means something else is package-sensitive.",
+        "Twenty-one keys move.",
     ],
 )
 def test_the_census_detector_recognises_the_shape_of_the_claim(claim: str) -> None:
@@ -91,6 +131,8 @@ def test_the_census_detector_recognises_the_shape_of_the_claim(claim: str) -> No
     [
         "A key that moves by the package's own contribution is truthful.",
         "Each connector is one package, and keys move by +1 per package.",
+        "A per-phrase outcome moves by +N for N phrases.",
+        "A finding is a move you cannot derive from the package.",
         "Find which keys are package-sensitive with the registry, then explain each move.",
     ],
 )
@@ -141,7 +183,7 @@ def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
         return module, done.returncode, done.stderr[-400:]
 
     # Each module writes its own record, so they are independent of one another.
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(run, repo_gate.evidence_writing_modules()))
     for module, code, stderr in results:
         # A module's own verdict (0 pass, 3 unmeasured, 1 red) is not this test's
@@ -161,7 +203,12 @@ def _add_a_package(root: Path) -> None:
     manifest = root / "connectors" / package / "connector.yaml"
     declared = manifest.read_text(encoding="utf-8")
     assert "\nsite: lever\n" in declared  # the loader requires `site` to match the name
-    manifest.write_text(declared.replace("\nsite: lever\n", "\nsite: zzprobe\n"), encoding="utf-8")
+    manifest.write_text(
+        declared.replace("\nsite: lever\n", "\nsite: zzprobe\n").replace("lever.co", HOST),
+        encoding="utf-8",
+    )
+    meta = root / "connectors" / package / "meta.yaml"
+    meta.write_text(meta.read_text(encoding="utf-8").replace("lever.co", HOST), encoding="utf-8")
     ledger = root / "connectors" / "robots-adjudications.yaml"
     text = ledger.read_text(encoding="utf-8")
     at = text.index(f"    package: connectors/{template}\n")
@@ -170,7 +217,7 @@ def _add_a_package(root: Path) -> None:
     end = len(text) if end == -1 else end + 1
     block = text[start:end]
     assert block.count(template) >= 2
-    clone = block.replace(template, package).replace("api.lever.co", "api.zzprobe.example")
+    clone = block.replace(template, package).replace("lever.co", HOST)
     ledger.write_text(text[:end] + clone + text[end:], encoding="utf-8")
     _git(root, "add", "-A")
 
@@ -193,11 +240,7 @@ def test_a_new_package_moves_more_keys_than_the_skill_ever_claimed() -> None:
     with tempfile.TemporaryDirectory(prefix="t197-") as scratch:
         root = Path(scratch)
         _copy_tracked_tree(root)
-        # `make evidence` refuses drift, so the committed records are the baseline.
-        before = {
-            path.name: json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted((root / "status" / "evidence").glob("*.json"))
-        }
+        before = _regenerate_evidence(root)
         _add_a_package(root)
         after = _regenerate_evidence(root)
     moved = _moved_keys(before, after)

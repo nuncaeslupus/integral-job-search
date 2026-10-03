@@ -167,13 +167,13 @@ d = parse_detail_page(c, (p/'fixture/detail.html').read_text()) if c.detail else
 print(build_offer(c, list_fields=rows[0], detail_fields=d, url='https://…'))"
 ```
 
-Then `make host-gate`. Several committed evidence keys move when a package lands,
-and this skill names no number of them: a count in prose has no last element and
+Then `make host-gate`. Committed evidence keys move when a package lands, and this
+skill names no number of them: a count in prose has no last element and
 goes stale the next time a census gains a key. Decide each move by the rule below.
 
 - **Truthful** — the key moves by an amount you can derive from the package you
   added. A census of packages moves by +1 per package. A per-phrase outcome (for
-  example `Run.steered`, `boards_consulted`, `plain_requests_made`) records one
+  example `boards_consulted`, `plain_requests_made`) records one
   `BoardOutcome` per phrase, so it moves by +N for N phrases: correct, and it reads
   as alarming. A record about the package's own robots adjudication or provenance
   moves because the package brought one.
