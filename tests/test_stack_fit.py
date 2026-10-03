@@ -19,7 +19,13 @@ from pydantic import ValidationError
 from integral import stack_fit
 from integral.cv_store import CVMaster, write_master
 from integral.identity import ProfileStore, create_profile
-from integral.profile import EvidenceLog, EvidenceRow, ProfileRevision, SkillStance
+from integral.profile import (
+    EvidenceLog,
+    EvidenceRow,
+    EvidenceSubject,
+    ProfileRevision,
+    SkillStance,
+)
 from integral.rank import Candidate, rank
 
 CASES: list[dict[str, Any]] = json.loads(stack_fit.DEFAULT_CASES_PATH.read_text(encoding="utf-8"))[
@@ -172,3 +178,217 @@ def test_an_unresolvable_stance_raises_instead_of_going_unread() -> None:
     assert stack_fit.resolve_technology("amazon_web_services") == "aws"
     with pytest.raises(stack_fit.StackFitError):
         stack_fit.resolve_technology("node")
+
+
+_LAST_JOB = "At my last job I built LLM agent harnesses and AI agents for prompt tooling."
+
+
+def _history_episode(store: ProfileStore, text: str = _LAST_JOB) -> EvidenceRow:
+    return EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="history",
+        kind="episode",
+        text=text,
+        source="conversation",
+    )
+
+
+def test_work_told_in_a_history_episode_is_not_missing(tmp_path: Path) -> None:
+    """T245: the evidence log holds the work; `master.json` never received it."""
+    store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
+    _offer(store, "ai", "AI engineer", "Python, LLM and AI agents in production.")
+    assert stack_fit.fits_for_store(store, ["ai"])["ai"]["missing"] == ["ai_agents", "llm"]
+    row = _history_episode(store)
+    fit = stack_fit.fits_for_store(store, ["ai"])["ai"]
+    assert fit["missing"] == []
+    assert fit["used"] == ["ai_agents", "llm"]
+    assert fit["sources"]["llm"] == f"log:{row.id}"
+
+
+def test_a_retracted_history_episode_no_longer_counts(tmp_path: Path) -> None:
+    store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
+    _offer(store, "ai", "AI engineer", "Python and AI agents.")
+    row = _history_episode(store)
+    assert stack_fit.fits_for_store(store, ["ai"])["ai"]["missing"] == []
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:05:00Z",
+        step="history",
+        kind="retraction",
+        text="forget that",
+        source="conversation",
+        retracts=row.id,
+    )
+    assert stack_fit.fits_for_store(store, ["ai"])["ai"]["missing"] == ["ai_agents"]
+
+
+def test_a_stance_row_is_not_read_as_prose(tmp_path: Path) -> None:
+    """ "no sé Kubernetes" must not credit Kubernetes as used."""
+    store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
+    _offer(store, "k", "Platform", "Kubernetes.")
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="ranking",
+        kind="statement",
+        text="Kubernetes no sé cómo funciona",
+        source="conversation",
+        skill=SkillStance(technology="kubernetes", level="none"),
+    )
+    fit = stack_fit.fits_for_store(store, ["k"])["k"]
+    assert fit["weak"] == ["kubernetes"]
+    assert fit["used"] == []
+
+
+def test_a_master_episode_whose_log_row_was_retracted_is_skipped(tmp_path: Path) -> None:
+    store = _store(tmp_path, {})
+    row = _history_episode(store)
+    master = CVMaster.model_validate(
+        {
+            "episodes": [
+                {
+                    "kind": "achievement",
+                    "text": _LAST_JOB,
+                    "provenance": [{"kind": "conversation_turn", "evidence_id": row.id}],
+                }
+            ]
+        }
+    )
+    assert "llm" in stack_fit.candidate_stack(master)
+    assert "llm" not in stack_fit.candidate_stack(master, (), frozenset({row.id}))
+
+
+def test_the_store_path_honours_a_retraction_of_a_master_episodes_log_row(tmp_path: Path) -> None:
+    store = _store(tmp_path, {})
+    row = _history_episode(store, "Shipped a gateway in Go.")
+    write_master(
+        store,
+        CVMaster.model_validate(
+            {
+                "episodes": [
+                    {
+                        "kind": "achievement",
+                        "text": "Shipped a gateway in Go.",
+                        "provenance": [{"kind": "conversation_turn", "evidence_id": row.id}],
+                    }
+                ]
+            }
+        ),
+    )
+    _offer(store, "g", "Backend", "We write Go services.")
+    assert stack_fit.fits_for_store(store, ["g"])["g"]["missing"] == []
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:05:00Z",
+        step="history",
+        kind="retraction",
+        text="forget that",
+        source="conversation",
+        retracts=row.id,
+    )
+    assert stack_fit.fits_for_store(store, ["g"])["g"]["missing"] == ["go"]
+
+
+_OFFER_ID = "sha256:" + "a" * 64
+_NOT_WORK_DONE = [
+    ("statement", "I have never used Kubernetes.", "kubernetes"),
+    ("statement", "No he tocado Kubernetes en mi vida.", "kubernetes"),
+    ("statement", "I would like to learn Rust next.", "rust"),
+    ("statement", "I refuse to work with PHP again.", "php"),
+    ("reaction", "That reads like a Go shop and I would hate it.", "go"),
+    ("constraint", "No PHP shops.", "php"),
+    ("outcome", "Rejected: they wanted Rust.", "rust"),
+]
+
+
+@pytest.mark.parametrize(("kind", "text", "technology"), _NOT_WORK_DONE)
+def test_a_row_that_is_not_work_done_never_credits_a_technology(
+    tmp_path: Path, kind: Any, text: str, technology: str
+) -> None:
+    store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
+    spelled = {"kubernetes": "Kubernetes", "rust": "Rust", "php": "PHP", "go": "Golang"}
+    _offer(store, "o", "Engineer", f"We use {spelled[technology]} daily.")
+    _offer(store, "other", "Other", "Golang and Kubernetes.")
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="feedback",
+        kind=kind,
+        text=text,
+        source="offer_reaction",
+        about=EvidenceSubject(kind="offer", id=_OFFER_ID),
+    )
+    fits = stack_fit.fits_for_store(store, ["o", "other"])
+    for fit in fits.values():
+        assert fit["used"] == []
+        assert fit["match"] == []
+    assert technology in fits["o"]["missing"]
+
+
+def test_a_step_ten_reason_credits_nothing_on_any_offer(tmp_path: Path) -> None:
+    store = _store(tmp_path, {})
+    _offer(store, "a", "Engineer", "Kubernetes and LLM work.")
+    _offer(store, "b", "Engineer", "LLM platform.")
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="feedback",
+        kind="statement",
+        text="asks for Kubernetes and LLM experience, which I don't have",
+        source="offer_reaction",
+        about=EvidenceSubject(kind="offer", id=_OFFER_ID),
+    )
+    fits = stack_fit.fits_for_store(store, ["a", "b"])
+    assert fits["a"]["missing"] == ["kubernetes", "llm"]
+    assert fits["b"]["missing"] == ["llm"]
+
+
+def test_a_retraction_matched_only_by_text_withdraws_a_master_episode(tmp_path: Path) -> None:
+    said = "Shipped a gateway in Go for two years."
+    store = _store(tmp_path, {"episodes": [{"kind": "achievement", "text": said}]})
+    _offer(store, "g", "Backend", "We write Go services.")
+    assert stack_fit.fits_for_store(store, ["g"])["g"]["missing"] == []
+    row = EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="intake",
+        kind="statement",
+        text=said,
+        source="conversation",
+    )
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:05:00Z",
+        step="intake",
+        kind="retraction",
+        text="forget that",
+        source="conversation",
+        retracts=row.id,
+    )
+    assert stack_fit.fits_for_store(store, ["g"])["g"]["missing"] == ["go"]
+
+
+def test_candidate_stack_accepts_a_one_shot_iterator(tmp_path: Path) -> None:
+    """Both passes over the rows (prose, then stance) must see them."""
+    store = _store(tmp_path, {})
+    episode = _history_episode(store)
+    stance = EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:01:00Z",
+        step="ranking",
+        kind="statement",
+        text="odio Java",
+        source="conversation",
+        skill=SkillStance(technology="java", averse=True),
+    )
+    held = stack_fit.candidate_stack(CVMaster.model_validate({}), iter([episode, stance]))
+    assert "llm" in held
+    assert held["java"].averse
+
+
+def test_an_aversion_only_row_is_not_credited_as_a_mention(tmp_path: Path) -> None:
+    store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
+    _offer(store, "k", "Platform", "Kubernetes.")
+    row = EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="ranking",
+        kind="statement",
+        text="odio Kubernetes",
+        source="conversation",
+        skill=SkillStance(technology="kubernetes", averse=True),
+    )
+    fit = stack_fit.fits_for_store(store, ["k"])["k"]
+    assert fit["averse"] == ["kubernetes"]
+    assert fit["sources"]["kubernetes"] == row.id
