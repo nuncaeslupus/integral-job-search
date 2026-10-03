@@ -541,6 +541,13 @@ def test_a_bare_year_end_is_a_span_not_the_start_of_the_year() -> None:
         assert (
             _held(("Senior Developer", "2021", later), ("Junior Developer", "2020", "2023")) == 0.2
         )
+        # and with the bare year on the senior side: "2023" may end after the junior "2023-06"
+        assert (
+            _held(("Senior Developer", "2020", "2023"), ("Junior Developer", "2021", later)) == 0.2
+        )
+        assert (
+            _held(("Junior Developer", "2021", later), ("Senior Developer", "2020", "2023")) == 0.2
+        )
     # but a year that ended before the other began is settled
     assert (
         _held(("Junior Developer", "2018", "2019"), ("Senior Developer", "2020", "2023-06")) == 0.8
