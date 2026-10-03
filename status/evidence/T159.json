@@ -510,6 +510,7 @@
     "pagination_capture.MINIMUM_DUPLICATE_KEY_PROBES",
     "pagination_capture.MINIMUM_URL_SIDE_PROBES",
     "pay.STALE_AFTER_DAYS",
+    "pay_normalise.MINIMUM_REFUSAL_STATES",
     "photo_extract.MIN_SHORT_SIDE",
     "photo_extract._TIMEOUT_SECONDS",
     "plan_v2.MINIMUM_BOARD_SIZE",

@@ -86,7 +86,7 @@ from pathlib import Path
 from typing import Any
 
 from integral.profile import ProfileRevision
-from integral.rank import DOMINATED_BY, Candidate, PayBand, RankingError, rank
+from integral.rank import DOMINATED_BY, Candidate, PayBand, RankingError, point_band, rank
 
 # §4.3's site: the pay rule is a constraint on the order §4.3 defines, so it is
 # read at the same section rather than given one of its own.
@@ -416,14 +416,14 @@ def _pair(case: str) -> tuple[Candidate, Candidate]:
             salary_per_month=rich_salary,
             scores=dict(_SCORES),
             unknown=_UNKNOWN,
-            pay=rich_band,
+            pay=rich_band or point_band(rich_salary, "EUR"),
         ),
         Candidate(
             offer_id=poor_id,
             salary_per_month=poor_salary,
             scores=dict(_SCORES),
             unknown=_UNKNOWN,
-            pay=poor_band,
+            pay=poor_band or point_band(poor_salary, "EUR"),
         ),
     )
 
@@ -613,12 +613,14 @@ def contradictions_refused() -> dict[str, int]:
         Candidate(
             offer_id="a-unranked-2000",
             salary_per_month=2000.0,
+            pay=point_band(2000.0, "EUR"),
             scores={**_SCORES, "perks": 1.0},
             unknown=_UNKNOWN,
         ),
         Candidate(
             offer_id="z-unranked-5000",
             salary_per_month=5000.0,
+            pay=point_band(5000.0, "EUR"),
             scores={**_SCORES, "perks": 0.0},
             unknown=_UNKNOWN,
         ),
