@@ -9,6 +9,7 @@
       "action": "installed",
       "expected_action": "installed",
       "missing": [
+        "platformdirs",
         "pydantic",
         "pyyaml"
       ],
@@ -30,6 +31,7 @@
       "action": "installed",
       "expected_action": "installed",
       "missing": [
+        "platformdirs",
         "pydantic",
         "pyyaml"
       ],
@@ -64,6 +66,7 @@
       "action": "installed",
       "expected_action": "installed",
       "missing": [
+        "platformdirs",
         "pydantic",
         "pyyaml"
       ],
@@ -87,6 +90,7 @@
       "action": "unavailable",
       "expected_action": "unavailable",
       "missing": [
+        "platformdirs",
         "pydantic",
         "pyyaml"
       ],
@@ -103,6 +107,7 @@
       "action": "failed",
       "expected_action": "failed",
       "missing": [
+        "platformdirs",
         "pydantic",
         "pyyaml"
       ],
@@ -124,6 +129,7 @@
       "action": "installed",
       "expected_action": "installed",
       "missing": [
+        "platformdirs",
         "pydantic",
         "pyyaml"
       ],

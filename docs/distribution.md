@@ -42,8 +42,10 @@ trust with their working history.
 ## 2. Candidate state lives outside the clone — the rule everything rests on
 
 `profiles/<handle>/` is **not** inside the repository. It resolves from
-`$INTEGRAL_HOME`, defaulting to `~/.integral-job-search/` (respecting
-`$XDG_DATA_HOME` where set).
+`$INTEGRAL_HOME`, else `$XDG_DATA_HOME/integral-job-search`, else the OS's own
+data directory: `~/.integral-job-search/` on Linux,
+`~/Library/Application Support/integral-job-search` on macOS and
+`%LOCALAPPDATA%\integral-job-search` on Windows (via `platformdirs`).
 
 **The resolver refuses to return any path inside a git work tree.** Not a
 warning — a refusal, with a `--dev` escape for work on the tool itself. This
@@ -62,6 +64,26 @@ What that one rule buys:
 
 `.gitignore` keeps `profiles/` ignored regardless. Two mechanisms for one
 promise is correct here; the ignore rule is the cheap belt behind the braces.
+
+### Backing up `$INTEGRAL_HOME`
+
+Keeping state outside the clone also means nothing else carries it: a profile
+made on one machine is invisible from another, and in an ephemeral cloud
+container it is **lost when the container is reclaimed**. For any such session a
+backup is *necessary*, not optional.
+
+The backup is the candidate's own **private** git repository:
+
+```bash
+cd "$INTEGRAL_HOME" && git remote add origin <your-private-repo-url>   # once
+bash tools/backup_state_home.sh                                        # each session end
+```
+
+`tools/backup_state_home.sh [DIR]` initialises the directory as a repository if
+needed, commits what is there and pushes to `origin` when one is configured. It
+only adds commits — it never rewrites a file under `profiles/` — and it refuses a
+directory that sits inside another repository. The remote must be private:
+profiles hold a candidate's history.
 
 ## 3. Why not a plugin — yet
 
