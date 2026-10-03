@@ -200,22 +200,22 @@
     {
       "module": "second_reader",
       "name": "FAIL_OPEN_CASES_AT_LEAST",
-      "line": 872
+      "line": 904
     },
     {
       "module": "second_reader",
       "name": "FIXTURES_AT_LEAST",
-      "line": 862
+      "line": 894
     },
     {
       "module": "second_reader",
       "name": "REGRESSION_CASES_AT_LEAST",
-      "line": 903
+      "line": 935
     },
     {
       "module": "second_reader",
       "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
-      "line": 889
+      "line": 921
     },
     {
       "module": "sourcing",

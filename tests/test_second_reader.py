@@ -552,3 +552,202 @@ def test_a_widened_spelling_never_turns_a_refusal_into_a_permission() -> None:
         # … and adding an `Allow` that only a widened spelling reaches must not
         # take that decision away from it.
         assert sr.allows(document, AGENT, target) is False
+
+
+# --- T195: a target of the wrong shape is refused, never allowed ------------
+#
+# Every verdict below is derived from the task's text and from two standards, not
+# read off either reader: RFC 9309 §2.2.2 compares rules against the request
+# target (path plus query), and RFC 3986 §3.3 says a path-absolute reference
+# opens with a single "/" because "//" begins a network-path reference carrying an
+# authority. A full URL is therefore not a request target, and the reader must
+# neither guess its path out nor fall through to "no rule matched, allow".
+
+_AJAX = "User-agent: *\nDisallow: /ajax/\n"
+
+# (robots.txt, request target) pairs carrying both an allow and a disallow, with
+# the verdict RFC 9309 §2.2.2 (longest match; allow wins a tie) gives each.
+_AGREEMENT_PAIRS = [
+    ("User-agent: *\nDisallow: /ajax/\nAllow: /ajax/ok\n", "/ajax/x", False),
+    ("User-agent: *\nDisallow: /ajax/\nAllow: /ajax/ok\n", "/ajax/ok", True),
+    ("User-agent: *\nDisallow: /ajax/\nAllow: /ajax/ok\n", "/jobs", True),
+    ("User-agent: *\nDisallow: /*?session=\nAllow: /\n", "/search?session=1", False),
+    ("User-agent: *\nDisallow: /*?session=\nAllow: /\n", "/search?q=1", True),
+    ("User-agent: *\nDisallow: /a$\nAllow: /a/b\n", "/a", False),
+    ("User-agent: *\nDisallow: /a$\nAllow: /a/b\n", "/a/b", True),
+    ("User-agent: *\nAllow: /\nDisallow: /private\n", "/private/x?y=2", False),
+]
+
+# Full URLs and network-path references for the path /ajax/x?y=2 -- each a shape
+# `Robots().allows` accepts and a request target is not.
+_WRONG_SHAPE_TARGETS = [
+    "https://es.talent.com/ajax/x",
+    "https://es.talent.com/ajax/x?y=2",
+    "https://es.talent.com/ajax/x?y=2#frag",
+    "https://es.talent.com/ajax/x#frag",
+    "https://user:pw@es.talent.com/ajax/x",
+    "https://es.talent.com:8443/ajax/x",
+    "HTTPS://ES.TALENT.COM/ajax/x",
+    "http://es.talent.com",
+    "//es.talent.com/ajax/x",
+    "//es.talent.com:8443/ajax/x?y=2",
+    "///ajax/x",
+    "es.talent.com/ajax/x",
+    "ajax/x",
+    "*",
+    "",
+    " /ajax/x",
+]
+
+
+def _robots_over(text: str) -> robots.Robots:
+    return robots.Robots(fetch=lambda _url: text)
+
+
+@pytest.mark.parametrize("target", _WRONG_SHAPE_TARGETS)
+def test_a_full_url_is_not_silently_allowed(target: str) -> None:
+    """The file refuses `/ajax/`; a URL for `/ajax/x` must not come back `True`.
+
+    RFC 3986 §3.3: only a single-slash path-absolute is a request target. The
+    verdict required is a refusal to answer (an exception), which cannot be
+    mistaken for an allow by a caller that tests truthiness.
+    """
+    with pytest.raises(sr.SecondReaderError):
+        sr.allows(_AJAX, AGENT, target)
+
+
+def test_a_url_that_the_sibling_reader_refuses_is_not_allowed_here() -> None:
+    """Fail-open is the defect: the sibling says False, this one must not say True."""
+    sibling = _robots_over(_AJAX).allows("https://es.talent.com/ajax/x")
+    assert sibling is False
+    with pytest.raises(sr.SecondReaderError):
+        sr.allows(_AJAX, AGENT, "https://es.talent.com/ajax/x")
+
+
+@pytest.mark.parametrize(("text", "path", "expected"), _AGREEMENT_PAIRS)
+def test_the_two_readers_agree_on_the_same_target(text: str, path: str, expected: bool) -> None:
+    """Each reader is given its own convention for the same resource.
+
+    `expected` is the §2.2.2 verdict written beside the pair; neither reader's
+    output decides it. The URL carries the same path and query, with the
+    userinfo, port and fragment the RFC 3986 grammar permits around them, none
+    of which belongs to the request target RFC 9309 matches.
+    """
+    for url in (
+        f"https://example.test{path}",
+        f"https://example.test:8443{path}",
+        f"https://user:pw@example.test{path}",
+        f"https://example.test{path}#frag",
+    ):
+        assert _robots_over(text).allows(url) is expected, url
+    assert sr.allows(text, AGENT, path) is expected
+
+
+def test_the_agreement_pairs_hold_both_verdicts() -> None:
+    """A table that only ever says one thing would agree with a constant."""
+    assert {e for _, _, e in _AGREEMENT_PAIRS} == {True, False}
+
+
+def test_a_wrong_shaped_target_is_wrong_for_the_reader_in_every_pair() -> None:
+    """Derived over the pairs: the URL form of every one is refused, not allowed."""
+    for text, path, _ in _AGREEMENT_PAIRS:
+        for target in (f"https://example.test{path}", f"//example.test{path}"):
+            with pytest.raises(sr.SecondReaderError):
+                sr.allows(text, AGENT, target)
+
+
+def test_every_reader_rejects_a_target_of_the_wrong_shape() -> None:
+    """Derived over `connector_policy.READERS`, so a reader added later is covered.
+
+    Each reader is handed the *other* convention's target for a path its file
+    refuses, and must not answer `True`. A reader that raises, or that answers
+    `False` both pass. Every wrong-shaped target is offered, including the ones
+    that name no refused resource (a bare host, `*`, ``): none may come back
+    `True`, because none is a request target.
+    """
+    from integral import connector_policy as cp
+
+    assert sr.NAME in cp.READERS
+    assert cp.DEFAULT_SECOND_READER in cp.READERS
+    for name, reader in cp.READERS.items():
+        for target in _WRONG_SHAPE_TARGETS:
+            try:
+                verdict = reader(_AJAX, AGENT, target)
+            except sr.SecondReaderError:
+                continue
+            assert verdict is not True, f"{name} answered True to {target!r}"
+
+
+def test_a_real_request_target_is_still_answered() -> None:
+    """The guard is not a blanket refusal: the convention it names still works."""
+    assert sr.allows(_AJAX, AGENT, "/ajax/x") is False
+    assert sr.allows(_AJAX, AGENT, "/jobs") is True
+    assert sr.allows(_AJAX, AGENT, "/") is True
+    assert sr.allows(_AJAX, AGENT, "/?q=1") is True
+
+
+def test_a_bytes_target_is_refused_not_coerced() -> None:
+    """`require_request_target`'s `isinstance(str)` branch: bytes are no path."""
+    with pytest.raises(sr.SecondReaderError):
+        sr.allows(_AJAX, AGENT, b"/ajax/x")  # type: ignore[arg-type]
+
+
+def test_classify_does_not_crash_on_a_double_slash_disallow() -> None:
+    """`Disallow: //admin` is a legal rule (RFC 9110 §4.1 path-abempty).
+
+    The reader refuses the `//admin` target as ambiguous with a network-path
+    reference; `_classify` must record that as no answer -- never an allow
+    (false_allows) and never an agreement -- and must not raise.
+    """
+    from integral import connector_policy as cp
+
+    text = "User-agent: *\nDisallow: //admin\n"
+    competence = cp._classify(text, AGENT)
+    assert competence.second_reader_false_allows == ()
+    assert competence.second_reader_false_refusals == ()
+    assert competence.second_reader_refused == ()
+    assert competence.verdict != cp.COMPETENT
+
+
+#: A file on which the sampler's witnesses reach the "no answer" branch of
+#: `_classify`: `//h/zq` is read by the RFC matcher as host `h`, path `/zq`
+#: (refused by `/*q`), while the second reader declines the `//` target; the
+#: `Allow`s capture the other witnesses of `/*q` so only that branch is left
+#: deciding. Whatever the reader declines to answer must be recorded as no
+#: answer -- not an agreement, a false allow, or a false refusal.
+_UNANSWERED_FILE = (
+    "User-agent: *\nDisallow: //h/zq\nDisallow: /*q\nAllow: /xq\nAllow: /yq\n"
+    "Allow: /q$\nAllow: /q\nAllow: /xxq\nAllow: /yyq\n"
+)
+
+
+def test_an_unanswered_control_counts_as_neither_agreement_nor_allow_nor_refusal() -> None:
+    from integral import connector_policy as cp
+
+    competence = cp._classify(_UNANSWERED_FILE, AGENT)
+    assert competence.verdict == cp.INCOMPETENT
+    assert competence.second_reader_refused == ()
+    assert competence.second_reader_false_allows == ()
+    assert competence.second_reader_false_refusals == ()
+
+
+def test_a_ledger_row_naming_an_unreadable_path_is_a_problem_not_a_crash() -> None:
+    """A `second_reader_refused` path the reader declines (`//h/zq`) is reported
+    by the row's checks, never raised and never read as an allow."""
+    from integral import connector_policy as cp
+
+    row = cp.RobotsAdjudication.from_mapping(
+        {
+            "site": "a.test",
+            "checked": "2026-09-04",
+            "agent": AGENT,
+            "standing": cp.SINGLE_PARSER,
+            "second_reader": sr.NAME,
+            "source": "connectors/robots-adjudications.yaml",
+            "allowed": [],
+            "second_reader_refused": ["//h/zq"],
+            "robots_txt": _UNANSWERED_FILE,
+        }
+    )
+    problems = row.problems()
+    assert any("declined to answer" in p and "//h/zq" in p for p in problems), problems

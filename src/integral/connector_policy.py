@@ -520,6 +520,9 @@ def second_reader_allows(text: str, agent: str, target: str) -> bool:
     first-match behaviour is not corrected here — correcting it would delete
     the independence that is the point of having it — it is measured.
     """
+    # The stdlib parser reads a bare `ajax/x` or `host/ajax/x` as some other path
+    # and answers True; the same refusal the longest-match reader makes applies.
+    second_reader.require_request_target(target)
     parser = urllib.robotparser.RobotFileParser()
     parser.parse(text.splitlines())
     return parser.can_fetch(agent, target)
@@ -575,14 +578,22 @@ def _classify(
                 continue
             tried.append(target)
             rfc_allows = robots.allows_text(text, agent, target)
-            second_allows = ask(text, agent, target)
+            try:
+                second_allows: bool | None = ask(text, agent, target)
+            except second_reader.SecondReaderError:
+                # The reader declined to read this target (e.g. `//admin`, which
+                # it refuses as ambiguous with a network-path reference). That is
+                # no answer: neither an agreement nor a false allow nor a false
+                # refusal, so it cannot count toward competence.
+                second_allows = None
             if not rfc_allows:
                 rfc_refused.append(target)
-                (false_allows if second_allows else agreed).append(target)
+                if second_allows is not None:
+                    (false_allows if second_allows else agreed).append(target)
                 # This pattern has produced its negative control; the rest of
                 # its family witnesses the same rule and says the same thing.
                 break
-            if not second_allows:
+            if second_allows is False:
                 false_refusals.append(target)
     if not rfc_refused:
         verdict = NO_CONTROL_POSSIBLE
@@ -1206,7 +1217,17 @@ class RobotsAdjudication:
                     "ALLOWS it on this file — a refusal the RFC does not make is not a "
                     "negative control, it is the second reader being wrong"
                 )
-            elif ask(self.robots_txt, self.agent, path):
+                continue
+            try:
+                second_allows = ask(self.robots_txt, self.agent, path)
+            except second_reader.SecondReaderError as exc:
+                problems.append(
+                    f"{where}: names {path!r} as a second-reader refusal, but the second "
+                    f"reader declined to answer for it ({exc}) — a path it cannot read "
+                    "is neither a refusal nor an allow, so it is no negative control"
+                )
+                continue
+            if second_allows:
                 problems.append(
                     f"{where}: names {path!r} as a second-reader refusal, and the second "
                     "reader ALLOWS it on this file — the agreement this row rests on is "
