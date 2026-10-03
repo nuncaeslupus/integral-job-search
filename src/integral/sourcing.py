@@ -841,6 +841,7 @@ def source(
     page_count: int = 1,
     robots: Robots | None = None,
     browser: Fetch | None = None,
+    offset: int = 0,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -854,8 +855,19 @@ def source(
     `from_captures` over the pages `browser_urls` asked the candidate's browser
     to save. Without it those boards are reported skipped; they are never sent
     to `fetch` (T173).
+
+    `offset` (T237) is how the phrases past `PHRASE_CEILING` get searched: pass
+    the **full** aim again with `offset=PHRASE_CEILING` (then twice that, ...)
+    and the window `aim.terms[offset:offset + PHRASE_CEILING]` is searched.
+    Never pass the remainder as if it were the aim: a slice is not what the
+    candidate said. This function does not replace a stored aim at all - it
+    records one only when none is stored yet, so no sequence of calls can
+    shorten what the candidate's step saved.
     """
-    from integral.search_terms import save_aim  # circular at module scope
+    from integral.search_terms import load_aim, save_aim  # circular at module scope
+
+    if offset < 0:
+        raise ValueError(f"offset must not be negative: {offset}")
 
     directory = directory or DEFAULT_CONNECTORS_DIR
     adjudicator = Robots() if robots is None else robots
@@ -864,9 +876,14 @@ def source(
     # next session did not know what had worked — and a persistence step that
     # has to be called separately is one that is skipped exactly when the
     # session ends badly, which is when it was most needed.
-    if aim.terms:
+    #
+    # T237: record, never replace. The first version saved whatever it was
+    # handed, so the second pass over the terms past the ceiling - called with
+    # the remainder - overwrote the candidate's aim with a slice of it. A
+    # stored aim is changed by the step that heard the change (`save_aim`).
+    if aim.terms and not load_aim(store).terms:
         save_aim(store, aim)
-    run = Run(unsearched=aim.terms[PHRASE_CEILING:])
+    run = Run(unsearched=aim.terms[offset + PHRASE_CEILING :])
     # What went unasked is the *difference*, never a branch per bucket. A branch
     # per bucket is one more thing to remember: #562 added a third bucket to
     # `packages_for` and no branch here, so a run that deliberately withheld five
@@ -878,7 +895,7 @@ def source(
     run.unreached = tuple(p.name for p in withheld)
     if run.unreached:
         run.unreached_because = _why_unreached(constraints, withheld)
-    phrases = aim.terms[:PHRASE_CEILING]
+    phrases = aim.terms[offset : offset + PHRASE_CEILING]
     # T203. Read here, by the act of searching, and not handed in: the module
     # that applies them was correct and tested for as long as nothing on this
     # path called it, and a parameter a caller must remember is the same gap.
@@ -931,6 +948,7 @@ def browser_urls(
     directory: Path | None = None,
     page_count: int = 1,
     robots: Robots | None = None,
+    offset: int = 0,
 ) -> list[str]:
     """The listing URLs `source` will ask `browser` for — what to open, in order.
 
@@ -940,7 +958,7 @@ def browser_urls(
     """
     directory = directory or DEFAULT_CONNECTORS_DIR
     adjudicator = Robots() if robots is None else robots
-    phrases = aim.terms[:PHRASE_CEILING]
+    phrases = aim.terms[offset : offset + PHRASE_CEILING]
     urls: list[str] = []
     for package in packages_for(constraints, directory):
         try:
