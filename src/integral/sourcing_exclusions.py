@@ -409,8 +409,28 @@ def ruled_out_by(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple
 # So the gap is looked for from the other side: the rows in which a candidate
 # says what rules a job out, set against what is recorded.
 
-#: The steps whose rows state what rules a job out (step 0 and step 2).
-STATEMENT_STEPS: tuple[str, ...] = ("identify", "constraints")
+
+def statement_steps() -> tuple[str, ...]:
+    """The steps whose rows can state what rules a job out (T220).
+
+    Read from `status/spec-v2-steps.json`'s `states_refusals`, never listed here:
+    the candidate refuses topics wherever they react — step 0 and 2, but also 5
+    (`reactions`), 6 (`preferences`) and 10 (`feedback`, "stop showing me banks").
+    The first version listed two steps and the other three were skipped, so step 7
+    never warned and `source()` kept showing what the candidate had refused.
+    """
+    from integral.process_spec import load_steps
+
+    return tuple(step.id for step in load_steps().steps if step.states_refusals)
+
+
+#: T220: a row about **one** advert is not listed. "This one is a bank, no" is a
+#: reaction to that advert, not a topic, and no `record` can honestly cover it nor
+#: an acknowledgement close it (it carries no non-topic dimension), so listing it
+#: would keep the backfill from ever reaching exit 0. The ceiling is the mirror: a
+#: topic refusal the candidate attached to an advert is not seen — ask for it as its
+#: own statement. Rows with no `about` (and any other subject kind) are listed.
+_SINGLE_ADVERT = "offer"
 
 #: A refusal in ES/EN/CA, matched on folded text. Deliberately broad: a row it
 #: over-reads costs one line of review, and a row it misses is a topic the
@@ -582,9 +602,12 @@ def _listed_rows(store: ProfileStore) -> list[EvidenceRow]:
     against it is never circular.
     """
     exclusions = load_exclusions(store)
+    steps = statement_steps()
     listed: list[EvidenceRow] = []
     for row in EvidenceLog(store).effective_rows():
-        if row.step not in STATEMENT_STEPS:
+        if row.step not in steps:
+            continue
+        if row.about is not None and row.about.kind == _SINGLE_ADVERT:
             continue
         # A row stating one of T24's pinned fields (salary, location, relocation, …)
         # is never a topic: step 2 writes one per field on every profile, `source()`
@@ -620,7 +643,7 @@ def _split(
 
 
 def unrecorded_statements(store: ProfileStore) -> tuple[UnrecordedStatement, ...]:
-    """The live rows of `STATEMENT_STEPS` that refuse something no exclusion matches.
+    """The live rows of `statement_steps()` that refuse something no exclusion matches.
 
     Every `constraint`-kind row counts, whatever its words, except one stating only
     T24's pinned fields, which is never a topic; other kinds need the cue. A row
