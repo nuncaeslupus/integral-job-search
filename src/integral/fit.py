@@ -38,13 +38,14 @@ takes them separately for the day the profile records them.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from functools import lru_cache
 from typing import Any, get_args
 
 from integral.candidate import LEVEL_ORDER, Level
-from integral.cv_store import load_master
+from integral.cv_store import Experience, load_master
 from integral.dimensions import Dimension, load_dimensions
 from integral.extraction import NormalisedAd, cue_findings
 from integral.identity import ProfileStore
@@ -174,22 +175,88 @@ def _held_seniority(title: str) -> float | None:
     return max(found) if found else None
 
 
+_MONTHS = {
+    "jan": 1, "ene": 1, "gen": 1, "feb": 2, "mar": 3, "apr": 4, "abr": 4, "may": 5, "mai": 5,
+    "jun": 6, "jul": 7, "aug": 8, "ago": 8, "sep": 9, "set": 9, "oct": 10, "nov": 11,
+    "dec": 12, "dic": 12, "des": 12,
+}  # fmt: skip
+_OPEN_WORDS = frozenset(
+    {"present", "current", "now", "ongoing", "actual", "actualidad", "hoy", "avui", "actualitat"}
+)
+_ISO = re.compile(r"^(\d{4})(?:-(\d{1,2})(?:-\d{1,2})?)?$")
+_NUMERIC = re.compile(r"^(\d{1,2})[/.-](\d{4})$")
+_NAMED = re.compile(r"^([^\W\d_]+)\.?\s+(\d{4})$")
+
+
+def _parse_date(text: str) -> tuple[int, int] | None:
+    """`(year, month)` from the spellings a CV uses, or `None` when it cannot be read.
+
+    A month-less year is month 0, so it sorts before any month of that year.
+    """
+    text = text.strip()
+    if match := _ISO.match(text):
+        return int(match[1]), int(match[2] or 0)
+    if match := _NUMERIC.match(text):
+        return int(match[2]), int(match[1])
+    if (match := _NAMED.match(text)) and (month := _MONTHS.get(match[1].lower()[:3])):
+        return int(match[2]), month
+    return None
+
+
+def last_held_level(experience: Sequence[Experience]) -> float | None:
+    """The level the CV supports for the last role held, never more than it supports.
+
+    Which role is last is read from dates parsed as dates, not compared as text.
+    Where it cannot be settled — several open roles, an open role that began
+    before a closed one ended, or a date that does not parse — every role that
+    could be the last is a candidate, and the answer is the **lowest** of them.
+    A candidate whose title states no level makes the answer unknown: it could be
+    the last role, and nothing says it was not junior.
+    """
+    if not experience:
+        return None
+    ended: dict[int, tuple[int, int]] = {}
+    started: dict[int, tuple[int, int]] = {}
+    open_roles: list[int] = []
+    ambiguous = False
+    for index, job in enumerate(experience):
+        if job.start is not None:
+            if (when := _parse_date(job.start)) is None:
+                ambiguous = True
+            else:
+                started[index] = when
+        if job.end is None or job.end.strip().lower() in _OPEN_WORDS:
+            open_roles.append(index)
+        elif (when := _parse_date(job.end)) is None:
+            ambiguous = True
+        else:
+            ended[index] = when
+    if ambiguous:
+        candidates = set(range(len(experience)))
+    elif open_roles:
+        known = [started[i] for i in open_roles if i in started]
+        floor = min(known) if len(known) == len(open_roles) else None
+        candidates = set(open_roles) | {
+            i for i, end in ended.items() if floor is None or end > floor
+        }
+    else:
+        latest = max(ended.values())
+        candidates = {i for i, end in ended.items() if end == latest}
+    levels = [_held_seniority(experience[i].title) for i in sorted(candidates)]
+    if any(level is None for level in levels):
+        return None
+    return min(level for level in levels if level is not None)
+
+
 def abilities_from_store(store: ProfileStore) -> CandidateAbility:
     """`cv/master.json` as `CandidateAbility`: the last role held and English."""
     master = load_master(store)
-    # The last held role: any with no end date is current; otherwise the latest end.
-    jobs = list(master.experience)
-    current = [job for job in jobs if job.end is None]
-    last = current or (
-        [job for job in jobs if job.end == max(j.end or "" for j in jobs)] if jobs else []
-    )
-    levels = [lv for job in last if (lv := _held_seniority(job.title)) is not None]
     english = [LEVEL_ORDER[e.level] for e in master.languages if e.language == "en"]
     best: Level | None = None
     if english:
         best = get_args(Level)[max(english)]  # `LEVEL_ORDER` is the enumeration of this
     return CandidateAbility(
-        seniority=max(levels) if levels else None,
+        seniority=last_held_level(master.experience),
         spoken=best,
         written=best,
     )

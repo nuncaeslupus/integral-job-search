@@ -15,14 +15,16 @@ from typing import Any
 
 import pytest
 
-from integral.cv_store import CVMaster, write_master
+from integral.cv_store import CVMaster, Experience, write_master
 from integral.fit import (
     CandidateAbility,
     FitReading,
     OfferDemand,
     _held_seniority,
+    _parse_date,
     abilities_from_store,
     fit_candidates,
+    last_held_level,
     read_fit,
     with_fit,
 )
@@ -160,15 +162,20 @@ def test_a_profile_missing_one_english_mode_still_compares_stack_and_level() -> 
     assert position(ranking, "z-better") < position(ranking, "a-worse")
 
 
-def test_an_offer_worse_on_every_component_both_state_stays_off_the_frontier() -> None:
-    # A: pays more, more remote, stack held, silent on seniority. B: Staff, missing stack.
+def test_silence_on_one_side_never_hides_an_offer_that_states_a_match() -> None:
+    """A silent on seniority, B states a level that matches: A must not dominate B."""
+    a = cand("A", read_fit(OfferDemand(stack=STACK_OK, english=0.6), ME))
+    b = cand("B", read_fit(OfferDemand(stack=STACK_BAD, seniority=0.5, english=0.6), ME))
+    ranking = order([a, b])
+    assert ranking["dominated"] == {}
+    assert sorted(ranking["pareto"]) == ["A", "B"]
+
+
+def test_an_offer_worse_on_every_component_both_state_is_dominated_when_the_silences_match() -> (
+    None
+):
     a = cand("A", read_fit(OfferDemand(stack=STACK_OK, english=0.6), ME), 5000.0, remote=0.9)
-    b = cand(
-        "B",
-        read_fit(OfferDemand(stack=STACK_BAD, seniority=0.8, english=0.6), ME),
-        2000.0,
-        remote=0.1,
-    )
+    b = cand("B", read_fit(OfferDemand(stack=STACK_BAD, english=0.6), ME), 2000.0, remote=0.1)
     ranking = order([a, b])
     assert ranking["pareto"] == ["A"]
     assert ranking["dominated"] == {"B": "dominated_by:A"}
@@ -466,9 +473,65 @@ def test_a_plain_title_states_no_level() -> None:
     assert _held_seniority("Desarrollador junior") == 0.2
 
 
-def test_a_candidate_with_no_dated_history_has_no_held_level(tmp_path: Path) -> None:
+def test_a_candidate_with_no_experience_has_no_held_level(tmp_path: Path) -> None:
     store = _store(tmp_path, {"languages": []})
     assert abilities_from_store(store) == CandidateAbility()
+
+
+def _held(*roles: tuple[str, str | None, str | None]) -> float | None:
+    return last_held_level(
+        [Experience(title=t, organisation="X", start=s, end=e) for t, s, e in roles]
+    )
+
+
+def test_an_old_senior_role_with_no_end_does_not_make_a_junior_candidate_senior() -> None:
+    assert _held(("Senior Developer", "2010", None), ("Junior Developer", "2023", "2024")) == 0.2
+
+
+def test_a_current_senior_side_role_does_not_raise_the_held_level() -> None:
+    assert (
+        _held(("Junior Developer", "2023", None), ("Senior Volunteer Mentor", "2022", None)) == 0.2
+    )
+    assert (
+        _held(("Senior Volunteer Mentor", "2022", None), ("Junior Developer", "2023", None)) == 0.2
+    )
+
+
+def test_end_dates_are_ordered_as_dates_not_as_text() -> None:
+    # "Mar 2023" > "2024-03" as strings; as dates the junior role is the later one.
+    assert (
+        _held(("Junior Developer", "2023", "2024-03"), ("Senior Developer", "2020", "Mar 2023"))
+        == 0.2
+    )
+    assert (
+        _held(("Senior Developer", "2023", "Mar 2024"), ("Junior Developer", "2020", "2023-03"))
+        == 0.8
+    )
+
+
+def test_roles_whose_dates_cannot_be_ordered_never_claim_more_than_the_lowest() -> None:
+    assert (
+        _held(("Senior Developer", "2010", "a while ago"), ("Junior Developer", "2023", "2024"))
+        == 0.2
+    )
+
+
+def test_an_ambiguous_last_role_with_no_stated_level_is_unknown() -> None:
+    assert _held(("Senior Developer", "2010", "2015"), ("Developer", "2016", "sometime")) is None
+
+
+def test_a_clean_history_reads_the_latest_role() -> None:
+    assert _held(("Junior Developer", "2015", "2020"), ("Senior Developer", "2020", None)) == 0.8
+    assert (
+        _held(("Senior Developer", "2010-01", "2015-06"), ("Junior Developer", "2016", "2024"))
+        == 0.2
+    )
+
+
+def test_a_month_name_in_spanish_or_catalan_parses() -> None:
+    assert _parse_date("ene 2020") == (2020, 1) and _parse_date("des. 2021") == (2021, 12)
+    assert _parse_date("03/2023") == (2023, 3) and _parse_date("2023-03-15") == (2023, 3)
+    assert _parse_date("last spring") is None
 
 
 @pytest.mark.parametrize("currency", [None, "EUR"])
@@ -524,4 +587,10 @@ def test_the_fit_axes_never_grant_a_dominance_the_old_rule_refuses() -> None:
         assert not (a.unknown | b.unknown) & {"commute"}
         assert a.salary_per_month >= b.salary_per_month  # type: ignore[operator]
         assert a.scores["remote"] >= b.scores["remote"]
+        # and the fit axes themselves: silent on both, or stated on both with a >= b;
+        # silence on exactly one side is never credited as "at least as good".
+        for name in FIT_DIMENSIONS:
+            assert (name in a.unknown) == (name in b.unknown)
+            if name not in a.unknown:
+                assert a.scores[name] >= b.scores[name]
     assert checked > 1000 and granted > 0

@@ -238,17 +238,18 @@ def dominates(
     """
     if a.salary_per_month is None or b.salary_per_month is None:
         return False
-    if any(name in a.unknown or name in b.unknown for name in dimensions if name not in _PAIRWISE):
-        return False
-    # T244: a fit component is compared where both sides state it and never
-    # blocks a claim by being silent, so adding the axes can only withhold a
-    # dominance the others made — never grant one, never hide one behind silence.
-    compared = [
-        name
+    # T244: a fit component silent on exactly one side blocks the claim like any
+    # other axis — A's silence is not "no worse than" B's statement. It is skipped
+    # only when both sides are silent: nothing is said on either, so nothing is
+    # compared, and the components both state still are.
+    if any(
+        (name in a.unknown) != (name in b.unknown)
+        if name in _PAIRWISE
+        else (name in a.unknown or name in b.unknown)
         for name in dimensions
-        if name not in _PAIRWISE or (name not in a.unknown and name not in b.unknown)
-    ]
-
+    ):
+        return False
+    compared = [name for name in dimensions if name not in a.unknown]
     way = signs or {}
     pairs = [(a.salary_per_month, b.salary_per_month)] + [
         (way.get(name, 1.0) * a.scores[name], way.get(name, 1.0) * b.scores[name])
