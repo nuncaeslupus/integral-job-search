@@ -767,7 +767,70 @@ def hook_main(stdin_text: str, *, root: Path | None = None) -> tuple[int, str]:
     )
     if decision.allowed:
         return 0, ""
-    return 2, f"profile guard refused this call — {decision.reason}"
+    message = f"profile guard refused this call — {decision.reason}"
+    active = read_active_handle(
+        roster, session_id=session_id if isinstance(session_id, str) else None
+    )
+    return 2, message + _recovery_hint(
+        tool_name,
+        tool_input,
+        active=active,
+        session_id=session_id if isinstance(session_id, str) else None,
+    )
+
+
+_SAFE_SESSION_ID = re.compile(r"[A-Za-z0-9._-]+")
+
+# Printed instead of a handle: the guard cannot prove which candidate this
+# session last held, and a ready-to-paste line naming the handle of the refused
+# call would turn a refusal into an identity switch. The session fills it in
+# after confirming who the candidate is.
+HANDLE_PLACEHOLDER = "<handle>"
+
+
+def restore_command(session_id: str) -> str:
+    """The one runnable line that re-identifies a candidate for `session_id`."""
+    if not _SAFE_SESSION_ID.fullmatch(session_id):
+        raise IdentityError("session id is not shell-safe")
+    return (
+        'uv run python -c "from integral.identity import write_active_handle, '
+        "default_profiles_root; write_active_handle(default_profiles_root(), "
+        f"'{HANDLE_PLACEHOLDER}', session_id='{session_id}')\""
+    )
+
+
+def _recovery_hint(
+    tool_name: str,
+    tool_input: dict[str, Any],
+    *,
+    active: Handle | None,
+    session_id: str | None,
+) -> str:
+    """What to append to a refusal so the session can fix it without a document.
+
+    Only when nobody is identified for this session: a refusal because the call
+    names *another* candidate's tree is the guard working. Never raises — the
+    refusal's exit code must not depend on building its explanation.
+    """
+    try:
+        if active is not None or not session_id:
+            return ""
+        lines: list[str] = []
+        if _SAFE_SESSION_ID.fullmatch(session_id):
+            lines.append(
+                "\nIf you know which candidate this is, restore the handle with "
+                f"(replace {HANDLE_PLACEHOLDER}): {restore_command(session_id)}"
+            )
+        command = tool_input.get("command") if tool_name == "Bash" else None
+        if isinstance(command, str) and "write_active_handle" in command:
+            lines.append(
+                "\nThis command both restores the handle and touches profiles/, and the "
+                "guard judges the whole command before any of it runs, so run the "
+                "restore as its own call first."
+            )
+        return "".join(lines)
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------
