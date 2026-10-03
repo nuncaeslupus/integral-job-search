@@ -211,8 +211,16 @@ def _platform_default(env: Mapping[str, str]) -> Path:
     `platformdirs` names the user data dir for the app.
     """
     if sys.platform == "win32":
+        # The injected mapping is honoured first, so `env=` means the same on
+        # every OS; platformdirs reads os.environ only as the fallback.
+        local = env.get("LOCALAPPDATA", "").strip()
+        if local:
+            return Path(local) / APP_DIR
         return Path(Windows(appname=APP_DIR, appauthor=False).user_data_dir)
     if sys.platform == "darwin":
+        mac_home = env.get("HOME", "").strip()
+        if mac_home:
+            return Path(mac_home) / "Library" / "Application Support" / APP_DIR
         return Path(MacOS(appname=APP_DIR, appauthor=False).user_data_dir)
     home = env.get("HOME", "").strip()
     base = Path(home) if home else Path("~")

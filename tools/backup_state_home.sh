@@ -15,6 +15,12 @@
 # not optional: state is lost when the container is reclaimed.
 set -eu
 
+# An inherited git environment can redirect every command below into some OTHER
+# repository (GIT_DIR is set inside hooks) and push the candidate's data there.
+# Only the author identity variables are kept.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_CEILING_DIRECTORIES GIT_NAMESPACE
+
 dir="${1:-${INTEGRAL_HOME:-}}"
 if [ -z "$dir" ]; then
   root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,10 +38,20 @@ fi
 dir="$(cd "$dir" && pwd -P)"
 
 # Refuse a directory that sits inside somebody else's repository: initialising
-# there would nest, and `add` would be driven by the outer repository's rules.
-outer="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -n "$outer" ] && [ "$(cd "$outer" && pwd -P)" != "$dir" ]; then
-  echo "backup_state_home: $dir is inside the repository at $outer; refusing" >&2
+# there would nest. This is a filesystem walk, not `git rev-parse`, because git's
+# own discovery can be blinded (GIT_CEILING_DIRECTORIES, unsafe ownership) and a
+# linked-worktree `.git` is a FILE. Any `.git` above DIR, of either kind, refuses.
+p="$(dirname "$dir")"
+while :; do
+  if [ -e "$p/.git" ]; then
+    echo "backup_state_home: $dir is inside the repository at $p; refusing" >&2
+    exit 2
+  fi
+  [ "$p" = "/" ] && break
+  p="$(dirname "$p")"
+done
+if [ -e "$dir/.git" ] && [ ! -d "$dir/.git" ]; then
+  echo "backup_state_home: $dir/.git is not a directory; refusing" >&2
   exit 2
 fi
 

@@ -105,11 +105,14 @@ def test_os_default_inside_a_work_tree_is_still_refused(
         candidate_root()
 
 
-def _backup(target: Path, home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _backup(
+    target: Path, home: Path, *args: str, extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     env = {
         "PATH": os.environ["PATH"],
         "HOME": str(home),
         HOME_ENV: str(target),
+        **(extra_env or {}),
     }
     return subprocess.run(
         ["bash", str(SCRIPT), *args],
@@ -191,3 +194,124 @@ def test_backup_refuses_a_missing_directory(tmp_path: Path) -> None:
     assert done.returncode == 2
     assert "does not exist" in done.stderr
     assert not missing.exists()
+
+
+def _commit_count(repo: Path) -> int:
+    return int(_git(repo, "rev-list", "--all", "--count").strip())
+
+
+def _repo_with_origin(base: Path, name: str) -> tuple[Path, Path]:
+    """A work repository with one commit pushed to a bare origin; returns both."""
+    origin = base / f"{name}-origin.git"
+    subprocess.run(["git", "init", "--quiet", "--bare", "-b", "main", str(origin)], check=True)
+    work = base / name
+    work.mkdir()
+    subprocess.run(["git", "-C", str(work), "init", "--quiet", "-b", "main"], check=True)
+    (work / "seed.txt").write_text("seed")
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "-C", str(work), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(work), *ident, "commit", "-q", "-m", "seed"], check=True)
+    subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(origin)], check=True)
+    subprocess.run(["git", "-C", str(work), "push", "-q", "origin", "main"], check=True)
+    return work, origin
+
+
+def test_backup_ignores_an_inherited_git_dir(tmp_path: Path) -> None:
+    """GIT_DIR (set inside hooks) must not redirect the commit into another repo."""
+    home = tmp_path / "home"
+    home.mkdir()
+    other, other_origin = _repo_with_origin(tmp_path, "other")
+    before = (_commit_count(other), _commit_count(other_origin))
+    state = tmp_path / "state A"
+    (state / "data").mkdir(parents=True)
+    (state / "data" / "cv.json").write_text("{}")
+
+    done = _backup(state, home, extra_env={"GIT_DIR": str(other / ".git")})
+    assert done.returncode == 0, done.stderr
+
+    assert (state / ".git").is_dir()
+    assert (_commit_count(other), _commit_count(other_origin)) == before
+    assert "data/cv.json" in _git(state, "ls-files")
+
+
+def test_backup_refuses_a_git_file_above_the_directory(tmp_path: Path) -> None:
+    """A linked-worktree `.git` is a file; it still marks an enclosing repository."""
+    home = tmp_path / "home"
+    home.mkdir()
+    outer = tmp_path / "outer"
+    inner = outer / "deep" / "state"
+    inner.mkdir(parents=True)
+    (outer / ".git").write_text("gitdir: /nonexistent\n")
+    (inner / "x.txt").write_text("x")
+
+    done = _backup(inner, home)
+    assert done.returncode == 2
+    assert "inside the repository" in done.stderr
+    assert not (inner / ".git").exists()
+
+
+def test_backup_refuses_when_git_discovery_is_blinded(tmp_path: Path) -> None:
+    """GIT_CEILING_DIRECTORIES hides the outer repository from git, not from us."""
+    home = tmp_path / "home"
+    home.mkdir()
+    outer = tmp_path / "outer"
+    inner = outer / "state"
+    inner.mkdir(parents=True)
+    subprocess.run(["git", "init", "--quiet", str(outer)], check=True)
+    (inner / "x.txt").write_text("x")
+
+    done = _backup(inner, home, extra_env={"GIT_CEILING_DIRECTORIES": str(tmp_path)})
+    assert done.returncode == 2
+    assert not (inner / ".git").exists()
+
+
+def test_backup_never_force_pushes(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    state, origin = _repo_with_origin(tmp_path, "state")
+    # Someone else advances origin so the state repository has diverged.
+    rival = tmp_path / "rival"
+    subprocess.run(["git", "clone", "-q", str(origin), str(rival)], check=True)
+    (rival / "other.txt").write_text("theirs")
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "-C", str(rival), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(rival), *ident, "commit", "-q", "-m", "rival"], check=True)
+    subprocess.run(["git", "-C", str(rival), "push", "-q", "origin", "main"], check=True)
+    theirs = _git(origin, "rev-parse", "main").strip()
+
+    (state / "mine.txt").write_text("mine")
+    done = _backup(state, home)
+
+    assert done.returncode != 0
+    assert _git(origin, "rev-parse", "main").strip() == theirs
+    assert "mine.txt" in _git(state, "ls-files")
+
+
+def test_backup_never_deletes_or_alters_candidate_files(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    state, origin = _repo_with_origin(tmp_path, "state")
+    (state / ".gitignore").write_text("*.secret\n")
+    ignored = state / "profiles" / "alice" / "notes.secret"
+    untracked = state / "profiles" / "alice" / "new.txt"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_bytes(b"ignored\r\n")
+    untracked.write_bytes(b"untracked")
+
+    done = _backup(state, home)
+    assert done.returncode == 0, done.stderr
+
+    assert ignored.read_bytes() == b"ignored\r\n"
+    assert untracked.read_bytes() == b"untracked"
+    assert "new.txt" in _git(origin, "ls-tree", "-r", "--name-only", "main")
+
+
+@pytest.mark.parametrize(("platform", "var"), (("darwin", "HOME"), ("win32", "LOCALAPPDATA")))
+def test_injected_env_decides_the_os_default(
+    monkeypatch: pytest.MonkeyPatch, clean_env: Path, platform: str, var: str
+) -> None:
+    """`env=` must mean the same on every OS, not fall through to os.environ."""
+    monkeypatch.setattr(sys, "platform", platform)
+    root = candidate_root(env={var: "/injected"})
+    assert root.parts[:2] == ("/", "injected")
+    assert str(clean_env) not in str(root)
