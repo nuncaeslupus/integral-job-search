@@ -2985,6 +2985,16 @@ def _classify_floor(
 _ANALYSES: dict[tuple[str, ...], dict[str, Any]] = {}
 
 
+def _input_repr(value: object) -> str:
+    """`repr(value)`, except a compiled pattern is keyed by its full source and
+    flags: `re.Pattern.__repr__` truncates the source at 200 characters, so an
+    edit past that point would leave the key unchanged (T223, found while pinning
+    F4 with a same-type replacement)."""
+    if isinstance(value, re.Pattern):
+        return repr((value.pattern, value.flags))
+    return repr(value)
+
+
 def _module_inputs() -> str:
     """Every module-level value `_analyse` and the prose clearance could read, as it
     is *now* (R2-3). Not only the `MINIMUM_*` floors: the analysis also reads
@@ -2994,16 +3004,26 @@ def _module_inputs() -> str:
     analysis. So the rule is closed over the module, never a name pattern: every
     global, functions included (a function's repr names its object, so patching
     one changes the key), except imported modules, dunders and `_ANALYSES` itself,
-    which cannot be part of its own key."""
-    return repr(
-        sorted(
-            (name, repr(value))
-            for name, value in globals().items()
-            if not name.startswith("__")
-            and name != "_ANALYSES"
-            and not isinstance(value, types.ModuleType)
-        )
-    )
+    which cannot be part of its own key.
+
+    T223 (F6): the attributes of each class this module defines are keyed too, as
+    `Class.attr` (methods are read through the class: `EvidencePinnedFloor.as_dict`
+    runs inside the analysis). Only the two slots no caller can patch to a different
+    value (`__dict__`, `__weakref__`) are left out. Attributes of *other* modules'
+    objects (stdlib functions, imported classes) stay outside the key by design:
+    nothing here patches them, and their identity is not this module's input."""
+    items: list[tuple[str, str]] = []
+    for name, value in globals().items():
+        if name.startswith("__") or name == "_ANALYSES" or isinstance(value, types.ModuleType):
+            continue
+        items.append((name, _input_repr(value)))
+        if isinstance(value, type) and value.__module__ == __name__:
+            items.extend(
+                (f"{name}.{attr}", _input_repr(member))
+                for attr, member in vars(value).items()
+                if attr not in ("__dict__", "__weakref__")
+            )
+    return repr(sorted(items))
 
 
 def _content_digest(src_dir: Path) -> str:

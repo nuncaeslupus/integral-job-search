@@ -19,6 +19,7 @@ import json
 import re
 import shutil
 import types
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -4155,12 +4156,115 @@ def test_patching_a_pattern_the_analysis_reads_changes_the_result(
     assert after["floors_swept"] != before["floors_swept"]
 
 
+def _same_type_variant(value: Any) -> Any:
+    """A value of `value`'s OWN type whose `repr` differs (T223 F4): the property
+    "this input is in the key" is only observable by a replacement a type-based
+    exclusion would also have dropped, so an `object()` stand-in -- a type never
+    excluded -- proves nothing. Closed over the type, with a loud failure rather
+    than a silent `object()` for a type it cannot vary."""
+    variant: Any
+    if value is None:
+        variant = "x"
+    elif isinstance(value, bool):
+        variant = not value
+    elif isinstance(value, int):
+        variant = value + 1
+    elif isinstance(value, str):
+        variant = value + "x"
+    elif isinstance(value, (frozenset, set, tuple, list, dict)):
+        if value:
+            variant = type(value)()
+        elif isinstance(value, dict):
+            variant = {"x": 1}
+        else:
+            variant = type(value)(["x"])
+    elif isinstance(value, re.Pattern):
+        variant = re.compile(value.pattern + "(?!)", value.flags)
+    elif isinstance(value, Path):
+        variant = value / "x"
+    elif isinstance(value, types.FunctionType):
+        original = value
+
+        def variant(*args: Any, **kwargs: Any) -> Any:
+            return original(*args, **kwargs)
+
+    elif isinstance(value, type):
+        variant = type(value.__name__, (value,), {})
+    else:
+        variant = copy.copy(value)
+        for attr in list(getattr(type(variant), "__slots__", ())) or list(vars(variant)):
+            try:
+                setattr(variant, attr, _same_type_variant(getattr(variant, attr)))
+            except (AttributeError, TypeError, pytest.fail.Exception):
+                continue
+            if repr(variant) != repr(value):
+                break
+    if isinstance(value, re.Pattern):
+        changed = (variant.pattern, variant.flags) != (value.pattern, value.flags)
+    else:
+        changed = repr(variant) != repr(value)
+    if not changed:
+        pytest.fail(f"no same-type variant with a different repr for {type(value)!r}")
+    return variant
+
+
+def _keyed_inputs() -> list[tuple[Any, str, Any]]:
+    """The population, derived from the module's own namespace and independent of
+    `_module_inputs`'s rule: (owner, attribute, current value) for every global and
+    every attribute of a class the module defines. The only exclusions are the ones
+    the key's docstring states: dunders, `_ANALYSES`, imported modules, and a class's
+    `__dict__`/`__weakref__` slots."""
+    population: list[tuple[Any, str, Any]] = []
+    for name, value in vars(floor_sweep).items():
+        if name.startswith("__") or name == "_ANALYSES" or isinstance(value, types.ModuleType):
+            continue
+        population.append((floor_sweep, name, value))
+        if isinstance(value, type) and value.__module__ == floor_sweep.__name__:
+            population.extend(
+                (value, attr, member)
+                for attr, member in vars(value).items()
+                if attr not in ("__dict__", "__weakref__")
+            )
+    return population
+
+
+def _label(owner: Any, attr: str) -> str:
+    return attr if owner is floor_sweep else f"{owner.__name__}.{attr}"
+
+
+def _inputs_outside_key(run: Callable[[], Any], calls: list[int]) -> tuple[list[str], int]:
+    """T223 F3, the measured number behind T216's `floor_sweep_cache_inputs_outside_key`:
+    every input in `_keyed_inputs()` whose same-type replacement does NOT miss the
+    cache, and how many were examined."""
+    inputs = floor_sweep._module_inputs()
+    outside: list[str] = []
+    examined = 0
+    for owner, attr, value in _keyed_inputs():
+        label = _label(owner, attr)
+        # Pin the property itself (F4): the value is a key component *before* patching.
+        shown = repr((value.pattern, value.flags)) if isinstance(value, re.Pattern) else repr(value)
+        if repr((label, shown)) not in inputs:
+            outside.append(label)
+            continue
+        before = len(calls)
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(owner, attr, _same_type_variant(value))
+            run()
+        examined += 1
+        if len(calls) != before + 1:
+            outside.append(label)
+    return outside, examined
+
+
 def test_patching_any_module_global_misses_the_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Closed over the module, not a name pattern: every global the analysis could
-    read -- constants, patterns, helper functions, and one added later -- is in
-    the key. The population is the module's own namespace, not the key's rule."""
+    read -- constants, patterns, helper functions, class attributes, and one added
+    later -- is in the key, shown by its own `repr` being a key component and by a
+    replacement of its OWN type missing the cache. The population is the module's
+    own namespace, not the key's rule; nothing is skipped by a hand-written list
+    (the key machinery included: a same-type wrapper still runs)."""
     calls = _stub_analysis(monkeypatch)
 
     def analyse() -> dict[str, Any]:
@@ -4178,13 +4282,9 @@ def test_patching_any_module_global_misses_the_cache(
     monkeypatch.setattr(floor_sweep, "MINIMUM_A_FLOOR_ADDED_LATER", 7, raising=False)
     run()
     assert len(calls) == 2
-    names = [
-        name
-        for name, value in vars(floor_sweep).items()
-        if not name.startswith("__")
-        and name != "_ANALYSES"
-        and not isinstance(value, types.ModuleType)
-    ]
+    monkeypatch.delattr(floor_sweep, "MINIMUM_A_FLOOR_ADDED_LATER")
+    population = _keyed_inputs()
+    names = {attr for owner, attr, _ in population if owner is floor_sweep}
     kinds = {
         "floor": [n for n in names if n.startswith("MINIMUM_")],
         "pattern": [n for n in names if isinstance(getattr(floor_sweep, n), re.Pattern)],
@@ -4192,29 +4292,101 @@ def test_patching_any_module_global_misses_the_cache(
     }
     # Denominators: each kind the second reader found outside the old key is present.
     assert {"MARGIN_MARKER_RE", "_CONSTANT_NAME_RE"} <= set(kinds["pattern"])
-    assert "_MAX_DELEGATION_DEPTH" in names
+    assert {"_MAX_DELEGATION_DEPTH", "_COUNT_PRESERVING_WRAPPERS", "_evidence_dir"} <= names
     assert len(kinds["floor"]) >= 4 and len(kinds["function"]) >= 50
-    # The key machinery itself cannot be replaced by an inert object and still run;
-    # each of these is in the key anyway (directly, or as `_THIS_FILE`'s code).
-    machinery = {
-        "_analysed_once",
-        "_module_inputs",
-        "_content_digest",
-        "_evidence_dir",
-        "_REPO_ROOT",
-        "Path",
-    }
-    for name in names:
-        if name in machinery:
-            continue
-        # Both an inert value and a callable one, so a key that skips either kind
-        # (constants, or helper functions) is caught.
-        for replacement in (object(), lambda *args, **kwargs: None):
-            before = len(calls)
-            with pytest.MonkeyPatch.context() as patch:
-                patch.setattr(floor_sweep, name, replacement)
-                run()
-            assert len(calls) == before + 1, (name, replacement)
+    class_attrs = [attr for owner, attr, _ in population if owner is not floor_sweep]
+    assert "as_dict" in class_attrs and len(class_attrs) >= 40
+    calls.clear()
+    outside, examined = _inputs_outside_key(run, calls)
+    assert examined >= 150
+    assert outside == []
+
+
+def test_a_key_that_drops_values_by_type_is_detected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F4's named mutant, in-process: a `_module_inputs` that skips frozenset/dict/str
+    values serves a stale analysis after `_COUNT_PRESERVING_WRAPPERS = frozenset()`.
+    The measurement must report it, not pass because an `object()` re-enters the key."""
+    calls = _stub_analysis(monkeypatch)
+    real = floor_sweep._module_inputs
+
+    def typed_blind() -> str:
+        keep = [
+            item
+            for item in ast.literal_eval(real())
+            if not item[1].startswith(("frozenset(", "{", "'"))
+        ]
+        return repr(keep)
+
+    monkeypatch.setattr(floor_sweep, "_module_inputs", typed_blind)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {}
+
+    def run() -> dict[str, Any]:
+        return floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
+
+    outside, _ = _inputs_outside_key(run, calls)
+    assert "_COUNT_PRESERVING_WRAPPERS" in outside
+
+
+def test_patching_the_evidence_directory_function_misses_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F5: `_evidence_dir` is patched, not skipped. Pointing it at a byte-identical
+    copy elsewhere leaves the content digest unchanged, so only the function's own
+    presence in the key can make this a miss."""
+    calls = _stub_analysis(monkeypatch)
+    copied = tmp_path / "evidence"
+    shutil.copytree(floor_sweep._evidence_dir(), copied)
+    live = floor_sweep._content_digest(floor_sweep._SRC_DIR)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(floor_sweep, "_evidence_dir", lambda: copied)
+        assert floor_sweep._content_digest(floor_sweep._SRC_DIR) == live
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {}
+
+    def run() -> dict[str, Any]:
+        return floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
+
+    run()
+    run()
+    assert len(calls) == 1
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(floor_sweep, "_evidence_dir", lambda: copied)
+        run()
+    assert len(calls) == 2
+
+
+def test_patching_a_class_attribute_misses_the_cache_and_is_not_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F6: `EvidencePinnedFloor.as_dict` runs inside the analysis, so patching it
+    between two same-tree calls must re-analyse, end to end over the live tree."""
+    monkeypatch.setattr(floor_sweep, "_ANALYSES", {})
+    before = floor_sweep.measure()
+    monkeypatch.setattr(floor_sweep.EvidencePinnedFloor, "as_dict", lambda self: {"patched": True})
+    after = floor_sweep.measure()
+    assert after["evidence_pinned_floors"] != before["evidence_pinned_floors"]
+    assert after["evidence_pinned_floors"][0] == {"patched": True}
+
+
+def test_a_second_call_over_an_unchanged_module_is_a_hit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The class attributes in the key must not make it unstable: the analysis
+    mutates none of them, so calls two and three are served from the cache."""
+    calls = _stub_analysis(monkeypatch)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {}
+
+    for _ in range(3):
+        floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
+    assert len(calls) == 1
 
 
 def test_every_evidence_path_the_resolver_accepts_is_hashed_by_the_digest(
