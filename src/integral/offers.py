@@ -310,37 +310,21 @@ def save_offer(store: ProfileStore, offer: Offer) -> Path:
     return store.write_json(offer.model_dump(mode="json"), "offers", f"{offer.id}.json")
 
 
-#: T230. Irregular spellings of a `SalaryPeriod` member, the only entries not
-#: produced by the rule in `_spelling_table`. Each target is checked to be a
-#: member of `SalaryPeriod` at import, so this cannot name a sixth period.
-_IRREGULAR_SPELLINGS: dict[str, str] = {"annual": "year", "annually": "year", "daily": "day"}
-
-
-def _spelling_table() -> dict[str, str]:
-    """Every accepted spelling, derived from `get_args(SalaryPeriod)`.
-
-    Closed rule: the casefolded member (`YEAR`), or member + `ly` (`hourly`,
-    `monthly`, `weekly`, `yearly`), plus `_IRREGULAR_SPELLINGS`. Nothing here
-    is a list of what was observed on disk."""
-    members = get_args(SalaryPeriod)
-    table = {m: m for m in members} | {m + "ly": m for m in members}
-    for spelling, target in _IRREGULAR_SPELLINGS.items():
-        if target not in members:  # pragma: no cover - structural
-            raise RuntimeError(f"irregular spelling {spelling!r} targets non-member {target!r}")
-        table[spelling] = target
-    return table
-
-
-_SPELLINGS = _spelling_table()
-
-
 def canonical_period(raw: object) -> str | None:
     """A stored `salary.period` spelling mapped to a `SalaryPeriod` member, or
-    `None` when the rule does not cover it. Never guesses: `None` means the
-    caller must refuse the record, not drop the period."""
+    `None` when it has no mapping. Never guesses: `None` means the caller must
+    refuse the record, not drop the period.
+
+    One vocabulary (T230 F1): this delegates to `salary_period.normalize_period`,
+    the table T170 made the only mapping from a board's word to a member, and
+    which the backfill migration also uses. A second table here would let a
+    spelling load on read yet have its salary dropped by the migration (or the
+    reverse). The import is lazy because `salary_period` imports this module."""
     if not isinstance(raw, str):
         return None
-    return _SPELLINGS.get(raw.strip().casefold())
+    from integral.salary_period import normalize_period
+
+    return normalize_period(raw)
 
 
 def _normalise_stored_period(raw: Any, name: str) -> Any:
@@ -408,8 +392,11 @@ def load_offers(store: ProfileStore, *, record: bool = False) -> OfferScan:
                 continue
             try:
                 offers.append(load_offer(store, path.stem))
-            except OfferError as exc:
-                skipped.append(SkippedOffer(path.stem, str(exc)))
+            except (OfferError, OSError, ValueError, RecursionError) as exc:
+                # Not only `OfferError`: a non-UTF-8 file (`UnicodeDecodeError`),
+                # a directory named `*.json` (`IsADirectoryError`) and deeply
+                # nested JSON (`RecursionError`) each escape `load_offer`.
+                skipped.append(SkippedOffer(path.stem, f"{type(exc).__name__}: {exc}"))
     if record and directory.is_dir():
         if skipped:
             store.write_text(

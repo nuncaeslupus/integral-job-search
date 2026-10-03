@@ -22,6 +22,8 @@ from integral.offers import (
     load_offers,
     save_offer,
 )
+from integral.salary_period import _TABLE, normalize_period
+from integral.salary_period_backfill import apply_repairs, scan_profile
 
 MEMBERS: tuple[str, ...] = get_args(SalaryPeriod)
 
@@ -43,9 +45,8 @@ def _put(store: ProfileStore, raw: dict[str, Any]) -> str:
 
 
 def _variants(member: str) -> list[str]:
-    # derived from the literal, never listed: the member in every case, padded,
-    # and its `-ly` form
-    return [member, member.upper(), member.title(), f"  {member.upper()} ", member + "ly"]
+    # derived from the literal, never listed: the member in every case, padded
+    return [member, member.upper(), member.title(), f"  {member.upper()} "]
 
 
 @pytest.mark.parametrize("member", MEMBERS)
@@ -128,11 +129,62 @@ def test_save_offer_refuses_a_variant_period_and_writes_nothing(tmp_path: Path) 
     assert not store.path("offers", f"{base.id}.json").exists()
 
 
+def test_the_read_path_and_t170_share_one_vocabulary() -> None:
+    # every key of the T170 table, every member variant, and the near-misses:
+    # the two functions may never disagree (F1). A wrong entry anywhere in
+    # `_TABLE` (`"h": "month"`) still agrees with itself, which is why the
+    # meaning is pinned separately by `test_t170_labels_load_as_their_period`.
+    spellings = list(_TABLE) + [v for m in MEMBERS for v in [*_variants(m), m + "ly"]]
+    spellings += ["yearly-bonus", "fortnightly", "one-time", "", "dayly"]
+    for spelling in spellings:
+        assert canonical_period(spelling) == normalize_period(spelling), spelling
+
+
 @pytest.mark.parametrize(
-    ("spelling", "member"), [("annual", "year"), ("ANNUALLY", "year"), ("Daily", "day")]
+    ("label", "member"),
+    [
+        ("h", "hour"),
+        ("per-year-salary", "year"),
+        ("per-month-salary", "month"),
+        ("per-week-salary", "week"),
+        ("per-day-wage", "day"),
+        ("per-hour-wage", "hour"),
+    ],
 )
-def test_the_irregular_spellings_map_to_their_member(spelling: str, member: str) -> None:
-    assert canonical_period(spelling) == member
+def test_t170_labels_load_as_their_period(tmp_path: Path, label: str, member: str) -> None:
+    store = _store(tmp_path)
+    oid = _put(store, _raw(f"label {label}", label))
+    loaded = load_offer(store, oid)
+    assert loaded.salary is not None and loaded.salary.period == member
+
+
+def test_the_backfill_keeps_every_salary_the_read_path_recovers(tmp_path: Path) -> None:
+    # F4, a measurement on a constructed store: stored_offers_that_do_not_load
+    # and salaries lost by the migration, over spellings from both sources.
+    store = _store(tmp_path)
+    spellings = [v for m in MEMBERS for v in _variants(m)] + list(_TABLE) + ["hourly", "YEAR"]
+    unmappable = _put(store, _raw("unmappable", "fortnightly"))
+    ids = {_put(store, _raw(f"spelling {i} {sp}", sp)): sp for i, sp in enumerate(spellings)}
+    readable_before = {o.id for o in load_offers(store).offers}
+    apply_repairs(store, scan_profile(store))
+    after = load_offers(store)
+    assert {o.id for o in after.offers} >= set(ids)
+    assert readable_before <= {o.id for o in after.offers}
+    assert all(o.salary is not None for o in after.offers if o.id in ids)
+    assert [s.offer_id for s in after.skipped] in ([], [unmappable])
+
+
+def test_a_bad_file_of_any_kind_does_not_abort_the_loop(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    good = _put(store, _raw("good", "year"))
+    offers = store.path("offers")
+    (offers / f"sha256:{'2' * 64}.json").write_bytes(b"\xff\xfe{}")
+    (offers / f"sha256:{'3' * 64}.json").mkdir()
+    (offers / f"sha256:{'4' * 64}.json").write_text("[" * 100000, encoding="utf-8")
+    scan = load_offers(store)
+    assert [o.id for o in scan.offers] == [good]
+    assert {s.offer_id[7] for s in scan.skipped} == {"2", "3", "4"}
+    assert all(s.reason for s in scan.skipped)
 
 
 def test_an_underscore_file_in_offers_is_not_an_offer(tmp_path: Path) -> None:
