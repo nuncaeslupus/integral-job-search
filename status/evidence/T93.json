@@ -6,7 +6,8 @@
     "identify",
     "intake",
     "history",
-    "reactions"
+    "reactions",
+    "application"
   ],
   "intake_follow_up_rule": true,
   "intake_artefact_fields": [
@@ -259,7 +260,7 @@
       "records_the_shortlist": false,
       "has_when_declined": true,
       "coercive_lines": [],
-      "invites_open_ended_talk": false,
+      "invites_open_ended_talk": true,
       "read_failure": "",
       "reasons": []
     },

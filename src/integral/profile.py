@@ -116,8 +116,16 @@ DERIVED_MANIFEST = ".derived.json"
 
 # §4.1's row kinds. `retraction` is one of them rather than a separate mechanism,
 # which is what makes "forget that" survive a rebuild.
-Kind = Literal["episode", "statement", "reaction", "constraint", "outcome", "retraction"]
-Source = Literal["conversation", "cv_document", "offer_reaction", "interview"]
+Kind = Literal[
+    "episode",
+    "statement",
+    "reaction",
+    "constraint",
+    "outcome",
+    "retraction",
+    "candidate_statement",  # T180: one sentence of the candidate's own application draft
+]
+Source = Literal["conversation", "cv_document", "offer_reaction", "interview", "application_draft"]
 # Private by default, and it stays private without a per-use approval (§6.2).
 Disclosure = Literal["private", "approved_for_use"]
 Precision = Literal["day", "month", "year"]
