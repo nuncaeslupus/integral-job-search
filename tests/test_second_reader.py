@@ -661,17 +661,16 @@ def test_every_reader_rejects_a_target_of_the_wrong_shape() -> None:
 
     Each reader is handed the *other* convention's target for a path its file
     refuses, and must not answer `True`. A reader that raises, or that answers
-    `False` because it can decode the URL, both pass; the stdlib wrapper is in the
-    set and is accepted only for the second reason.
+    `False` both pass. Every wrong-shaped target is offered, including the ones
+    that name no refused resource (a bare host, `*`, ``): none may come back
+    `True`, because none is a request target.
     """
     from integral import connector_policy as cp
 
     assert sr.NAME in cp.READERS
     assert cp.DEFAULT_SECOND_READER in cp.READERS
     for name, reader in cp.READERS.items():
-        # Only the targets that name the refused resource: a URL whose path is `/`
-        # is legitimately allowed by a reader that can decode it.
-        for target in (t for t in _WRONG_SHAPE_TARGETS if "ajax/x" in t and ("//" in t)):
+        for target in _WRONG_SHAPE_TARGETS:
             try:
                 verdict = reader(_AJAX, AGENT, target)
             except sr.SecondReaderError:
@@ -685,3 +684,25 @@ def test_a_real_request_target_is_still_answered() -> None:
     assert sr.allows(_AJAX, AGENT, "/jobs") is True
     assert sr.allows(_AJAX, AGENT, "/") is True
     assert sr.allows(_AJAX, AGENT, "/?q=1") is True
+
+
+def test_a_bytes_target_is_refused_not_coerced() -> None:
+    """`require_request_target`'s `isinstance(str)` branch: bytes are no path."""
+    with pytest.raises(sr.SecondReaderError):
+        sr.allows(_AJAX, AGENT, b"/ajax/x")  # type: ignore[arg-type]
+
+
+def test_classify_does_not_crash_on_a_double_slash_disallow() -> None:
+    """`Disallow: //admin` is a legal rule (RFC 9110 §4.1 path-abempty).
+
+    The reader refuses the `//admin` target as ambiguous with a network-path
+    reference; `_classify` must record that as no answer -- never an allow
+    (false_allows) and never an agreement -- and must not raise.
+    """
+    from integral import connector_policy as cp
+
+    text = "User-agent: *\nDisallow: //admin\n"
+    competence = cp._classify(text, AGENT)
+    assert competence.second_reader_false_allows == ()
+    assert competence.second_reader_refused == ()
+    assert competence.verdict != cp.COMPETENT

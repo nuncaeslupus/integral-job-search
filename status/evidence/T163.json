@@ -203,22 +203,22 @@
     {
       "module": "second_reader",
       "name": "FAIL_OPEN_CASES_AT_LEAST",
-      "lineno": 903
+      "lineno": 904
     },
     {
       "module": "second_reader",
       "name": "FIXTURES_AT_LEAST",
-      "lineno": 893
+      "lineno": 894
     },
     {
       "module": "second_reader",
       "name": "REGRESSION_CASES_AT_LEAST",
-      "lineno": 934
+      "lineno": 935
     },
     {
       "module": "second_reader",
       "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
-      "lineno": 920
+      "lineno": 921
     },
     {
       "module": "sourcing",

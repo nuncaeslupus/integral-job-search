@@ -814,10 +814,11 @@ def require_request_target(target: str) -> None:
 
     So the wrong shape is refused rather than guessed at. Anything not opening
     with `/` is refused (`https://h/p`, `h/p`, `*`, the empty string), and so is
-    a value opening `//`: RFC 3986 §3.3 forbids a path-absolute reference from
-    beginning with two slashes because that is how a network-path reference
-    (`//host/path`, authority and all) is written, so the two cannot be told
-    apart and the one that fails open is not chosen.
+    a value opening `//`. That last refusal is a **deliberate choice, not an RFC
+    requirement**: `//admin` is a legal request target (RFC 9110 §4.1, path-abempty),
+    but it is indistinguishable here from the network-path reference
+    `//host/path` (RFC 3986 §4.2), and guessing wrong fails open. Refusing is
+    fail-closed: callers see an error, never an allow.
     """
     if not isinstance(target, str):
         raise SecondReaderError(f"target must be text, not {type(target).__name__}")
