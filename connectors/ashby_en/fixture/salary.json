@@ -5,7 +5,8 @@
       "min": 30000.0,
       "max": 45000.0,
       "currency": "EUR",
-      "period": null
+      "period": null,
+      "card_uncomparable": "The row source `_row_sources` hands back for this JSON list carries neighbouring postings' compensation too (EUR 30K-45K, EUR 40K-45K and PLN 130K-145K all appear in one slice), so the text holds more than one band and `card_band` correctly says nothing. The declared read is the engine's own read of this posting's `compensationTierSummary`; counted, not skipped."
     },
     "1": {
       "verdict": "refused",

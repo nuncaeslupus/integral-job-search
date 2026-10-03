@@ -3630,3 +3630,22 @@ def test_no_client_can_name_a_header() -> None:
         parse_connector(
             _HTMX_BOARD.replace("  client: htmx\n", '  headers: {"Authorization": "Bearer x"}\n')
         )
+
+
+@pytest.mark.parametrize(
+    ("text", "low", "high"),
+    [
+        # A magnitude suffix is a whole token, never the first letter of a word.
+        ("USD 174,000-252,000 Mountain View", "174000", "252000"),
+        ("EUR 40.000-50.000 Madrid", "40000", "50000"),
+        ("EUR 40.000-50.000 Kiel", "40000", "50000"),
+        ("USD 174K-252K Mountain View", "174000", "252000"),
+        ("CAD 150k-190k", "150000", "190000"),
+        ("$1.5M - $2M", "1500000", "2000000"),
+    ],
+)
+def test_take_reads_a_magnitude_only_as_a_whole_token(text: str, low: str, high: str) -> None:
+    from integral.connectors import _take
+
+    assert _take("range_low", text) == low
+    assert _take("range_high", text) == high

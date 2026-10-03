@@ -21,7 +21,9 @@ from integral.connector_salary_audit import (
     _declared_for,
     _money_contexts,
     _packages,
+    _single_figure_agrees,
     card_band,
+    card_figure,
     measure,
     record,
 )
@@ -291,6 +293,19 @@ def test_the_record_commits_the_distinct_verdict_floor() -> None:
         ("[SE] CAD 42K Toronto", None),  # one figure is not a band
         ("USD 1K-2K or EUR 3K-4K", None),  # two different bands: nothing said
         ("10 - 20 employees", None),  # no currency, not money
+        # N1: formats the old slice could not cut out, each a real fixture row.
+        ("Jornada completa 45.000 \u20ac - 55.000 \u20ac Anadida", (45000.0, 55000.0, "EUR")),
+        ("Salary: \u00a335,681 to \u00a339,424 per annum", (35681.0, 39424.0, "GBP")),
+        ("[MI] 174K-252K USD Mountain View", (174000.0, 252000.0, "USD")),
+        # N3: a word starting with M/K is not a magnitude.
+        ("USD 174,000-252,000 Mountain View", (174000.0, 252000.0, "USD")),
+        ("EUR 40.000-50.000 Madrid", (40000.0, 50000.0, "EUR")),
+        ("EUR 40.000-50.000 Kiel", (40000.0, 50000.0, "EUR")),
+        # Escaped markup between the figures is not a reason to see no band.
+        (
+            "&lt;span&gt;$320,000&lt;/span&gt;&amp;mdash;&lt;span&gt;$405,000 USD&lt;/span&gt;",
+            (320000.0, 405000.0, "USD"),
+        ),
     ],
 )
 def test_card_band_reads_the_card_with_the_engines_own_take(
@@ -370,3 +385,99 @@ def test_foorillas_rows_are_counted_as_read_through_a_substituted_detail() -> No
     """47 of foorilla's 48 banded cards disagree with the one shared advert page
     (row 0's own card is the 48th); wellfound, which reads its card, adds none."""
     assert measure(_CONNECTORS)["rows_read_through_a_substituted_detail"] == 47
+
+
+@pytest.mark.parametrize(
+    ("text", "figure"),
+    [
+        ("[SE] CAD 42K Toronto", (42000.0, "CAD")),
+        ("[MI] RON 100K Bucharest", (100000.0, "RON")),
+        ("Starting at $143,913 Per year (GS 14-15)", (143913.0, "USD")),
+        ("18.000 \u20ac De duracion determinada", (18000.0, "EUR")),
+        ("CAD 150K-190K Vancouver", None),  # a band is `card_band`'s, not a figure
+        ("USD 1K or EUR 3K", None),  # two figures: nothing to hold a read against
+        ("GS 14-15, 12 staff", None),  # no currency
+    ],
+)
+def test_card_figure_reads_a_lone_figure(
+    text: str, figure: tuple[float, str | None] | None
+) -> None:
+    assert card_figure(text) == figure
+
+
+_DROP = object()
+
+
+def _edit_entry(tmp_path: Path, package: str, row: str, **changes: object) -> Path:
+    directory = _copy_connectors(tmp_path)
+    path = directory / package / "fixture" / "salary.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for key, value in changes.items():
+        if value is _DROP:
+            data["rows"][row].pop(key, None)
+        else:
+            data["rows"][row][key] = value
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return directory
+
+
+def test_no_row_that_reads_a_salary_leaves_its_card_money_uncompared() -> None:
+    """T215's key. Driven to zero over the committed tree, and the count of rows
+    that carry a declared reason is exact so it cannot grow unseen."""
+    measured = measure(_CONNECTORS)
+    assert measured["rows_read_whose_card_money_was_not_compared"] == 0, measured["uncompared"]
+    assert measured["rows_read_with_a_declared_uncomparable_card"] == 4
+    assert "rows_read_whose_card_money_was_not_compared" in record(measured)
+
+
+@pytest.mark.parametrize(
+    ("package", "row", "changes"),
+    [
+        # N1's probe: the engine reads 45000-45000, the entry is copied to match.
+        ("jobfluent_es", "2", {"min": 45000.0, "max": 45000.0}),
+        ("infojobs_es", "0", {"max": 51000.0}),
+        ("jobsacuk_en", "0", {"min": 35000.0}),
+        ("tecnoempleo_es", "0", {"max": 37000.0}),
+        # a single-figure card is compared too
+        ("usajobs_en", "0", {"min": 143914.0}),
+        ("usajobs_en", "0", {"min": None, "max": 143913.0}),
+    ],
+)
+def test_an_entry_that_disagrees_with_a_card_the_old_slice_missed_is_red(
+    tmp_path: Path, package: str, row: str, changes: dict[str, object]
+) -> None:
+    directory = _edit_entry(tmp_path, package, row, **changes)
+    measured = measure(directory)
+    assert measured["salary_expectation_mismatches"] >= 1, measured["mismatches"]
+    assert any(f"{package} [{row}]" in entry for entry in measured["mismatches"])
+
+
+def test_an_uncomparable_card_without_a_reason_is_counted_not_skipped(tmp_path: Path) -> None:
+    directory = _edit_entry(tmp_path, "getmanfred_es", "0", card_uncomparable=_DROP)
+    measured = measure(directory)
+    assert measured["rows_read_whose_card_money_was_not_compared"] == 1
+    assert measured["rows_read_with_a_declared_uncomparable_card"] == 3
+    assert any("getmanfred_es [0]" in entry for entry in measured["uncompared"])
+
+
+def test_a_token_reason_does_not_declare_a_card_uncomparable(tmp_path: Path) -> None:
+    directory = _edit_entry(tmp_path, "getmanfred_es", "0", card_uncomparable="x")
+    assert measure(directory)["rows_read_whose_card_money_was_not_compared"] == 1
+
+
+@pytest.mark.parametrize(
+    ("declared", "agrees"),
+    [
+        ({"min": 42000.0, "max": None, "currency": "CAD"}, True),
+        ({"min": None, "max": 42000.0, "currency": "CAD"}, True),  # side is the engine's call
+        ({"min": 42000.0, "max": None, "currency": None}, True),  # no currency declared: a gap
+        ({"min": 43000.0, "max": None, "currency": "CAD"}, False),  # wrong figure
+        ({"min": 42000.0, "max": 42000.0, "currency": "CAD"}, False),  # a band from one figure
+        ({"min": None, "max": None, "currency": "CAD"}, False),  # nothing read
+        ({"min": 42000.0, "max": None, "currency": "USD"}, False),  # wrong currency
+    ],
+)
+def test_a_declared_read_must_match_the_one_figure_the_card_prints(
+    declared: dict[str, object], agrees: bool
+) -> None:
+    assert _single_figure_agrees(declared, (42000.0, "CAD")) is agrees

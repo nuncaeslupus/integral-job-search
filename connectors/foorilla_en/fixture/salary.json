@@ -275,7 +275,7 @@
     },
     "34": {
       "verdict": "refused",
-      "why": "The card prints a single figure (`CAD 42K`), not a band. `range_low`/`range_high` need exactly two figures and decline one, so the connector declares no salary for it rather than reading one end as both. The shared fixture detail page states CAD 150K-190K, but that is another advert's band; this row's own card is authoritative.",
+      "why": "The card prints a single figure (`CAD 42K`), not a band. This is an engine gap, not a judgement about the figure: T200's spec says a source salary must produce `salary.min` or `salary.max`, so a lone figure should read, but `range_low`/`range_high` require exactly two figures and decline one, and `_take` has no member that reads a single figure as a bound. The connector therefore declares no salary for it. The shared fixture detail page states CAD 150K-190K, but that is another advert's band; this row's own card is authoritative.",
       "list_says": "atforms (PL856) 2d ago [SE] [Full Time] CAD 42K Toronto , Ontario, Canada [R]"
     },
     "35": {
@@ -304,7 +304,7 @@
     },
     "38": {
       "verdict": "refused",
-      "why": "The card prints a single figure (`RON 100K`), not a band. `range_low`/`range_high` need exactly two figures and decline one, so the connector declares no salary for it rather than reading one end as both. The shared fixture detail page states CAD 150K-190K, but that is another advert's band; this row's own card is authoritative.",
+      "why": "The card prints a single figure (`RON 100K`), not a band. This is an engine gap, not a judgement about the figure: T200's spec says a source salary must produce `salary.min` or `salary.max`, so a lone figure should read, but `range_low`/`range_high` require exactly two figures and decline one, and `_take` has no member that reads a single figure as a bound. The connector therefore declares no salary for it. The shared fixture detail page states CAD 150K-190K, but that is another advert's band; this row's own card is authoritative.",
       "list_says": "eb&Mobile Team) 2d ago [MI] [Full Time] RON 100K Bucharest, Bucharest, Romania [R]"
     },
     "39": {
