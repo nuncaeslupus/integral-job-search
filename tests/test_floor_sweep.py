@@ -29,6 +29,25 @@ import pytest
 from integral import floor_sweep
 
 
+@pytest.fixture(autouse=True)
+def _never_rewrite_the_live_prose_evidence(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T223: `_main()` and one test wrote `status/evidence/T163.json` -- the file the
+    cache key hashes -- in place. Under xdist another worker's live-tree call could
+    read it mid-rewrite and key a second analysis (`test_the_live_tree_is_analysed_
+    once_in_a_session` failed in a clean `verified_gate.sh` checkout). Every call
+    that would target the live path is redirected to a scratch file."""
+    real = floor_sweep.write_prose_clearance_evidence
+    live = floor_sweep.DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH
+    scratch = tmp_path_factory.mktemp("prose") / "T163.json"
+
+    def redirected(evidence: Path = live) -> dict[str, Any]:
+        return real(scratch if Path(evidence) == live else evidence)
+
+    monkeypatch.setattr(floor_sweep, "write_prose_clearance_evidence", redirected)
+
+
 def _write(tmp_path: Path, source: str, name: str = "mod") -> Path:
     path = tmp_path / f"{name}.py"
     path.write_text(source, encoding="utf-8")
@@ -4013,6 +4032,20 @@ def _count_analyses(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
 
     monkeypatch.setattr(floor_sweep, "_analyse", counting)
     return calls
+
+
+def test_no_test_in_this_file_rewrites_the_live_evidence_the_key_hashes() -> None:
+    """The deterministic form of the xdist race: calling `_main` and the prose
+    writer at their defaults must leave every file under `status/evidence/`
+    untouched (mtime and bytes), because a worker reading one mid-rewrite keys a
+    second analysis of the same tree."""
+    evidence = floor_sweep._evidence_dir()
+    before = {p.name: (p.stat().st_mtime_ns, p.read_bytes()) for p in evidence.glob("*.json")}
+    assert len(before) >= 100
+    floor_sweep._main(["/tmp/floor_sweep_race_probe.json"])
+    floor_sweep.write_prose_clearance_evidence(floor_sweep.DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH)
+    after = {p.name: (p.stat().st_mtime_ns, p.read_bytes()) for p in evidence.glob("*.json")}
+    assert after == before
 
 
 def test_the_live_tree_is_analysed_once_in_a_session(
