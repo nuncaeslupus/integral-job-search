@@ -55,7 +55,7 @@ from integral.explain import explain
 from integral.offers import Location, Offer, Salary
 from integral.pay import NetEstimate
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, rank
+from integral.rank import Candidate, point_band, rank
 from integral.stack_fit import summary_line
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -566,6 +566,7 @@ def _fixture() -> tuple[list[Offer], list[Candidate]]:
             Candidate(
                 offer_id=offer.id,
                 salary_per_month=monthly,
+                pay=point_band(monthly, "EUR"),
                 scores=scores,
                 unknown=frozenset(n for n in _FIXTURE_DIMENSIONS if n not in scores),
                 spans={name: (quote,) for name, quote in spans.items()},
@@ -741,6 +742,7 @@ def _t87_fixture() -> tuple[list[Offer], list[Candidate], list[Reading]]:
             Candidate(
                 offer_id=offer_id,
                 salary_per_month=3000.0 + 100 * index,
+                pay=point_band(3000.0 + 100 * index, "EUR"),
                 scores={"remote": 1.0 - 0.2 * index, "commute": -0.1 * index},
             )
         )

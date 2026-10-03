@@ -24,6 +24,7 @@ from integral.rank import (
     dominates,
     frontier,
     measure,
+    point_band,
     rank,
     salary_equivalent_total,
     write_evidence,
@@ -52,6 +53,7 @@ def _candidate(offer_id: str, salary: float | None = 3000.0, **scores: float) ->
     return Candidate(
         offer_id=offer_id,
         salary_per_month=salary,
+        pay=point_band(salary, "EUR"),
         scores={name: scores[name] for name in DIMENSIONS if name in scores},
         unknown=frozenset(name for name in DIMENSIONS if name not in scores),
     )

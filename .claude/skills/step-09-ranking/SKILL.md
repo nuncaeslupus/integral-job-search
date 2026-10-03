@@ -48,6 +48,30 @@ In this step that sounds like:
 - Never show what is unknown about an offer as neutral — an advert silent on hours is not an advert promising good ones.
 - Never assemble the card's prose a paragraph at a time by a model — it is a template filled from the normalised JSON.
 
+## Pay reaches the ranking converted, or the offer is refused
+
+`Candidate.salary_per_month` has no currency, so never build a `Candidate` with a bare
+number. Go through `integral.pay_normalise`, which converts into the weights' currency
+per month with a dated, sourced rate you pass in (never fetch one), re-reads the advert
+when `salary` is empty, and raises `PayNormaliseError` rather than compare an unconverted
+figure. `rank` refuses a point with no band in the ranking's currency.
+
+```python
+from integral.pay_normalise import DatedRate, RateTable, annotate, candidate_for
+
+# The target is the weights' currency, or with no weights (L1) the candidate's own,
+# `salary.currency` in `profile/constraints.json`. A ranking with no currency at all
+# is refused when its pay points are unlabelled or disagree.
+target = (weights or {}).get("currency") or constraints["salary"]["currency"]
+table = RateTable(target, (DatedRate("USD", 0.9, "2026-10-01", "<source>"),))
+candidate, reading = candidate_for(offer, extraction, dimensions=dims, table=table)
+ranking = annotate(rank(candidates, ..., currency=table.target), readings, table)
+```
+
+- An offer with no published pay is ordered among the unpaid ones and `unpaid_offers`
+  names it: say so on the card, and never present that order as a pay verdict.
+- No rate for a currency means the pay is refused: tell the candidate, do not guess one.
+
 ## The candidate's stack is data, not a question
 
 What the candidate knows is already on disk: `cv/master.json` (`skills` with levels,

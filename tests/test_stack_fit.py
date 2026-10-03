@@ -26,7 +26,7 @@ from integral.profile import (
     ProfileRevision,
     SkillStance,
 )
-from integral.rank import Candidate, rank
+from integral.rank import Candidate, point_band, rank
 
 CASES: list[dict[str, Any]] = json.loads(stack_fit.DEFAULT_CASES_PATH.read_text(encoding="utf-8"))[
     "cases"
@@ -157,7 +157,7 @@ def test_a_row_without_a_stance_is_written_as_before(tmp_path: Path) -> None:
 def test_rank_carries_the_fit_and_moves_nothing() -> None:
     candidates = [
         Candidate(offer_id="a", salary_per_month=None, scores={}),
-        Candidate(offer_id="b", salary_per_month=4000.0, scores={}),
+        Candidate(offer_id="b", salary_per_month=4000.0, pay=point_band(4000.0, "EUR"), scores={}),
     ]
     kwargs: dict[str, Any] = {
         "dimensions": (),

@@ -59,7 +59,7 @@ from integral.explain import explain
 from integral.identity import ProfileStore
 from integral.offers import Offer, compute_offer_id
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, rank
+from integral.rank import Candidate, point_band, rank
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T43.json"
@@ -201,6 +201,7 @@ def _explanations(spans: Mapping[str, tuple[str, ...]]) -> dict[str, dict[str, A
     candidate = Candidate(
         offer_id=compute_offer_id(text),
         salary_per_month=3600.0,
+        pay=point_band(3600.0, "EUR"),
         scores={"remote": 1.0, "commute": 0.5},
         spans=spans,
     )

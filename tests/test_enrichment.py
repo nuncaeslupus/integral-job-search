@@ -40,7 +40,7 @@ from integral.identity import ProfileStore, create_profile
 from integral.offers import Offer, compute_offer_id
 from integral.presentation import card, render
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, rank
+from integral.rank import Candidate, point_band, rank
 
 _AT = "2026-08-24T10:00:00Z"
 _DIMENSIONS = ("commute", "remote")
@@ -99,6 +99,7 @@ def test_an_explanation_never_cites_an_outside_source_as_the_employer() -> None:
     honest = Candidate(
         offer_id="sha256:" + "1" * 64,
         salary_per_month=3600.0,
+        pay=point_band(3600.0, "EUR"),
         scores={"remote": 1.0, "commute": 0.5},
         spans={"remote": ("100% en remoto",), "commute": ("junto a la estación",)},
     )
@@ -120,6 +121,7 @@ def test_an_outside_sentence_reaching_a_span_is_counted() -> None:
     leaked = Candidate(
         offer_id="sha256:" + "2" * 64,
         salary_per_month=3600.0,
+        pay=point_band(3600.0, "EUR"),
         scores={"remote": 1.0, "commute": 0.5},
         spans={"remote": (quote,), "commute": ("junto a la estación",)},
     )

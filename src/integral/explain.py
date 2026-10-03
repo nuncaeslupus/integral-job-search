@@ -67,6 +67,7 @@ from typing import Any
 from integral.profile import ProfileRevision
 from integral.rank import (
     Candidate,
+    point_band,
     priced_by,
     priced_dimensions,
     rank,
@@ -276,6 +277,7 @@ def _fixture_candidates(strip: str | None = None) -> list[Candidate]:
         Candidate(
             offer_id=offer_id,
             salary_per_month=salary,
+            pay=point_band(salary, "EUR"),
             scores=scores,
             unknown=frozenset(name for name in _FIXTURE_DIMENSIONS if name not in scores),
             spans={} if offer_id == strip else spans,

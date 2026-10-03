@@ -60,6 +60,7 @@ from integral.profile import (
 )
 from integral.rank import (
     Candidate,
+    point_band,
     priced_dimensions,
     rank,
     rankable_dimensions,
@@ -170,7 +171,7 @@ def pricing_inputs(store: ProfileStore) -> tuple[dict[str, Any], dict[str, Any]]
     return json.loads(written["traits.json"]), json.loads(written["weights.json"])
 
 
-def _probe_offers(dimension: str, priced: Mapping[str, float]) -> list[Candidate]:
+def _probe_offers(dimension: str, priced: Mapping[str, float], unit: str | None) -> list[Candidate]:
     # `__probe__` is a ranked axis both offers leave unknown, so neither
     # dominates the other and both survive to be read: the question is about the
     # order's reading, not about the frontier.
@@ -179,6 +180,7 @@ def _probe_offers(dimension: str, priced: Mapping[str, float]) -> list[Candidate
         Candidate(
             offer_id=f"probe-{name}",
             salary_per_month=3000.0,
+            pay=point_band(3000.0, unit or "EUR"),  # synthetic probes: the unit cancels
             scores={dimension: score},
             unknown=unknown,
         )
@@ -197,7 +199,8 @@ def moves_order(
     """
     resolved = weights_for_currency(weights, currency)
     priced = priced_dimensions(resolved)
-    probes = _probe_offers(dimension, priced)
+    unit = (resolved or {}).get("currency") or currency
+    probes = _probe_offers(dimension, priced, unit)
     ranking = rank(
         probes,
         dimensions=rankable_dimensions([dimension, _PROBE_AXIS], resolved),
@@ -327,6 +330,7 @@ def _offers() -> list[Candidate]:
         Candidate(
             offer_id=f"offer-{index}",
             salary_per_month=3300.0 - 100.0 * index,
+            pay=point_band(3300.0 - 100.0 * index, "EUR"),
             scores={"english_demand": score},
         )
         for index, score in enumerate((1.0, 0.0, -1.0))
@@ -339,6 +343,7 @@ def _ranking(weights: Mapping[str, Any], traits: Mapping[str, Any] | None) -> di
         Candidate(
             offer_id=c.offer_id,
             salary_per_month=c.salary_per_month,
+            pay=c.pay,
             scores=c.scores,
             unknown=frozenset(d for d in dimensions if d != "english_demand"),
         )
