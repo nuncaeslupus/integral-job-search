@@ -439,10 +439,10 @@ from integral.generate import (
     DEFAULT_FIXTURE_MASTER,
     Manifest,
     _claim_lines,
-    _entries,
+    claim_is_backed,
     generate,
     read_manifest,
-    render_entry,
+    withdrawn_turn_ids,
 )
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EVIDENCE_PARTS, EvidenceLog, Kind, ProfileError
@@ -969,6 +969,7 @@ def measure_prepared(
     withdrawn = {text for text in approved if _withdrawn_by(text, retracted)}
     approved -= withdrawn
     claims = read_manifest(store, offer_id, version).claims
+    withdrawn_ids = withdrawn_turn_ids(store)
 
     # What backs a line, by kind. A CV entry is backed by the store re-rendering
     # to it — T45's rule. An **episode line is backed by the approval file and
@@ -982,10 +983,7 @@ def measure_prepared(
             if claim.text in approved:
                 backed[(claim.document, claim.text)] += 1
             continue
-        entries = _entries(master, claim.section)
-        if claim.entry_index < len(entries) and (
-            render_entry(claim.section, entries[claim.entry_index]) == claim.text
-        ):
+        if claim_is_backed(master, claim, withdrawn_ids):
             backed[(claim.document, claim.text)] += 1
 
     documents = {path.name: path.read_text(encoding="utf-8") for path in sorted(where.glob("*.md"))}

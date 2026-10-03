@@ -6,5 +6,6 @@
   "adverts_generated": 208,
   "gaps_named": 416,
   "claims_tracing_to_a_retracted_row": 0,
-  "retraction_probe_live_claims_traced": 2
+  "retraction_probe_sections": 6,
+  "retraction_probe_live_claims_traced": 6
 }

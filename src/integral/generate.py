@@ -47,6 +47,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from integral.cv_store import (
+    SCALAR_FIELDS,
     Certification,
     ConversationTurn,
     CVMaster,
@@ -410,6 +411,35 @@ def _claim_lines(text: str) -> list[str]:
     return [line for raw in text.splitlines() if (line := raw.strip()) and line not in exempt]
 
 
+def withdrawn_turn_ids(store: ProfileStore) -> frozenset[str]:
+    """Evidence rows a retraction currently suppresses (chains of any depth)."""
+    log = EvidenceLog(store)
+    return log.suppressed_ids() if log.exists() else frozenset()
+
+
+def claim_is_backed(master: CVMaster, claim: Claim, withdrawn: frozenset[str]) -> bool:
+    """The ONE backing rule for a CV entry, shared by every gate that asks.
+
+    The store must re-render to the claimed line, and **no** conversation turn
+    the entry cites may be withdrawn: a value the candidate retracted is not
+    something she stands behind, whichever section it sits in and wherever it
+    falls among the entry's provenance items. `suppressed_ids` resolves a
+    retraction of a retraction, so a restored turn backs its claim again.
+    `integral.approval` calls this rather than keeping a copy, because a second
+    copy of the rule is how the send path came to ignore retractions.
+    """
+    entries = _entries(master, claim.section)
+    if claim.entry_index >= len(entries):
+        return False
+    entry = entries[claim.entry_index]
+    if render_entry(claim.section, entry) != claim.text:
+        return False
+    return not any(
+        isinstance(item, ConversationTurn) and item.evidence_id in withdrawn
+        for item in entry.provenance
+    )
+
+
 def traceability(
     store: ProfileStore, master: CVMaster, offer_id: str, version: int
 ) -> dict[str, Any]:
@@ -425,22 +455,9 @@ def traceability(
     # still succeeded — so an extra copy of a true sentence was a free line the
     # gate could not see. Each on-disk line consumes one row's worth of backing.
     backed: Counter[tuple[str, str]] = Counter()
-    # A claim is backed only by what the candidate still stands behind: an entry
-    # whose conversation turn has been retracted (and not un-retracted) is a
-    # withdrawn value, whatever section it sits in. `suppressed_ids` resolves
-    # chains of any depth, so a restored turn backs its claim again.
-    log = EvidenceLog(store)
-    withdrawn = log.suppressed_ids() if log.exists() else frozenset()
+    withdrawn = withdrawn_turn_ids(store)
     for claim in read_manifest(store, offer_id, version).claims:
-        entries = _entries(master, claim.section)
-        if (
-            claim.entry_index < len(entries)
-            and render_entry(claim.section, entries[claim.entry_index]) == claim.text
-            and not any(
-                isinstance(item, ConversationTurn) and item.evidence_id in withdrawn
-                for item in entries[claim.entry_index].provenance
-            )
-        ):
+        if claim_is_backed(master, claim, withdrawn):
             backed[(claim.document, claim.text)] += 1
 
     total = 0
@@ -486,76 +503,87 @@ DEFAULT_FIXTURE_MASTER = _REPO_ROOT / "tests" / "fixtures" / "generation" / "mas
 _FIXTURE_ASKS: tuple[str, ...] = ("PostgreSQL", "Python", "Kubernetes", "Salesforce")
 
 
+def _probe_entry(section: str, tag: str, turns: tuple[str, ...]) -> SourcedEntry:
+    """One entry of `section` whose rendering carries `tag` and cites `turns` in order."""
+    prov = tuple(ConversationTurn(evidence_id=turn) for turn in turns)
+    if section == "headline":
+        return SourcedText(text=f"Headline {tag}", provenance=prov)
+    if section == "experience":
+        return Experience(title=f"Role {tag}", organisation="Org", provenance=prov)
+    if section == "education":
+        return Education(qualification=f"Diploma {tag}", institution="Uni", provenance=prov)
+    if section == "skills":
+        return Skill(name=f"Skill {tag}", provenance=prov)
+    if section == "certifications":
+        return Certification(name=f"Cert {tag}", provenance=prov)
+    if section == "languages":
+        return LanguageEntry(language="en", level="professional", provenance=prov)
+    raise GenerationError(f"the retraction probe has no builder for section {section!r}")
+
+
+def _probe_master(tag: str, turns: tuple[str, ...]) -> CVMaster:
+    fields: dict[str, Any] = {}
+    for section in _CLAIMABLE:
+        entry = _probe_entry(section, tag, turns)
+        fields[section] = entry if section in SCALAR_FIELDS else (entry,)
+    return CVMaster(**fields)
+
+
 def retracted_claims_still_traced() -> dict[str, int]:
     """`claims_tracing_to_a_retracted_row`: step 11 must not cite a withdrawn turn.
 
-    Two education entries are said in conversation, then the wrong one is
-    retracted, and a second twin is retracted and the retraction itself retracted
-    (so it is live again). Generation runs over the real `generate`/`traceability`
-    path. The count is claim lines that traceability calls *backed* although the
-    turn behind them is withdrawn; the restored twin is the control that the
-    check has not simply started refusing everything.
+    The population is derived from `_CLAIMABLE` (every section a claim can come
+    from, scalars included), so a section added later is probed, or the probe
+    refuses to run. Each section gets one entry citing a live turn and then a
+    **withdrawn** one (second, so a guard that reads only the first provenance
+    item is caught), and a twin whose retraction was itself retracted. Run
+    through the real `generate`/`traceability`. The count is the sections whose
+    withdrawn claim traceability still calls backed; the twin is the control
+    that the check has not simply started refusing everything.
     """
-    master_entries: dict[str, str] = {}
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch) / "profiles"
         identity = create_profile(root, "Retraction Probe", handle="probe", language="en")
         store = ProfileStore(root, identity.handle)
         log = EvidenceLog(store)
-        ids: dict[str, str] = {}
-        for name in ("right", "wrong", "restored"):
-            ids[name] = log.append(
+
+        def say(text: str, retracts: str | None = None) -> str:
+            return log.append(
                 recorded_at="2026-08-24T09:00:00Z",
-                step="history",
-                kind="statement",
-                text=f"Diploma {name}",
+                step="history" if retracts is None else "any",
+                kind="statement" if retracts is None else "retraction",
+                text=text,
                 source="conversation",
+                retracts=retracts,
             ).id
-        withdrawn = log.append(
-            recorded_at="2026-08-24T09:00:00Z",
-            step="any",
-            kind="retraction",
-            text="no",
-            source="conversation",
-            retracts=ids["wrong"],
-        )
-        first = log.append(
-            recorded_at="2026-08-24T09:00:00Z",
-            step="any",
-            kind="retraction",
-            text="no",
-            source="conversation",
-            retracts=ids["restored"],
-        )
-        log.append(
-            recorded_at="2026-08-24T09:00:00Z",
-            step="any",
-            kind="retraction",
-            text="oops",
-            source="conversation",
-            retracts=first.id,
-        )
-        assert withdrawn.retracts == ids["wrong"]
-        master = CVMaster(
-            education=tuple(
-                Education(
-                    qualification=f"Diploma {name}",
-                    institution="Uni",
-                    provenance=(ConversationTurn(evidence_id=ids[name]),),
-                )
-                for name in ("right", "wrong", "restored")
+
+        rows = {name: say(f"said {name}") for name in ("live", "wrong", "restored")}
+        say("no", retracts=rows["wrong"])
+        say("oops", retracts=say("no", retracts=rows["restored"]))
+
+        traced_withdrawn = 0
+        traced_live = 0
+        for name, offer in (("wrong", "probe-wrong"), ("restored", "probe-restored")):
+            master = _probe_master(name, (rows["live"], rows[name]))
+            write_master(store, master)
+            lines = {
+                section: render_entry(section, _entries(master, section)[0])
+                for section in _CLAIMABLE
+            }
+            manifest = generate(
+                store, master, offer_id=offer, advert=" ".join(lines.values()), asks=()
             )
-        )
-        write_master(store, master)
-        manifest = generate(store, master, offer_id="probe-1", advert="x", asks=())
-        measured = traceability(store, master, "probe-1", manifest.version)
-        untraced = {line.split(": ", 1)[1] for line in measured["claims_untraced"]}
-        for name, entry in zip(("right", "wrong", "restored"), master.education, strict=True):
-            master_entries[name] = render_entry("education", entry)
-        backed = {name for name, line in master_entries.items() if line not in untraced}
+            measured = traceability(store, master, offer, manifest.version)
+            untraced = {line.split(": ", 1)[1] for line in measured["claims_untraced"]}
+            traced = sum(1 for line in lines.values() if line not in untraced)
+            if name == "wrong":
+                traced_withdrawn = traced
+            else:
+                traced_live = traced
     return {
-        "claims_tracing_to_a_retracted_row": int("wrong" in backed),
-        "retraction_probe_live_claims_traced": len(backed & {"right", "restored"}),
+        "claims_tracing_to_a_retracted_row": traced_withdrawn,
+        "retraction_probe_sections": len(_CLAIMABLE),
+        "retraction_probe_live_claims_traced": traced_live,
     }
 
 
@@ -625,15 +653,15 @@ def _main(argv: list[str]) -> int:
     print(json.dumps(measured, ensure_ascii=False))
     if measured["claims_unused"]:
         return 1
-    # `== 1.0`, not "no untraced lines". A run that generated nothing at all
-    # scores `None` with an empty untraced list, and exiting 0 on that would
-    # report a gate met by a generator that produced no document.
     if measured["claims_tracing_to_a_retracted_row"] != 0:
         print("a claim traces to a retracted row", file=sys.stderr)
         return 1
-    if measured["retraction_probe_live_claims_traced"] != 2:
+    if measured["retraction_probe_live_claims_traced"] != measured["retraction_probe_sections"]:
         print("the retraction probe's live claims no longer trace", file=sys.stderr)
         return 1
+    # `== 1.0`, not "no untraced lines". A run that generated nothing at all
+    # scores `None` with an empty untraced list, and exiting 0 on that would
+    # report a gate met by a generator that produced no document.
     if measured["cv_generation_traceability"] != 1.0:
         print(
             f"cv_generation_traceability is {measured['cv_generation_traceability']!r}, not 1.0",
