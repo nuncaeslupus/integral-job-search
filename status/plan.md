@@ -512,7 +512,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T241 | Reports and dashboards have no shared visual style (test-mode 658fcce2) | 10 | S | — | `html_pages_outside_the_shared_style == 0` | gate set in its own PR | ☐ |
 | T242 | The ranker returns hash order when a priced dimension is unknown everywhere (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☑ |
 | T243 | Only two dimensions are priced, so what a candidate said never moves the order (test-mode 658fcce2) | 5 | M | — | `trait_dimensions_with_evidence_never_priced_and_never_reported == 0` | gate set in its own PR | ☑ |
-| T244 | Whether a candidate can do the job never enters the ranking (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☐ |
+| T244 | Whether a candidate can do the job never enters the ranking (test-mode 658fcce2) | 5 | M | — | `metric == 0` | gate set in its own PR | ☑ |
 | T245 | Stack fit reads only the master CV, which misses work told in conversation (test-mode 658fcce2) | 10 | S | — | `metric == 0` | gate set in its own PR | ☑ |
 | T246 | Pay enters the ranking unconverted, and a stated band can be stored as none (test-mode 658fcce2) | 10 | S | — | `metric == 0` | gate set in its own PR | ☐ |
 | T247 | A candidate's job-alert emails are never read as a source, and reading them has no permission step (test-mode 453a5c19) | 5 | M | — | `job_alert_emails_read_without_a_recorded_permission == 0` | gate set in its own PR | ☐ |

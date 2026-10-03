@@ -635,6 +635,9 @@ def rank(
         ordering,
         salaries,
     )
+    # T244: of two offers alike on pay and on everything the order read, the one
+    # the candidate can better do is not below the other. A tiebreak, not a price.
+    ordered = _fit_before_the_alphabet(ordered, ordering, salaries, by_id)
 
     ranking: dict[str, Any] = {
         "run_id": at,
@@ -982,6 +985,41 @@ def _pay_before_the_alphabet(
         for index, offer_id in zip(slots, by_pay, strict=True):
             result[index] = offer_id
         start = stop
+    return result
+
+
+#: The dimension `integral.fit` carries the fit reading under.
+FIT_DIMENSION = "fit"
+
+
+def _fit_before_the_alphabet(
+    ordered: Sequence[str],
+    ordering: Mapping[str, float],
+    salaries: Mapping[str, float],
+    by_id: Mapping[str, Candidate],
+) -> list[str]:
+    """T244: inside one (primary bucket, pay) tie, offers with a known fit take
+    the same slots back in descending order of it.
+
+    Same shape as `_pay_before_the_alphabet`, and for its reason: an offer whose
+    fit is unknown keeps the slot it had and is not moved, because an unknown fit
+    is not a poor one and not a good one. Slots are permuted only among offers
+    that share the bucket and the salary (or the lack of one), so the pay rule is
+    never undone.
+    """
+    result = list(ordered)
+    groups: dict[tuple[float, float | None], list[int]] = {}
+    for index, offer_id in enumerate(result):
+        if FIT_DIMENSION in by_id[offer_id].scores:
+            key = (ordering.get(offer_id, float("-inf")), salaries.get(offer_id))
+            groups.setdefault(key, []).append(index)
+    for slots in groups.values():
+        by_fit = sorted(
+            (result[i] for i in slots),
+            key=lambda o: (-by_id[o].scores[FIT_DIMENSION], o),
+        )
+        for index, offer_id in zip(slots, by_fit, strict=True):
+            result[index] = offer_id
     return result
 
 
