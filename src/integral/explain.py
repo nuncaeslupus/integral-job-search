@@ -65,7 +65,14 @@ from pathlib import Path
 from typing import Any
 
 from integral.profile import ProfileRevision
-from integral.rank import Candidate, priced_by, priced_dimensions, rank, salary_equivalent_total
+from integral.rank import (
+    Candidate,
+    priced_by,
+    priced_dimensions,
+    rank,
+    salary_equivalent_total,
+    weights_for_currency,
+)
 
 # §4.3's site is `integral.rank`; this module explains that formula's second
 # term rather than implementing a formula of its own, so it declares no
@@ -125,6 +132,10 @@ def explain(
     collapsed each of them, which is the whole of what there is to say about an
     offer that is not being shown. The card that says it to a person is T44.
     """
+    # B4: the stated figures in force depend on the ranking's currency, so the
+    # explanation resolves against the ranking it explains instead of trusting every
+    # caller to have done it. Idempotent: weights already resolved pass through.
+    weights = weights_for_currency(weights, ranking.get("currency"))
     by_id = {candidate.offer_id: candidate for candidate in candidates}
     explanations: dict[str, dict[str, Any]] = {}
     for offer_id in ranking["pareto"]:

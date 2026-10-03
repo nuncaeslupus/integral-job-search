@@ -33,6 +33,7 @@ from integral.rank import (
     UNPRICED_CURRENCY,
     UNPRICED_NEGLIGIBLE,
     UNPRICED_NO_CHOICE,
+    UNPRICED_NO_CURRENCY,
     Candidate,
     PayBand,
     RankingError,
@@ -509,11 +510,22 @@ def test_a_usd_statement_with_currency_eur_does_not_raise_and_is_skipped() -> No
     assert ranking["unpriced_trait_dimensions"]["reasons"] == {"x": UNPRICED_CURRENCY}
 
 
+def test_no_currency_known_has_its_own_reason_not_another_currency() -> None:
+    weights = {**stated_part_worths([_stated("x", cur="USD")], {})}
+    offer = Candidate(offer_id="o", salary_per_month=1.0, scores={})
+    ranking = rank(
+        [offer], dimensions=[], revision=REV, weights=weights, at="t", traits=_traits(x=1)
+    )
+    assert ranking["unpriced_trait_dimensions"]["reasons"] == {"x": UNPRICED_NO_CURRENCY}
+    assert UNPRICED_NO_CURRENCY != UNPRICED_CURRENCY
+
+
 def test_with_no_fit_and_no_currency_nothing_stated_is_adopted() -> None:
     weights = {**stated_part_worths([_stated("x", cur="USD")], {})}
     resolved = weights_for_currency(weights, None)
     assert resolved is not None and "currency" not in resolved
-    assert resolved["stated_part_worths"] == {} and resolved["stated_skipped"] == {"x": "currency"}
+    assert resolved["stated_part_worths"] == {}
+    assert resolved["stated_skipped"] == {"x": "no_currency"}
     offer = Candidate(offer_id="o", salary_per_month=1.0, scores={})
     ranking = rank([offer], dimensions=[], revision=REV, weights=weights, at="t")
     assert ranking["currency"] is None and ranking["level"] == "L1"
@@ -579,3 +591,102 @@ def test_every_scenario_dimension_is_a_real_ontology_id() -> None:
     from integral.stated_pricing import ontology_ids
 
     assert set(SCENARIO_DIMENSIONS) <= ontology_ids()
+
+
+# -- B4: every reader of the weights resolves against the ranking's currency --
+
+
+def _raw_stated_profile(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    store = _store(tmp_path)
+    EvidenceLog(store).append(
+        recorded_at="t",
+        step="history",
+        kind="episode",
+        text="e",
+        source="conversation",
+        dimensions=("english_demand",),
+    )
+    record_stated_price(
+        store,
+        dimension="english_demand",
+        direction="less",
+        strength="strong",
+        currency="EUR",
+        text="said",
+        at="t",
+    )
+    return pricing_inputs(store)
+
+
+def _two_offers_with_pay() -> list[Candidate]:
+    return [
+        Candidate(
+            offer_id="A",
+            salary_per_month=3300.0,
+            scores={"english_demand": 1.0},
+            spans={"english_demand": ("C1 English",)},
+        ),
+        Candidate(
+            offer_id="B",
+            salary_per_month=3000.0,
+            scores={"english_demand": 0.0},
+            spans={"english_demand": ("no English",)},
+        ),
+    ]
+
+
+def test_explain_with_the_raw_weights_gives_the_stated_driver(tmp_path: Path) -> None:
+    from integral.explain import explain, explained_fraction
+
+    traits, raw = _raw_stated_profile(tmp_path)
+    offers = _two_offers_with_pay()
+    ranking = rank(
+        offers,
+        dimensions=rankable_dimensions([], raw, "EUR"),
+        revision=REV,
+        weights=raw,
+        at="t",
+        currency="EUR",
+        traits=traits,
+    )
+    assert ranking["pareto"] == ["B", "A"]
+    explanations = explain(ranking, offers, raw)  # the call shape every caller uses
+    assert [d["source"] for d in explanations["A"]["drivers"]] == ["stated"]
+    assert explanations["A"]["delta_unavailable"] is None
+    assert explained_fraction(ranking, offers, raw)["explained_fraction"] == 1.0
+
+
+def test_the_audit_refuses_when_stated_prices_exist_and_no_currency_is_given(
+    tmp_path: Path,
+) -> None:
+    _, raw = _raw_stated_profile(tmp_path)
+    offers = [
+        Candidate(offer_id="A", salary_per_month=3000.0, scores={"english_demand": 1.0}),
+        Candidate(offer_id="B", salary_per_month=3000.0, scores={"english_demand": 0.0}),
+    ]
+    forged = {
+        "pareto": ["A"],
+        "dominated": {"B": "dominated_by:A"},
+        "dimensions": ["english_demand"],
+    }
+    with pytest.raises(RankingError):
+        dominance_violations(forged, offers, raw)
+    assert dominance_violations(forged, offers, raw, "EUR") > 0
+    # None is an answer ("asked for no currency"), not an omission.
+    assert dominance_violations(forged, offers, raw, None) == 0
+
+
+# -- O4: the register's figures are the table's -------------------------------
+
+
+def test_methods_4_2a_states_the_rungs_that_stated_tiers_holds() -> None:
+    import re
+
+    from integral.weights import STATED_METHODS_REF
+
+    text = (Path(__file__).resolve().parents[1] / "docs" / "METHODS.md").read_text("utf-8")
+    heading = STATED_METHODS_REF.split("#", 1)[1].split("-")[0]
+    assert heading == "42a"
+    section = text.split("### 4.2a", 1)[1].split("\n### ", 1)[0]
+    found = dict(re.findall(r"\b(slight|clear|strong) (\d+)\b", section))
+    assert {k: float(v) for k, v in found.items()} == dict(STATED_TIERS)

@@ -419,7 +419,11 @@ def weights_for_currency(
         return dict(weights)
     keep = {n: p for n, p in entries.items() if base is not None and p.get("currency") == base}
     skipped = dict(weights.get("stated_skipped") or {})
-    skipped.update({n: "currency" for n in entries if n not in keep})
+    # Two different facts, two reasons: a figure in the wrong currency, and a
+    # ranking that has no currency for any figure to be in.
+    skipped.update(
+        {n: ("currency" if base is not None else "no_currency") for n in entries if n not in keep}
+    )
     resolved = {**weights, "stated_part_worths": keep, "stated_skipped": skipped}
     if not fitted_priced and keep:
         resolved["currency"] = base
@@ -481,6 +485,7 @@ def rankable_dimensions(
 UNPRICED_NO_CHOICE = "no_choice_and_no_statement"
 UNPRICED_NEGLIGIBLE = "negligible_in_choices"
 UNPRICED_CURRENCY = "stated_in_another_currency"
+UNPRICED_NO_CURRENCY = "stated_with_no_currency_known"
 
 
 def unpriced_trait_dimensions(
@@ -512,7 +517,9 @@ def unpriced_trait_dimensions(
         count = entry.get("evidence_count") if isinstance(entry, Mapping) else None
         if not isinstance(count, int) or count <= 0 or name in priced:
             continue
-        if skipped.get(name) == "currency":
+        if skipped.get(name) == "no_currency":
+            reasons[name] = UNPRICED_NO_CURRENCY
+        elif skipped.get(name) == "currency":
             reasons[name] = UNPRICED_CURRENCY
         elif name in negligible:
             reasons[name] = UNPRICED_NEGLIGIBLE
@@ -1046,11 +1053,18 @@ def excluded_offers_without_a_reason(ranking: Mapping[str, Any]) -> int:
     )
 
 
+class _Unset:
+    """Sentinel: the audit's `currency` was not given (None is a real answer)."""
+
+
+_UNSET = _Unset()
+
+
 def dominance_violations(
     ranking: Mapping[str, Any],
     candidates: Sequence[Candidate],
     weights: Mapping[str, Any] | None = None,
-    currency: str | None = None,
+    currency: str | _Unset | None = _UNSET,
 ) -> int:
     """Audit the published lists against the candidates that produced them.
 
@@ -1083,7 +1097,17 @@ def dominance_violations(
     # `currency=` it was asked for), never from the ranking under audit — a ranker
     # that published wrong signs and built its frontier from them would otherwise
     # pass its own audit. With no weights nothing is priced and there are none.
-    signs = dimension_signs(weights_for_currency(weights, currency))
+    if currency is _UNSET:
+        if isinstance(weights, Mapping) and weights.get("stated_part_worths"):
+            raise RankingError(
+                "the weights hold stated prices and no `currency=` was given to the audit — "
+                "which of them were in force depends on the ranking's currency, and guessing "
+                "it (or reading it off the ranking under audit) would let a forged ranking "
+                "choose its own signs; pass the currency the ranking was asked for, "
+                "None if it was asked for none"
+            )
+        currency = None
+    signs = dimension_signs(weights_for_currency(weights, currency))  # type: ignore[arg-type]
     published = list(ranking["pareto"])
     collapsed = dict(ranking["dominated"])
     violations = 0
