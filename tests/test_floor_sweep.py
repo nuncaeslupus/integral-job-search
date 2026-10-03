@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import gc
 import itertools
 import json
 import re
@@ -4242,8 +4243,10 @@ def _inputs_outside_key(run: Callable[[], Any], calls: list[int]) -> tuple[list[
     for owner, attr, value in _keyed_inputs():
         label = _label(owner, attr)
         # Pin the property itself (F4): the value is a key component *before* patching.
-        shown = repr((value.pattern, value.flags)) if isinstance(value, re.Pattern) else repr(value)
-        if repr((label, shown)) not in inputs:
+        # A component by name; a scalar or callable also by its exact `repr`.
+        components = dict(ast.literal_eval(inputs))
+        plain = not isinstance(value, (re.Pattern, tuple, list, set, frozenset, dict))
+        if label not in components or (plain and components[label] != repr(value)):
             outside.append(label)
             continue
         before = len(calls)
@@ -4300,6 +4303,66 @@ def test_patching_any_module_global_misses_the_cache(
     outside, examined = _inputs_outside_key(run, calls)
     assert examined >= 150
     assert outside == []
+
+
+def test_freed_patches_never_reuse_a_cached_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
+    """B1: a function's `repr` is its address, and a freed patch's address is
+    reused by the next one. N distinct patches of one helper, each freed and
+    collected before the next, must yield N analyses, not fewer."""
+    calls = _stub_analysis(monkeypatch)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {}
+
+    original = floor_sweep._classify_floor
+    rounds = 60
+    for _ in range(rounds):
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(
+                floor_sweep,
+                "_classify_floor",
+                lambda *args, _o=original, **kwargs: _o(*args, **kwargs),
+            )
+            floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
+        gc.collect()
+    assert len(calls) == rounds
+
+
+def test_a_pattern_edited_past_its_repr_cutoff_misses_the_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B2/O1: `re.Pattern.__repr__` shows only the first 200 characters of the
+    source. Staleness is tested directly: a pattern, then one that differs only
+    after character 200, then one that differs only in flags -- bare and nested in
+    a container -- must each miss."""
+    calls = _stub_analysis(monkeypatch)
+
+    def analyse() -> dict[str, Any]:
+        calls.append(1)
+        return {}
+
+    def run() -> None:
+        floor_sweep._analysed_once("x", floor_sweep._SRC_DIR, analyse)
+
+    long = "a" * 250
+    shapes = (
+        lambda pattern: pattern,
+        lambda pattern: (pattern,),
+        lambda pattern: {"k": frozenset({pattern})},
+    )
+    for shape in shapes:
+        for variants in (
+            (re.compile(long), re.compile(long + "b")),
+            (re.compile(long), re.compile(long, re.IGNORECASE)),
+        ):
+            calls.clear()
+            floor_sweep._ANALYSES.clear()
+            for pattern in variants:
+                monkeypatch.setattr(floor_sweep, "_T223_PATTERN", shape(pattern), raising=False)
+                run()
+            assert len(calls) == 2, (shape(variants[0]), shape(variants[1]))
+    monkeypatch.delattr(floor_sweep, "_T223_PATTERN")
 
 
 def test_a_key_that_drops_values_by_type_is_detected(monkeypatch: pytest.MonkeyPatch) -> None:
