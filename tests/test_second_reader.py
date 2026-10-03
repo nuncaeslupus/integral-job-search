@@ -335,6 +335,24 @@ def test_the_two_matchers_take_one_reading_and_the_closed_rows_stay_closed() -> 
     assert "(P)" in contested.why and "(c)" in contested.why, "a contested row must name both"
 
 
+def test_a_widened_disallow_weighs_its_longest_spelling_in_the_second_reader() -> None:
+    """D-30 / #666 F1: one request-independent weight, never the short spelling.
+
+    `Disallow: /*/x` matches `/a?b=/x` only through its query spelling and must
+    outrank `Allow: /*=` (5 octets); weighed short (4) it lost and the request
+    was permitted. An Allow keeps its as-written length.
+    """
+    text = "User-agent: *\nDisallow: /*/x\nAllow: /*=\n"
+    assert sr.allows(text, "x", "/a?b=/x") is False
+    assert sr.Rule(sr.DISALLOW, sr.canonical("/*/x")).octets == 6
+    assert sr.Rule(sr.ALLOW, sr.canonical("/*/x")).octets == 4
+    # request-independent: the same weight whatever the target
+    assert sr.allows(text, "x", "/a/x") is False
+    # a longer determinate Allow still wins on length
+    longer = "User-agent: *\nDisallow: /*/x\nAllow: /a?b=%2Fx\n"
+    assert sr.allows(longer, "x", "/a?b=/x") is True
+
+
 def test_a_low_confidence_regression_row_states_its_argument() -> None:
     """The same rule `CONTESTED_CASES` applies to the independent table.
 

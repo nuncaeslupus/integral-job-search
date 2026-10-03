@@ -109,14 +109,33 @@ def test_contested_is_read_off_the_rfc_not_a_matcher(allow: str, contested: bool
     assert mr.is_contested(allow) is contested
 
 
-def test_the_recorded_cost_of_reading_p_is_held_by_both_matchers() -> None:
-    """The cost is a decision: a longer determinate Allow outranks a wildcard Disallow."""
-    assert mr.RECORDED_COST_TRIPLES
-    for text, target in mr.RECORDED_COST_TRIPLES:
-        assert mr._verdicts(text, target) == (True, True)
-        # ... and the Disallow alone refuses, so the cost is real, not vacuous.
+def test_the_pinned_refusals_are_refused_by_both_matchers() -> None:
+    """The fail-open directions the review found stay closed — REFUSE is the pass state."""
+    assert mr.PINNED_REFUSALS
+    for text, target in mr.PINNED_REFUSALS:
+        assert mr._verdicts(text, target) == (False, False), (text, target)
+        # ... and the Disallow alone refuses, so the pin is not vacuous.
         alone = text.split("Allow:")[0]
         assert mr._verdicts(alone, target) == (False, False)
+
+
+def test_a_permitting_matcher_breaks_the_pinned_refusal_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(mr, "_verdicts", lambda text, target: (True, False))
+    result = mr.measure(list(islice(mr.generate(), 5)))
+    assert result["pinned_refusals_held"] is False
+
+
+def test_the_population_exercises_contested_disallows() -> None:
+    """F3: the widened-Disallow branch is in the population, and counted as contested."""
+    population = set(mr.generate())
+    assert (
+        "User-agent: *\nDisallow: /*/x\nAllow: /*=\n",
+        "/a?b=/x",
+    ) in population
+    assert mr.triple_is_contested("User-agent: *\nDisallow: /*/x/\nAllow: /a?b=\n")
+    assert not mr.triple_is_contested("User-agent: *\nDisallow: /a\nAllow: /a?b=\n")
 
 
 def test_a_disallow_is_widened_and_an_allow_is_not() -> None:

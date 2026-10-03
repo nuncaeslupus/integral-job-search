@@ -128,12 +128,12 @@
     {
       "module": "matcher_readings",
       "name": "MINIMUM_CONTESTED_TRIPLES",
-      "lineno": 214
+      "lineno": 238
     },
     {
       "module": "matcher_readings",
       "name": "MINIMUM_TRIPLES",
-      "lineno": 206
+      "lineno": 230
     },
     {
       "module": "naming",
@@ -203,22 +203,22 @@
     {
       "module": "second_reader",
       "name": "FAIL_OPEN_CASES_AT_LEAST",
-      "lineno": 832
+      "lineno": 872
     },
     {
       "module": "second_reader",
       "name": "FIXTURES_AT_LEAST",
-      "lineno": 822
+      "lineno": 862
     },
     {
       "module": "second_reader",
       "name": "REGRESSION_CASES_AT_LEAST",
-      "lineno": 863
+      "lineno": 903
     },
     {
       "module": "second_reader",
       "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
-      "lineno": 849
+      "lineno": 889
     },
     {
       "module": "sourcing",

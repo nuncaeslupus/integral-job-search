@@ -3,10 +3,10 @@
   "matcher_reading_divergences": 0,
   "divergences_robots_more_permissive": 0,
   "divergences_second_reader_more_permissive": 0,
-  "triples_compared_at_least": 70000,
-  "contested_triples_at_least": 25200,
+  "triples_compared_at_least": 141768,
+  "contested_triples_at_least": 88176,
   "recorded_divergences": 0,
-  "recorded_cost_triples_held": true,
+  "pinned_refusals_held": true,
   "unrecorded_examples": [],
   "gate_status": "measured"
 }

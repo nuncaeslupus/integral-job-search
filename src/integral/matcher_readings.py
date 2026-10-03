@@ -26,12 +26,15 @@ length; it is the TARGET that is offered in a second spelling, and only to a
   rule takes part in, so the text does not choose; the choice is a risk
   decision, and this repository weighs a fail-open worse than a fail-closed.
 
-Hence the asymmetry. A `Disallow` is offered the second spelling (it can only
-make a refusal reach further). An `Allow` is not (an ambiguity is never
-resolved into a permission). Weight is the as-written canonical length for both.
+Hence the asymmetry, in coverage and in weight alike. Coverage: a `Disallow` is
+offered the second spelling (it can only make a refusal reach further); an
+`Allow` is not (an ambiguity is never resolved into a permission). Weight: one
+request-independent length per rule — an `Allow` weighs its as-written length
+and a widened `Disallow` its LONGEST spelling, so an ambiguity in weight is
+never resolved into a permission either.
 
-The losing branch, and its risk, recorded beside the choice
------------------------------------------------------------
+The losing branches, and their risk, recorded beside the choice
+---------------------------------------------------------------
 **(c)** — emit the ambiguous run in both spellings for allows too and weigh
 whichever matched — is fail-OPEN: an `Allow` behind a `*` reaches a query and
 outranks a `Disallow` (6 octets against a query, 4 against a path), so the same
@@ -40,16 +43,17 @@ rule's rank against a fixed competitor moves with the request. Measured by
 triples (8.2%) answered differently, 7:1 toward `robots.py` being the permissive
 side.
 
-**What (P) costs, stated rather than hidden.** (1) A site that writes
+**Weighing a widened `Disallow` at its as-written (short) spelling** — the first
+form of (P) this task shipped — is fail-OPEN too: it counts octets the match
+never compared, and 57 generator triples flipped DISALLOW -> ALLOW against
+`main` (second reader on #666, F1). It lost for that reason. The longest-
+spelling weight opens nothing, and `PINNED_REFUSALS` holds the showcase triples
+at REFUSE in both matchers.
+
+**What (P) still costs, and it is fail-closed.** A site that writes
 `Allow: /*/x` meaning to carve out a query gets the carve-out only through the
-determinate spelling (`Allow: /*%2Fx`); the repository refuses more than the RFC
-strictly requires. (2) A `Disallow` that reaches a query only through a `*`
-weighs its as-written length, so a longer determinate `Allow` outranks it:
-`Disallow: /*http://evil` (15) loses to `Allow: /out?url=http%3A` (16) on
-`/out?url=http://evil.com`, where the Disallow alone refuses. That is the same
-ranking `Disallow: /a*` (3) loses to `Allow: /abc` (4) under — the wildcard
-weighs one octet — not a new exception, and `RECORDED_COST_TRIPLES` pins it so
-it stays a decision.
+determinate spelling (`Allow: /*%2Fx`): the repository refuses more than the RFC
+strictly requires.
 
 What this module measures
 -------------------------
@@ -91,7 +95,22 @@ Triple = tuple[str, str]
 
 #: The competing `Disallow` — literal, wildcard-led, anchored and delimiter-
 #: carrying, so the Allow is contested at each of its possible lengths.
-DISALLOW_PATTERNS = ("/a", "/a*", "/*", "/jobs", "/*a$", "/*/x", "/a?", "/a*x")
+DISALLOW_PATTERNS = (
+    "/a",
+    "/a*",
+    "/*",
+    "/jobs",
+    "/*a$",
+    "/*/x",
+    "/a?",
+    "/a*x",
+    # Region-crossing Disallow runs, so the widened-Disallow branch (coverage
+    # AND weight) is exercised and not only the Allow side (F3, #666).
+    "/*/x/",
+    "/*http://",
+    "/*b=/x",
+    "/*http://evil",
+)
 
 #: What the Allow starts with: nothing before its `*`, or a `*` that may span
 #: the path/query delimiter, or literal text then a `*`.
@@ -121,7 +140,11 @@ ALLOW_RUNS = (
 #: How the Allow ends: open, anchored, or another wildcard.
 ALLOW_TAILS = ("", "$", "*")
 
-TARGET_PATHS = ("/a", "/a/x", "/a/x/", "/jobs", "/jobs/x")
+#: Determinate Allows — no `*`, region spelled out — that compete with a widened
+#: Disallow at lengths either side of its two spellings.
+ALLOW_DETERMINATE = ("/a?b=", "/a?b=%2Fx", "/out?url=http%3A", "/jobs?a=1&b=")
+
+TARGET_PATHS = ("/a", "/a/x", "/a/x/", "/jobs", "/jobs/x", "/out")
 
 #: The query a target carries, spelled raw and encoded so the same data is
 #: offered both ways.
@@ -136,6 +159,7 @@ TARGET_QUERIES = (
     "?q=a/b",
     "?/x",
     "?a=1&b=/x/",
+    "?url=http://evil.com",
 )
 
 #: The octets whose canonical form RFC 3986 §3.3 and §3.4 give differently in a
@@ -145,18 +169,15 @@ REGION_SENSITIVE = "/?"
 
 def allow_patterns() -> tuple[str, ...]:
     """Every Allow the components build, de-duplicated and ordered."""
-    return tuple(
-        sorted(
-            {
-                lead + run + tail
-                for lead, run, tail in itertools.product(ALLOW_LEADS, ALLOW_RUNS, ALLOW_TAILS)
-            }
-        )
-    )
+    built = {
+        lead + run + tail
+        for lead, run, tail in itertools.product(ALLOW_LEADS, ALLOW_RUNS, ALLOW_TAILS)
+    }
+    return tuple(sorted(built | set(ALLOW_DETERMINATE)))
 
 
 def is_contested(allow: str) -> bool:
-    """Whether an Allow carries a run whose region its own text leaves open.
+    """Whether a rule (an Allow or a Disallow) carries a run whose region its own text leaves open.
 
     Read off RFC 9309 §2.2.3 and RFC 3986 §3.3/§3.4, never off a matcher: a run
     after a `*` that holds `/` or `?` has two canonical spellings. The first run
@@ -185,15 +206,18 @@ def generate() -> Iterator[Triple]:
 #: for the standard — never because a session found it inconvenient.
 RECORDED_DIVERGENCES: frozenset[Triple] = frozenset()
 
-#: The cost of (P), pinned: both matchers answer ALLOW here, and the Disallow
-#: alone would refuse. See the module docstring. It is not a divergence — the
-#: matchers agree — it is the one place (P) is less safe than (c) was safe, kept
-#: so removing it is an argued change.
-RECORDED_COST_TRIPLES: tuple[Triple, ...] = (
+#: Triples both matchers must REFUSE — the fail-open directions this task's
+#: review found and closed. A gate that required ALLOW here would make a fail-open
+#: the passing state; this one fails if either matcher permits them.
+#: `(Disallow /*http://evil, Allow /out?url=http%3A)` and
+#: `(Disallow /*/x, Allow /*=)` are the showcase of the short-weight defect.
+PINNED_REFUSALS: tuple[Triple, ...] = (
     (
         "User-agent: *\nDisallow: /*http://evil\nAllow: /out?url=http%3A\n",
         "/out?url=http://evil.com",
     ),
+    ("User-agent: *\nDisallow: /*/x\nAllow: /*=\n", "/a?b=/x"),
+    ("User-agent: *\nDisallow: /*/x/\nAllow: /a?b=\n", "/a?b=/x/"),
 )
 
 #: Floors, in `naming.MINIMUM_SCANNED`'s style: what the generator guarantees,
@@ -202,16 +226,16 @@ RECORDED_COST_TRIPLES: tuple[Triple, ...] = (
 #: and the floor is that size: slack under a floor is the shrunken-generator hole
 #: it exists to close, since a dropped component would leave the gate `measured`
 #: over a smaller scan. Zero slack, deliberately.
-#: arsenal-floor-margin: MINIMUM_TRIPLES value=70000
-MINIMUM_TRIPLES = 70000
+#: arsenal-floor-margin: MINIMUM_TRIPLES value=141768
+MINIMUM_TRIPLES = 141768
 
 #: The contested subset's own floor: the Allows carrying a region-sensitive run
 #: behind a `*`, which are the only ones the divergence lives in. Without it the
 #: whole population could stay above the total floor while those were deleted,
 #: since uncontested triples alone can satisfy a total. Zero slack for the same
 #: reason.
-#: arsenal-floor-margin: MINIMUM_CONTESTED_TRIPLES value=25200
-MINIMUM_CONTESTED_TRIPLES = 25200
+#: arsenal-floor-margin: MINIMUM_CONTESTED_TRIPLES value=88176
+MINIMUM_CONTESTED_TRIPLES = 88176
 
 
 def _verdicts(text: str, target: str) -> tuple[bool, bool]:
@@ -227,6 +251,15 @@ def _allow_of(text: str) -> str:
     return text.rsplit("Allow: ", 1)[1].rstrip("\n")
 
 
+def _disallow_of(text: str) -> str:
+    return text.split("Disallow: ", 1)[1].split("\n", 1)[0]
+
+
+def triple_is_contested(text: str) -> bool:
+    """Contested when EITHER rule carries a region-ambiguous run."""
+    return is_contested(_allow_of(text)) or is_contested(_disallow_of(text))
+
+
 def measure(population: Iterable[Triple] | None = None) -> dict[str, Any]:
     """Run both matchers over the population and count the unrecorded gaps."""
     triples = list(generate() if population is None else population)
@@ -235,7 +268,7 @@ def measure(population: Iterable[Triple] | None = None) -> dict[str, Any]:
     examples: list[dict[str, Any]] = []
     for text, target in triples:
         compared += 1
-        contested += int(is_contested(_allow_of(text)))
+        contested += int(triple_is_contested(text))
         robots_allows, second_allows = _verdicts(text, target)
         if robots_allows == second_allows:
             continue
@@ -248,7 +281,7 @@ def measure(population: Iterable[Triple] | None = None) -> dict[str, Any]:
             unrecorded += 1
             if len(examples) < 5:
                 examples.append({"robots_txt": text, "target": target, "robots": robots_allows})
-    cost_held = all(all(_verdicts(text, target)) for text, target in RECORDED_COST_TRIPLES)
+    refusals_held = not any(any(_verdicts(text, target)) for text, target in PINNED_REFUSALS)
     floored = compared >= MINIMUM_TRIPLES and contested >= MINIMUM_CONTESTED_TRIPLES
     status = "measured" if compared and floored else "unmeasured"
     return {
@@ -261,7 +294,7 @@ def measure(population: Iterable[Triple] | None = None) -> dict[str, Any]:
         "contested_triples": contested,
         "contested_triples_at_least": MINIMUM_CONTESTED_TRIPLES,
         "recorded_divergences": len(RECORDED_DIVERGENCES),
-        "recorded_cost_triples_held": cost_held,
+        "pinned_refusals_held": refusals_held,
         "unrecorded_examples": examples,
         "gate_status": status,
     }
@@ -289,8 +322,8 @@ def _main(argv: list[str] | None = None) -> int:
     """`python -m integral.matcher_readings [--write-evidence [PATH]]`.
 
     Writes the record either way, because `make evidence` runs every module with
-    no arguments. Exit 1 on an unrecorded divergence or a lost cost triple, 3
-    when unmeasured (a verdict, not a pass), 0 otherwise.
+    no arguments. Exit 1 on an unrecorded divergence or a pinned refusal that a matcher now
+    permits, 3 when unmeasured (a verdict, not a pass), 0 otherwise.
     """
     args = [a for a in (argv or []) if a != "--write-evidence"]
     target = Path(args[0]) if args else DEFAULT_EVIDENCE_PATH
@@ -299,10 +332,7 @@ def _main(argv: list[str] | None = None) -> int:
     if measured["gate_status"] == "unmeasured":
         print("matcher_reading_divergences_unrecorded: UNMEASURED", file=sys.stderr)
         return 3
-    if (
-        measured["matcher_reading_divergences_unrecorded"]
-        or not measured["recorded_cost_triples_held"]
-    ):
+    if measured["matcher_reading_divergences_unrecorded"] or not measured["pinned_refusals_held"]:
         return 1
     return 0
 

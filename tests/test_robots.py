@@ -325,25 +325,26 @@ def test_specificity_counts_the_wildcard_octets() -> None:
     assert _allowed(rules, "/a/b/c") is True
 
 
-def test_precedence_is_scored_on_the_rule_as_written() -> None:
-    """D-30, reading (P): a rule is canonicalised once and weighs that length.
+def test_a_widened_disallow_weighs_its_longest_spelling() -> None:
+    """D-30, reading (P) with a fail-closed weight: one length per rule, request-independent.
 
-    RFC 9309 §2.2.2 canonicalises a rule "prior to comparison" and weighs "the
-    match that has the most octets". A run behind a `*` may meet a request in
-    either region (RFC 3986 §3.3 / §3.4), but the rule's text does not change
-    with the request, so its weight must not either. `Disallow: /*http://evil`
-    weighs 15 whether it matched the path spelling or the query one.
+    RFC 9309 §2.2.2 weighs "the match that has the most octets". A run behind a
+    `*` may meet either region, and the Disallow matching only through its query
+    spelling must not be weighed on the shorter spelling it never compared: that
+    let a shorter-looking Allow outrank it (57 generator triples, #666 F1).
+    `Disallow: /*http://evil` weighs 19 whichever region it matched.
     """
     path = _request_path("https://x.test/out?url=http://evil.com")
     disallow = _normalize_rule("/*http://evil")
-    # It still MATCHES through the query spelling (coverage widens for a
-    # Disallow, one-directionally) and the walk still reports the query octets:
-    assert _match_octets(*disallow, path) == 18
-    # but the weight is the as-written one: 15, so the 16-octet Allow outranks it.
-    assert _allowed([(False, "/*http://evil"), (True, "/out?url=http%3A")], path) is True
-    # And the same weight on a request whose run meets a PATH: one length, not two.
+    assert _match_octets(*disallow, path) == 18  # matched through the query spelling
+    # weight = 18 + the `*`: the Disallow beats the 16-octet determinate Allow.
+    assert _allowed([(False, "/*http://evil"), (True, "/out?url=http%3A")], path) is False
+    # Request-independent: the same rule weighs the same against a PATH.
     other = _request_path("https://x.test/a/http://evil")
-    assert _allowed([(False, "/*http://evil"), (True, "/a/http%3A//evil")], other) is True
+    assert _allowed([(False, "/*http://evil"), (True, "/a/http%3A//evil")], other) is False
+    # `Disallow: /*/x` against `Allow: /*=` on `/a?b=/x` (the reviewer's 56 triples).
+    q = _request_path("https://x.test/a?b=/x")
+    assert _allowed([(False, "/*/x"), (True, "/*=")], q) is False
 
 
 def test_an_allow_behind_a_wildcard_keeps_the_one_spelling_it_was_written_in() -> None:
@@ -361,30 +362,23 @@ def test_an_allow_behind_a_wildcard_keeps_the_one_spelling_it_was_written_in() -
     assert _allowed([(False, "/a*"), (True, "/*%2Fx")], path) is True
 
 
-def test_a_wildcard_disallow_and_its_wildcard_free_spelling_may_differ_in_weight() -> None:
-    """The recorded cost of (P), pinned so it is a decision and not an accident.
-
-    `Disallow: /*http://evil` (15) loses to a determinate `Allow` of 16 octets,
-    while the same intent written without the `*` (26) beats it. That is the
-    ranking `/a*` loses to `/abc` under, and it is stated here so a change that
-    removes it is argued rather than silent.
-    """
+def test_a_longer_determinate_allow_still_outranks_a_wildcard_disallow() -> None:
+    """The weight is a length comparison, not a thumb on the scale for the Disallow."""
     path = _request_path("https://x.test/out?url=http://evil.com")
-    allow = (True, "/out?url=http%3A")
-
-    assert _allowed([(False, "/*http://evil"), allow], path) is True
-    assert _allowed([(False, "/out?url=http%3A%2F%2Fevil"), allow], path) is False
+    # 18 + `*` = 19 for the Disallow, against a 24-octet determinate Allow.
+    assert _allowed([(False, "/*http://evil"), (True, "/out?url=http%3A%2F%2F")], path) is True
 
 
-def test_no_longer_allow_is_beaten_and_no_shorter_one_wins_by_as_written_length() -> None:
-    """The weight comparison as a CLASS: the longer as-written rule wins every pair."""
+def _weight(pattern: str, *, allow: bool) -> int:
+    chunks, anchored = _normalize_rule(pattern, widen=not allow)
+    return sum(max(len(t) for t, _ in run) for run in chunks) + len(chunks) - 1 + int(anchored)
+
+
+def test_the_longer_rule_wins_every_pair_by_its_widest_weight() -> None:
+    """The weight comparison as a CLASS, with the widened-Disallow weight."""
     path = _request_path("https://x.test/out?url=http://evil.com")
     disallows = ["/*http://evil", "/*http://", "/out*http://", "/*%2F/", "/out*//", "/*?"]
     allows = ["/out", "/out?", "/out?url=h", "/out?url=htt", "/out?url=http%3A"]
-
-    def written(pattern: str) -> int:
-        chunks, anchored = _normalize_rule(pattern)
-        return sum(len(run[0][0]) for run in chunks) + len(chunks) - 1 + int(anchored)
 
     compared = 0
     for disallow in disallows:
@@ -393,7 +387,7 @@ def test_no_longer_allow_is_beaten_and_no_shorter_one_wins_by_as_written_length(
             if _match_octets(*_normalize_rule(allow, widen=False), path) is None:
                 continue
             compared += 1
-            wins = written(allow) >= written(disallow)  # the allow takes a tie
+            wins = _weight(allow, allow=True) >= _weight(disallow, allow=False)
             assert _allowed([(False, disallow), (True, allow)], path) is wins, (disallow, allow)
     assert compared >= 12, f"the class must stay populated; compared {compared}"
 

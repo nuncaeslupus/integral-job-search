@@ -405,6 +405,39 @@ def canonical(text: str, *, query_delimits: bool = True, as_pattern: bool = True
     return "".join(out)
 
 
+def _widest_octets(pattern: str) -> int:
+    """A `Disallow`'s weight: its LONGEST canonical spelling (D-30, reading (P)).
+
+    A run behind a `*` may meet a path or a query (§2.2.3), where RFC 3986 §3.3
+    keeps `/` literal and §3.4 makes it `%2F`; the pattern does not say which.
+    `spellings` already widens a Disallow's COVERAGE toward refusing, and the
+    weight resolves the same ambiguity the same way: one request-independent
+    length per rule, the larger of the two. An Allow keeps its as-written length.
+    Weighing the short spelling of a Disallow that matched only through its
+    query spelling let a shorter-looking Allow outrank it (second reader on
+    #666, F1).
+
+    `pattern` is already canonical (`parse` canonicalises it). Each run is
+    re-read with a trailing `*` held after it so a final `$` is not taken for an
+    anchor, then that sentinel is subtracted.
+    """
+    anchored = pattern.endswith("$")
+    body = pattern[:-1] if anchored else pattern
+    runs = body.split("*")
+    total = len(runs) - 1 + int(anchored)
+    in_query = False
+    for index, run in enumerate(runs):
+        path_len = len(canonical(run + "*", query_delimits=not in_query)) - 1
+        if in_query:
+            total += len(canonical("?" + run + "*")) - 2
+        elif index == 0:
+            total += path_len
+        else:
+            total += max(path_len, len(canonical("?" + run + "*")) - 2)
+        in_query = in_query or "?" in run
+    return total
+
+
 @dataclass(frozen=True)
 class Rule:
     """One `Allow:` or `Disallow:` line, with the pattern it matches."""
@@ -444,8 +477,15 @@ class Rule:
         because their patterns contain only `/` (held out) and a trailing `$`
         (§2.2.3's anchor, consumed rather than compared), so
         `dollar_specificity_readings_diverge` still weighs 5 octets against 4.
+
+        **D-30:** an `Allow` weighs this as-written length; a `Disallow` weighs
+        its LONGEST region spelling (`_widest_octets`) — still one length per
+        rule, never request-dependent, and never short of a spelling it matched
+        through. `integral.robots` takes the same weight.
         """
-        return len(self.pattern)
+        if self.kind == ALLOW:
+            return len(self.pattern)
+        return _widest_octets(self.pattern)
 
 
 @dataclass(frozen=True)

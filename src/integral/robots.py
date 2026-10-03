@@ -631,41 +631,43 @@ def _allowed(rules: list[tuple[bool, str]], path: str) -> bool:
         chunks, anchored = _normalize_rule(pattern, widen=not is_allow)
         if _match_octets(chunks, anchored, path) is None:
             continue
-        matched = sum(len(run[0][0]) for run in chunks)
+        # Widest spelling of each run, so a widened Disallow weighs the longer of
+        # the two it may have met; an Allow carries one spelling, so this is its
+        # as-written length.
+        matched = sum(max(len(text) for text, _ in run) for run in chunks)
         # Specificity is the octet count of the rule's CANONICAL PATTERN, `*` and
         # `$` included: `len(chunks) - 1` restores the `*` octets that splitting
         # removed and `int(anchored)` the trailing `$`. Restoring only the
         # wildcards is how `Disallow: /foo/*$` once scored 6 against
         # `Allow: /foo/x`, tied, and lost to the allow rule.
         #
-        # **D-30 settled this as reading (P), and `matched` is therefore the
-        # as-written length, not the length of whichever spelling met the
-        # request.** §2.2.2 canonicalises a rule "prior to comparison", and a rule
-        # is canonicalised ONCE: its text carries no region, so its canonical
-        # form is a property of the rule, and "the match that has the most
-        # octets" ranks rules by that one length. A run behind a `*` may span the
-        # path/query delimiter (§2.2.3), where RFC 3986 §3.3 makes `/` structure
-        # and §3.4 makes it data — so the same text can meet a request in either
-        # region. The ambiguity is absorbed in COVERAGE, one-directionally: a
-        # `Disallow` is also offered its query spelling (`widen`), an `Allow` is
-        # not, because an ambiguity must never be resolved into a permission. It
-        # is deliberately NOT absorbed in WEIGHT: scoring the spelling that
-        # matched made one rule weigh 6 octets against a query and 4 against a
-        # path, so its rank against a fixed competitor moved with the request,
-        # and `integral.second_reader` — which weighs `len(pattern)` — disagreed
-        # on 4-8% of contested triples. The two matchers now agree on all of the
-        # population `integral.matcher_readings` generates.
+        # **D-30 settled this as reading (P), with a fail-closed weight.** §2.2.2
+        # canonicalises a rule "prior to comparison" and weighs "the match that
+        # has the most octets". A run behind a `*` may span the path/query
+        # delimiter (§2.2.3), where RFC 3986 §3.3 makes `/` structure and §3.4
+        # makes it data — one text, two canonical spellings of different length.
+        # The ambiguity is resolved ONE WAY, in coverage and in weight alike:
         #
-        # **The cost, recorded beside the choice.** A `Disallow` that reaches a
-        # query only through a `*` weighs its as-written length, so a longer
-        # `Allow` that matches determinately outranks it:
-        # `Disallow: /*http://evil` (15) loses to `Allow: /out?url=http%3A` (16)
-        # on `/out?url=http://evil.com`, where the Disallow alone refuses. That is
-        # the same ranking `/a*` (3) loses to `/abc` (4) under, not a new
-        # exception — and the same intent written without the `*` weighs 26 and
-        # wins. The reading (c) this replaces permitted MORE for an Allow behind
-        # a `*` and refused that request; it is the fail-open direction, which is
-        # why it lost. `matcher_readings.RECORDED_COST_TRIPLES` pins this one.
+        # * coverage: a `Disallow` is also offered its query spelling (`widen`);
+        #   an `Allow` is not — an ambiguity never becomes a permission;
+        # * weight: a rule weighs ONE request-independent length, and it is the
+        #   LONGEST spelling it may take. An `Allow` has one spelling, so that is
+        #   its as-written length; a widened `Disallow` weighs its longer
+        #   (query) spelling, so it is never under-counted against an `Allow`.
+        #
+        # Weighing the as-written (short) spelling of a Disallow that matched
+        # only through its query spelling counted octets that were never
+        # compared and let a shorter-looking `Allow` outrank it: 57 triples of
+        # the D-30 generator flipped DISALLOW -> ALLOW against `main` (second
+        # reader on #666, F1). Scoring the spelling that matched had the opposite
+        # flaw — one rule weighed 6 octets against a query and 4 against a path,
+        # so its rank moved with the request. The longest spelling is both
+        # request-independent and never opens anything.
+        #
+        # **Residual cost.** Reading (P) still refuses an `Allow: /*/x` its reach
+        # into a query, which is more than the RFC strictly requires — a
+        # fail-closed cost, accepted. `integral.matcher_readings` measures the
+        # flips against the weight it replaced.
         length = matched + len(chunks) - 1 + int(anchored)
         if length > best_len or (length == best_len and is_allow):
             best_len, best_allow = length, is_allow
@@ -1681,8 +1683,9 @@ Disallow: /search?
     # current argument.** Those rows were written under reading (c), which scored
     # the spelling that matched and offered an `Allow` the query spelling. D-30
     # replaced (c) with (P) — one canonical length per rule, extra spellings for a
-    # `Disallow` only — so eight of them flipped, were renamed to say what they now
-    # pin, and carry the (P) derivation in their citation. The comments are kept
+    # `Disallow` only, weighed at its longest spelling — so eight of them were
+    # re-argued (three return to main's verdict), were renamed to say what they
+    # now pin, and carry the (P) derivation in their citation. The comments are kept
     # because they record how the divergence arose and what each row used to
     # guard; `integral.matcher_readings` has the full derivation and the cost.
     _Fixture(
@@ -1690,17 +1693,17 @@ Disallow: /search?
         # request; adding a strictly shorter `Allow` used to let it through,
         # because the Disallow matched 19 canonical octets and was scored on
         # its 15-octet path spelling against the Allow's 18.
-        name="a_wildcard_disallow_reaching_a_query_weighs_its_pattern_as_written",
+        name="a_wildcard_disallow_weighs_its_longest_spelling_against_a_determinate_allow",
         robots_txt="User-agent: *\nDisallow: /*http://evil\nAllow: /out?url=http%3A\n",
         agent="TestBot/1.0",
         url="https://example.com/out?url=http://evil.com",
-        expected_allowed=True,
+        expected_allowed=False,
         citation=(
-            "D-30 settled reading (P): a rule is canonicalised once, as written, and its weight "
-            "is that canonical length. RFC 9309 §2.2.2 — 'the match that has the most octets', "
-            "read as D-30 settled it (P): the Disallow is canonicalised once, as written, so "
-            "`/*http://evil` weighs 15 however it was reached, against the Allow's 16, and the "
-            "longer rule wins. The same weight as `/a*` carrying 3 against `/abc`'s 4"
+            "RFC 9309 §2.2.2 — D-30 (P), fail-closed weight: a Disallow that can meet a query "
+            "weighs its LONGEST canonical spelling, one request-independent length. "
+            "`/*http://evil` weighs 19 (`/`, `*`, `http%3A%2F%2Fevil`) against the Allow's 16, so "
+            "the Disallow wins; weighing its short 15-octet spelling let the Allow win (57 "
+            "generator triples, #666 F1)"
         ),
     ),
     _Fixture(
@@ -1821,16 +1824,16 @@ Disallow: /search?
         # spelling `/x` instead of the 4-octet `%2Fx` it actually matched, so
         # it drops from 7 to 5, loses to the 6-octet Allow, and 38 requests
         # this matcher refuses are permitted.
-        name="an_anchored_wildcard_disallow_weighs_its_pattern_as_written",
+        name="an_anchored_wildcard_disallow_weighs_its_longest_spelling",
         robots_txt="User-agent: *\nDisallow: /*/x$\nAllow: /*%2Fx\n",
         agent="TestBot/1.0",
         url="https://example.com/a?b=/x",
-        expected_allowed=True,
+        expected_allowed=False,
         citation=(
-            "D-30 settled reading (P): a rule is canonicalised once, as written, and its weight "
-            "is that canonical length. RFC 9309 §2.2.2/§2.2.3 — (P): `/*/x$` weighs 5 as written "
-            "(`/`, `*`, `/x`, `$`) against `/*%2Fx`'s 6, so the Allow outranks it; one canonical "
-            "length per rule, whatever region it met"
+            "RFC 9309 §2.2.2/§2.2.3 — D-30 (P), fail-closed weight: `/*/x$` weighs 7 at its "
+            "longest spelling (`/`, `*`, `%2Fx`, `$`) against `/*%2Fx`'s 6, so the Disallow wins; "
+            "weighing it at 5 let the Allow outrank a rule that matched only through its query "
+            "spelling"
         ),
     ),
     _Fixture(
@@ -1838,15 +1841,15 @@ Disallow: /search?
         # the run's longest spelling instead of the one that matched over-scores
         # the Allow's `?y` — 2 octets matched, 4 in its `%3Fy` query spelling —
         # from 4 to 6, which beats the Disallow's 5. 26 requests permitted.
-        name="an_unanchored_wildcard_disallow_weighs_its_pattern_as_written",
+        name="an_unanchored_wildcard_disallow_weighs_its_longest_spelling",
         robots_txt="User-agent: *\nDisallow: /*/\nAllow: /*?y\n",
         agent="TestBot/1.0",
         url="https://example.com/x?y=/",
-        expected_allowed=True,
+        expected_allowed=False,
         citation=(
-            "D-30 settled reading (P): a rule is canonicalised once, as written, and its weight "
-            "is that canonical length. RFC 9309 §2.2.2 — (P): `/*/` weighs 3 as written and "
-            "`/*?y` 4, so the Allow outranks the Disallow regardless of the region either run met"
+            "RFC 9309 §2.2.2 — D-30 (P), fail-closed weight: `/*/` weighs 5 at its longest "
+            "spelling against `/*?y`'s 4, so the Disallow wins; at its short spelling (3) the "
+            "Allow outranked it"
         ),
     ),
     # ---- The direction that costs a refusal ---------------------------------
