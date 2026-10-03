@@ -451,6 +451,17 @@ class EvidenceLog:
             "a row retracts something that retracts it back"
         )
 
+    def effective(self) -> list[EvidenceRow]:
+        """What is currently believed: live rows only, retractions excluded.
+
+        A row is live unless an *active* retraction names it, and a retraction is
+        active unless a later active retraction names it in turn — so retracting
+        a retraction restores the row it struck, at any depth. That resolution is
+        `suppressed_ids`; this is its reader, and the one step 11's traceability
+        check cites through, so a claim tracing to a withdrawn row is refused.
+        """
+        return self.effective_rows()
+
     def effective_rows(self) -> list[EvidenceRow]:
         """The rows a rebuild may use: everything live, retractions excluded.
 
