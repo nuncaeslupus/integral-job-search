@@ -16,10 +16,11 @@ Three questions, in the order that stops wasted work:
 1. **May we fetch it?** Adjudicated by `integral.robots`, this repo's audited
    RFC 9309 matcher, never by grepping the file. Every `--refused` path is a
    negative control: a matcher that cannot refuse cannot permit either, and a
-   True with no False beside it says nothing. The stdlib parser runs as the
-   second reader and its *competence* is reported, because on any robots.txt
-   opening with `Allow: /` it answers True to everything and an agreement with
-   it would be an agreement with a parser that cannot disagree.
+   True with no False beside it says nothing. The reader named by
+   `connector_policy.DEFAULT_SECOND_READER` (resolved at run time) runs as the
+   second reader and its *competence* is reported as a `standing`, because a
+   reader that answers True to everything cannot disagree, and an agreement with
+   it is not an agreement.
 
 2. **Is the advert in the bytes?** Counting rows is unreliable — a wrong URL
    looks exactly like an empty page. This fetches and reports the body size and
@@ -37,14 +38,17 @@ from __future__ import annotations
 import argparse
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "src")
 
+from integral import connector_policy  # noqa: E402
 from integral.connector_procedure import (  # noqa: E402
     CLIENTS,
     second_reader_verdict,
 )
+from integral.second_reader import SecondReaderError  # noqa: E402
 from integral.robots import USER_AGENT, Robots  # noqa: E402
 
 def fetch(url: str, headers: dict[str, str]) -> tuple[int | None, int, str]:
@@ -88,10 +92,37 @@ def robots_report(allowed: list[str], refused: list[str]) -> tuple[bool, list[st
     return ok, lines
 
 
-def second_reader(paths: list[str]) -> str:
-    """`second_reader_verdict` over the live robots.txt for these paths."""
+def request_target(url: str) -> str:
+    """The origin-form request target of `url`: its path and query, as RFC 9309 matches."""
+    parts = urllib.parse.urlsplit(url)
+    return (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+
+
+def second_reader_standing(robots_text: str, urls: list[str]) -> tuple[str, str, str]:
+    """(reader, verdict, standing) for these URLs over this robots.txt. Pure.
+
+    The reader is whatever `connector_policy.DEFAULT_SECOND_READER` names **at the
+    moment of the call**: it is looked up on the module each time and never bound
+    here, so a reader swap in the repo moves this probe with it (T196).
+    """
+    reader = connector_policy.DEFAULT_SECOND_READER
+    if reader not in connector_policy.READERS:
+        return reader, f"not run - {reader!r} is not a reader this repo knows", "single_parser"
+    try:
+        verdict = second_reader_verdict(
+            robots_text, urls, reader=reader, paths=[request_target(u) for u in urls]
+        )
+    except SecondReaderError as error:  # a reader that declined is not a reader that agreed
+        return reader, f"not run - {error}", "single_parser"
+    if verdict.startswith("competent"):
+        return reader, verdict, "two_parsers_agreed"
+    return reader, verdict, "single_parser"
+
+
+def second_reader(paths: list[str]) -> list[str]:
+    """Report lines for the second reader over the live robots.txt for these paths."""
     if not paths:
-        return "not run — no path given"
+        return ["  second reader: not run - no path given", "  standing: single_parser"]
     origin = "/".join(paths[0].split("/")[:3])
     try:
         request = urllib.request.Request(
@@ -100,8 +131,10 @@ def second_reader(paths: list[str]) -> str:
         with urllib.request.urlopen(request, timeout=20) as response:
             text = response.read().decode("utf-8", "replace")
     except Exception as error:  # a reader that could not read is not a reader
-        return f"not run — {type(error).__name__}: {error}"
-    return second_reader_verdict(text, paths)
+        reason = f"not run - {type(error).__name__}: {error}"
+        return [f"  second reader: {reason}", "  standing: single_parser"]
+    reader, verdict, standing = second_reader_standing(text, paths)
+    return [f"  second reader ({reader}): {verdict}", f"  standing: {standing}"]
 
 
 def main() -> int:
@@ -121,7 +154,7 @@ def main() -> int:
     print(f"  agent: {USER_AGENT}")
     permitted, lines = robots_report(allowed, args.refused)
     print("\n".join(lines))
-    print(f"  second reader: {second_reader(allowed + args.refused)}")
+    print("\n".join(second_reader(allowed + args.refused)))
     if not permitted:
         print("\nVERDICT  refused — do not fetch, and record it in connectors/ruled-out.yaml")
         return 1
