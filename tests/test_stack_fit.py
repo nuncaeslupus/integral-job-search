@@ -19,7 +19,13 @@ from pydantic import ValidationError
 from integral import stack_fit
 from integral.cv_store import CVMaster, write_master
 from integral.identity import ProfileStore, create_profile
-from integral.profile import EvidenceLog, EvidenceRow, ProfileRevision, SkillStance
+from integral.profile import (
+    EvidenceLog,
+    EvidenceRow,
+    EvidenceSubject,
+    ProfileRevision,
+    SkillStance,
+)
 from integral.rank import Candidate, rank
 
 CASES: list[dict[str, Any]] = json.loads(stack_fit.DEFAULT_CASES_PATH.read_text(encoding="utf-8"))[
@@ -199,19 +205,6 @@ def test_work_told_in_a_history_episode_is_not_missing(tmp_path: Path) -> None:
     assert fit["sources"]["llm"] == f"log:{row.id}"
 
 
-def test_a_plain_statement_row_counts_the_same(tmp_path: Path) -> None:
-    store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
-    _offer(store, "ai", "AI engineer", "LLM work.")
-    EvidenceLog(store).append(
-        recorded_at="2026-09-30T10:00:00Z",
-        step="history",
-        kind="statement",
-        text="I built LLM tooling.",
-        source="conversation",
-    )
-    assert stack_fit.fits_for_store(store, ["ai"])["ai"]["missing"] == []
-
-
 def test_a_retracted_history_episode_no_longer_counts(tmp_path: Path) -> None:
     store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
     _offer(store, "ai", "AI engineer", "Python and AI agents.")
@@ -291,6 +284,96 @@ def test_the_store_path_honours_a_retraction_of_a_master_episodes_log_row(tmp_pa
         retracts=row.id,
     )
     assert stack_fit.fits_for_store(store, ["g"])["g"]["missing"] == ["go"]
+
+
+_OFFER_ID = "sha256:" + "a" * 64
+_NOT_WORK_DONE = [
+    ("statement", "I have never used Kubernetes.", "kubernetes"),
+    ("statement", "No he tocado Kubernetes en mi vida.", "kubernetes"),
+    ("statement", "I would like to learn Rust next.", "rust"),
+    ("statement", "I refuse to work with PHP again.", "php"),
+    ("reaction", "That reads like a Go shop and I would hate it.", "go"),
+    ("constraint", "No PHP shops.", "php"),
+    ("outcome", "Rejected: they wanted Rust.", "rust"),
+]
+
+
+@pytest.mark.parametrize(("kind", "text", "technology"), _NOT_WORK_DONE)
+def test_a_row_that_is_not_work_done_never_credits_a_technology(
+    tmp_path: Path, kind: Any, text: str, technology: str
+) -> None:
+    store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
+    _offer(store, "o", "Engineer", f"{technology} {technology}.".replace("go go", "Golang"))
+    _offer(store, "other", "Other", "Golang and Kubernetes.")
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="feedback",
+        kind=kind,
+        text=text,
+        source="offer_reaction",
+        about=EvidenceSubject(kind="offer", id=_OFFER_ID),
+    )
+    fits = stack_fit.fits_for_store(store, ["o", "other"])
+    for fit in fits.values():
+        assert fit["used"] == []
+        assert fit["match"] == []
+
+
+def test_a_step_ten_reason_credits_nothing_on_any_offer(tmp_path: Path) -> None:
+    store = _store(tmp_path, {})
+    _offer(store, "a", "Engineer", "Kubernetes and LLM work.")
+    _offer(store, "b", "Engineer", "LLM platform.")
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="feedback",
+        kind="statement",
+        text="asks for Kubernetes and LLM experience, which I don't have",
+        source="offer_reaction",
+        about=EvidenceSubject(kind="offer", id=_OFFER_ID),
+    )
+    fits = stack_fit.fits_for_store(store, ["a", "b"])
+    assert fits["a"]["missing"] == ["kubernetes", "llm"]
+    assert fits["b"]["missing"] == ["llm"]
+
+
+def test_a_retraction_matched_only_by_text_withdraws_a_master_episode(tmp_path: Path) -> None:
+    said = "Shipped a gateway in Go for two years."
+    store = _store(tmp_path, {"episodes": [{"kind": "achievement", "text": said}]})
+    _offer(store, "g", "Backend", "We write Go services.")
+    assert stack_fit.fits_for_store(store, ["g"])["g"]["missing"] == []
+    row = EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:00:00Z",
+        step="intake",
+        kind="statement",
+        text=said,
+        source="conversation",
+    )
+    EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:05:00Z",
+        step="intake",
+        kind="retraction",
+        text="forget that",
+        source="conversation",
+        retracts=row.id,
+    )
+    assert stack_fit.fits_for_store(store, ["g"])["g"]["missing"] == ["go"]
+
+
+def test_candidate_stack_accepts_a_one_shot_iterator(tmp_path: Path) -> None:
+    """Both passes over the rows (prose, then stance) must see them."""
+    store = _store(tmp_path, {})
+    episode = _history_episode(store)
+    stance = EvidenceLog(store).append(
+        recorded_at="2026-09-30T10:01:00Z",
+        step="ranking",
+        kind="statement",
+        text="odio Java",
+        source="conversation",
+        skill=SkillStance(technology="java", averse=True),
+    )
+    held = stack_fit.candidate_stack(CVMaster.model_validate({}), iter([episode, stance]))
+    assert "llm" in held
+    assert held["java"].averse
 
 
 def test_an_aversion_only_row_is_not_credited_as_a_mention(tmp_path: Path) -> None:

@@ -242,21 +242,28 @@ def candidate_stack(
     master: CVMaster,
     statements: Iterable[EvidenceRow] = (),
     retracted_ids: frozenset[str] = frozenset(),
+    retracted_texts: frozenset[str] = frozenset(),
 ) -> dict[str, Held]:
     """R6 then R7: the CV's reading, overridden by what the candidate said.
 
     T245: work told in conversation reaches the evidence log and the story bank
     without reaching `cv/master.json`, so the log's own prose counts too. An
-    effective `episode` or `statement` row without a skill stance names what the
-    candidate did; a technology it names is *used, level unstated* (source
-    `log:<row id>`), never missing. A stance row is not read as prose — "no sé
-    Kubernetes" must not credit Kubernetes. `retracted_ids` are the evidence
-    rows a retraction suppresses: a master episode whose provenance names one
-    is skipped, so forgetting a story forgets its technologies too.
+    effective `episode` row records work done; a technology it names is *used,
+    level unstated* (source `log:<row id>`), never missing. Only `episode`: a
+    `statement`, `reaction`, `constraint` or `outcome` row says what the
+    candidate thinks, wants or refuses, and "never used Kubernetes" or "no PHP
+    shops" would credit the very technology it denies. The conversational CV
+    entries `cv_store` writes are statements, but they sit in `master` with
+    their provenance and are read there. `retracted_ids` are the evidence rows
+    a retraction suppresses and `retracted_texts` their sentences
+    (`approval.retracted_episode_texts`): a master episode matching either is
+    skipped, so forgetting a story forgets its technologies too.
 
     `statements` is the effective log (`EvidenceLog.effective_rows`), so a
     retracted row never arrives; rows without a `skill` stance are ignored.
     """
+    from integral.approval import _withdrawn_by
+
     levels: dict[str, tuple[str | None, str]] = {}
     for index, skill in enumerate(master.skills):
         for technology in named(skill.name, label=True):
@@ -279,13 +286,10 @@ def candidate_stack(
             isinstance(src, ConversationTurn) and src.evidence_id in retracted_ids
             for src in e.provenance
         )
+        and not _withdrawn_by(e.text, retracted_texts)
     ]
     rows = list(statements)
-    prose += [
-        (f"log:{row.id}", row.text)
-        for row in rows
-        if row.kind in ("episode", "statement") and row.skill is None
-    ]
+    prose += [(f"log:{row.id}", row.text) for row in rows if row.kind == "episode"]
     for source, text in prose:
         for technology in named(text):
             levels.setdefault(technology, (None, source))
@@ -360,11 +364,15 @@ def fits_for_store(store: ProfileStore, offer_ids: Iterable[str]) -> dict[str, d
     An offer that is not on disk is left out rather than guessed at; the
     ranking then carries no fit for it, which reads as unknown, not as a match.
     """
+    from integral.approval import retracted_episode_texts
+
     log = EvidenceLog(store)
+    master = load_master(store)
     held = candidate_stack(
-        load_master(store),
+        master,
         log.effective_rows(),
         log.suppressed_ids() if log.exists() else frozenset(),
+        retracted_episode_texts(store, master),
     )
     fits: dict[str, dict[str, Any]] = {}
     for offer_id in offer_ids:
