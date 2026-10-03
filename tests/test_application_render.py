@@ -69,22 +69,56 @@ def test_output_is_a_single_file() -> None:
         assert not re.search(r"url\(\s*['\"]?(?!data:)", doc.css)
 
 
-Rule = tuple[str, tuple[str, ...], dict[str, str]]  # (context, selectors, declarations)
+Rule = tuple[str, tuple[str, ...], list[tuple[str, str]]]  # (context, selectors, declarations)
+
+# The only values a governed property may ever take, in any rule, under any selector.
+ALLOWED = {
+    "size": "a4",
+    "margin": "22mm 24mm",
+    "orphans": "3",
+    "widows": "3",
+    "break-after": "avoid",
+    "break-inside": "avoid",
+}
+REQUIRED = [
+    ("@page", "size"),
+    ("@page", "margin"),
+    ("p", "orphans"),
+    ("p", "widows"),
+    ("li", "orphans"),
+    ("li", "widows"),
+    ("h1", "break-after"),
+    ("h2", "break-after"),
+    ("h3", "break-after"),
+]
 
 
-def _decls(block: str) -> dict[str, str]:
-    out: dict[str, str] = {}
+def _norm(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def _all_decls(block: str) -> list[tuple[str, str]]:
+    out = []
     for part in block.split(";"):
         if ":" in part:
             name, _, value = part.partition(":")
-            out[name.strip().lower()] = " ".join(value.split())
+            out.append((_norm(name), _norm(value)))
     return out
 
 
-def _parse_css(css: str) -> list[Rule]:
-    """Flat list of rules; context is 'top', 'media:<query>' for one nesting level."""
+def _parse_css(css: str) -> tuple[list[Rule], list[str]]:
+    """Rules as (context, selectors, declarations) plus refused constructs.
+
+    Closed rule: the only at-rules are a bare ``@media print`` at top level and a
+    bare ``@page`` at top level or inside it. Anything else is refused outright
+    rather than interpreted, so no spelling of a condition can hide an override.
+    """
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
     rules: list[Rule] = []
+    refused = [
+        f"at-rule refused: statement {m.group(1)!r}"
+        for m in re.finditer(r"(?:^|[;}{])\s*(@[^{};]*);", css)
+    ]
 
     def walk(text: str, context: str) -> None:
         i = 0
@@ -92,50 +126,49 @@ def _parse_css(css: str) -> list[Rule]:
             head_end = text.find("{", i)
             if head_end < 0:
                 return
-            head = " ".join(text[i:head_end].split())
+            head = _norm(text[i:head_end].replace("}", " "))
             depth, k = 1, head_end + 1
             while depth and k < len(text):
                 depth += {"{": 1, "}": -1}.get(text[k], 0)
                 k += 1
             body = text[head_end + 1 : k - 1]
-            if head.startswith("@media"):
-                walk(body, "media:" + head[len("@media") :].strip())
-            else:
-                selectors = tuple(x.strip() for x in head.split(","))
-                rules.append((context, selectors, _decls(body)))
             i = k
+            if head == "@media print" and context == "top":
+                walk(body, "print")
+            elif head.startswith("@") and head != "@page":
+                refused.append(f"at-rule refused: {head!r} in {context}")
+            elif "{" in body:  # CSS nesting would hide an override from this parser
+                refused.append(f"nested rule refused: {head!r}")
+            elif head == "@page":
+                rules.append((context, ("@page",), _all_decls(body)))
+            else:
+                sels = tuple(x.strip() for x in head.split(","))
+                rules.append((context, sels, _all_decls(body)))
 
     walk(css, "top")
-    return rules
+    return rules, refused
+
+
+def _is_governed(selector: str, prop: str) -> bool:
+    if selector == "@page":
+        return prop == "size" or prop.startswith("margin")
+    return prop in ("orphans", "widows") or prop.startswith(("break-", "page-break-"))
 
 
 def _print_rule_violations(css: str) -> list[str]:
     """Why this stylesheet does not carry the print rules the spec requires."""
-    rules = _parse_css(css)
-    live = ("top", "media:print")  # contexts that apply when printing
-    want: list[tuple[str, str, str]] = [
-        ("@page", "size", "A4"),
-        ("@page", "margin", "22mm 24mm"),
-        ("p", "orphans", "3"),
-        ("p", "widows", "3"),
-        ("li", "orphans", "3"),
-        ("li", "widows", "3"),
-        ("h1", "break-after", "avoid"),
-        ("h2", "break-after", "avoid"),
-        ("h3", "break-after", "avoid"),
-    ]
-    found: list[str] = []
-    for selector, prop, value in want:
-        values = [
-            (ctx, decls[prop])
-            for ctx, sels, decls in rules
-            if selector in sels and prop in decls and ctx in live
-        ]
-        if not values:
-            found.append(f"{selector} {prop}: no declaration that applies in print")
-        elif values[-1][1] != value:
-            found.append(f"{selector} {prop}: final value {values[-1][1]!r}, want {value!r}")
-        found += [f"{selector} {prop}: {v!r} is not {value!r}" for _, v in values if v != value]
+    rules, found = _parse_css(css)
+    present: set[tuple[str, str]] = set()
+    for _, selectors, decls in rules:
+        for prop, value in decls:
+            for selector in selectors:
+                if not _is_governed(selector, prop):
+                    continue
+                if ALLOWED.get(prop) != value:
+                    found.append(f"governed {selector} {prop}: {value!r} is not allowed")
+                else:
+                    present.add((selector, prop))
+    found += [f"missing: {s} {p}" for s, p in REQUIRED if (s, p) not in present]
     return sorted(set(found))
 
 
@@ -146,43 +179,54 @@ def test_print_rules_are_present() -> None:
 
 BASE = Doc(render_document("# H", title="t")).css
 
+# Each is appended to a stylesheet that is otherwise clean, so a red result is
+# about the appended text and nothing else. (name, appended css, reason fragment)
+REFUSED = [
+    (
+        "N1 print and condition",
+        "@media print and (orientation: portrait) {p,li{orphans:1}}",
+        "at-rule",
+    ),
+    ("N2 only print", "@media only print {h1,h2,h3{break-after:auto}}", "at-rule"),
+    ("N3 print, screen", "@media print, screen {@page{size:letter}}", "at-rule"),
+    ("N4 supports", "@supports (display:grid) {p,li{orphans:1}}", "at-rule"),
+    ("N5 descendant selector", "body p, body li {orphans:1;widows:1}", "governed"),
+    ("N6 upper-case selector", "P, LI {orphans:1;widows:1}", "governed"),
+    ("N7 universal !important", "* {orphans:1 !important;widows:1 !important}", "governed"),
+    ("N8 page pseudo", "@page :first {margin:0}", "at-rule"),
+    ("N9 margin longhand", "@page {margin-top:0}", "governed"),
+    ("N10 page-break-after", "h1,h2,h3{page-break-after:auto}", "governed"),
+    ("N11 landscape", "@page {size: A4 landscape}", "governed"),
+    ("N12 important before correct", "p { orphans: 1 !important }", "governed"),
+    ("N13 nested media", "@media print {@media print {p{orphans:1}}}", "at-rule"),
+    ("N14 screen block", "@media screen {h1{break-after:auto}}", "at-rule"),
+    ("N15 widows 30", "p {widows: 30}", "governed"),
+    ("N16 avoid-column", "h2 {break-after: avoid-column}", "governed"),
+    ("N18 css nesting", "body { p { orphans: 1 } }", "nested"),
+    ("N19 css nesting &", "p { & { orphans: 1 } }", "nested"),
+    ("N20 nesting in page", "@page { @top-left { margin: 0 } }", "nested"),
+    ("N17 import", "@import url(https://x.test/a.css);", "at-rule"),
+]
 
-@pytest.mark.parametrize(
-    "name,old,new",
-    [
-        ("P1 landscape", "size: A4;", "size: A4 landscape;"),
-        ("P2 extra margin", "margin: 22mm 24mm;", "margin: 22mm 24mm 0 0;"),
-        ("P3 widows 30", "p, li { orphans: 3; widows: 3; }", "p, li { orphans: 3; widows: 30; }"),
-        ("P4 avoid-column", "break-after: avoid;", "break-after: avoid-column;"),
-        (
-            "P5 commented out",
-            "p, li { orphans: 3; widows: 3; }",
-            "/* p, li { orphans: 3; widows: 3; } */",
-        ),
-        (
-            "P6 screen only",
-            "@media print {\n  @page { size: A4; margin: 22mm 24mm; }",
-            "@media screen {\n  @page { size: A4; margin: 22mm 24mm; }",
-        ),
-        (
-            "P7 later override",
-            "li { break-inside: avoid; }",
-            "li { break-inside: avoid; }\np, li { orphans: 1; widows: 1; }",
-        ),
-    ],
-)
-def test_broken_print_rules_are_refused(name: str, old: str, new: str) -> None:
-    assert old in BASE, name
-    assert _print_rule_violations(BASE.replace(old, new)), name
+
+@pytest.mark.parametrize("name,extra,reason", REFUSED, ids=[r[0] for r in REFUSED])
+def test_overriding_print_rules_are_refused(name: str, extra: str, reason: str) -> None:
+    assert _print_rule_violations(BASE) == []
+    found = _print_rule_violations(BASE + "\n" + extra)
+    assert any(reason in f for f in found), (name, found)
 
 
-def test_heading_rule_moved_to_screen_is_refused() -> None:
-    css = BASE.replace(
-        "h1, h2, h3 { font-family",
-        "@media screen { h1, h2, h3 { break-after: avoid; } }\nh1, h2, h3 { font-family",
-    )
-    css = css.replace(" break-after: avoid; }\nh1 {", " }\nh1 {", 1)
-    assert _print_rule_violations(css)
+def test_an_offender_before_the_correct_rule_is_still_refused() -> None:
+    """Every value counts, not the last: N12 placed first, the correct rule after."""
+    found = _print_rule_violations("p { orphans: 1 !important }\n" + BASE)
+    assert any("governed p orphans" in f for f in found)
+
+
+def test_removing_a_required_declaration_is_refused() -> None:
+    needle = "p, li { orphans: 3; widows: 3; }"
+    assert needle in BASE
+    assert any("missing" in f for f in _print_rule_violations(BASE.replace(needle, "")))
+    assert any("missing" in f for f in _print_rule_violations(""))
 
 
 def test_every_field_is_escaped() -> None:
