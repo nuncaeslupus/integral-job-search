@@ -2396,3 +2396,37 @@ def test_a_browser_board_skipped_mid_host_keeps_the_employers_it_already_lost(
     assert outcome.skipped and "real browser" in outcome.skipped, outcome
     assert first.employer is not None, first
     assert any(first.employer in e for e in outcome.employers_failed), outcome
+
+
+def test_a_refused_duplicate_is_recorded_under_the_copy_that_is_stored(
+    store: ProfileStore,
+) -> None:
+    """T224. A row that is another copy of a stored advert writes nothing under
+    its own id, so the fetch record must name the stored copy — an id that is in
+    no `offers/` file reads as a stored offer to anything that trusts the log."""
+    from integral.lifecycle import load_lifecycle_offer, save_lifecycle_offer
+    from integral.offers import compute_offer_id
+
+    first = _run(store, _answer_with_captures())
+    assert first.added > 0, first.summary()
+    # Re-store every offer under a different text hash, as a later search would.
+    renamed = 0
+    for path in sorted(Path(store.path("offers")).glob("*.json")):
+        offer, record = load_lifecycle_offer(store, path.stem)
+        if not offer.url:
+            continue
+        text = "another search, another row text: " + offer.text
+        new = offer.model_copy(update={"id": compute_offer_id(text), "text": text})
+        save_lifecycle_offer(store, new, record.model_copy(update={"offer_id": new.id}))
+        path.unlink()
+        store.path("offers", "lifecycle", f"{offer.id}.json").unlink()
+        renamed += 1
+    assert renamed > 0
+    log = Path(store.path("offers", FETCH_LOG))
+    already = len(log.read_text(encoding="utf-8").splitlines())
+    _run(store, _answer_with_captures())
+    stored = {p.stem for p in Path(store.path("offers")).glob("*.json")}
+    rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()[already:]]
+    recorded = {i for row in rows for i in row["offer_ids"]}
+    assert recorded, "the second run recorded nothing"
+    assert recorded <= stored

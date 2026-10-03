@@ -91,6 +91,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sys
 import tempfile
@@ -101,6 +102,7 @@ from pathlib import Path
 from typing import Any, Literal, get_args
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from integral.advert_identity import identity_query_for, restrict_query
 from integral.dedup import Tombstone, load_tombstones, tombstone_match
 from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.offers import Offer, OfferError, OfferStatus, Strict, connect_manual, load_offer
@@ -477,6 +479,25 @@ def canonicalize_url(url: str) -> str:
     return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, urlencode(query), ""))
 
 
+def advert_identity(url: str | None, source: str) -> str | None:
+    """T224. The canonical url that names an advert, or `None` without a url.
+
+    `canonicalize_url`, then the query cut down to what `source`'s connector
+    declares as identity (`Connector.identity_query`). Two copies of one advert
+    stored under different text hashes share this value; two different adverts
+    never do (talent's `?id=` survives). Storage, tombstones and rule-outs key
+    on it — never on `Offer.id`, which hashes text a list row changes on every
+    search.
+    """
+    if not url or not url.strip():
+        return None
+    return restrict_query(canonicalize_url(url), identity_query_for(url, source))
+
+
+def offer_identity(offer: Offer) -> str | None:
+    return advert_identity(offer.url, offer.source)
+
+
 def _strip_chrome(text: str) -> str:
     return "\n".join(line for line in text.splitlines() if not _CHROME_LINE.match(line.strip()))
 
@@ -558,7 +579,7 @@ def build_tombstone(offer: Offer, record: LifecycleRecord, *, purged_at: str) ->
     return Tombstone(
         offer_id=offer.id,
         url=offer.url,
-        url_canonical=canonicalize_url(offer.url) if offer.url else None,
+        url_canonical=offer_identity(offer),
         text_sha256=compute_text_sha256(offer.text),
         first_seen=record.collected_at,
         purged_at=purged_at,
@@ -599,6 +620,81 @@ def purge_batch(
 # §7.4 — collection through the tombstone gate, and explicit revival
 
 
+#: T224. offers dir -> {offer id: ((mtime_ns, size), identity)}. Re-read only for
+#: a file whose stamp moved, so `collect_offer` over a 3,000-offer tree is one
+#: directory scan rather than 3,000 JSON parses per incoming advert. Only the
+#: *identity* is cached; a status is always read from disk (see `stored_copies`).
+_IDENTITY_CACHE: dict[Path, dict[str, tuple[tuple[int, int], str | None]]] = {}
+
+
+def _identity_on_disk(path: Path) -> str | None:
+    """The identity of the offer file at `path`, from its raw JSON. An
+    unreadable or url-less file has none — it cannot be matched, never matched
+    wrongly."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        url = raw.get("url")
+        source = raw.get("source")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(url, str) or not isinstance(source, str):
+        return None
+    return advert_identity(url, source)
+
+
+def stored_identities(store: ProfileStore) -> dict[str, str | None]:
+    """Every stored offer id -> its advert identity (`None` when it has none)."""
+    directory = Path(store.path("offers"))
+    if not directory.is_dir():
+        return {}
+    cache = _IDENTITY_CACHE.setdefault(directory.resolve(), {})
+    present: dict[str, tuple[int, int]] = {}
+    with os.scandir(directory) as entries:
+        for entry in entries:
+            if entry.name.endswith(".json") and not entry.name.startswith("_"):
+                stat = entry.stat()
+                present[entry.name[: -len(".json")]] = (stat.st_mtime_ns, stat.st_size)
+    for gone in set(cache) - set(present):
+        del cache[gone]
+    for offer_id, stamp in present.items():
+        cached = cache.get(offer_id)
+        if cached is None or cached[0] != stamp:
+            cache[offer_id] = (stamp, _identity_on_disk(directory / f"{offer_id}.json"))
+    return {offer_id: cached[1] for offer_id, cached in cache.items()}
+
+
+def copies_among(identities: dict[str, str | None], offer_id: str) -> list[str]:
+    """The ids in `identities` that are the same advert as `offer_id`, itself
+    excluded. An offer with no identity has no copies: nothing can be shown to
+    be the same advert, so nothing is claimed to be."""
+    own = identities.get(offer_id)
+    if own is None:
+        return []
+    return sorted(i for i, identity in identities.items() if identity == own and i != offer_id)
+
+
+def stored_copies_of(store: ProfileStore, identity: str, *, excluding: str) -> list[str]:
+    """Stored offers carrying `identity`, other than `excluding` (T224). Takes the
+    identity rather than an id because the incoming offer is not stored yet."""
+    return sorted(
+        i for i, found in stored_identities(store).items() if found == identity and i != excluding
+    )
+
+
+def _legacy_tombstone_for(
+    tombstones: Sequence[Tombstone], offer: Offer, identity: str | None
+) -> Tombstone | None:
+    """A tombstone written before T224 holds `url_canonical` with the whole
+    query. Its raw `url` is still on the row, so it is read through the same
+    identity rule rather than migrated: the ledger is append-only."""
+    if identity is None:
+        return None
+    for tombstone in tombstones:
+        if tombstone.url and advert_identity(tombstone.url, offer.source) == identity:
+            return tombstone
+    return None
+
+
 @dataclass(frozen=True)
 class CollectionOutcome:
     """What happened when one incoming `Offer` was run through the
@@ -608,6 +704,9 @@ class CollectionOutcome:
     offer_id: str
     added_as_new: bool
     matched_tombstone: str | None
+    #: T224. The already-stored offer this one is another copy of, when that is
+    #: why it was not added.
+    duplicate_of: str | None = None
 
 
 def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOutcome:
@@ -634,18 +733,27 @@ def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOu
     runs first so a revived offer's re-sighting still counts (§7.4).
     """
     tombstones = current_tombstones(store)
+    identity = offer_identity(offer)
     matched = tombstones.get(offer.id)
     if matched is None:
         text_sha256 = compute_text_sha256(offer.text)
-        url_canonical = canonicalize_url(offer.url) if offer.url else None
         matched = tombstone_match(
-            list(tombstones.values()), url_canonical=url_canonical, text_sha256=text_sha256
-        )
+            list(tombstones.values()), url_canonical=identity, text_sha256=text_sha256
+        ) or _legacy_tombstone_for(list(tombstones.values()), offer, identity)
     if matched is not None:
         _record_resighting(store, matched, at=at)
         return CollectionOutcome(offer.id, added_as_new=False, matched_tombstone=matched.offer_id)
     if store.path(*_lifecycle_parts(offer.id)).exists():
         return CollectionOutcome(offer.id, added_as_new=False, matched_tombstone=None)
+    # T224. Another copy of this advert is already stored — under a different
+    # text hash, because a list row's text changes between searches. Storing
+    # this one would hand any rule-out recorded against the first a second id to
+    # escape through, so it is a re-sighting and nothing is written.
+    copies = stored_copies_of(store, identity, excluding=offer.id) if identity else []
+    if copies:
+        return CollectionOutcome(
+            offer.id, added_as_new=False, matched_tombstone=None, duplicate_of=copies[0]
+        )
     record = track_new_offer(offer, at=at)
     save_lifecycle_offer(store, offer, record)
     return CollectionOutcome(offer.id, added_as_new=True, matched_tombstone=None)
