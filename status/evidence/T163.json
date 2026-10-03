@@ -203,22 +203,22 @@
     {
       "module": "second_reader",
       "name": "FAIL_OPEN_CASES_AT_LEAST",
-      "lineno": 872
-    },
-    {
-      "module": "second_reader",
-      "name": "FIXTURES_AT_LEAST",
-      "lineno": 862
-    },
-    {
-      "module": "second_reader",
-      "name": "REGRESSION_CASES_AT_LEAST",
       "lineno": 903
     },
     {
       "module": "second_reader",
+      "name": "FIXTURES_AT_LEAST",
+      "lineno": 893
+    },
+    {
+      "module": "second_reader",
+      "name": "REGRESSION_CASES_AT_LEAST",
+      "lineno": 934
+    },
+    {
+      "module": "second_reader",
       "name": "STDLIB_DISAGREEMENTS_AT_LEAST",
-      "lineno": 889
+      "lineno": 920
     },
     {
       "module": "sourcing",

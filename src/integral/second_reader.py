@@ -801,6 +801,33 @@ def spellings(target: str) -> tuple[str, ...]:
     return tuple(found)
 
 
+def require_request_target(target: str) -> None:
+    """Refuse, by raising, any `target` that is not an origin-form request target.
+
+    `allows` takes the **request target** RFC 9309 §2.2.2 compares rules against:
+    a path with an optional query, which RFC 3986 §3.3 / RFC 9112 §3.2.1 write as
+    beginning with a single `/`. Its sibling `integral.robots.Robots().allows`
+    takes a full URL, with nothing in either signature to tell them apart, and a
+    full URL handed here matches no rule, so it fell through to §2.2.2's
+    permissive "no match is an allow" -- `True` for everything, negative
+    controls included. That is a fail-open reached by a call that looks right.
+
+    So the wrong shape is refused rather than guessed at. Anything not opening
+    with `/` is refused (`https://h/p`, `h/p`, `*`, the empty string), and so is
+    a value opening `//`: RFC 3986 §3.3 forbids a path-absolute reference from
+    beginning with two slashes because that is how a network-path reference
+    (`//host/path`, authority and all) is written, so the two cannot be told
+    apart and the one that fails open is not chosen.
+    """
+    if not isinstance(target, str):
+        raise SecondReaderError(f"target must be text, not {type(target).__name__}")
+    if not target.startswith("/") or target.startswith("//"):
+        raise SecondReaderError(
+            f"target {target!r} is not a request target (a path opening with a single "
+            "'/', plus any query): pass the path, not a URL"
+        )
+
+
 def allows(text: str, agent: str, target: str) -> bool:
     """RFC 9309's verdict for `target`, for `agent`, over the document in hand.
 
@@ -814,9 +841,13 @@ def allows(text: str, agent: str, target: str) -> bool:
     string (`Disallow: /*?session=`), and matching only up to the `?` would
     admit exactly the endpoints such a rule exists to exclude. Paths are
     compared case-sensitively — only product tokens are not.
+
+    A `target` that is not a request target raises `SecondReaderError`; see
+    `require_request_target`.
     """
     if not isinstance(text, str):  # pragma: no cover - defensive
         raise SecondReaderError(f"robots.txt must be text, not {type(text).__name__}")
+    require_request_target(target)
     rules = select(parse(text), agent)
     wanted = spellings(target)
     # An `Allow` is matched against the canonical spelling alone; a `Disallow`
