@@ -1217,7 +1217,17 @@ class RobotsAdjudication:
                     "ALLOWS it on this file — a refusal the RFC does not make is not a "
                     "negative control, it is the second reader being wrong"
                 )
-            elif ask(self.robots_txt, self.agent, path):
+                continue
+            try:
+                second_allows = ask(self.robots_txt, self.agent, path)
+            except second_reader.SecondReaderError as exc:
+                problems.append(
+                    f"{where}: names {path!r} as a second-reader refusal, but the second "
+                    f"reader declined to answer for it ({exc}) — a path it cannot read "
+                    "is neither a refusal nor an allow, so it is no negative control"
+                )
+                continue
+            if second_allows:
                 problems.append(
                     f"{where}: names {path!r} as a second-reader refusal, and the second "
                     "reader ALLOWS it on this file — the agreement this row rests on is "

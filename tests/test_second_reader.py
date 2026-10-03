@@ -704,5 +704,50 @@ def test_classify_does_not_crash_on_a_double_slash_disallow() -> None:
     text = "User-agent: *\nDisallow: //admin\n"
     competence = cp._classify(text, AGENT)
     assert competence.second_reader_false_allows == ()
+    assert competence.second_reader_false_refusals == ()
     assert competence.second_reader_refused == ()
     assert competence.verdict != cp.COMPETENT
+
+
+#: A file on which the sampler's witnesses reach the "no answer" branch of
+#: `_classify`: `//h/zq` is read by the RFC matcher as host `h`, path `/zq`
+#: (refused by `/*q`), while the second reader declines the `//` target; the
+#: `Allow`s capture the other witnesses of `/*q` so only that branch is left
+#: deciding. Whatever the reader declines to answer must be recorded as no
+#: answer -- not an agreement, a false allow, or a false refusal.
+_UNANSWERED_FILE = (
+    "User-agent: *\nDisallow: //h/zq\nDisallow: /*q\nAllow: /xq\nAllow: /yq\n"
+    "Allow: /q$\nAllow: /q\nAllow: /xxq\nAllow: /yyq\n"
+)
+
+
+def test_an_unanswered_control_counts_as_neither_agreement_nor_allow_nor_refusal() -> None:
+    from integral import connector_policy as cp
+
+    competence = cp._classify(_UNANSWERED_FILE, AGENT)
+    assert competence.verdict == cp.INCOMPETENT
+    assert competence.second_reader_refused == ()
+    assert competence.second_reader_false_allows == ()
+    assert competence.second_reader_false_refusals == ()
+
+
+def test_a_ledger_row_naming_an_unreadable_path_is_a_problem_not_a_crash() -> None:
+    """A `second_reader_refused` path the reader declines (`//h/zq`) is reported
+    by the row's checks, never raised and never read as an allow."""
+    from integral import connector_policy as cp
+
+    row = cp.RobotsAdjudication.from_mapping(
+        {
+            "site": "a.test",
+            "checked": "2026-09-04",
+            "agent": AGENT,
+            "standing": cp.SINGLE_PARSER,
+            "second_reader": sr.NAME,
+            "source": "connectors/robots-adjudications.yaml",
+            "allowed": [],
+            "second_reader_refused": ["//h/zq"],
+            "robots_txt": _UNANSWERED_FILE,
+        }
+    )
+    problems = row.problems()
+    assert any("declined to answer" in p and "//h/zq" in p for p in problems), problems
