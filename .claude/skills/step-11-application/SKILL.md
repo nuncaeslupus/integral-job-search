@@ -1,6 +1,6 @@
 ---
 name: step-11-application
-description: Step 11 (`application`) of the candidate process — drafts a CV and letter for one specific shortlisted offer. Do NOT use for preparing for the interview that follows an application — that is step 12, which reads this step's generated documents.
+description: Step 11 (`application`) of the candidate process — builds a CV and edits the candidate's own letter for one specific shortlisted offer. Do NOT use for preparing for the interview that follows an application — that is step 12, which reads this step's generated documents.
 ---
 
 # step-11-application
@@ -43,9 +43,9 @@ An offer with status `shortlisted`, and `cv/master.json` with enough in it to dr
 In this step that sounds like:
 
 ```text
-"Drafting the CV and the letter for this one — this takes a moment."
+"Going through your letter and pulling the CV together for this one — this takes a moment."
 …then, once the work is finished…
-"Thanks for waiting — here's the draft. …"
+"Thanks for waiting — here's your letter with my changes marked, and the CV. …"
 ```
 
 **Never:**
@@ -70,18 +70,18 @@ Why: the first letter this repository generated for a real application was fluen
 1. Ask for the draft (above). If the candidate has none and declines to write one, the letter is declined (see "When declined"); do not compose a substitute.
 2. Harvest the draft in the same pass: `integral.application_authorship.harvest_draft(store, draft, recorded_at=...)` writes each sentence as an evidence row with `kind="candidate_statement"`, `source="application_draft"`, and returns the row ids.
 3. Edit surgically. Report each change by name and let the candidate veto it. A rewrite in the assistant's register is the failure this step exists to prevent. When a gap needs a sentence the candidate has not said, ask them for it; do not write it for them.
-4. Record who wrote each paragraph of `carta.md` in a `## Authorship` table in `trazabilidad.md`, one row per paragraph (headings excepted), `| paragraph number | author | evidence ids | changes |`. Authors are `candidate` (their words untouched), `edited` (their sentence with a named change, so `changes` is required) and `assistant` (nothing the candidate said, so no evidence ids). `candidate` and `edited` must cite the harvested ids.
+4. Record who wrote each paragraph of `carta.md` in a `## Authorship` table in `trazabilidad.md`, one row per paragraph (headings excepted), `| paragraph number | author | evidence ids | changes |`. Authors are `candidate` (their words untouched: the paragraph is exactly the cited sentences, in order), `edited` (their sentence with a named change, so `changes` must say what changed, not `-` or `none`, and the paragraph must still contain most of the cited sentence) and `assistant` (nothing the candidate said, so no evidence ids). `candidate` and `edited` must cite the harvested ids. `carta.md` has no headings, because a heading is a line nobody on record wrote.
 5. Before ending the step run `integral.application_authorship.check_package(<cv/generated/<offer_id>/v<N>>, store)`; a paragraph with no named author, or a candidate source that is not a live harvested row, fails it.
 
 This is not a template with the candidate's phrases pasted in. Whether the letter can be read aloud without flinching is for the candidate to say, and no gate checks it; the gate checks only the mechanical half, that the package says who wrote each paragraph.
 
 ## Stop rule
 
-A CV and the candidate's letter (edited, with its authorship recorded) exist for this offer and the candidate has approved them, or has parked them. **Hard cap: three regeneration rounds per offer**, after which the useful move is to talk about what is wrong rather than generate a fourth.
+A CV and the candidate's letter (edited, with its authorship recorded) exist for this offer and the candidate has approved them, or has parked them. **Hard cap: three regeneration rounds per offer** — each new CV version or fresh round of edits to the letter counts — after which the useful move is to talk about what is wrong rather than generate a fourth.
 
 ## When declined
 
-Offered per offer. Declining generates nothing and leaves the offer `shortlisted`. A candidate who wants to write their own letter and only use the CV gets exactly that.
+Offered per offer. Declining generates nothing and leaves the offer `shortlisted`. A candidate who writes a letter but wants no edits to it gets it back unchanged, with the authorship table all `candidate`; one who wants no letter at all, or only the CV, gets exactly that — the skill never writes one in their place.
 
 ## Outputs
 
@@ -101,10 +101,10 @@ This governs the **exit** alone. §3.3's *offered skip* — "we can stop here an
 jobs with what I have" — is a move **forward** to a provisional ranking, not a way out, and is
 offered at the end of every first-run step exactly as that section requires.
 
-What the tool says out loud when the step ends, verbatim — the settled example from the spec:
+What the tool says out loud when the step ends, for example:
 
 ```text
-"That's the CV and letter for the Girona role. I've led with the migration work and left out the teaching — say if that's wrong. I'd send it today rather than polish it, because the posting is already a fortnight old. Ready to send, or sit on it?"
+"That's the CV and your letter for the Girona role. I left your wording alone except for two marked changes, led the CV with the migration work and left out the teaching — say if any of that is wrong. I'd send it today rather than polish it, because the posting is already a fortnight old. Ready to send, or sit on it?"
 ```
 
 Writes `last_activity`.

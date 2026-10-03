@@ -29,6 +29,15 @@ from integral.profile import EvidenceLog
 
 AUTHORS = ("candidate", "edited", "assistant")
 SECTION = "## Authorship"
+# A change cell must name a change. These say there is none, in the languages the
+# candidates write in; anything else with a word in it is taken as a name.
+NO_CHANGE = frozenset(
+    {"none", "na", "n a", "nil", "nothing", "no change", "no changes", "ninguno", "cap"}
+)
+# An `edited` paragraph is the candidate's sentence with changes, so it must still
+# contain most of what it cites; below this share it is a different sentence.
+EDITED_KEEPS = 0.5
+_WORD = re.compile(r"[^\W\d_]+")
 _EVIDENCE_ID = re.compile(r"ev-\d{6,}")
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 _CELL_SPLIT = re.compile(r"(?<!\\)\|")
@@ -39,21 +48,14 @@ class AuthorshipError(ValueError):
 
 
 def letter_paragraphs(letter_md: str) -> list[str]:
-    """The letter's paragraphs: blank-line separated blocks that are not headings.
+    """The letter's paragraphs: every non-blank, blank-line separated block.
 
-    A heading is the document's furniture, not a claim about the candidate, so it
-    carries no author; everything else does, salutation and sign-off included.
+    Headings are not exempt. A heading is text somebody wrote about the candidate,
+    so it needs an author like any sentence; ``check_authorship`` refuses the letter
+    that has one instead, because the candidate's letter has none to preserve.
     """
     blocks = re.split(r"\n[ \t]*\n", letter_md.replace("\r\n", "\n"))
-    out = []
-    for block in blocks:
-        text = block.strip()
-        if not text:
-            continue
-        if all(line.lstrip().startswith("#") for line in text.splitlines() if line.strip()):
-            continue
-        out.append(text)
-    return out
+    return [block.strip() for block in blocks if block.strip()]
 
 
 def draft_sentences(draft: str) -> list[str]:
@@ -137,6 +139,22 @@ def _table_rows(trazabilidad_md: str) -> list[list[str]]:
     return rows
 
 
+def _squash(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _names_a_change(cell: str) -> bool:
+    words = [w.casefold() for w in _WORD.findall(cell)]
+    return bool(words) and " ".join(words) not in NO_CHANGE
+
+
+def _shared(cited: str, paragraph: str) -> float:
+    """The share of the cited sentence's words that the paragraph still contains."""
+    want = [w.casefold() for w in _WORD.findall(cited)]
+    have = {w.casefold() for w in _WORD.findall(paragraph)}
+    return sum(w in have for w in want) / len(want) if want else 0.0
+
+
 def check_authorship(
     letter_md: str, trazabilidad_md: str, evidence: EvidenceLog | None
 ) -> AuthorshipReport:
@@ -153,15 +171,15 @@ def check_authorship(
     by_number: dict[int, list[list[str]]] = {}
     for cells in rows:
         head = cells[0] if cells else ""
-        if not head.isdigit():
+        if not re.fullmatch(r"[0-9]+", head):
             defects.append(f"row {cells!r} does not start with a paragraph number")
             continue
         by_number.setdefault(int(head), []).append(cells)
-    live: dict[str, str] = {}
+    live: dict[str, tuple[str, str]] = {}
     if evidence is not None:
         gone = evidence.suppressed_ids()
         live = {
-            r.id: r.source
+            r.id: (r.source, r.text)
             for r in evidence.rows()
             if r.kind == "candidate_statement" and r.id not in gone
         }
@@ -182,10 +200,25 @@ def check_authorship(
             if not ids:
                 defects.append(f"paragraph {n}: {author} but no candidate source named")
             for ev in ids:
-                if live.get(ev) != "application_draft":
+                if live.get(ev, ("", ""))[0] != "application_draft":
                     defects.append(f"paragraph {n}: {ev} is not a live candidate draft statement")
-            if author == "edited" and not changes.strip():
-                defects.append(f"paragraph {n}: edited but no change named")
+            cited = [live[ev][1] for ev in ids if ev in live]
+            body = _squash(paragraphs[n - 1])
+            if author == "candidate" and cited and body != _squash(" ".join(cited)):
+                defects.append(
+                    f"paragraph {n}: candidate, but it is not exactly the cited sentences"
+                )
+            if author == "edited":
+                if not _names_a_change(changes):
+                    defects.append(f"paragraph {n}: edited but no change named")
+                for ev in ids:
+                    if ev in live and _shared(live[ev][1], body) < EDITED_KEEPS:
+                        defects.append(f"paragraph {n}: edited, but {ev} is not in it")
+    defects += [
+        f"carta.md line {line!r} is a heading; the candidate's letter has none"
+        for line in letter_md.splitlines()
+        if line.lstrip().startswith("#")
+    ]
     extra = sorted(set(by_number) - set(range(1, len(paragraphs) + 1)))
     defects += [f"authorship row for paragraph {n}, which the letter does not have" for n in extra]
     if not paragraphs:

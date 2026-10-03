@@ -211,11 +211,10 @@
       "has_protocol_section": true,
       "spoken_examples": 1,
       "disclosures": [
-        "\"Drafting the CV and the letter for this one — this takes a moment.\"",
-        "\"Thanks for waiting — here's the draft. …\""
+        "\"Going through your letter and pulling the CV together for this one — this takes a moment.\""
       ],
       "completions": [
-        "\"Thanks for waiting — here's the draft. …\""
+        "\"Thanks for waiting — here's your letter with my changes marked, and the CV. …\""
       ],
       "states_the_rule": true,
       "first_contact": false,

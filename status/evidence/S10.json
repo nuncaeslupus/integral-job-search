@@ -2,11 +2,11 @@
   "skill_listing_budget_overage_chars": 0,
   "listing_budget_chars": 11000,
   "budget_source": "config",
-  "description_chars_total": 9171,
+  "description_chars_total": 9197,
   "skills_counted": 35,
-  "headroom_chars": 1829,
+  "headroom_chars": 1803,
   "upstream_default_budget_chars": 8000,
-  "overage_against_upstream_default": 1171,
+  "overage_against_upstream_default": 1197,
   "budget_declaration_reasons": [],
   "steps_with_a_skill_fraction": 1.0,
   "per_skill": [
@@ -172,8 +172,8 @@
     },
     {
       "skill": "step-11-application",
-      "description_chars": 244,
-      "listing_chars": 267
+      "description_chars": 270,
+      "listing_chars": 293
     },
     {
       "skill": "step-12-interview-log",
