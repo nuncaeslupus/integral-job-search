@@ -59,7 +59,11 @@ figure. `rank` refuses a point with no band in the ranking's currency.
 ```python
 from integral.pay_normalise import DatedRate, RateTable, annotate, candidate_for
 
-table = RateTable(weights["currency"], (DatedRate("USD", 0.9, "2026-10-01", "<source>"),))
+# The target is the weights' currency, or with no weights (L1) the candidate's own,
+# `salary.currency` in `profile/constraints.json`. A ranking with no currency at all
+# is refused when its pay points are unlabelled or disagree.
+target = (weights or {}).get("currency") or constraints["salary"]["currency"]
+table = RateTable(target, (DatedRate("USD", 0.9, "2026-10-01", "<source>"),))
 candidate, reading = candidate_for(offer, extraction, dimensions=dims, table=table)
 ranking = annotate(rank(candidates, ..., currency=table.target), readings, table)
 ```

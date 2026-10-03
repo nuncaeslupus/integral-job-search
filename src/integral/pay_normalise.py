@@ -329,13 +329,21 @@ def _unconverted(table: RateTable) -> int:
     return _audit(table)[0]
 
 
+_NO_OP_USD = RateTable("EUR", (DatedRate("USD", 1.0, "2026-10-01", "planted: no-op"),))
+
+#: How many states `_rank_refusals` evaluates. A committed floor, and the metric
+#: carries any shortfall, so dropping a state from the list moves the number
+#: instead of leaving a smaller audit reading as clean.
+MINIMUM_REFUSAL_STATES = 8
+
+
 def _planted_raw() -> int:
     """The same audit, fed what the old path produced: the USD figure unconverted."""
-    return _unconverted(RateTable("EUR", (DatedRate("USD", 1.0, "2026-10-01", "planted: no-op"),)))
+    return _unconverted(_NO_OP_USD)
 
 
-def _refusals() -> dict[str, int]:
-    """How many no-rate or no-calendar-factor states were ranked instead of refused."""
+def _read_refusals() -> int:
+    """How many no-rate or no-calendar-factor states were read instead of refused."""
     unrefused = 0
     states = [
         _offer("a", "x", Salary(min=1, max=2, currency="USD", period="year", stated=True)),
@@ -349,40 +357,72 @@ def _refusals() -> dict[str, int]:
         except PayNormaliseError:
             continue
         unrefused += 1
-    # What reaches `rank` itself, whatever door it came through: a point with no
-    # band, and a point beside a band in another currency, in a ranking whose
-    # currency is known. Each must be refused.
-    foreign_band_accepted = 0
-    for pay in (None, PayBand(3000, 3000, "USD")):
-        point = Candidate("f", 3000.0, {}, frozenset(_DIMENSIONS), pay=pay)
+    return unrefused
+
+
+def _point(offer_id: str, salary: float, unit: str | None) -> Candidate:
+    pay = None if unit is None else PayBand(salary, salary, unit)
+    return Candidate(offer_id, salary, {}, frozenset(_DIMENSIONS), pay=pay)
+
+
+#: What reaches `rank` itself, whatever door it came through, each of which must
+#: be refused: `(candidates, weights, currency)`. A point with no band, or beside
+#: a band in another currency, when the currency is known (L2 or `currency=`);
+#: and with no currency at all (L1), a point with no band, a mix of bare and
+#: banded points, and bands in two currencies.
+def _rank_refusals() -> list[tuple[list[Candidate], dict[str, Any] | None, str | None]]:
+    return [
+        ([_point("f", 3000.0, None)], _WEIGHTS, "EUR"),
+        ([_point("f", 3000.0, "USD")], _WEIGHTS, "EUR"),
+        ([_point("f", 3000.0, None)], None, "EUR"),
+        ([_point("f", 3000.0, "USD")], None, "EUR"),
+        ([_point("f", 3000.0, None), _point("g", 3100.0, None)], None, None),
+        ([_point("f", 3000.0, None), _point("g", 3100.0, "EUR")], None, None),
+        ([_point("f", 3333.0, "USD"), _point("g", 3100.0, "EUR")], None, None),
+        ([_point("f", 3333.0, None)], {"currency": "EUR", "part_worths": {}}, None),
+    ]
+
+
+def _refusals() -> dict[str, int]:
+    accepted = 0
+    states = _rank_refusals()
+    for candidates, weights, currency in states:
         try:
             rank(
-                [point],
+                candidates,
                 dimensions=_DIMENSIONS,
                 revision=_REVISION,
-                weights=_WEIGHTS,
+                weights=weights,
                 at="T246",
-                currency="EUR",
+                currency=currency,
             )
-            foreign_band_accepted += 1
+            accepted += 1
         except RankingError:
             pass
-    return {"unrefused": unrefused, "foreign_band_accepted": foreign_band_accepted}
+    return {
+        "unrefused": _read_refusals(),
+        "foreign_band_accepted": accepted,
+        "states_checked": len(states),
+    }
 
 
 def measure() -> dict[str, Any]:
     refusals = _refusals()
     wrong, compared = _audit(_TABLE)
     wrong_settled, compared_settled = _audit(_TABLE, settled=0.5)
+    shortfall = max(0, MINIMUM_REFUSAL_STATES - refusals["states_checked"])
     return {
         "unconverted_pay_reaching_rank": wrong
         + wrong_settled
         + refusals["unrefused"]
-        + refusals["foreign_band_accepted"],
+        + refusals["foreign_band_accepted"]
+        + shortfall,
         # What the audit compared (frontier and dominated, both runs), not the
         # number of fixture rows.
         "offers_checked": compared + compared_settled,
+        "refusal_states_checked": refusals["states_checked"],
         "unconverted_detected_when_planted": min(_planted_raw(), 1),
+        "settled_run_detected_when_planted": min(_audit(_NO_OP_USD, settled=0.5)[0], 1),
     }
 
 
@@ -400,6 +440,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
     measured = write_evidence(args.evidence)
     print(f"unconverted_pay_reaching_rank: {measured['unconverted_pay_reaching_rank']} (== 0)")
     print(f"unconverted_detected_when_planted: {measured['unconverted_detected_when_planted']}")
+    print(f"settled_run_detected_when_planted: {measured['settled_run_detected_when_planted']}")
     return 0
 
 

@@ -167,6 +167,10 @@ class Candidate:
 def point_band(salary: float | None, currency: str) -> PayBand | None:
     """A point reading as the band whose ends coincide, in `currency` (T246).
 
+    **It asserts that the figure is already in `currency`; it converts nothing.**
+    A figure read from an advert goes through `integral.pay_normalise.candidate_for`.
+    This is for callers that hold a number they already know the unit of.
+
     `salary_per_month` has no unit of its own, so a point enters a ranking with
     a known currency only beside a band in that currency; this is the band a
     point salary *is* (`PayBand`'s docstring), for callers that hold one figure.
@@ -314,6 +318,7 @@ def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None)
     point beside a foreign band would be sorted as if it were this one. A band
     with no point is silent to the sort, so it stays incomparable and is let
     through. This is a rule on what reaches the sort, not on one entry path.
+    With no currency at all the points must still agree: see the first block.
     Checked once, here, where the currency is known — `require_coverage`'s
     reason, one axis over.
 
@@ -328,6 +333,22 @@ def require_pay_coherence(candidates: Sequence[Candidate], currency: str | None)
     so a band with no point is ranked as if unpaid whatever it is denominated
     in.
     """
+    if currency is None:
+        # T246: a ranking that names no currency takes the single one every
+        # point's band agrees on, and refuses a point with no band or bands in
+        # two currencies — L1 orders on the point alone, so a mixed or unlabelled
+        # set is exactly the comparison of unconverted pay this module refuses.
+        units = {
+            candidate.pay.currency if candidate.pay is not None else None
+            for candidate in candidates
+            if candidate.salary_per_month is not None
+        }
+        if None in units or len(units) > 1:
+            raise RankingError(
+                "the ranking names no currency and its pay points do not agree on one "
+                f"({sorted(unit or 'no band' for unit in units)}) — convert them first "
+                "(`integral.pay_normalise.candidate_for`), never compare them as they are"
+            )
     for candidate in candidates:
         band = candidate.pay
         # T246: when the ranking's currency is known, a point reading must

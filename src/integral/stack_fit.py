@@ -466,7 +466,7 @@ def _probe_store(root: Path, *, with_statement: bool) -> str | None:
     the ranking carried no fit at all — the failure this task exists to fix.
     """
     from integral.cv_store import write_master
-    from integral.rank import Candidate, rank
+    from integral.rank import Candidate, point_band, rank
 
     identity = create_profile(
         root, f"Stack probe {with_statement}", handle=f"stack-probe-{int(with_statement)}"
@@ -491,7 +491,14 @@ def _probe_store(root: Path, *, with_statement: bool) -> str | None:
         "probe-java.json",
     )
     ranking = rank(
-        [Candidate(offer_id="probe-java", salary_per_month=3000.0, scores={})],
+        [
+            Candidate(
+                offer_id="probe-java",
+                salary_per_month=3000.0,
+                pay=point_band(3000.0, "EUR"),
+                scores={},
+            )
+        ],
         dimensions=(),
         revision=EvidenceLog(store).revision(),
         weights=None,

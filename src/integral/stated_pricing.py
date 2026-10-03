@@ -180,7 +180,7 @@ def _probe_offers(dimension: str, priced: Mapping[str, float], unit: str | None)
         Candidate(
             offer_id=f"probe-{name}",
             salary_per_month=3000.0,
-            pay=None if unit is None else point_band(3000.0, unit),
+            pay=point_band(3000.0, unit or "EUR"),  # synthetic probes: the unit cancels
             scores={dimension: score},
             unknown=unknown,
         )

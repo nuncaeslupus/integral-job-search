@@ -473,7 +473,11 @@ def _outcome(weights: dict[str, Any] | None, currency: str | None) -> tuple[Any,
             salary_per_month=c.salary_per_month,
             scores={},
             unknown=frozenset(dims),
-            pay=c.pay,
+            # The point is banded in the ranking's own currency, so the case that
+            # can rank (no fit, USD) does rank; a band in another one is refused.
+            pay=c.pay
+            if c.salary_per_month is None
+            else point_band(c.salary_per_month, currency or "EUR"),
         )
         for c in _band_offers()
     ]
@@ -489,6 +493,16 @@ def _outcome(weights: dict[str, Any] | None, currency: str | None) -> tuple[Any,
     except RankingError as exc:
         return ("raised", type(exc).__name__)
     return ("ranked", ranking["currency"], ranking["pareto"])
+
+
+def test_at_least_one_t138_case_actually_ranks() -> None:
+    """Otherwise the comparison below is `raised == raised` everywhere and cannot fail."""
+    outcomes = [
+        _outcome(None if fit is None else {**fit}, currency)
+        for fit in (None, _FIT_EUR)
+        for currency in (None, "EUR", "USD")
+    ]
+    assert any(outcome[0] == "ranked" for outcome in outcomes)
 
 
 @pytest.mark.parametrize("fit", [None, _FIT_EUR], ids=["no-fit", "fit-eur"])

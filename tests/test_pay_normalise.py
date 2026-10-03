@@ -270,3 +270,41 @@ def test_the_audit_compares_the_dominated_as_well_as_the_frontier() -> None:
     assert compared_bad == 5 and wrong_bad == 3
     measured = measure()
     assert measured["offers_checked"] == 10
+
+
+def _point(i: str, salary: float, unit: str | None) -> Candidate:
+    pay = None if unit is None else PayBand(salary, salary, unit)
+    return Candidate(i, salary, {}, frozenset(DIMS), pay=pay)
+
+
+def _l1(*candidates: Candidate) -> dict[str, Any]:
+    return rank(list(candidates), dimensions=DIMS, revision=REV, weights=None, at="t")
+
+
+def test_a_ranking_with_no_currency_refuses_a_point_without_a_unit_or_with_two() -> None:
+    """L1 orders on the point alone, so unlabelled or mixed points are refused (N1)."""
+    with pytest.raises(RankingError):
+        _l1(_point("a", 3333.0, "USD"), _point("b", 3100.0, "EUR"))
+    with pytest.raises(RankingError):
+        _l1(_point("a", 3333.0, None), _point("b", 3100.0, None))
+    with pytest.raises(RankingError):
+        _l1(_point("a", 3333.0, None), _point("b", 3100.0, "EUR"))
+    # Points that agree on one currency are ranked.
+    ranking = _l1(_point("a", 3333.0, "EUR"), _point("b", 3100.0, "EUR"))
+    assert ranking["pareto"] == ["a", "b"]
+
+
+def test_the_gate_evaluates_every_refusal_state_and_a_dropped_one_moves_the_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from integral import pay_normalise
+
+    states = pay_normalise._rank_refusals()
+    assert len(states) >= pay_normalise.MINIMUM_REFUSAL_STATES
+    assert measure()["refusal_states_checked"] == len(states)
+    monkeypatch.setattr(pay_normalise, "_rank_refusals", lambda: states[:-1])
+    assert measure()["unconverted_pay_reaching_rank"] > 0
+
+
+def test_the_settled_run_can_rise() -> None:
+    assert measure()["settled_run_detected_when_planted"] == 1
