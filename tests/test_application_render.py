@@ -53,7 +53,7 @@ def test_output_is_a_single_file() -> None:
             f"# H\n\n- {HOSTILE}\n\n{HOSTILE}",
             title=HOSTILE,
             kind=kind,
-            photo=b"\x89PNG-bytes",
+            photo=b"\x89PNG-bytes" if kind == "cv" else None,
             photo_mime="image/png",
         )
         doc = Doc(out)
@@ -69,15 +69,120 @@ def test_output_is_a_single_file() -> None:
         assert not re.search(r"url\(\s*['\"]?(?!data:)", doc.css)
 
 
+Rule = tuple[str, tuple[str, ...], dict[str, str]]  # (context, selectors, declarations)
+
+
+def _decls(block: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for part in block.split(";"):
+        if ":" in part:
+            name, _, value = part.partition(":")
+            out[name.strip().lower()] = " ".join(value.split())
+    return out
+
+
+def _parse_css(css: str) -> list[Rule]:
+    """Flat list of rules; context is 'top', 'media:<query>' for one nesting level."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    rules: list[Rule] = []
+
+    def walk(text: str, context: str) -> None:
+        i = 0
+        while True:
+            head_end = text.find("{", i)
+            if head_end < 0:
+                return
+            head = " ".join(text[i:head_end].split())
+            depth, k = 1, head_end + 1
+            while depth and k < len(text):
+                depth += {"{": 1, "}": -1}.get(text[k], 0)
+                k += 1
+            body = text[head_end + 1 : k - 1]
+            if head.startswith("@media"):
+                walk(body, "media:" + head[len("@media") :].strip())
+            else:
+                selectors = tuple(x.strip() for x in head.split(","))
+                rules.append((context, selectors, _decls(body)))
+            i = k
+
+    walk(css, "top")
+    return rules
+
+
+def _print_rule_violations(css: str) -> list[str]:
+    """Why this stylesheet does not carry the print rules the spec requires."""
+    rules = _parse_css(css)
+    live = ("top", "media:print")  # contexts that apply when printing
+    want: list[tuple[str, str, str]] = [
+        ("@page", "size", "A4"),
+        ("@page", "margin", "22mm 24mm"),
+        ("p", "orphans", "3"),
+        ("p", "widows", "3"),
+        ("li", "orphans", "3"),
+        ("li", "widows", "3"),
+        ("h1", "break-after", "avoid"),
+        ("h2", "break-after", "avoid"),
+        ("h3", "break-after", "avoid"),
+    ]
+    found: list[str] = []
+    for selector, prop, value in want:
+        values = [
+            (ctx, decls[prop])
+            for ctx, sels, decls in rules
+            if selector in sels and prop in decls and ctx in live
+        ]
+        if not values:
+            found.append(f"{selector} {prop}: no declaration that applies in print")
+        elif values[-1][1] != value:
+            found.append(f"{selector} {prop}: final value {values[-1][1]!r}, want {value!r}")
+        found += [f"{selector} {prop}: {v!r} is not {value!r}" for _, v in values if v != value]
+    return sorted(set(found))
+
+
 def test_print_rules_are_present() -> None:
     css = Doc(render_document("# H", title="t")).css
-    page = re.search(r"@page\s*\{([^}]*)\}", css)
-    assert page
-    assert re.search(r"size:\s*A4\b", page.group(1))
-    assert re.search(r"margin:\s*22mm 24mm", page.group(1))
-    assert re.search(r"@media print\s*\{[^@]*@page", css)
-    assert re.search(r"p,\s*li\s*\{[^}]*orphans:\s*3;[^}]*widows:\s*3", css)
-    assert re.search(r"h1,\s*h2,\s*h3\s*\{[^}]*break-after:\s*avoid", css)
+    assert _print_rule_violations(css) == []
+
+
+BASE = Doc(render_document("# H", title="t")).css
+
+
+@pytest.mark.parametrize(
+    "name,old,new",
+    [
+        ("P1 landscape", "size: A4;", "size: A4 landscape;"),
+        ("P2 extra margin", "margin: 22mm 24mm;", "margin: 22mm 24mm 0 0;"),
+        ("P3 widows 30", "p, li { orphans: 3; widows: 3; }", "p, li { orphans: 3; widows: 30; }"),
+        ("P4 avoid-column", "break-after: avoid;", "break-after: avoid-column;"),
+        (
+            "P5 commented out",
+            "p, li { orphans: 3; widows: 3; }",
+            "/* p, li { orphans: 3; widows: 3; } */",
+        ),
+        (
+            "P6 screen only",
+            "@media print {\n  @page { size: A4; margin: 22mm 24mm; }",
+            "@media screen {\n  @page { size: A4; margin: 22mm 24mm; }",
+        ),
+        (
+            "P7 later override",
+            "li { break-inside: avoid; }",
+            "li { break-inside: avoid; }\np, li { orphans: 1; widows: 1; }",
+        ),
+    ],
+)
+def test_broken_print_rules_are_refused(name: str, old: str, new: str) -> None:
+    assert old in BASE, name
+    assert _print_rule_violations(BASE.replace(old, new)), name
+
+
+def test_heading_rule_moved_to_screen_is_refused() -> None:
+    css = BASE.replace(
+        "h1, h2, h3 { font-family",
+        "@media screen { h1, h2, h3 { break-after: avoid; } }\nh1, h2, h3 { font-family",
+    )
+    css = css.replace(" break-after: avoid; }\nh1 {", " }\nh1 {", 1)
+    assert _print_rule_violations(css)
 
 
 def test_every_field_is_escaped() -> None:
@@ -104,9 +209,10 @@ def test_photo_is_a_cv_variant_and_validated() -> None:
     imgs = [a for t, a in cv.tags if t == "img"]
     assert len(imgs) == 1
     assert imgs[0]["src"] == "data:image/jpeg;base64,YWJj"
-    assert (
-        "img" not in Doc(render_document("# N", title="Name", kind="letter", photo=b"abc")).names()
-    )
+    with pytest.raises(ValueError):
+        render_document("# N", title="Name", kind="letter", photo=b"abc")
+    with pytest.raises(ValueError):
+        render_document("# N", title="Name", kind="cv", photo=b"")
     assert "img" not in Doc(render_document("# N", title="Name", kind="cv")).names()
     with pytest.raises(ValueError):
         render_document("x", title="t", kind="cv", photo=b"a", photo_mime='image/png"onload="x')
@@ -132,3 +238,24 @@ def test_title_cannot_break_out_of_the_head() -> None:
     assert "script" not in doc.names()
     assert doc.names().count("title") == 1
     assert title in "".join(doc.text)
+
+
+def test_csp_meta_precedes_title_and_style() -> None:
+    doc = Doc(render_document("body", title="t"))
+    order = [(t, a.get("http-equiv")) if t == "meta" else (t, None) for t, a in doc.tags]
+    csp = order.index(("meta", "Content-Security-Policy"))
+    names = [t for t, _ in order]
+    assert names.index("head") < csp < names.index("title")
+    assert csp < names.index("style") < names.index("body")
+
+
+def test_comments_in_the_stylesheet_do_not_hide_real_rules() -> None:
+    css = BASE.replace("p, li {", "/* note { size: A5 } */\np, li {", 1)
+    assert css != BASE
+    assert _print_rule_violations(css) == []
+
+
+def test_closing_hash_needs_a_space() -> None:
+    doc = Doc(render_document("## C#\n\n## Title ##\n\n### F# and C ###", title="t"))
+    text = [x for x in doc.text if x.strip()][1:]  # [0] is the <title>
+    assert text == ["C#", "Title", "F# and C"]

@@ -25,7 +25,8 @@ PHOTO_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gi
 KINDS = ("letter", "cv")
 
 _BOLD = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
-_HEADING = re.compile(r"^(#{1,3})[ \t]+(.*?)[ \t]*#*[ \t]*$")
+# A closing ``#`` sequence only counts after a space (CommonMark): ``## C#`` keeps its ``#``.
+_HEADING = re.compile(r"^(#{1,3})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 _BULLET = re.compile(r"^[ \t]*[-*+][ \t]+(.*)$")
 _LANG = re.compile(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*")
 
@@ -117,11 +118,13 @@ def render_document(
     photo_mime: str = "image/jpeg",
     lang: str = "en",
 ) -> str:
-    """One self-contained HTML document. ``photo`` is honoured for the CV only."""
+    """One self-contained HTML document. ``photo`` is for the CV only; elsewhere it is refused."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}, not {kind!r}")
     if not _LANG.fullmatch(lang):
         raise ValueError(f"lang {lang!r} is not a language tag")
+    if photo is not None and (kind != "cv" or not photo):
+        raise ValueError("photo must be non-empty bytes and is only valid for kind='cv'")
     header = _photo_header(photo, photo_mime, title) if photo is not None and kind == "cv" else ""
     return (
         "<!doctype html>\n"
