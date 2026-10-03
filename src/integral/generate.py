@@ -64,6 +64,7 @@ from integral.cv_store import (
 )
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
+from integral.voice import VoiceApplied, VoicePreference, applied, stored_preferences, violations
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T45.json"
@@ -157,6 +158,9 @@ class Manifest(Strict):
     # candidate can decide — apply anyway and address it in the letter, or leave
     # this one — and never written into the document itself.
     gaps: tuple[str, ...] = ()
+    # T147: every stored voice preference this generation applied, so the
+    # candidate can see what governed the document and retract a wrong one.
+    voice_applied: tuple[VoiceApplied, ...] = ()
 
 
 def render_entry(section: str, entry: SourcedEntry) -> str:
@@ -225,6 +229,38 @@ def _holds(master: CVMaster, ask: str) -> bool:
         for section in _CLAIMABLE
         for entry in _entries(master, section)
     )
+
+
+def _voice_filter(
+    master: CVMaster,
+    chosen: list[tuple[str, int]],
+    preferences: tuple[VoicePreference, ...],
+) -> tuple[list[tuple[str, int]], list[Omission]]:
+    """Leave out every selected entry whose rendered line breaks a live preference.
+
+    The rule is closed: it is applied to what each entry *renders to*, whatever
+    section it is in and however it was chosen, so an entry added to a section
+    later is covered without anyone remembering to list it. Nothing is
+    rewritten (that would be inventing a claim); the entry is omitted and the
+    omission names the preference, so the candidate can overrule it.
+    """
+    kept: list[tuple[str, int]] = []
+    omitted: list[Omission] = []
+    for section, index in chosen:
+        text = render_entry(section, _entries(master, section)[index])
+        broken = violations(text, preferences)
+        if not broken:
+            kept.append((section, index))
+            continue
+        omitted.append(
+            Omission(
+                section=section,
+                entry_index=index,
+                text=text,
+                reason="voice preference: " + "; ".join(p.statement for p in broken),
+            )
+        )
+    return kept, omitted
 
 
 def _select(
@@ -349,6 +385,14 @@ def generate(
     no version number.
     """
     episode_picks = _episode_picks(master, _approved_episodes)
+    preferences = stored_preferences(EvidenceLog(store))
+    for line in sorted(_SCAFFOLD):
+        if violations(line, preferences):
+            # No entry to leave out: refusing is the only way not to emit it.
+            raise GenerationError(
+                f"the fixed line {line!r} breaks a stored voice preference — "
+                "nothing was written; retract the preference or change the line"
+            )
     version = next_version(store, offer_id)
     if version > GENERATION_CAP:
         raise GenerationError(
@@ -372,6 +416,9 @@ def generate(
         ) from exc
 
     chosen, omissions = _select(master, advert, asks)
+    chosen, voice_omissions = _voice_filter(master, chosen, preferences)
+    episode_picks, episode_omissions = _voice_filter(master, episode_picks, preferences)
+    omissions = [*omissions, *voice_omissions, *episode_omissions]
     cv_lines, cv_claims = _cv_lines(master, chosen)
     letter_lines, letter_claims = _letter_lines(master, chosen + episode_picks)
     manifest = Manifest(
@@ -380,6 +427,7 @@ def generate(
         claims=tuple(cv_claims + letter_claims),
         omissions=tuple(omissions),
         gaps=tuple(sorted({ask for ask in asks if not _holds(master, ask)})),
+        voice_applied=applied(preferences),
     )
 
     _atomic_write_text(store, "\n".join(cv_lines).rstrip("\n") + "\n", *where, "cv.md")
