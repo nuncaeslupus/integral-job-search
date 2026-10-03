@@ -20,10 +20,11 @@ from integral.photo_extract import _Listed, choose, extract_photo
 pytestmark = pytest.mark.skipif(shutil.which("pdfimages") is None, reason="poppler not installed")
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+STENCIL = -1  # third tuple element: an /ImageMask stencil rather than a picture
 
 
 def _pdf(pages: list[list[tuple[int, int, int]]]) -> bytes:
-    """Each page is a list of (width, height, smask_side) images; smask_side 0 = no soft mask."""
+    """Pages of (width, height, smask_side) images; 0 = no soft mask, STENCIL = ImageMask."""
     objs: list[bytes] = []
 
     def add(body: bytes) -> int:
@@ -36,6 +37,18 @@ def _pdf(pages: list[list[tuple[int, int, int]]]) -> bytes:
     for images in pages:
         xobjs, drawing = [], b""
         for n, (w, h, smask_side) in enumerate(images):
+            if smask_side == STENCIL:
+                bits = bytes([0xAA]) * (((w + 7) // 8) * h)
+                oid = add(
+                    b"<< /Type /XObject /Subtype /Image /Width %d /Height %d "
+                    b"/ImageMask true /BitsPerComponent 1 /Length %d >>\nstream\n"
+                    % (w, h, len(bits))
+                    + bits
+                    + b"\nendstream"
+                )
+                xobjs.append(b"/Im%d %d 0 R" % (n, oid))
+                drawing += b"q 100 0 0 100 10 10 cm /Im%d Do Q\n" % n
+                continue
             data = bytes([(37 * n) % 256, 90, 160]) * (w * h)
             smask_ref = b""
             if smask_side:
@@ -130,6 +143,47 @@ def test_a_soft_mask_is_not_a_photo_and_does_not_shift_the_file(tmp_path: Path) 
     photo = extract_photo(cv)
     assert photo is not None
     assert int.from_bytes(photo[16:20], "big") == 240
+
+
+def _width(png: bytes | None) -> int:
+    assert png is not None and png.startswith(PNG_MAGIC)
+    return int.from_bytes(png[16:20], "big")
+
+
+def test_a_stencil_listed_before_the_photo_does_not_shift_the_file(tmp_path: Path) -> None:
+    # pdfimages numbers output files by listing row, stencils included.
+    cv = _write(tmp_path, "cv.pdf", [[(600, 600, STENCIL), (240, 300, 0)]])
+    png = extract_photo(cv)
+    assert _width(png) == 240
+    assert int.from_bytes(png[20:24], "big") == 300  # type: ignore[index]
+
+
+def test_a_soft_mask_listed_before_the_photo_does_not_shift_the_file(tmp_path: Path) -> None:
+    # a small image with its own soft mask lists two rows (image, smask) first.
+    cv = _write(tmp_path, "cv.pdf", [[(50, 50, 50), (240, 300, 0)]])
+    png = extract_photo(cv)
+    assert _width(png) == 240
+    assert int.from_bytes(png[20:24], "big") == 300  # type: ignore[index]
+
+
+def test_an_oserror_during_extraction_is_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cv = _write(tmp_path, "cv.pdf", [[(240, 300, 0)]])
+
+    def boom(*_a: object, **_k: object) -> None:
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr("integral.photo_extract.tempfile.TemporaryDirectory", boom)
+    assert extract_photo(cv) is None
+
+
+def test_a_filename_starting_with_a_dash_is_a_path_not_an_option(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write(tmp_path, "-j", [[(240, 300, 0)]])
+    assert _width(extract_photo(Path("-j"))) == 240
 
 
 def test_two_images_tied_for_largest_are_ambiguous(tmp_path: Path) -> None:

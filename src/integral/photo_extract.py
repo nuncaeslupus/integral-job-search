@@ -59,7 +59,7 @@ def _run(args: list[str]) -> subprocess.CompletedProcess[str] | None:
 
 
 def _list_page_one(pdf: Path) -> list[_Listed] | None:
-    done = _run(["pdfimages", "-list", "-f", "1", "-l", "1", str(pdf)])
+    done = _run(["pdfimages", "-list", "-f", "1", "-l", "1", "--", str(pdf)])
     if done is None:
         return None
     rows: list[_Listed] = []
@@ -98,12 +98,18 @@ def extract_photo(pdf: Path) -> bytes | None:
     best = choose(rows)
     if best is None:
         return None
-    with tempfile.TemporaryDirectory() as scratch:
-        prefix = Path(scratch) / "img"
-        if _run(["pdfimages", "-png", "-f", "1", "-l", "1", str(pdf), str(prefix)]) is None:
-            return None
-        produced = Path(f"{prefix}-{best.index:03d}.png")
-        if not produced.is_file():
-            return None
-        data = produced.read_bytes()
+    try:
+        with tempfile.TemporaryDirectory() as scratch:
+            prefix = Path(scratch) / "img"
+            if (
+                _run(["pdfimages", "-png", "-f", "1", "-l", "1", "--", str(pdf), str(prefix)])
+                is None
+            ):
+                return None
+            produced = Path(f"{prefix}-{best.index:03d}.png")
+            if not produced.is_file():
+                return None
+            data = produced.read_bytes()
+    except OSError:
+        return None
     return data or None
