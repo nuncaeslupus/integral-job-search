@@ -303,7 +303,8 @@ def test_a_row_that_is_not_work_done_never_credits_a_technology(
     tmp_path: Path, kind: Any, text: str, technology: str
 ) -> None:
     store = _store(tmp_path, {"skills": [{"name": "Python", "level": "expert"}]})
-    _offer(store, "o", "Engineer", f"{technology} {technology}.".replace("go go", "Golang"))
+    spelled = {"kubernetes": "Kubernetes", "rust": "Rust", "php": "PHP", "go": "Golang"}
+    _offer(store, "o", "Engineer", f"We use {spelled[technology]} daily.")
     _offer(store, "other", "Other", "Golang and Kubernetes.")
     EvidenceLog(store).append(
         recorded_at="2026-09-30T10:00:00Z",
@@ -317,6 +318,7 @@ def test_a_row_that_is_not_work_done_never_credits_a_technology(
     for fit in fits.values():
         assert fit["used"] == []
         assert fit["match"] == []
+    assert technology in fits["o"]["missing"]
 
 
 def test_a_step_ten_reason_credits_nothing_on_any_offer(tmp_path: Path) -> None:
