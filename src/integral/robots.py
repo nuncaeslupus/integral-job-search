@@ -30,10 +30,12 @@ that apply.
 from __future__ import annotations
 
 import contextlib
+import http.client
 import json
 import re
 import string
 import sys
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -107,6 +109,24 @@ Fetch = Callable[[str], str]
 
 class RobotsError(RuntimeError):
     """The site's rules could not be established, so nothing may be fetched."""
+
+
+class RobotsUnreachable(RobotsError):
+    """T238: the site never ANSWERED — a network-level failure on every attempt.
+
+    Still a `RobotsError`, so every caller that fails closed keeps doing so; the
+    subclass exists only so the candidate can be told "unreachable" (try later)
+    from "refused" (the site said no) or an HTTP status it did answer with.
+    """
+
+    def __init__(self, message: str, attempts: int) -> None:
+        super().__init__(message)
+        self.attempts = attempts
+
+
+#: T238: seconds waited before each retry of a network-level failure — so one
+#: initial try plus `len(...)` retries. Short on purpose: it is one tiny file.
+RETRY_DELAYS: tuple[float, ...] = (1.0, 3.0)
 
 
 def _read(url: str) -> str:
@@ -798,8 +818,12 @@ class Robots:
         user_agent: str = USER_AGENT,
         fetch: Fetch = _read,
         browser_fetch: Fetch = _browser_read,
+        retry_delays: tuple[float, ...] = RETRY_DELAYS,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.user_agent = user_agent
+        self._retry_delays = retry_delays
+        self._sleep = sleep
         self._fetch = fetch
         self._browser_fetch = browser_fetch
         self._groups: dict[str, list[_Group]] = {}
@@ -808,19 +832,24 @@ class Robots:
         #: one answer, remembered like a success. Unremembered, an ATS host of
         #: 57 employers re-fetched it — and re-ran T71's browser retry — once
         #: per employer (#445 round 2, B2).
-        self._unreadable: dict[str, str] = {}
+        self._unreadable: dict[str, RobotsError] = {}
 
     def _groups_for(self, url: str) -> list[_Group]:
         parts = urlsplit(url)
         origin = f"{parts.scheme}://{parts.netloc}"
         if origin in self._unreadable:
-            raise RobotsError(self._unreadable[origin])
+            # A fresh exception of the SAME kind: an unreachable origin must keep
+            # reading as unreachable when it is asked about again (T238).
+            cached = self._unreadable[origin]
+            if isinstance(cached, RobotsUnreachable):
+                raise RobotsUnreachable(str(cached), cached.attempts)
+            raise RobotsError(str(cached))
         if origin not in self._groups:
             robots_url = urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
             try:
                 text = self._policy_text(origin, robots_url)
             except RobotsError as exc:
-                self._unreadable[origin] = str(exc)
+                self._unreadable[origin] = exc
                 raise
             self._groups[origin] = _parse_groups(text)
         return self._groups[origin]
@@ -828,7 +857,7 @@ class Robots:
     def _policy_text(self, origin: str, robots_url: str) -> str:
         """The body of `robots_url`, or `RobotsError` when it is no answer."""
         try:
-            text = self._fetch(robots_url)
+            text = self._fetch_retrying(robots_url)
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
                 # The site saying "no rules", which permits everything.
@@ -854,7 +883,7 @@ class Robots:
                 # recovering it is not license to read it more loosely.
                 try:
                     text = self._browser_fetch(robots_url)
-                except (urllib.error.HTTPError, OSError) as retry_exc:
+                except (urllib.error.HTTPError, OSError, http.client.HTTPException) as retry_exc:
                     raise RobotsError(
                         f"{origin}/robots.txt returned 403, and the browser-agent "
                         f"retry could not read it either: {retry_exc}"
@@ -863,9 +892,30 @@ class Robots:
                 # 500, a redirect loop, anything else — an unanswered
                 # question, and an unanswered question is not a yes.
                 raise RobotsError(f"{origin}/robots.txt returned {exc.code}") from exc
-        except OSError as exc:
-            raise RobotsError(f"{origin}/robots.txt could not be read: {exc}") from exc
+        except (OSError, http.client.HTTPException) as exc:
+            attempts = 1 + len(self._retry_delays)
+            raise RobotsUnreachable(
+                f"{origin}/robots.txt could not be reached after {attempts} attempts: {exc}",
+                attempts,
+            ) from exc
         return text
+
+    def _fetch_retrying(self, robots_url: str) -> str:
+        """`self._fetch`, retried on a network-level failure and on nothing else.
+
+        An `HTTPError` is the site ANSWERING (and a subclass of `OSError`, which
+        is why it is named first): its status keeps the meaning `_policy_text`
+        gives it, and re-asking would only repeat that answer. Only a failure to
+        get any answer — no route, reset, timeout, DNS — is worth another try.
+        """
+        for delay in self._retry_delays:
+            try:
+                return self._fetch(robots_url)
+            except urllib.error.HTTPError:
+                raise
+            except (OSError, http.client.HTTPException):
+                self._sleep(delay)
+        return self._fetch(robots_url)
 
     def allows(self, url: str) -> bool:
         rules, _ = _select_rules(self._groups_for(url), self.user_agent)
