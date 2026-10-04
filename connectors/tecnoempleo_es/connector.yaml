@@ -61,6 +61,9 @@ last_verified: "2026-08-30"
 # paywall, no cookie wall — verified by fetching with the tool's own UA and
 # nothing else (no cookie jar, no referer) and getting the complete ad text.
 auth: none
+# T236: see `Connector.employer_unpublished`. Declared because this connector's own fixture
+# yields rows with no `company`; `tests/test_employer_published.py` re-checks both ways.
+employer_unpublished: "Aggregator-fed postings (slug ends -appcast) are published without an employer profile; the list card has no company anchor and the detail page is equally anonymous. About a quarter of rows."
 
 list:
   # The per-technology search. `?te=<term>` is the board's own filter parameter;

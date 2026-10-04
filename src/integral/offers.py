@@ -234,6 +234,18 @@ class Offer(Strict):
         return value
 
 
+def names_an_employer(company: str | None) -> bool:
+    """Whether `company` names anyone (T236).
+
+    `None`, `""` and whitespace all answer no. One definition, because an
+    offer built with no employer is stored and presented like any other and
+    every decision keyed on the employer must agree on what "no employer"
+    is: a blank string compared to a blank string is equal, and that equality
+    is not a match. Any employer-keyed comparison asks this first.
+    """
+    return bool(company and company.strip())
+
+
 def compute_offer_id(text: str) -> str:
     """Content-address an offer by its verbatim text alone.
 
