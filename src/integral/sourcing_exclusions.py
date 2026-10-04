@@ -48,7 +48,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from integral.candidate import CONSTRAINT_FIELD_NAMES, FIELD_MODELS
 from integral.identity import IdentityError, ProfileStore
-from integral.offers import Offer
+from integral.offers import Offer, names_an_employer
 from integral.profile import EvidenceLog, EvidenceRow, ProfileError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -337,8 +337,80 @@ def _stems(needle: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     return (forms + tuple(abstract), suffixes + (_ABSTRACT_SUFFIXES if abstract else ()))
 
 
+#: Legal-form tokens a company name may end in. Dots are removed first, so
+#: "S.L.", "S.L.U." and "SL" all read as one token.
+_LEGAL_FORMS = frozenset(
+    [
+        "sl",
+        "slu",
+        "sa",
+        "sau",
+        "sc",
+        "scp",
+        "srl",
+        "spa",
+        "sas",
+        "sarl",
+        "ltd",
+        "limited",
+        "inc",
+        "llc",
+        "gmbh",
+        "ag",
+        "bv",
+        "nv",
+        "plc",
+        "corp",
+    ]
+)
+#: What a board appends to the employer's name: JobFluent writes "Foo logo".
+_BOARD_SUFFIXES = frozenset({"logo"})
+
+
+def employer_key(name: str | None) -> str:
+    """An employer's name reduced to what two spellings of it share.
+
+    Case, accents, punctuation, a board's trailing "logo" and trailing legal
+    forms ("S.L.", "Inc") are dropped, so "Fòrum Restauración, S.L. logo" and
+    "forum restauracion" are the same employer. Whole-name only: the key is
+    compared for equality, never searched inside, because "Bar" is not
+    "Barclays".
+    """
+    folded = _fold(re.sub(r"\.", "", name or ""), " ")
+    tokens = re.sub(r"[^0-9a-z]+", " ", folded).split()
+    while len(tokens) > 1 and tokens[-1] in _BOARD_SUFFIXES | _LEGAL_FORMS:
+        tokens.pop()
+    return " ".join(tokens)
+
+
+def _employer_matches(candidate: Candidate, exclusion: Exclusion) -> bool:
+    """Is this advert from an employer the candidate named?
+
+    Reads the company field, and the title's " en <Empresa>" tail for the
+    adverts that carry no company at all (every possible split on " en " is
+    tried, so a name that itself contains " en " is still reached). An advert
+    that names no employer at all is **undecidable** and counts as ruled out.
+    """
+    wanted = {employer_key(v) for v in (exclusion.value, *exclusion.terms)} - {""}
+    if not wanted:
+        return False
+    if employer_key(candidate.employer) in wanted:
+        return True
+    title = candidate.title or ""
+    parts = re.split(r"\s+en\s+", title, flags=re.IGNORECASE)
+    if any(employer_key(" en ".join(parts[i:])) in wanted for i in range(1, len(parts))):
+        return True
+    # An advert that names no employer anywhere (a board that does not publish
+    # one) cannot be shown to be somebody else's: the exclusion is undecidable
+    # for it, which is not the same as satisfied, so it is held and said.
+    return not names_an_employer(candidate.employer) and len(parts) == 1
+
+
 def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     """Is this advert one the candidate ruled out?
+
+    The `employer:` facet is a different question — who published it — and is
+    answered by `_employer_matches` on the normalised company, never by text.
 
     The stated value, and every `term` recorded beside it, is matched as a
     **word plus a closed set of endings** (`SUFFIXES`), never as free text:
@@ -349,6 +421,8 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     Title, text and employer are all read: an advert from "Banco Sabadell" is
     on the banking topic whether or not its text says so.
     """
+    if exclusion.facet.strip().lower() == "employer":
+        return _employer_matches(candidate, exclusion)
     raw = f"{candidate.title or ''} {candidate.employer or ''} {candidate.text}"
     for join in ("", " "):
         haystack = _fold(raw, join)
