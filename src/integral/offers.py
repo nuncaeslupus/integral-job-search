@@ -69,6 +69,7 @@ from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from integral.advert_link import advert_url
 from integral.dimensions import Language
 from integral.identity import IdentityError, ProfileStore
 
@@ -293,7 +294,7 @@ def connect_manual(
             id=compute_offer_id(text),
             source="manual",
             source_ref=source_ref,
-            url=url,
+            url=advert_url([url]),  # T252
             fetched_at=fetched_at,
             title=title,
             company=company,

@@ -103,6 +103,7 @@ from urllib.parse import SplitResult, parse_qsl, quote, unquote, urlsplit
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from integral.advert_link import advert_url
 from integral.dimensions import Language
 from integral.offers import Location, Offer, Salary, SourceKind, compute_offer_id
 from integral.salary_period import normalize_period
@@ -4178,7 +4179,8 @@ def build_offer(
             source=connector.site,
             source_kind=source_kind_of(connector),
             source_ref=source_ref or merged.get("source_ref"),
-            url=url or merged.get("url"),
+            # T252: never the application form — see `advert_link`.
+            url=advert_url([url, merged.get("url")]),
             title=merged.get("title"),
             company=merged.get("company"),
             location=location,
@@ -4219,7 +4221,7 @@ def build_search_offer(
             id=compute_offer_id(text),
             source=SEARCH_SOURCE,
             source_ref=source_ref,
-            url=url,
+            url=advert_url([url]),  # T252: a search hit may be the form
             title=title,
             company=company,
             language=language,
