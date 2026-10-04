@@ -271,7 +271,7 @@
     {
       "module": "connectors",
       "name": "MINIMUM_PROBES",
-      "line": 4761,
+      "line": 4813,
       "population": 15
     },
     {
@@ -343,7 +343,7 @@
     {
       "module": "offers",
       "name": "MINIMUM_CHECKS",
-      "line": 532,
+      "line": 546,
       "population": 10
     },
     {

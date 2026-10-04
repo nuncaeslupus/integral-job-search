@@ -3354,6 +3354,25 @@ class Connector(Strict):
     #: about the board and `tests/test_advert_identity.py` re-checks it against
     #: every committed fixture.
     identity_query: tuple[str, ...] | None = None
+    #: T236. Declares that adverts on this board may carry **no employer name**,
+    #: and says why. `None` (the default) is the claim that every advert the
+    #: board serves names its employer, and `tests/test_employer_published.py`
+    #: re-checks it against every committed fixture: a connector whose own
+    #: fixture yields an empty `company` fails unless it declares this, and one
+    #: that declares it with no empty row left in its fixture fails too, so the
+    #: declaration cannot outlive its cause. The reason is a sentence for the
+    #: next reader; it must say whether the board genuinely withholds the name
+    #: or the parser has not reached it yet. Sourcing counts the offers built
+    #: with no employer per board either way (`BoardOutcome.no_employer`).
+    employer_unpublished: str | None = None
+    #: T236. The other way to have rows with no employer: the board DOES name
+    #: one and this connector does not read it yet. Never an exemption — it
+    #: names the open task (`T<n>`) that owns the fix, sourcing reports the
+    #: board as a connector fault while it stands, and
+    #: `tests/test_employer_published.py` fails once that task is merged so the
+    #: key cannot outlive it. Mutually exclusive with `employer_unpublished`:
+    #: a board either omits the employer or is missing a selector.
+    employer_gap: str | None = None
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3400,6 +3419,39 @@ class Connector(Strict):
                     "nowhere — no advert is served from it"
                 )
         return hosts
+
+    @field_validator("employer_unpublished")
+    @classmethod
+    def _employer_unpublished_gives_a_reason(cls, reason: str | None) -> str | None:
+        # A validator, never a repair: a bare `true`-shaped declaration is the
+        # exemption with nothing behind it. Blank is refused, not defaulted.
+        if reason is not None and not reason.strip():
+            raise ValueError(
+                "employer_unpublished: give the reason — a blank one exempts the "
+                "board from the employer check and says nothing about why"
+            )
+        return reason
+
+    @field_validator("employer_gap")
+    @classmethod
+    def _employer_gap_names_a_task(cls, task: str | None) -> str | None:
+        # A validator, never a repair: `t235`, `T235 ` or a sentence would read
+        # as a task and match nothing the plan can be checked against.
+        if task is not None and re.fullmatch(r"T[0-9]+", task) is None:
+            raise ValueError(
+                f"employer_gap: {task!r} is not a task id — name the open task that owns "
+                "the fix, as `T<n>`; a gap with no owner is just an exemption"
+            )
+        return task
+
+    @model_validator(mode="after")
+    def _a_board_omits_or_is_missing_a_selector(self) -> Connector:
+        if self.employer_gap is not None and self.employer_unpublished is not None:
+            raise ValueError(
+                "employer_gap and employer_unpublished are exclusive: the board either "
+                "does not publish an employer or this connector does not read it"
+            )
+        return self
 
     @field_validator("identity_query")
     @classmethod

@@ -48,6 +48,10 @@ locale: en
 version: "1.0.0"
 last_verified: "2026-09-06"
 auth: none
+# T236: the board names the employer on every advert and this connector reads none of it.
+# Not an omission, so not `employer_unpublished`: `employer_gap` names the task that owns
+# the fix, is reported as a connector fault, and fails its test once T235 is merged.
+employer_gap: "T235"
 
 list:
   # `job_search` is the board's own parameter, taken from the recorded capture
