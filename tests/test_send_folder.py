@@ -5,6 +5,7 @@ Every claim here is pinned by reverting the one line that makes it true.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -210,3 +211,47 @@ def test_a_version_never_staged_still_records_as_before(
     version = _prepare(store, master, (0,))
     assert verify_send(store, OFFER, version) == []
     record_sent(store, master, OFFER, version, confirms=_confirm(store, version))
+
+
+def test_a_tampered_file_with_a_rewritten_record_is_still_refused(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """The record shares a tree with `send/`, so it cannot vouch for the files alone."""
+    version = _staged(store, master)
+    letter = _send(store, version) / "letter.md"
+    letter.write_text(letter.read_text(encoding="utf-8") + f"\n{FAILURE}\n", encoding="utf-8")
+    record = _version_dir(store, version) / "send.json"
+    data = json.loads(record.read_text(encoding="utf-8"))
+    data["files"]["letter.md"] = hashlib.sha256(letter.read_bytes()).hexdigest()
+    record.write_text(json.dumps(data), encoding="utf-8")
+    assert verify_send(store, OFFER, version) == [
+        "letter.md in send/ differs from what was approved"
+    ]
+    with pytest.raises(ApprovalError, match="send/ folder is not what was approved"):
+        record_sent(store, master, OFFER, version, confirms=_confirm(store, version))
+
+
+def test_a_send_folder_that_is_a_link_to_another_folder_is_refused(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    version = _staged(store, master)
+    folder = _send(store, version)
+    other = _version_dir(store, version) / "elsewhere"
+    folder.rename(other)
+    folder.symlink_to(other, target_is_directory=True)  # same bytes, still a link
+    assert verify_send(store, OFFER, version) == ["send/ is missing or is not a real directory"]
+    with pytest.raises(ApprovalError, match="send/ folder is not what was approved"):
+        record_sent(store, master, OFFER, version, confirms=_confirm(store, version))
+
+
+def test_a_document_edited_after_staging_in_both_places_is_refused(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """The staged hash is the reference the version-dir comparison cannot be."""
+    version = _staged(store, master)
+    for where in (_send(store, version), _version_dir(store, version)):
+        letter = where / "letter.md"
+        letter.write_text(letter.read_text(encoding="utf-8") + "\nBest wishes.\n", encoding="utf-8")
+    assert verify_send(store, OFFER, version) == [
+        "letter.md in send/ differs from what was approved"
+    ]

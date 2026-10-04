@@ -881,7 +881,14 @@ def verify_send(
 
     Compared against the digests recorded at staging **and** the payload on disk: a
     file edited, added, removed or swapped for a link or directory after approval is
-    named. A version with no `send/` and no record has nothing to disagree with.
+    named. Each file is compared with the approved document in the version dir
+    itself, not only with the hash in `send.json`, which sits in the same tree and
+    can be rewritten to agree with a tampered file.
+
+    A version with no `send/` and no record has nothing to disagree with, and that
+    includes one whose `send/` and `send.json` were both deleted: that reads as
+    never staged, and T46 allows recording it, because the boundary is the payload
+    digest and `send/` is a convenience on top of it.
     """
     where = _version_parts(offer_id, version)
     folder = store.path(*where, SEND_DIR)
@@ -890,8 +897,10 @@ def verify_send(
         return []
     if not record_path.exists():
         return ["send/ exists but was not staged by stage_send, so nothing approved it"]
-    if not folder.is_dir() or folder.is_symlink():
-        return ["send/ is missing or is not a directory"]
+    # `store.path` resolves links, so `folder.is_symlink()` is always False; the
+    # unresolved path is the one that can be a link.
+    if store.home.joinpath(*where, SEND_DIR).is_symlink() or not folder.is_dir():
+        return ["send/ is missing or is not a real directory"]
     try:
         record = json.loads(record_path.read_text(encoding="utf-8"))
         recorded: dict[str, str] = dict(record["files"])
@@ -914,8 +923,13 @@ def verify_send(
             defects.append(f"{name} was approved and is missing from send/")
         elif entry.is_symlink() or not entry.is_file():
             defects.append(f"{name} in send/ is not a regular file")
-        elif _sha256(entry.read_bytes()) != expected:
-            defects.append(f"{name} in send/ differs from what was approved")
+        else:
+            sent = entry.read_bytes()
+            # The record is a file in the same tree as `send/`, so a rewritten
+            # `send.json` can agree with a rewritten file: the approved document
+            # in the version dir is the independent reference.
+            if sent != store.path(*where, name).read_bytes() or _sha256(sent) != expected:
+                defects.append(f"{name} in send/ differs from what was approved")
     return defects
 
 

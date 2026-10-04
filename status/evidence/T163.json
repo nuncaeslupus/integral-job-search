@@ -8,12 +8,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "lineno": 3629
+      "lineno": 3643
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "lineno": 3624
+      "lineno": 3638
     },
     {
       "module": "approval",
