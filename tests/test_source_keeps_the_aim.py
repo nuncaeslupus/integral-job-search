@@ -15,10 +15,20 @@ from pathlib import Path
 import pytest
 
 from integral.candidate import Aim, CandidateConstraints, Location
+from integral.connectors import accepts_query, build_list_requests, load_connector
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
 from integral.search_terms import load_aim, save_aim
-from integral.sourcing import PHRASE_CEILING, Response, browser_urls, source
+from integral.sourcing import (
+    PHRASE_CEILING,
+    Response,
+    browser_urls,
+    browser_urls_every_phrase,
+    needs_browser,
+    packages_for,
+    source,
+    source_every_phrase,
+)
 
 _CONNECTORS = Path(__file__).resolve().parents[1] / "connectors"
 AT = "2026-01-01T00:00:00+00:00"
@@ -181,3 +191,75 @@ def test_browser_urls_follows_the_same_window() -> None:
         assert set(first).isdisjoint(second)
         assert any("term0" in u for u in first) and not any("term0" in u for u in second)
         assert any(f"term{PHRASE_CEILING}" in u for u in second)
+
+
+# --- T251: every term is searched, or named with the offset that searches it ---
+
+
+def _recording(asked: list[str]):  # type: ignore[no-untyped-def]
+    def fetch(request: object) -> Response:
+        asked.append(request.url)  # type: ignore[attr-defined]
+        return Response(None, "", error="no network in this test")
+
+    return fetch
+
+
+def _every(store: ProfileStore, aim: Aim, **kwargs):  # type: ignore[no-untyped-def]
+    asked: list[str] = []
+    run = source_every_phrase(
+        store,
+        _spain(),
+        aim,
+        fetch=_recording(asked),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_allow(),
+        **kwargs,
+    )
+    return run, asked
+
+
+def _steerable_boards() -> list[str]:
+    return [
+        p.name
+        for p in packages_for(_spain(), _CONNECTORS)
+        if accepts_query(load_connector(_CONNECTORS / p.name))
+        and not needs_browser(load_connector(_CONNECTORS / p.name))  # asked of the browser
+    ]
+
+
+@pytest.mark.parametrize("n", [m for m in _COUNTS if m])
+def test_every_term_is_requested_from_every_board_that_takes_a_query(
+    store: ProfileStore, n: int
+) -> None:
+    """The property itself: the requests that went out, not the run's own
+    bookkeeping. One request per (steerable board, term), each built by the
+    connector's own URL builder, so a term dropped from any board is missing."""
+    boards = _steerable_boards()
+    assert boards, "no steerable board is installed, so this proves nothing"
+    aim = Aim(state="stated", terms=_terms(n))
+    run, asked = _every(store, aim)
+    for board in boards:
+        connector = load_connector(_CONNECTORS / board)
+        for term in aim.terms:
+            wanted = {r.url for r in build_list_requests(connector, page_count=1, query=term)}
+            assert wanted <= set(asked), (board, term)
+    assert run.unsearched == () and run.next_offset is None
+    assert load_aim(store) == aim  # the one writer still saved the whole aim, once
+
+
+def test_a_single_window_still_names_the_offset_that_continues_it(store: ProfileStore) -> None:
+    aim = Aim(state="stated", terms=_terms(2 * PHRASE_CEILING + 1))
+    run = _run(store, aim)
+    assert run.next_offset == PHRASE_CEILING
+    assert f"offset={PHRASE_CEILING}" in run.summary()
+    last = _run(store, aim, 2 * PHRASE_CEILING)
+    assert last.next_offset is None and "NOT searched" not in last.summary()
+
+
+def test_browser_boards_are_asked_for_every_term_too() -> None:
+    aim = Aim(state="stated", terms=_terms(2 * PHRASE_CEILING + 1))
+    urls = browser_urls_every_phrase(_spain(), aim, directory=_CONNECTORS, robots=_allow())
+    assert urls, "no steerable browser board is installed, so this proves nothing"
+    for term in aim.terms:
+        assert any(term in u for u in urls), term

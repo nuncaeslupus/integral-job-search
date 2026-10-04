@@ -377,6 +377,10 @@ class Run:
     #: that searched six of nine and reported "6 boards searched" describes a
     #: partial pass as a whole one.
     unsearched: tuple[str, ...] = ()
+    #: The `offset` that searches `unsearched` next, or None when nothing is
+    #: left (T251). Said in the summary, so a session continues from the report
+    #: rather than from arithmetic it might get wrong.
+    next_offset: int | None = None
     #: Worldwide boards left out because the candidate's reach does not include
     #: remote work, and why in the candidate's terms. Said, so a quiet run is
     #: not read as a quiet world.
@@ -589,7 +593,8 @@ class Run:
             lines.append(f"  searched, one phrase at a time: {', '.join(self.searched)}")
         if self.unsearched:
             lines.append(
-                f"  NOT searched this run (over the {PHRASE_CEILING}-phrase ceiling): "
+                f"  NOT searched this run (over the {PHRASE_CEILING}-phrase ceiling "
+                f"or the offer ceiling), continue with offset={self.next_offset}: "
                 f"{', '.join(self.unsearched)}"
             )
         if self.steered:
@@ -885,6 +890,8 @@ def source(
     robots: Robots | None = None,
     browser: Fetch | None = None,
     offset: int = 0,
+    already_added: int = 0,
+    refused_origins: dict[str, str] | None = None,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -907,6 +914,22 @@ def source(
     aim it was given exactly when `offset == 0`. A pass with `offset > 0` is a
     continuation and never writes, so a slice cannot reach the store and a
     changed aim at offset 0 is still saved.
+
+    `already_added` (T251) is how many offers earlier windows of the same run
+    already wrote, so `OFFER_CEILING` stays one ceiling for the whole run;
+    `source_every_phrase` is the caller that sets it. `refused_origins` is the
+    same idea for T174's refusal map: a host's refusal is its answer for the
+    whole run, so a caller running several windows hands one dict through them.
+
+    A board that takes no query is asked once per run, at `offset == 0`, and its
+    rows are filtered against the **whole** aim: asking it again per window is
+    the same request for the same answer, and filtering each time against that
+    window's six phrases would call a row that matched in window 0 a row that
+    "matched none of your phrases".
+
+    When the offer ceiling fills partway through a window, the phrases of that
+    window it never sent come back in `unsearched` and `next_offset` is **this**
+    window's offset: resuming past it would skip them.
     """
     from integral.search_terms import save_aim  # circular at module scope
 
@@ -927,6 +950,8 @@ def source(
     if aim.terms and offset == 0:
         save_aim(store, aim)
     run = Run(unsearched=aim.terms[offset + PHRASE_CEILING :])
+    if run.unsearched:
+        run.next_offset = offset + PHRASE_CEILING
     # What went unasked is the *difference*, never a branch per bucket. A branch
     # per bucket is one more thing to remember: #562 added a third bucket to
     # `packages_for` and no branch here, so a run that deliberately withheld five
@@ -945,7 +970,7 @@ def source(
     exclusions = load_exclusions(store)
     # T174: shared by every board and phrase, so a host's refusal is its
     # answer for the rest of the run rather than for one request.
-    refused_origins: dict[str, str] = {}
+    refused_origins = {} if refused_origins is None else refused_origins
     for package in packages_for(constraints, directory):
         # A board that does not search returns the same list whatever was
         # asked, so asking it once per phrase is N identical requests for one
@@ -956,9 +981,11 @@ def source(
             steerable = accepts_query(_connector_of(package, directory))
         except (ConnectorError, OSError):
             steerable = False
+        if offset and not (steerable and phrases):
+            continue  # asked, and filtered against the whole aim, at offset 0
         queries: tuple[str | None, ...] = phrases if steerable and phrases else (None,)
         for query in queries:
-            room = OFFER_CEILING - run.added
+            room = OFFER_CEILING - already_added - run.added
             if room <= 0:
                 run.outcomes.append(
                     BoardOutcome(package.name, None, steerable, query, skipped=_CEILING_SKIP)
@@ -974,14 +1001,75 @@ def source(
                     directory=directory,
                     page_count=page_count,
                     robots=adjudicator,
-                    phrases=phrases,
+                    phrases=phrases if steerable else aim.terms,
                     room=room,
                     browser=browser,
                     refused_origins=refused_origins,
                     exclusions=exclusions,
                 )
             )
+    # Phrases the ceiling stopped before they were sent to a board that takes a
+    # query. They sit inside this window, so the window — not the next one — is
+    # where a resumed run must start, and they are named rather than left only
+    # in the "NOT asked, after the ceiling" line.
+    cut = tuple(
+        dict.fromkeys(
+            o.query for o in run.outcomes if o.skipped == _CEILING_SKIP and o.query is not None
+        )
+    )
+    if cut:
+        run.unsearched = cut + run.unsearched
+        run.next_offset = offset
     return run
+
+
+def source_every_phrase(
+    store: ProfileStore,
+    constraints: CandidateConstraints,
+    aim: Aim,
+    **kwargs: Any,
+) -> Run:
+    """`source()` over every window of the aim, one run (T251).
+
+    The candidate's rule is that a term in the aim is searched on every board
+    that takes a query, and duplicates are discarded afterwards — not that the
+    first `PHRASE_CEILING` are and the rest wait for somebody to remember
+    `offset`. So this walks the windows from `offset=0` (the one that saves the
+    aim) and merges them.
+
+    The offer ceiling stays one ceiling for the run: once it is reached no later
+    window is opened, and the terms it would have searched are returned as
+    `unsearched` with the `next_offset` that resumes there. Every term is
+    therefore either searched or named with the offset that searches it.
+    """
+    merged = Run()
+    offset = 0
+    refused: dict[str, str] = {}
+    while True:
+        run = source(
+            store,
+            constraints,
+            aim,
+            offset=offset,
+            already_added=merged.added,
+            refused_origins=refused,
+            **kwargs,
+        )
+        if offset == 0:
+            merged.unreached = run.unreached
+            merged.unreached_because = run.unreached_because
+        merged.outcomes.extend(run.outcomes)
+        if run.next_offset == offset:  # the ceiling cut this window short
+            merged.unsearched = run.unsearched
+            merged.next_offset = offset
+            return merged
+        offset += PHRASE_CEILING
+        if offset >= len(aim.terms):
+            return merged
+        if merged.added >= OFFER_CEILING:
+            merged.unsearched = aim.terms[offset:]
+            merged.next_offset = offset
+            return merged
 
 
 def browser_urls(
@@ -1022,6 +1110,24 @@ def browser_urls(
             for request in requests:
                 if _may_fetch(adjudicator, request.url) and request.url not in urls:
                     urls.append(request.url)
+    return urls
+
+
+def browser_urls_every_phrase(
+    constraints: CandidateConstraints,
+    aim: Aim,
+    **kwargs: Any,
+) -> list[str]:
+    """`browser_urls` over every window of the aim, in order, without repeats.
+
+    The partner of `source_every_phrase`: a browser board is asked for every
+    phrase too, so the candidate's browser is told every page to save at once.
+    """
+    urls: list[str] = []
+    for offset in range(0, max(len(aim.terms), 1), PHRASE_CEILING):
+        for url in browser_urls(constraints, aim, offset=offset, **kwargs):
+            if url not in urls:
+                urls.append(url)
     return urls
 
 
