@@ -48,6 +48,22 @@ plugin writes its output there too, not to its own default location.
 > pushing. Do not edit the block above to say so — it is auto-managed and `/init`
 > will overwrite it; this note is the host-owned place to record it.
 
+## Which kind of session this is
+
+Decide this before running anything in the protocol above; it is the owner's rule
+(2026-10-02) and this is the only place its text lives.
+
+A session is a candidate session unless the conversation opens with `[[…]]` keys or tells it to work in the repo, or is told to work in the repo after its first response, in which case it is a repo session for the rest of the session. Default candidate; repo when asked for.
+
+- **The board protocol applies only in a repo session.** The "Automatic session
+  protocol" above (handover, task issues, board, claim, PR) is not run in a candidate
+  session: no fetch, no claim, no handover read, nothing under `arsenal/` opened.
+- **A candidate session** runs the candidate process from step 0
+  (`.claude/skills/step-00-identify/SKILL.md`) and proceeds as a real one.
+- Step 0 and the test-mode skill point here; they never restate the rule.
+  `tests/test_session_kind_rule.py` fails if the rule is deleted, duplicated, or a
+  pointer is removed.
+
 ## The GitHub channel depends on the surface — detect it, don't assume
 
 `bash claude-arsenal/bin/github_channel.sh --detect` answers this, and its answer

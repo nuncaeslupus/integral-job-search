@@ -9,6 +9,8 @@ A second channel, open during a live session, carrying notes about the tool whil
 
 CANARY: test-mode-loaded-2026-08-20-afe6c69e-c576a153e5be4d45
 
+**Which kind of session this is** decides whether `[[…]]` opens a repo session: see `CLAUDE.md`, section "Which kind of session this is". The rule is not restated here.
+
 **Orthogonal.** This is not a step. It runs *alongside* whichever of the thirteen steps is live, and it never chooses, skips or reorders one.
 
 ## When to load

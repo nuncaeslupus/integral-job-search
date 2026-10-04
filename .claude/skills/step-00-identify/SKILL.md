@@ -9,6 +9,8 @@ The candidate is greeted by name, told when they were last here and where they s
 
 CANARY: step-00-identify-loaded-2026-08-18-f42ed484-4826385d60392bea
 
+**Which kind of session this is** is decided before this step runs, and by one rule only: see `CLAUDE.md`, section "Which kind of session this is". This step is for a candidate session.
+
 **Required.** No candidate reaches a ranking without this step — §2.5 promises every *offered* step may be declined, and this is not one of those.
 
 ## When to load
