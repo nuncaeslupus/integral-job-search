@@ -584,7 +584,7 @@ def test_an_employer_whose_path_robots_disallows_is_passed_over(tmp_path: Path) 
     assert asked == ["acme", "beta"]
     (outcome,) = run.outcomes
     assert outcome.added == 2
-    assert outcome.employers_failed == ("Gone Co (robots.txt disallows it)",)
+    assert outcome.employers_failed == ("Gone Co (refused: robots.txt disallows it)",)
 
 
 def test_an_unreadable_robots_txt_is_asked_once_per_host(tmp_path: Path) -> None:
