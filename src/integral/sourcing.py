@@ -238,9 +238,11 @@ class BoardOutcome:
     #: text** although the connector's `detail:` declares a `text` selector —
     #: the signature of a selector that has stopped matching (a build hash
     #: rotated), which is otherwise indistinguishable from an advert with no
-    #: body. A **subset of `dropped`**, not a bucket beside it: each such row
-    #: is also counted there, so it is named in `_NOT_AN_UNREALIZED_ROW_FIELD`
-    #: and never summed into `_unrealized_rows` a second time.
+    #: body. Not a bucket beside `dropped`: such a row is usually dropped too
+    #: (and counted there), but not always — other detail fields can still
+    #: complete the offer, which is then added with this count still raised. So
+    #: it is named in `_NOT_AN_UNREALIZED_ROW_FIELD` and never summed into
+    #: `_unrealized_rows`, where it would count a dropped row twice.
     empty_detail: int = 0
     #: T167. Rows an unsteered board returned that matched none of the
     #: candidate's phrases — filtered before any advert page was opened.

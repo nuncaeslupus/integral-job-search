@@ -222,3 +222,100 @@ def test_an_empty_detail_row_is_not_counted_twice_as_unrealized(store: ProfileSt
     outcome = _outcome(store, "talent_es", _EMPTY_PAGE)
     assert outcome.empty_detail
     assert _unrealized_rows(outcome) <= outcome.items, outcome
+
+
+# ---------------------------------------------------------------------------
+# round 2: the attribute spelling, the list `item`, and the declares-`text` guard
+
+
+def _talent_copy(tmp_path: Path, edit: Any) -> Path:
+    """A full copy of the committed talent_es package (fixtures included) whose
+    `connector.yaml` is passed through `edit`."""
+    import shutil
+
+    target = tmp_path / "talent_es"
+    shutil.copytree(_CONNECTORS / "talent_es", target)
+    path = target / "connector.yaml"
+    path.write_text(edit(path.read_text(encoding="utf-8")), encoding="utf-8")
+    return target
+
+
+def _replaced(text: str, old: str, new: str) -> str:
+    assert text.count(old) == 1, f"the committed file moved: {old!r}"
+    return text.replace(old, new)
+
+
+def test_a_class_named_through_an_attribute_selector_is_still_a_generated_class() -> None:
+    assert generated_classes('div[class="sc-f4dbceab-10"]') == ("sc-f4dbceab-10",)
+    assert generated_classes("div[class='x sc-f4dbceab-10 y']") == ("sc-f4dbceab-10",)
+    assert generated_classes('div[class="job-description"]') == ()
+    assert generated_classes('div[data-x="sc-f4dbceab-10"]') == ()
+
+
+def test_the_attribute_spelling_does_not_get_past_the_refusal(tmp_path: Path) -> None:
+    def edit(text: str) -> str:
+        text = _without_acceptance(text, 'css: "div.sc-f4dbceab-10"')
+        return _replaced(text, 'css: "div.sc-f4dbceab-10"', "css: 'div[class=\"sc-f4dbceab-10\"]'")
+
+    with pytest.raises(ConnectorError, match=r"detail selector.*sc-f4dbceab-10"):
+        load_connector(_package_with(tmp_path, edit))
+
+
+def test_a_list_item_selector_on_a_generated_class_is_refused(tmp_path: Path) -> None:
+    package = _talent_copy(
+        tmp_path,
+        lambda t: _replaced(
+            t,
+            "item: 'article[data-testid=\"job-card-unified\"]'",
+            "item: 'article.JobCard_card__TSiPB'",
+        ),
+    )
+    with pytest.raises(ConnectorError, match=r"item: JobCard_card__TSiPB"):
+        load_connector(package)
+
+
+def test_a_page_is_not_empty_when_detail_declares_no_text(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    """The count means "the selector for the body stopped matching". A connector
+    whose `detail:` never promised a body has nothing to have stopped matching, so
+    a 200 page yielding no record is not counted."""
+
+    # The format requires a body source somewhere, so the list names one that
+    # matches nothing on this page: the row stays incomplete and the advert page
+    # is fetched, while `detail:` itself declares no `text`.
+    def edit(text: str) -> str:
+        text = _replaced(
+            text,
+            'text:\n      css: "div.sc-f4dbceab-10"',
+            'company:\n      css: "div.sc-f4dbceab-10"',
+        )
+        anchor = '    detail_url: {css: "a", attr: href}'
+        return _replaced(text, anchor, anchor + '\n    text: {css: "div.nope"}')
+
+    package = _talent_copy(tmp_path, edit)
+    connector = load_connector(package)
+    assert connector.detail is not None and "text" not in connector.detail.fields
+    list_html = (package / "fixture" / "list.html").read_text(encoding="utf-8")
+    fetched: list[str] = []
+
+    def answer(request: ListRequest) -> Response:
+        if urlsplit(request.url).path == urlsplit(connector.list.url_pattern).path:
+            return Response(200, list_html, error=None)
+        fetched.append(request.url)
+        return Response(200, _EMPTY_PAGE, error=None)
+
+    found = next(p for p in installed_packages(tmp_path) if p.name == "talent_es")
+    outcome = _one_board(
+        store,
+        found,
+        "python",
+        fetch=answer,
+        at=_AT,
+        directory=tmp_path,
+        page_count=1,
+        robots=Robots(fetch=lambda url: _ALLOW),
+        phrases=("python",),
+    )
+    assert fetched, "no advert page was fetched, so this proves nothing"
+    assert outcome.empty_detail == 0, outcome

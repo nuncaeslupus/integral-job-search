@@ -1348,16 +1348,30 @@ class FieldSelector(Strict):
 #: stylesheet renames them and a selector built on one stops matching with no
 #: error anywhere. Three families, each a closed shape rather than a guess:
 #: styled-components (`sc-f4dbceab-10`), CSS modules (`JobCard_title__X32Qk`)
-#: and emotion (`css-1a2b3c4`).
+#: and emotion (`css-1a2b3c4`), plus styled-jsx (`jsx-1234567890`, a numeric
+#: hash). Not covered, deliberately: styled-components v5's `sc-bdVaJa` and
+#: emotion's labelled `css-xxxx-MuiBox-root` have no shape that cannot also be a
+#: legitimate stable name (`sc-header`, `css-loader`), so a pattern for them would
+#: refuse good selectors; they are left to review.
 _GENERATED_CLASS = re.compile(
     r"^(?:sc-[A-Za-z0-9]{5,}-\d+|[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9-]+__[A-Za-z0-9_-]{5}"
-    r"|css-[a-z0-9]{5,8})$"
+    r"|css-[a-z0-9]{5,8}|jsx-\d{6,})$"
 )
 
 
 def generated_classes(css: str) -> tuple[str, ...]:
-    """The build-generated class names a selector is built on, in order."""
-    return tuple(c for c in compile_selector(css).classes if _GENERATED_CLASS.match(c))
+    """The build-generated class names a selector is built on, in order.
+
+    Read from `.class` tokens **and** from `[class="…"]` values: the attribute
+    spelling names the same class, and checking only one spelling lets the other
+    through unnoticed.
+    """
+    compiled = compile_selector(css)
+    names = list(compiled.classes)
+    for attr, value in compiled.attrs:
+        if attr == "class" and value is not None:
+            names.extend(value.split())
+    return tuple(c for c in names if _GENERATED_CLASS.match(c))
 
 
 def _refuse_unaccepted_generated_classes(
