@@ -48,9 +48,10 @@ locale: en
 version: "1.0.0"
 last_verified: "2026-09-06"
 auth: none
-# T236: see `Connector.employer_unpublished`. Declared because this connector's own fixture
-# yields rows with no `company`; `tests/test_employer_published.py` re-checks both ways.
-employer_unpublished: "GAP, not an omission: the board names the employer on the advert (hiring/companies link, and in the slug) and this connector maps none of it. Filed as T235, which owns the fix."
+# T236: the board names the employer on every advert and this connector reads none of it.
+# Not an omission, so not `employer_unpublished`: `employer_gap` names the task that owns
+# the fix, is reported as a connector fault, and fails its test once T235 is merged.
+employer_gap: "T235"
 
 list:
   # `job_search` is the board's own parameter, taken from the recorded capture

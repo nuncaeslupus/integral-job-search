@@ -3365,6 +3365,14 @@ class Connector(Strict):
     #: or the parser has not reached it yet. Sourcing counts the offers built
     #: with no employer per board either way (`BoardOutcome.no_employer`).
     employer_unpublished: str | None = None
+    #: T236. The other way to have rows with no employer: the board DOES name
+    #: one and this connector does not read it yet. Never an exemption — it
+    #: names the open task (`T<n>`) that owns the fix, sourcing reports the
+    #: board as a connector fault while it stands, and
+    #: `tests/test_employer_published.py` fails once that task is merged so the
+    #: key cannot outlive it. Mutually exclusive with `employer_unpublished`:
+    #: a board either omits the employer or is missing a selector.
+    employer_gap: str | None = None
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3423,6 +3431,27 @@ class Connector(Strict):
                 "board from the employer check and says nothing about why"
             )
         return reason
+
+    @field_validator("employer_gap")
+    @classmethod
+    def _employer_gap_names_a_task(cls, task: str | None) -> str | None:
+        # A validator, never a repair: `t235`, `T235 ` or a sentence would read
+        # as a task and match nothing the plan can be checked against.
+        if task is not None and re.fullmatch(r"T[0-9]+", task) is None:
+            raise ValueError(
+                f"employer_gap: {task!r} is not a task id — name the open task that owns "
+                "the fix, as `T<n>`; a gap with no owner is just an exemption"
+            )
+        return task
+
+    @model_validator(mode="after")
+    def _a_board_omits_or_is_missing_a_selector(self) -> Connector:
+        if self.employer_gap is not None and self.employer_unpublished is not None:
+            raise ValueError(
+                "employer_gap and employer_unpublished are exclusive: the board either "
+                "does not publish an employer or this connector does not read it"
+            )
+        return self
 
     @field_validator("identity_query")
     @classmethod

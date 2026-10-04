@@ -43,6 +43,7 @@ MINIMUM_CONNECTORS = 25
 MINIMUM_ROWS = 100
 MINIMUM_CONNECTORS_NAMING_AN_EMPLOYER = 15
 MINIMUM_DECLARED = 1
+MINIMUM_GAPS = 1
 
 
 def _directory(connector: Connector) -> Path:
@@ -66,8 +67,9 @@ def fixture_rows_without_employer(connector: Connector) -> tuple[int, int]:
     """
     directory = _directory(connector) / "fixture"
     rows = parse_list_page(connector, (directory / "list.html").read_text(encoding="utf-8"))
-    if "{employer}" in connector.list.url_pattern:
-        return len(rows), 0
+    # `_one_board` fills a blank company from the request's employer, and only
+    # a blank one: a row that names its own employer never needed the slot.
+    slot = "{employer}" in connector.list.url_pattern
     detail_company = None
     detail = directory / "detail.html"
     if detail.exists() and connector.detail is not None and not _list_supplies_text(connector):
@@ -77,7 +79,9 @@ def fixture_rows_without_employer(connector: Connector) -> tuple[int, int]:
     empty = [
         row
         for row in rows
-        if not names_an_employer(row.get("company")) and not names_an_employer(detail_company)
+        if not names_an_employer(row.get("company"))
+        and not slot
+        and not names_an_employer(detail_company)
     ]
     return len(rows), len(empty)
 
@@ -88,6 +92,7 @@ def test_the_library_is_large_enough_for_the_rule_to_mean_something() -> None:
     assert sum(rows for rows, _ in measured) >= MINIMUM_ROWS
     assert sum(1 for _, empty in measured if empty == 0) >= MINIMUM_CONNECTORS_NAMING_AN_EMPLOYER
     assert sum(1 for c in CONNECTORS if c.employer_unpublished) >= MINIMUM_DECLARED
+    assert sum(1 for c in CONNECTORS if c.employer_gap) >= MINIMUM_GAPS
 
 
 @pytest.mark.parametrize("site", SITES)
@@ -96,10 +101,10 @@ def test_a_connector_whose_fixture_yields_no_employer_declares_it(site: str) -> 
     rows, empty = fixture_rows_without_employer(connector)
     assert rows, f"{site}: its list fixture parsed no rows, so nothing was checked"
     if empty:
-        assert connector.employer_unpublished, (
+        assert connector.employer_unpublished or connector.employer_gap, (
             f"{site}: {empty} of {rows} fixture rows yield no `company` and connector.yaml "
-            "does not declare `employer_unpublished` — fix the selector or declare it, with "
-            "the reason"
+            "declares neither `employer_unpublished` (the board omits it) nor `employer_gap` "
+            "(it names it and the connector does not read it) — fix the selector or declare"
         )
 
 
@@ -108,9 +113,49 @@ def test_a_declaration_is_not_kept_after_its_cause_is_gone(site: str) -> None:
     """The other direction: an exemption nothing needs is the check switched off
     for a board that now publishes an employer, and it would stay off."""
     connector = next(c for c in CONNECTORS if c.site == site)
-    if connector.employer_unpublished:
+    if connector.employer_unpublished or connector.employer_gap:
         _, empty = fixture_rows_without_employer(connector)
-        assert empty, f"{site}: declares employer_unpublished but its fixture yields employers"
+        assert empty, f"{site}: declares a missing employer but its fixture yields employers"
+
+
+@pytest.mark.parametrize("site", SITES)
+def test_a_gap_names_a_task_that_is_still_open(site: str) -> None:
+    """A gap is a debt, not an exemption: it ends when its task merges. The plan's
+    row for the task is what says whether it has."""
+    connector = next(c for c in CONNECTORS if c.site == site)
+    if connector.employer_gap:
+        plan = (ROOT / "status" / "plan.md").read_text(encoding="utf-8")
+        row = next(
+            (
+                line
+                for line in plan.splitlines()
+                if line.startswith(f"| {connector.employer_gap} |")
+            ),
+            None,
+        )
+        assert row is not None, f"{site}: {connector.employer_gap} is not a task on the plan"
+        assert row.rstrip().endswith("☐ |"), (
+            f"{site}: {connector.employer_gap} is no longer open — read the employer and drop "
+            "`employer_gap`"
+        )
+
+
+@pytest.mark.parametrize("task", ["", "t235", "T235 ", "T", "T-1", "T235 owns it", "235"])
+def test_a_gap_that_names_no_task_is_refused(task: str) -> None:
+    text = (ROOT / "connectors" / "foorilla_en" / "connector.yaml").read_text(encoding="utf-8")
+    assert parse_connector(text).employer_gap == "T235"
+    broken = text.replace('employer_gap: "T235"', f'employer_gap: "{task}"', 1)
+    with pytest.raises(ConnectorError, match="employer_gap"):
+        parse_connector(broken)
+
+
+def test_a_board_cannot_both_omit_the_employer_and_miss_a_selector() -> None:
+    text = (ROOT / "connectors" / "foorilla_en" / "connector.yaml").read_text(encoding="utf-8")
+    both = text.replace(
+        'employer_gap: "T235"', 'employer_gap: "T235"\nemployer_unpublished: "x"', 1
+    )
+    with pytest.raises(ConnectorError, match="exclusive"):
+        parse_connector(both)
 
 
 def test_a_blank_reason_is_not_a_declaration() -> None:
@@ -148,7 +193,9 @@ _ROWS = (
 )
 
 
-def _run(store: ProfileStore, tmp_path: Path, declare: str | None = None) -> list[BoardOutcome]:
+def _run(
+    store: ProfileStore, tmp_path: Path, declare: str | None = None, gap: str | None = None
+) -> list[BoardOutcome]:
     directory = tmp_path / "connectors"
     pages = flood_board(directory, rows=1)
     if declare is not None:
@@ -156,6 +203,14 @@ def _run(store: ProfileStore, tmp_path: Path, declare: str | None = None) -> lis
         path.write_text(
             path.read_text(encoding="utf-8").replace(
                 "\nauth:", f'\nemployer_unpublished: "{declare}"\nauth:', 1
+            ),
+            encoding="utf-8",
+        )
+    if gap is not None:
+        path = directory / "flood_en" / "connector.yaml"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "\nauth:", f'\nemployer_gap: "{gap}"\nauth:', 1
             ),
             encoding="utf-8",
         )
@@ -186,8 +241,10 @@ def _run(store: ProfileStore, tmp_path: Path, declare: str | None = None) -> lis
     return run.outcomes
 
 
-def _summary(store: ProfileStore, tmp_path: Path, declare: str | None = None) -> str:
-    return Run(outcomes=_run(store, tmp_path, declare)).summary()
+def _summary(
+    store: ProfileStore, tmp_path: Path, declare: str | None = None, gap: str | None = None
+) -> str:
+    return Run(outcomes=_run(store, tmp_path, declare, gap)).summary()
 
 
 def test_offers_with_no_employer_are_counted_per_board(store: ProfileStore, tmp_path: Path) -> None:
@@ -208,6 +265,17 @@ def test_a_declared_count_is_reported_with_the_boards_reason(
     text = _summary(store, tmp_path, declare="anonymous postings")
     assert "NO EMPLOYER flood_en: 3 of 4" in text
     assert "anonymous postings" in text
+    assert "UNDECLARED" not in text
+
+
+def test_a_gap_is_reported_as_a_connector_fault_never_as_an_omission(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    text = _summary(store, tmp_path, gap="T235")
+    assert "NO EMPLOYER flood_en: 3 of 4" in text
+    assert "CONNECTOR FAULT" in text
+    assert "T235 owns the fix" in text
+    assert "does not publish" not in text
     assert "UNDECLARED" not in text
 
 
@@ -238,27 +306,49 @@ def test_a_blank_employer_trips_no_exclusion(employer: str | None) -> None:
 
 # --- the one definition agrees with the one that links copies (T225) -------
 
-_NAMES = [
-    None,
-    "",
-    " ",
-    "\t\n",
-    chr(0xA0),
-    chr(0x200B),  # zero-width space: invisible, category Cf
-    chr(0xFEFF) + " " + chr(0x200D),
-    "Acme",
-    " Acme ",
-    chr(0x200B) + "Acme",
-    chr(0xFF21) + "cme",  # fullwidth A: NFKC folds it
-]
+
+def _names_over_every_code_point() -> list[str]:
+    import sys
+
+    return [
+        shaped
+        for cp in range(sys.maxunicode + 1)
+        if not 0xD800 <= cp <= 0xDFFF
+        for shaped in (chr(cp), f" {chr(cp)} ", f"{chr(cp)}x")
+    ]
 
 
-@pytest.mark.parametrize("company", _NAMES)
-def test_an_empty_company_links_nothing_and_names_nobody(company: str | None) -> None:
+def test_an_empty_company_links_nothing_and_names_nobody() -> None:
     """`posting_key` joins copies by employer and title; a company that
     `names_an_employer` refuses must give no key, so it can never join two
-    adverts. Both directions, over invisible-only names too: a definition that
-    called a zero-width space an employer would let every such offer share one."""
+    adverts, and one it accepts must give one. Every code point, alone, padded
+    with spaces and followed by a letter — not a sample of spellings, so a
+    character class nobody thought of is still compared."""
     from integral.lifecycle import posting_key
 
-    assert (posting_key("Backend engineer", company) is not None) is names_an_employer(company)
+    disagreements = [
+        f"U+{ord(name.strip()[0]) if name.strip() else ord(name[0]):04X}"
+        for name in _names_over_every_code_point()
+        if (posting_key("Backend engineer", name) is not None) is not names_an_employer(name)
+    ]
+    assert not disagreements, disagreements[:10]
+    # The two ends are populated, so the loop is not agreeing about nothing.
+    assert names_an_employer("Acme")
+    assert not names_an_employer(chr(0x200B))
+    assert not names_an_employer(None)
+
+
+def test_pythonorg_reads_the_employer_and_only_the_employer() -> None:
+    """A non-empty `company` is not the right one: the enclosing span's whole
+    text ("New Python developer Eleks") passes the empty-row rule and is wrong.
+    The expected names are read off `fixture/list.html` — the loose text after
+    each `<br/>` — not produced by the connector."""
+    connector = next(c for c in CONNECTORS if c.site == "pythonorg")
+    html = (_directory(connector) / "fixture" / "list.html").read_text(encoding="utf-8")
+    rows = parse_list_page(connector, html)
+    assert [row["company"] for row in rows] == [
+        "Eleks",
+        "NordVpn/NordSecurity",
+        "Softech Associate",
+    ]
+    assert connector.employer_unpublished is None and connector.employer_gap is None

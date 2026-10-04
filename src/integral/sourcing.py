@@ -268,6 +268,10 @@ class BoardOutcome:
     #: declares one: the count above is then expected of this board, and the
     #: report says so instead of raising it as a fault.
     employer_unpublished: str | None = None
+    #: T236. The open task a connector names for a board that does publish an
+    #: employer which it does not read (`employer_gap`). A fault, not an
+    #: expectation: the summary never words it as an omission.
+    employer_gap: str | None = None
     #: T144. On an ATS host each request is a different employer's board, so
     #: one employer's failure is that employer's, never the host's: the others
     #: are still read, and the failures are named here rather than ending the
@@ -334,6 +338,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "excluded_because",
         "no_employer",
         "employer_unpublished",
+        "employer_gap",
         "source_kind",
     }
 )
@@ -629,11 +634,15 @@ class Run:
                     "row(s) are on a topic you ruled out — " + "; ".join(outcome.excluded_because)
                 )
             if outcome.no_employer:
-                note = (
-                    f"the board does not publish one — {outcome.employer_unpublished}"
-                    if outcome.employer_unpublished
-                    else "UNDECLARED: connector.yaml does not say this board omits it"
-                )
+                if outcome.employer_unpublished:
+                    note = f"the board does not publish one — {outcome.employer_unpublished}"
+                elif outcome.employer_gap:
+                    note = (
+                        f"CONNECTOR FAULT: the board names its employer and this connector "
+                        f"does not read it yet ({outcome.employer_gap} owns the fix)"
+                    )
+                else:
+                    note = "UNDECLARED: connector.yaml does not say this board omits it"
                 lines.append(
                     f"  NO EMPLOYER {outcome.connector}: {outcome.no_employer} of "
                     f"{outcome.items} row(s) became an offer with no employer name — {note}"
@@ -1196,6 +1205,7 @@ def _one_board(
             excluded_because=tuple(excluded_because),
             no_employer=no_employer,
             employer_unpublished=connector.employer_unpublished,
+            employer_gap=connector.employer_gap,
             employers_failed=tuple(failed),
             source_kind=source_kind_of(connector),
             skipped=skipped,

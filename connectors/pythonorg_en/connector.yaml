@@ -25,9 +25,6 @@ last_verified: "2026-08-30"
 # Listings are public; reading them needs no account. Posting one does, which is
 # not something this connector does.
 auth: none
-# T236: see `Connector.employer_unpublished`. Declared because this connector's own fixture
-# yields rows with no `company`; `tests/test_employer_published.py` re-checks both ways.
-employer_unpublished: "GAP, not an omission: the board does publish the employer, as a bare text node after a <br/> that this selector grammar cannot address (see the company note under list.fields). Every row is affected until the grammar gains a text-node step."
 
 list:
   # **The URL that was actually captured, and no page key on it (T113).**
@@ -105,8 +102,7 @@ list:
       attr: href
     title:
       css: "a"
-    # A real limitation, stated rather than papered over. The board writes the
-    # company as a **bare text node** after a `<br/>` inside
+    # The board writes the company as a **bare text node** after a `<br/>` inside
     # `span.listing-company-name`:
     #
     #     <span class="listing-company-name">
@@ -115,31 +111,16 @@ list:
     #       Eleks
     #     </span>
     #
-    # No element wraps "Eleks" — on the list page or on the detail page, where
-    # the same text sits loose inside `span.company-name` — and this grammar
-    # addresses elements, never text nodes, so no selector anywhere on this
-    # board returns the company on its own. The detail page cannot rescue it
-    # either: `<title>` is "Python developer, Eleks | Python.org" and
-    # `og:title` is "Job: Python developer at Eleks", both compound.
-    #
-    # **No `company`, therefore.** The enclosing span's text is
-    # "New Python developer Eleks" — the badge, the title and the employer run
-    # together — and this selector grammar has no text-node or `nth-of-type`
-    # step to isolate the last part. An earlier revision of this file mapped
-    # that composite anyway and said so in a comment, on the grounds that
-    # omitting the field made `connector_health.free_signals` report "company
-    # is null on every row" and drown the true rot signals in a false one.
-    #
-    # That reason no longer exists: the signal now asks whether a field the
-    # connector *declared* came back empty, so a connector that never claims a
-    # company is not reported broken for lacking one. With the incentive gone,
-    # the honest choice is the plain one — publish no employer rather than the
-    # wrong employer for every listing. `New Python developer Eleks` is not a
-    # company, and a candidate reading it as one is worse off than a candidate
-    # who sees the field is unknown.
-    #
-    # The upgrade path is a text-node or `nth-of-type` extension to the
-    # selector grammar, not a change here.
+    # No element wraps "Eleks", so no selector returns it alone — but `take:
+    # last_text_node` (#356) reads exactly the element's last text piece, which
+    # is the employer here: the badge and the title are elements, and the loose
+    # text after the `<br/>` comes last. (T236: this comment used to say the
+    # grammar could not reach it and the connector published no employer; both
+    # were wrong, and 8 of 16 stored offers carried a blank one.) The detail
+    # page's `<title>` and `og:title` are compound, so the list is the place.
+    company:
+      css: "span.listing-company-name"
+      take: last_text_node
     # One per listing, inside the `h2`. The board's location strings are free
     # text and often multi-city ("Vilnius / Kaunas / Warsaw, Lithuania/Poland"),
     # which is why this is `location_raw` and no `location_country` is claimed.
