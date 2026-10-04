@@ -231,7 +231,7 @@ that every ranked offer cites the advert's own words for each dimension that mov
 position — not that the order is right. `rank_spearman` is the gate for that, and it is
 T20's, still open: a step that explains itself well has not thereby been shown to rank well.
 
-**A list shown with no `present()` row is not coverage (T226).** The script also reads the latest `rankings/<run_id>.json` against `search/presentations.jsonl` (`integral.presentation_audit.unpresented_ranking`): when no presentation row at or after that run shows any of its offers, it reports them under `unpresented_ranking` and `coverage_met` is false. Call `present()` and re-run it.
+**A list shown with no `present()` row is not coverage (T226).** The script also reads the latest `rankings/<run_id>.json` against `search/presentations.jsonl` (`integral.presentation_audit.unpresented_ranking`): when no presentation row at or after that run shows any of its offers, it reports them under `unpresented_ranking` and `coverage_met` is false. If the list was shown, call `present()` for it and re-run the script. If it was not shown, show it first.
 
 The script writes its result to the candidate's own tree at `session/checkpoint-ranking.json`, never to a shared or
 global path.

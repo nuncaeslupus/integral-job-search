@@ -9,6 +9,7 @@ that always reports (or never does) fails one of them.
 from __future__ import annotations
 
 import importlib.util
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -17,7 +18,7 @@ import pytest
 
 from integral.decline import DeclineLedger
 from integral.identity import ProfileStore, create_profile
-from integral.lifecycle import save_lifecycle_offer, track_new_offer
+from integral.lifecycle import purge_offer, save_lifecycle_offer, track_new_offer
 from integral.offers import connect_manual
 from integral.presentation_audit import unpresented_ranking, unrecorded_discards
 from integral.presentation_log import present, rule_out
@@ -44,12 +45,19 @@ def _rank(store: ProfileStore, ids: list[str], run_id: str = _RAN) -> None:
     store.write_json({"run_id": run_id, "pareto": ids}, "rankings", f"{run_id}.json")
 
 
-def _say_about(store: ProfileStore, offer_id: str, text: str) -> None:
+def _say_about(
+    store: ProfileStore,
+    offer_id: str,
+    text: str,
+    *,
+    step: str = "feedback",
+    kind: str = "statement",
+) -> None:
     capture(
         EvidenceLog(store),
         DeclineLedger(store),
-        step="feedback",
-        kind="statement",
+        step=step,
+        kind=kind,  # type: ignore[arg-type]
         text=text,
         source="offer_reaction",
         recorded_at=_SHOWN,
@@ -107,7 +115,7 @@ def test_unreadable_or_untimed_rankings_fail_closed(tmp_path: Path) -> None:
     store.write_json({"run_id": "not a time", "pareto": [oid]}, "rankings", "x.json")
     assert unpresented_ranking(store), "an untimed ranking cannot be shown to have been presented"
     store.path("rankings", "x.json").write_text("{", encoding="utf-8")
-    assert [g["problem"] for g in unpresented_ranking(store)] == ["unreadable"]
+    assert [g["problem"] for g in unpresented_ranking(store)] == ["undatable"]
 
 
 def test_nothing_ranked_is_no_gap(tmp_path: Path) -> None:
@@ -139,6 +147,107 @@ def test_the_same_words_said_twice_need_two_decisions(tmp_path: Path) -> None:
     rule_out(store, oid, "demasiado junior", at=_SHOWN)
     _say_about(store, oid, "demasiado junior")
     assert len(unrecorded_discards(store)) == 1
+
+
+_OLDER = "2026-09-30T09:00:00Z"
+
+
+def _older_ranking_presented(store: ProfileStore) -> str:
+    oid = _offer(store, "Older")
+    _rank(store, [oid], _OLDER)
+    present(store, [oid], at="2026-09-30T09:05:00Z")
+    return oid
+
+
+def test_a_newer_unpresented_ranking_is_reported_beside_an_older_presented_one(
+    tmp_path: Path,
+) -> None:
+    """F2: the newest list is the one asked about, so the second day's gap shows."""
+    store = _store(tmp_path)
+    _older_ranking_presented(store)
+    newer = _offer(store, "Newer")
+    _rank(store, [newer])
+    gap = unpresented_ranking(store)
+    assert [(g["problem"], g["offers"]) for g in gap] == [("no present() row", [newer])]
+
+
+def test_a_corrupt_newest_ranking_is_a_gap_even_beside_an_older_presented_one(
+    tmp_path: Path,
+) -> None:
+    """F1: a corrupt newest file is dated by its name, and is not passed over."""
+    store = _store(tmp_path)
+    _older_ranking_presented(store)
+    store.path("rankings").joinpath(f"{_RAN}.json").write_text("{", encoding="utf-8")
+    assert [g["problem"] for g in unpresented_ranking(store)] == ["unreadable"]
+
+
+def test_an_untimed_run_id_is_dated_by_the_file_name(tmp_path: Path) -> None:
+    """F1: `run_id` that is not a time falls back to the `<run_id>.json` stem."""
+    store = _store(tmp_path)
+    _older_ranking_presented(store)
+    newer = _offer(store, "Newer")
+    store.write_json({"run_id": "r2", "pareto": [newer]}, "rankings", f"{_RAN}.json")
+    gap = unpresented_ranking(store)
+    assert [(g["ranking"], g["problem"]) for g in gap] == [(f"{_RAN}.json", "no present() row")]
+
+
+def test_a_ranking_that_cannot_be_dated_at_all_is_a_gap(tmp_path: Path) -> None:
+    """F1: neither `run_id` nor name dates it, so it may be the newest: reported."""
+    store = _store(tmp_path)
+    _older_ranking_presented(store)
+    store.write_json({"run_id": "r2", "pareto": [_offer(store, "Newer")]}, "rankings", "r2.json")
+    assert [(g["ranking"], g["problem"]) for g in unpresented_ranking(store)] == [
+        ("r2.json", "undatable")
+    ]
+
+
+def test_a_step_5_stimulus_reaction_owes_no_decision(tmp_path: Path) -> None:
+    """F3: step-05 Outputs — reactions tied to a stimulus offer left `new`."""
+    store = _store(tmp_path)
+    _say_about(
+        store, _offer(store), "Massa hores per aquest sou.", step="reactions", kind="reaction"
+    )
+    assert unrecorded_discards(store) == []
+
+
+def test_a_step_5_statement_about_a_stimulus_owes_no_decision(tmp_path: Path) -> None:
+    """F3: scoped by step as well as kind. A statement in step 5 is not a step-10 decision."""
+    store = _store(tmp_path)
+    _say_about(store, _offer(store), "no treballaria mai en banca", step="reactions")
+    assert unrecorded_discards(store) == []
+
+
+def test_a_step_10_aside_owes_no_decision(tmp_path: Path) -> None:
+    """F3: step-10 Never — no status is inferred from a remark that is not a decision."""
+    store = _store(tmp_path)
+    _say_about(store, _offer(store), "la oficina parece bonita", kind="reaction")
+    assert unrecorded_discards(store) == []
+
+
+def test_a_ruled_out_offer_purged_later_is_carried_by_its_tombstone(tmp_path: Path) -> None:
+    """F3: `purge_offer` drops the lifecycle record and keeps the evidence row."""
+    store = _store(tmp_path)
+    oid = _offer(store)
+    rule_out(store, oid, "nada de banca", at=_SHOWN)
+    purge_offer(store, oid, at="2027-01-01T00:00:00Z", now=datetime(2027, 1, 1, tzinfo=UTC))
+    assert not store.path("offers", "lifecycle", f"{oid}.json").exists()
+    assert unrecorded_discards(store) == []
+
+
+def test_the_feedback_checkpoint_also_asks_about_a_re_shown_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F4: step 10 re-ranks and re-shows; that list owes a present() row too."""
+    module = _script("step-10-feedback")
+    gap, ok = _store(tmp_path, "gap"), _store(tmp_path, "ok")
+    _rank(gap, [_offer(gap)])
+    shown = _offer(ok)
+    _rank(ok, [shown])
+    present(ok, [shown], at=_SHOWN)
+    opened = _checkpoint(module, monkeypatch, tmp_path, "gap")
+    closed = _checkpoint(module, monkeypatch, tmp_path, "ok")
+    assert opened["unpresented_ranking"] and opened["coverage_met"] is False
+    assert closed["unpresented_ranking"] == [] and closed["coverage_met"] is True
 
 
 def _script(step_dir: str) -> ModuleType:
