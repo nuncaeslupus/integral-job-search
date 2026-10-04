@@ -117,28 +117,6 @@ def test_a_declaration_is_not_kept_after_its_cause_is_gone(site: str) -> None:
         assert empty, f"{site}: declares a missing employer but its fixture yields employers"
 
 
-@pytest.mark.parametrize("site", SITES)
-def test_a_gap_names_a_task_that_is_still_open(site: str) -> None:
-    """A gap is a debt, not an exemption: it ends when its task merges. The plan's
-    row for the task is what says whether it has."""
-    connector = next(c for c in CONNECTORS if c.site == site)
-    if connector.employer_gap:
-        plan = (ROOT / "status" / "plan.md").read_text(encoding="utf-8")
-        row = next(
-            (
-                line
-                for line in plan.splitlines()
-                if line.startswith(f"| {connector.employer_gap} |")
-            ),
-            None,
-        )
-        assert row is not None, f"{site}: {connector.employer_gap} is not a task on the plan"
-        assert row.rstrip().endswith("☐ |"), (
-            f"{site}: {connector.employer_gap} is no longer open — read the employer and drop "
-            "`employer_gap`"
-        )
-
-
 def _with_a_gap(task: str) -> str:
     """tecnoempleo's package with its omission declaration swapped for a gap.
 
@@ -150,6 +128,41 @@ def _with_a_gap(task: str) -> str:
     text = (ROOT / "connectors" / "tecnoempleo_es" / "connector.yaml").read_text(encoding="utf-8")
     kept = [line for line in text.splitlines() if not line.startswith("employer_unpublished:")]
     return "\n".join(kept).replace("\nauth:", f'\nemployer_gap: "{task}"\nauth:', 1)
+
+
+def _gap_problem(task: str, plan: str) -> str | None:
+    """Why a gap naming `task` may not stand, or None. A gap is a debt, not an
+    exemption: it ends when its task merges, and the plan's row says whether it has."""
+    row = next((line for line in plan.splitlines() if line.startswith(f"| {task} |")), None)
+    if row is None:
+        return f"{task} is not a task on the plan"
+    if not row.rstrip().endswith("\u2610 |"):
+        return f"{task} is no longer open"
+    return None
+
+
+PLAN = (ROOT / "status" / "plan.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("site", SITES)
+def test_a_gap_names_a_task_that_is_still_open(site: str) -> None:
+    connector = next(c for c in CONNECTORS if c.site == site)
+    if connector.employer_gap:
+        assert _gap_problem(connector.employer_gap, PLAN) is None, site
+
+
+def test_the_gap_check_refuses_a_task_that_is_done_or_absent() -> None:
+    """No committed connector owes a gap now, so the rule above would run on
+    nothing. Exercised here on constructed gaps, against a constructed plan and
+    against the real one."""
+    plan = "| T900 | open | x | \u2610 |\n| T901 | done | x | \u2611 |\n"
+    assert _gap_problem("T900", plan) is None
+    assert "no longer open" in (_gap_problem("T901", plan) or "")
+    assert "not a task" in (_gap_problem("T902", plan) or "")
+    # T235 is ticked on the real plan, so a gap naming it must now be refused.
+    gap = parse_connector(_with_a_gap("T235")).employer_gap
+    assert gap == "T235"
+    assert "no longer open" in (_gap_problem(gap, PLAN) or "")
 
 
 @pytest.mark.parametrize("task", ["", "t235", "T235 ", "T", "T-1", "T235 owns it", "235"])
