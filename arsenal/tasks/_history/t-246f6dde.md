@@ -2,6 +2,7 @@
 id: t-246f6dde
 title: "D-29: status/plan.md's milestone rows still list 82 merged tasks, and the contract saying they don't is enforced by nothing"
 priority: 5
+status: merged
 ---
 
 Imported from issue #314
@@ -58,6 +59,5 @@ Worth folding #308 into the same module if that task has not started: both gates
      everything. -->
 
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
+uv run --extra dev --extra collect pytest tests/test_plan_milestones.py -q -k "not live"
 ```

@@ -284,6 +284,17 @@ def task_label(row: dict[str, object]) -> str | None:
     return label if _LABEL_RE.match(label) else None
 
 
+def merged_tasks(labelled: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+    """The labelled tasks the board says are finished: `status: merged`, exactly.
+
+    One definition, read by this module's tick check (D-27) and by
+    `plan_milestones` (D-29) — two modules deciding separately which tasks are
+    merged is how they come to disagree about it, and each would then certify
+    the plan against a different archive. Reads the board, never a plan tick.
+    """
+    return {label: task for label, task in labelled.items() if str(task.get("status")) == "merged"}
+
+
 def _duplicates(labels: list[str], side: str) -> list[str]:
     counted = Counter(labels)
     return [
@@ -416,9 +427,7 @@ def measure(plan: Path = DEFAULT_PLAN, queue: Path = DEFAULT_QUEUE) -> dict[str,
     # what the narrower reading does (search it for
     # `an_archived_done_task_is_outside_this_checks_scope`), so the hole is a
     # recorded choice rather than something to be rediscovered.
-    merged = {
-        label: task for label, task in labelled.items() if str(task.get("status")) == "merged"
-    }
+    merged = merged_tasks(labelled)
     unticked_merged_rows: list[str] = []
     for label in sorted(merged):
         planned_rows = rows_by_label.get(label, [])
