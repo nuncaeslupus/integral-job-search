@@ -804,6 +804,221 @@ def test_a_phrase_stopped_by_the_ceiling_is_not_reported_as_searched(
     assert "NOT asked, after the ceiling: tecnoempleo_es (rust)" in run.summary()
 
 
+def test_the_offer_ceiling_stops_a_walk_of_every_window_and_names_where_to_resume(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T251: the ceiling is one ceiling for the whole run. The first window
+    fills it, so no later window is opened, and the terms it would have
+    searched come back named, with the offset that resumes there."""
+    import shutil
+
+    from integral.sourcing import PHRASE_CEILING, source_every_phrase
+
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 1)
+    shutil.copytree(_CONNECTORS / "tecnoempleo_es", tmp_path / "tecnoempleo_es")
+    terms = tuple(f"term{i}" for i in range(2 * PHRASE_CEILING + 1))
+    asked: list[str] = []
+    answer = _answer_with_detail()
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        response: Response = answer(request)
+        return response
+
+    run = source_every_phrase(
+        store,
+        _spain(),
+        Aim(state="stated", terms=terms),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+    )
+    assert run.added == 1, run.summary()
+    # The ceiling filled inside window 0 after `term0`: terms 1-5 of that same
+    # window were never sent, so the window itself is where to resume. Resuming
+    # at `PHRASE_CEILING` would skip them (second reader, F1).
+    assert run.unsearched == terms[1:], run.summary()
+    assert run.next_offset == 0
+    assert "continue with offset=0" in run.summary()
+    assert not any(t in u for t in terms[PHRASE_CEILING:] for u in asked), "a later window ran"
+
+
+def test_following_next_offset_until_done_requests_every_term(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The property across runs: whatever the ceiling cuts, a session that does
+    only what the summary says ends with every (steered board, term) requested."""
+    import shutil
+
+    from integral.connectors import build_list_requests, load_connector
+    from integral.sourcing import PHRASE_CEILING, source
+
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 1)
+    shutil.copytree(_CONNECTORS / "tecnoempleo_es", tmp_path / "tecnoempleo_es")
+    terms = tuple(f"term{i}" for i in range(PHRASE_CEILING + 3))
+    aim = Aim(state="stated", terms=terms)
+    asked: list[str] = []
+    answer = _answer_with_detail()
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        response: Response = answer(request)
+        return response
+
+    offset: int | None = 0
+    for _ in range(len(terms) + 2):  # bounded: a resume that never advances must fail
+        assert offset is not None
+        run = source(
+            store, _spain(), aim, fetch=fetch, at=AT, directory=tmp_path,
+            robots=_robots(), offset=offset,
+        )  # fmt: skip
+        offset = run.next_offset
+        if offset is None:
+            break
+    else:
+        pytest.fail("still told to continue after every term had a turn")
+    connector = load_connector(tmp_path / "tecnoempleo_es")
+    for term in terms:
+        wanted = {r.url for r in build_list_requests(connector, page_count=1, query=term)}
+        assert wanted <= set(asked), term
+
+
+def test_a_walk_asks_a_refusing_host_once_and_a_queryless_board_once(
+    store: ProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second reader, F2: the run's host learning and its query-less boards
+    belong to the run, not to each window of it."""
+    from urllib.parse import urlsplit
+
+    from integral.connectors import accepts_query, load_connector
+    from integral.sourcing import PHRASE_CEILING, source_every_phrase
+
+    terms = _TERMS + tuple(f"extra{i}" for i in range(2 * PHRASE_CEILING - len(_TERMS) + 1))
+    assert len(terms) > 2 * PHRASE_CEILING
+    aim = Aim(state="stated", terms=terms)
+    refused: list[str] = []
+
+    def refuse(request: ListRequest) -> Response:
+        refused.append(urlsplit(request.url).netloc)
+        return Response(429, "")
+
+    source_every_phrase(
+        store, _spain(), aim, fetch=refuse, at=AT, directory=_CONNECTORS, robots=_robots()
+    )
+    assert refused, "nothing was requested, so this proves nothing"
+    assert max(refused.count(h) for h in set(refused)) == 1, sorted(refused)
+
+    run = source_every_phrase(
+        store,
+        _spain(),
+        aim,
+        fetch=_answer_with_detail(),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+    )
+    queryless = [
+        p.name
+        for p in packages_for(_spain(), _CONNECTORS)
+        if not accepts_query(load_connector(_CONNECTORS / p.name))
+    ]
+    assert queryless, "no board without a query is installed, so this proves nothing"
+    summary = run.summary()
+    for name in queryless:
+        assert sum(o.connector == name for o in run.outcomes) == 1, name
+        assert summary.count(f"FILTERED {name}:") <= 1, summary
+
+
+def test_the_offers_a_window_wrote_count_against_the_next_windows_room(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T251: one ceiling per run, not one per window. A later window is told how
+    many offers the earlier ones wrote (`already_added`) and, handed it, spends
+    no more than the room that is left."""
+    import shutil
+
+    import integral.sourcing as sourcing
+    from integral.sourcing import PHRASE_CEILING, source_every_phrase
+
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 100)
+    shutil.copytree(_CONNECTORS / "tecnoempleo_es", tmp_path / "tecnoempleo_es")
+    terms = tuple(f"term{i}" for i in range(PHRASE_CEILING + 1))
+    told: list[tuple[int, int]] = []
+    real = sourcing.source
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        run = real(*args, **kwargs)
+        told.append((kwargs["already_added"], run.added))
+        return run
+
+    monkeypatch.setattr("integral.sourcing.source", spy)
+    run = source_every_phrase(
+        store,
+        _spain(),
+        Aim(state="stated", terms=terms),
+        fetch=_answer_with_detail(),
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+    )
+    assert len(told) == 2 and told[0] == (0, run.added) and run.added > 0, told
+    assert told[1][0] == told[0][1], told
+    # and a window handed all the room already spent asks nothing
+    asked: list[str] = []
+
+    def record(r: ListRequest) -> Response:
+        asked.append(r.url)
+        return Response(None, "", error="x")
+
+    spent = real(
+        store,
+        _spain(),
+        Aim(state="stated", terms=terms),
+        fetch=record,
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+        already_added=100,
+    )
+    assert asked == [] and spent.added == 0
+
+
+def test_a_queryless_board_is_filtered_by_the_whole_aim_not_by_its_first_window(
+    tmp_path: Path,
+) -> None:
+    """Second reader, F2: a row matching only a phrase past window 0 is still on
+    the aim. Same phrases, one put first and one put past the window: the
+    query-less boards must keep the same rows either way."""
+    from integral.connectors import accepts_query, load_connector
+    from integral.sourcing import PHRASE_CEILING, source
+
+    junk = tuple(f"zzz{i}" for i in range(PHRASE_CEILING))
+    first = ("developer", *junk)
+    late = (*junk, "developer")
+    outcomes = []
+    for n, terms in enumerate((first, late)):
+        create_profile(tmp_path, f"T{n}", handle=f"t{n}", language="es", fiction=True)
+        run = source(
+            ProfileStore(tmp_path, f"t{n}"),
+            _spain(),
+            Aim(state="stated", terms=terms),
+            fetch=_answer_with_detail(),
+            at=AT,
+            directory=_CONNECTORS,
+            robots=_robots(),
+        )
+        outcomes.append(
+            {
+                o.connector: (o.items, o.off_aim)
+                for o in run.outcomes
+                if not accepts_query(load_connector(_CONNECTORS / o.connector))
+            }
+        )
+    assert outcomes[0] == outcomes[1], outcomes
+    assert any(items > off for items, off in outcomes[0].values()), "no row matched: vacuous"
+
+
 def test_a_ceiling_that_fills_at_a_page_end_is_still_reported(
     store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
