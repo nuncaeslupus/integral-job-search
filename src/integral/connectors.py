@@ -1309,6 +1309,18 @@ class FieldSelector(Strict):
     #: expression: every member is implemented here, so a connector names one
     #: and supplies no pattern of its own. See `Take` and `_take`.
     take: Take | None = None
+    #: T234. Why a selector that names a **build-generated class** is kept
+    #: anyway. Absent, `ListPage` and `DetailPage` refuse such a selector at
+    #: load (`generated_classes`); present, it is a stated, reviewable
+    #: exception — the reason is the whole value and may not be blank.
+    build_hash_accepted: str | None = Field(default=None, min_length=1)
+
+    @field_validator("build_hash_accepted")
+    @classmethod
+    def _the_reason_is_not_blank(cls, reason: str | None) -> str | None:
+        if reason is not None and not reason.strip():
+            raise ValueError("build_hash_accepted must say why, not be blank")
+        return reason
 
     @model_validator(mode="after")
     def _take_and_attr_are_compatible(self) -> FieldSelector:
@@ -1330,6 +1342,56 @@ class FieldSelector(Strict):
         except ConnectorError as exc:
             raise ValueError(str(exc)) from exc
         return css
+
+
+#: T234. Class names a build tool generates, so any redeploy that touches the
+#: stylesheet renames them and a selector built on one stops matching with no
+#: error anywhere. Three families, each a closed shape rather than a guess:
+#: styled-components (`sc-f4dbceab-10`), CSS modules (`JobCard_title__X32Qk`)
+#: and emotion (`css-1a2b3c4`), plus styled-jsx (`jsx-1234567890`, a numeric
+#: hash). Not covered, deliberately: styled-components v5's `sc-bdVaJa` and
+#: emotion's labelled `css-xxxx-MuiBox-root` have no shape that cannot also be a
+#: legitimate stable name (`sc-header`, `css-loader`), so a pattern for them would
+#: refuse good selectors; they are left to review.
+_GENERATED_CLASS = re.compile(
+    r"^(?:sc-[A-Za-z0-9]{5,}-\d+|[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9-]+__[A-Za-z0-9_-]{5}"
+    r"|css-[a-z0-9]{5,8}|jsx-\d{6,})$"
+)
+
+
+def generated_classes(css: str) -> tuple[str, ...]:
+    """The build-generated class names a selector is built on, in order.
+
+    Read from `.class` tokens **and** from `[class="…"]` values: the attribute
+    spelling names the same class, and checking only one spelling lets the other
+    through unnoticed.
+    """
+    compiled = compile_selector(css)
+    names = list(compiled.classes)
+    for attr, value in compiled.attrs:
+        if attr == "class" and value is not None:
+            names.extend(value.split())
+    return tuple(c for c in names if _GENERATED_CLASS.match(c))
+
+
+def _refuse_unaccepted_generated_classes(
+    section: str, selectors: dict[str, FieldSelector], item: str | None = None
+) -> None:
+    """Refuse, at load, any selector in `section` built on a generated class
+    that does not carry `build_hash_accepted`. Derived from the selectors
+    themselves, so a field added later is covered without anyone listing it."""
+    found: list[str] = []
+    for name, selector in selectors.items():
+        if selector.build_hash_accepted is None and (hashed := generated_classes(selector.css)):
+            found.append(f"{name}: {', '.join(hashed)}")
+    if item is not None and (hashed := generated_classes(item)):
+        found.append(f"item: {', '.join(hashed)}")
+    if found:
+        raise ValueError(
+            f"{section} selector(s) built on a build-generated class, which the next redeploy "
+            f"renames: {'; '.join(found)} — use a tag, id or data attribute, or state why "
+            "not with `build_hash_accepted`"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2322,6 +2384,12 @@ class ListPage(Strict):
     #: Markup route. Required unless `json` is given instead.
     item: str | None = Field(default=None, min_length=1)
     fields: dict[str, FieldSelector] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _no_unaccepted_generated_classes(self):  # type: ignore[no-untyped-def]
+        _refuse_unaccepted_generated_classes("list", self.fields, self.item)
+        return self
+
     #: JSON route — for a board whose listing carries no advert markup at all.
     #: Named `from_json` rather than `json` because `json` is an attribute
     #: pydantic's `BaseModel` already defines.
@@ -3108,6 +3176,11 @@ class DetailPage(Strict):
 
     fields: dict[str, FieldSelector] = Field(default_factory=dict)
     from_json: JsonSource | None = None
+
+    @model_validator(mode="after")
+    def _no_unaccepted_generated_classes(self):  # type: ignore[no-untyped-def]
+        _refuse_unaccepted_generated_classes("detail", self.fields)
+        return self
 
     @field_validator("fields")
     @classmethod
