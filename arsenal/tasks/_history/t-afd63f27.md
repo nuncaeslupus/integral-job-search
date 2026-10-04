@@ -3,6 +3,7 @@ id: t-afd63f27
 title: "T234: talent_es reads the advert page with a build-hash selector that now matches nothing, and a selector matching nothing on a 200 page is reported nowhere"
 label: "T234: talent_es detail selector"
 priority: 5
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2).
@@ -14,13 +15,6 @@ Two fixes, and the second is the general one: a durable selector for the talent 
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run --extra dev pytest tests/test_detail_selectors.py tests/test_connectors.py tests/test_sourcing.py -q
 ```
