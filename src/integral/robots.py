@@ -30,6 +30,7 @@ that apply.
 from __future__ import annotations
 
 import contextlib
+import http.client
 import json
 import re
 import string
@@ -891,7 +892,7 @@ class Robots:
                 # 500, a redirect loop, anything else — an unanswered
                 # question, and an unanswered question is not a yes.
                 raise RobotsError(f"{origin}/robots.txt returned {exc.code}") from exc
-        except OSError as exc:
+        except (OSError, http.client.HTTPException) as exc:
             attempts = 1 + len(self._retry_delays)
             raise RobotsUnreachable(
                 f"{origin}/robots.txt could not be reached after {attempts} attempts: {exc}",
@@ -912,7 +913,7 @@ class Robots:
                 return self._fetch(robots_url)
             except urllib.error.HTTPError:
                 raise
-            except OSError:
+            except (OSError, http.client.HTTPException):
                 self._sleep(delay)
         return self._fetch(robots_url)
 

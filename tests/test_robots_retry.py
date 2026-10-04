@@ -10,6 +10,7 @@ a candidate's round takes, and not only through `Robots`.
 
 from __future__ import annotations
 
+import http.client
 import urllib.error
 from pathlib import Path
 
@@ -178,3 +179,34 @@ def test_a_robots_disallow_is_worded_as_refused(store: ProfileStore) -> None:
     assert skipped and all(s and s.startswith("refused") for s in skipped), skipped
     assert not any("unreachable" in (s or "") for s in skipped)
     assert slept == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        http.client.IncompleteRead(b"par"),
+        http.client.BadStatusLine("garbage"),
+        http.client.LineTooLong("header line"),
+    ],
+)
+def test_a_malformed_response_is_a_network_failure_retried_and_cached(
+    store: ProfileStore, error: Exception
+) -> None:
+    """O1: `http.client.HTTPException` is not an `OSError`, so it used to escape
+    `_one_board` and end the whole round. Same treatment as a dropped socket."""
+    transient = _Flaky(1, error)
+    robots, slept = _robots(transient)
+    asked, skipped = _run(store, robots)
+    assert asked and not any(s and "robots" in s for s in skipped), skipped
+    assert slept[:1] == [0.5]
+
+    persistent = _Flaky(10**6, error)
+    robots, _ = _robots(persistent)
+    assert _may_fetch(robots, URL) is False
+    assert persistent.calls == 3
+    assert _may_fetch(robots, URL + "/x") is False
+    assert persistent.calls == 3, "an unreachable origin was re-fetched"
+    with pytest.raises(RobotsUnreachable):
+        robots.allows(URL)
+    asked, skipped = _run(store, _robots(_Flaky(10**6, error))[0])
+    assert asked == [] and skipped and all(s and "unreachable" in s for s in skipped), skipped

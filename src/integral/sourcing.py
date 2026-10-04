@@ -1383,7 +1383,7 @@ def _one_board(
         try:
             if not robots.allows(request.url):
                 if request.employer:
-                    failed.append(f"{request.employer} (robots.txt disallows it)")
+                    failed.append(f"{request.employer} (refused: robots.txt disallows it)")
                     continue
                 return ended(
                     request.url,
