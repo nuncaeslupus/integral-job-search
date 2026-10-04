@@ -13,22 +13,24 @@ yes.
    advert is an anecdote the candidate already saw; two is the smallest number
    that separates "a phrase the market uses" from "one employer's wording".
    Higher would starve a low-volume market, which is where an aim most needs
-   growing. Distinct means distinct employers (an advert with no named employer
-   counts alone): one vacancy cross-posted on three boards is one vacancy, and
-   counting it thrice would propose a term from a single advert. Boards are
-   reported (`boards`) and rank ties, so a title seen across boards sorts first;
-2. it has at least `WORDS_NEEDED` (2) significant words once gender markers,
-   level words, work-mode words and a trailing location are removed - a bare
-   `engineer` is not a search, it is the whole market;
-3. no aim term already covers it: the term's significant words are all in the
-   title's (what a board's AND-ed query would match), so searching `ai
-   engineer` already finds `generative ai engineer`;
-4. the candidate has not declined it. A decline is matched by significant words,
-   so a reworded title (`Developer` for `Engineer`) is not asked again.
-
-Significant words are `same_vacancy.title_words`, so `developer`/`engineer`/
-`ingeniero` and `front-end`/`frontend` read as one - the same normalisation the
-seen-before check uses, not a second one.
+   growing. Distinct means distinct employers; adverts naming no employer
+   count together as one, since a cross-posted one cannot be told from two.
+   One vacancy cross-posted on three boards is one vacancy, and counting it
+   thrice would propose a term from a single advert. Boards are reported
+   (`boards`) and rank ties, so a title seen across boards sorts first;
+2. it has at least `WORDS_NEEDED` (2) words once gender markers, level words,
+   work-mode words and a trailing location are removed - a bare `engineer` is
+   not a search, it is the whole market;
+3. no aim term already covers it: a board's AND-ed query for that term would
+   match the title (`sourcing.matches_aim` - every word of the term is a whole
+   word of the title), so `ai engineer` already finds `generative ai engineer`
+   and `software engineer` does not cover `applied ai engineer`. No synonym
+   folding: `developer` is not `engineer` to a board's query;
+4. the candidate has not declined it: a declined term whose words are all in
+   the title's is not asked again;
+5. the advert is not about a topic the candidate ruled out
+   (`search/exclusions.json`): a term must not be proposed from adverts the
+   search would have dropped.
 
 Ponytail: a location written as `en Barcelona`/`in Berlin` is not stripped (it
 is indistinguishable from `en Telecomunicaciones`/`in Test`); only `- X`, `| X`,
@@ -47,9 +49,11 @@ from pathlib import Path
 from typing import Any
 
 from integral.identity import IdentityError, ProfileStore
-from integral.same_vacancy import _GENDER, _LEVEL_SPELLINGS, _LEVELS, employer_key, title_words
+from integral.offers import load_offer
+from integral.same_vacancy import _GENDER, _LEVEL_SPELLINGS, _LEVELS, employer_key
 from integral.search_terms import AIM_FILE, load_aim
-from integral.sourcing import recorded_offer_ids
+from integral.sourcing import _words, matches_aim, recorded_offer_ids
+from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
 
 DECLINED_FILE = ("search", "declined_terms.json")
 WORDS_NEEDED = 2
@@ -84,11 +88,18 @@ def clean_title(title: str) -> str:
 
 
 def _key(term: str) -> frozenset[str]:
-    return title_words(term)[0]
+    """The words a board's query would read in `term` - no synonym folding."""
+    return frozenset(_words(term))
 
 
-def _covers(aim_terms: tuple[str, ...], key: frozenset[str]) -> bool:
-    return any((need := _key(t)) and need <= key for t in aim_terms)
+def _covers(aim_terms: tuple[str, ...], phrase: str) -> bool:
+    """Whether searching any aim term would already return this title.
+
+    The repo's own query matching (`sourcing.matches_aim`): every word of the
+    term is a whole word of the title. `software engineer` therefore covers
+    `software engineer ai` and does not cover `applied ai engineer`.
+    """
+    return matches_aim({"title": phrase}, aim_terms)
 
 
 def declined(store: ProfileStore) -> list[str]:
@@ -112,11 +123,19 @@ def _offers(store: ProfileStore, ids: set[str]) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for offer_id in sorted(ids):
         try:
-            payload = store.read_json("offers", f"{offer_id}.json")
-        except IdentityError:
+            offer = load_offer(store, offer_id)
+        except (IdentityError, ValueError):
             continue
-        if isinstance(payload, dict) and isinstance(payload.get("title"), str):
-            found.append({**payload, "id": offer_id})
+        if offer.title:
+            found.append(
+                {
+                    "title": offer.title,
+                    "company": offer.company,
+                    "source": offer.source,
+                    "id": offer_id,
+                    "offer": offer,
+                }
+            )
     return found
 
 
@@ -131,14 +150,19 @@ def propose(store: ProfileStore, offer_ids: set[str] | None = None) -> list[Prop
         return []
     ids = recorded_offer_ids(store) if offer_ids is None else offer_ids
     refused = [_key(t) for t in declined(store)]
+    exclusions = load_exclusions(store)
     groups: dict[frozenset[str], list[tuple[str, str, str]]] = {}
     for offer in _offers(store, ids):
+        if ruled_out_by(candidate_of(offer["offer"]), exclusions):
+            continue
         phrase = clean_title(offer["title"])
         key = _key(phrase)
-        if len(key) < WORDS_NEEDED or _covers(aim.terms, key) or key in refused:
+        if len(key) < WORDS_NEEDED or _covers(aim.terms, phrase):
+            continue
+        if any(r <= key for r in refused):
             continue
         employer = employer_key(offer.get("company"))
-        who = "|".join(employer) if employer else f"anonymous:{offer['id']}"
+        who = "|".join(employer) if employer else "no-employer"
         groups.setdefault(key, []).append((who, str(offer.get("source", "")), phrase))
     proposals = []
     for rows in groups.values():
@@ -154,6 +178,10 @@ def propose(store: ProfileStore, offer_ids: set[str] | None = None) -> list[Prop
 
 def _write_declined(store: ProfileStore, terms: list[str]) -> None:
     store.write_json({"terms": terms}, *DECLINED_FILE)
+
+
+def _norm(term: str) -> str:
+    return " ".join(term.split()).casefold()
 
 
 def accept(store: ProfileStore, term: str) -> list[str]:
@@ -172,7 +200,7 @@ def accept(store: ProfileStore, term: str) -> list[str]:
     if not isinstance(payload, dict) or payload.get("state") != "stated":
         raise TermError("the aim is not stated; add terms through step 7, not here")
     terms = list(payload.get("terms", ()))
-    if term.casefold() in {t.casefold() for t in terms}:
+    if _norm(term) in {_norm(t) for t in terms}:
         raise TermError(f"{term!r} is already in the aim")
     terms.append(term)
     store.write_json({**payload, "terms": terms}, *AIM_FILE)

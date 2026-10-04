@@ -19,6 +19,7 @@ from integral.lifecycle import save_lifecycle_offer, track_new_offer
 from integral.offers import Offer, compute_offer_id
 from integral.search_terms import AIM_FILE, save_aim
 from integral.sourcing import FETCH_LOG
+from integral.sourcing_exclusions import Exclusion, record_exclusion
 from integral.term_proposals import (
     DECLINED_FILE,
     TermError,
@@ -42,8 +43,10 @@ def store(tmp_path: Path) -> ProfileStore:
     return s
 
 
-def _advert(store: ProfileStore, title: str, company: str | None, board: str = "a") -> str:
-    text = f"{title} at {company} on {board} " + "x" * 20
+def _advert(
+    store: ProfileStore, title: str, company: str | None, board: str = "a", extra: str = ""
+) -> str:
+    text = f"{title} at {company} on {board} {extra} " + "x" * 20
     offer = Offer(
         id=compute_offer_id(text),
         source=board,
@@ -90,9 +93,11 @@ def test_one_vacancy_cross_posted_is_still_one_vacancy(store: ProfileStore) -> N
     assert _terms(store) == []
 
 
-def test_adverts_with_no_employer_each_count(store: ProfileStore) -> None:
+def test_adverts_with_no_employer_count_once_between_them(store: ProfileStore) -> None:
     _advert(store, "Generative AI Engineer", None, "a")
     _advert(store, "Generative AI Engineer", None, "b")
+    assert _terms(store) == []
+    _advert(store, "Generative AI Engineer", "Acme", "b")
     assert _terms(store) == ["generative ai engineer"]
 
 
@@ -110,12 +115,94 @@ def test_noise_is_stripped_from_a_title(raw: str, clean: str) -> None:
     assert clean_title(raw) == clean
 
 
-def test_a_title_the_aim_already_covers_is_not_proposed(store: ProfileStore) -> None:
-    # "python developer" searches python AND developer; engineer is a synonym.
+SPEC_TITLES = [
+    "Applied AI Engineer",
+    "Developer Platform",
+    "AI Platform Engineer",
+    "Generative AI Engineer",
+    "Developer Tools",
+]
+
+
+@pytest.mark.parametrize(
+    "aim_term",
+    [
+        "software engineer",
+        "software developer",
+        "desarrollador de software",
+        "ingeniero de software",
+        "remote developer",
+    ],
+)
+def test_a_broad_aim_term_does_not_swallow_the_spec_titles(
+    store: ProfileStore, aim_term: str
+) -> None:
+    save_aim(store, Aim(state="stated", terms=(aim_term,), evidence=("e1",)))
+    for title in SPEC_TITLES:
+        _advert(store, title, "Acme")
+        _advert(store, title, "Globex")
+    assert sorted(_terms(store)) == sorted(t.lower() for t in SPEC_TITLES)
+
+
+def test_coverage_is_what_a_boards_and_query_would_match(store: ProfileStore) -> None:
+    # every word of the aim term is a word of the title -> a search already finds it
+    save_aim(store, Aim(state="stated", terms=("python developer",), evidence=("e1",)))
+    for title in ("Senior Python Developer Platform", "Python Developer Tools"):
+        _advert(store, title, "Acme")
+        _advert(store, title, "Globex")
+    # a synonym is a different word to a board: not covered
     _advert(store, "Python Engineer", "Acme")
-    _advert(store, "Senior Python Developer", "Globex")
-    _advert(store, "Python Developer Platform", "Initech")
+    _advert(store, "Python Engineer", "Globex")
+    assert _terms(store) == ["python engineer"]
+
+
+def test_a_decline_does_not_silence_a_different_word_order_with_other_words(
+    store: ProfileStore,
+) -> None:
+    decline(store, "platform engineer")
+    for title in ("Developer Platform", "Platform Engineer Lead Tools"):
+        _advert(store, title, "Acme")
+        _advert(store, title, "Globex")
+    assert _terms(store) == ["developer platform"]
+
+
+def test_adverts_on_a_ruled_out_topic_propose_nothing(store: ProfileStore) -> None:
+    record_exclusion(
+        store,
+        Exclusion(about="sector:banking", stated_at_cycle=1, words="no banks", terms=("banking",)),
+    )
+    _advert(store, "Applied AI Engineer", "Acme", extra="a banking group")
+    _advert(store, "Applied AI Engineer", "Globex", extra="retail banking")
     assert _terms(store) == []
+    _advert(store, "Applied AI Engineer", "Initech")
+    assert _terms(store) == []  # one surviving vacancy is below the threshold
+    _advert(store, "Applied AI Engineer", "Umbrella")
+    assert _terms(store) == ["applied ai engineer"]
+
+
+def test_a_title_seen_across_boards_sorts_before_a_busier_single_board_one(
+    store: ProfileStore,
+) -> None:
+    for company in ("A1", "A2", "A3"):
+        _advert(store, "Developer Tools", company, "a")
+    _advert(store, "Applied AI Engineer", "B1", "a")
+    _advert(store, "Applied AI Engineer", "B2", "b")
+    assert _terms(store) == ["applied ai engineer", "developer tools"]
+
+
+def test_the_duplicate_check_ignores_case_and_spacing_in_the_stored_aim(
+    store: ProfileStore,
+) -> None:
+    store.write_json(
+        {"state": "stated", "terms": ["Python   Developer"], "evidence": []}, *AIM_FILE
+    )
+    with pytest.raises(TermError):
+        accept(store, "python developer")
+
+
+def test_declining_the_same_words_in_another_order_stores_it_once(store: ProfileStore) -> None:
+    decline(store, "developer tools")
+    assert decline(store, "Tools  Developer") == ["developer tools"]
 
 
 def test_a_single_word_title_is_never_proposed(store: ProfileStore) -> None:
@@ -130,8 +217,8 @@ def test_declined_is_not_proposed_again_even_reworded(store: ProfileStore) -> No
     assert _terms(store) == ["developer tools engineer"]
     decline(store, "developer tools engineer")
     assert _terms(store) == []
-    _advert(store, "Developer Tools Developer", "Initech")
-    _advert(store, "Developer Tools Developer", "Umbrella")
+    _advert(store, "Senior Tools Developer Engineer - Madrid", "Initech")
+    _advert(store, "Developer Tools Engineer (m/f/d)", "Umbrella")
     assert _terms(store) == []
     declined = json.loads(store.path(*DECLINED_FILE).read_text())["terms"]
     assert declined == ["developer tools engineer"]
@@ -211,8 +298,3 @@ def test_the_command_line_proposes_then_writes_only_on_accept(
     assert cli(["accept", *base, "--term", "applied ai engineer"]) == 0
     assert "applied ai engineer" in json.loads(_aim_bytes(store))["terms"]
     assert cli(["accept", *base, "--term", "applied ai engineer"]) == 2
-
-
-def test_declining_the_same_title_in_another_wording_stores_it_once(store: ProfileStore) -> None:
-    decline(store, "developer tools")
-    assert decline(store, "Tools Engineer Developer") == ["developer tools"]
