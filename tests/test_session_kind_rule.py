@@ -14,9 +14,26 @@ ROOT = Path(__file__).resolve().parent.parent
 
 RULE = (
     "A session is a candidate session unless the conversation opens with `[[…]]` "
-    "keys or tells it to work in the repo, or is told to work in the repo after its "
-    "first response, in which case it is a repo session for the rest of the session. "
-    "Default candidate; repo when asked for."
+    "keys (keys as `integral.test_mode.parse_turn` reads them: outside a paste, since "
+    "the paste guard declines `[[…]]` inside a pasted advert or CV, so a paste or "
+    "stray brackets never make a repo session) or tells it to work in the repo, or "
+    "is told to work in the repo after its first response, in which case it is a "
+    "repo session for the rest of the session. Default candidate; repo when asked for."
+)
+# The clauses that give the rule its effect, not only its wording.
+OPERATIVE = (
+    'Neither the "Automatic session protocol" above nor the "Session-start protocol" of '
+    '`claude-arsenal/AGENTS.md` ("At the start of every session") is run in a '
+    "candidate session",
+    "Decide this before running anything in either protocol above or in `claude-arsenal/AGENTS.md`",
+    "The board protocol applies only in a repo session.",
+    "A session spawned with a task assigned is a repo session",
+)
+# Any sentence that classifies a session is the rule restated, in whatever words.
+CLASSIFYING = re.compile(
+    r"(?:\b(?:is|becomes?|counts as|makes? it|opens?) an? (?:repo|candidate) session"
+    r"|default(?:s| to)? candidate|repo when asked)",
+    re.IGNORECASE,
 )
 HEADING = "## Which kind of session this is"
 POINTER = 'section "Which kind of session this is"'
@@ -51,12 +68,14 @@ def test_rule_is_stated_in_exactly_one_file_and_once() -> None:
     assert claude.count(RULE) == 1
 
 
-def test_rule_sits_under_its_heading_and_gates_the_board_protocol() -> None:
+def test_rule_sits_under_its_heading_and_names_both_protocols() -> None:
     text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
     assert text.count(HEADING) == 1
-    section = text.split(HEADING, 1)[1].split("\n## ", 1)[0]
-    assert RULE in _norm(section)
-    assert "board protocol applies only in a repo session" in _norm(section)
+    section = _norm(text.split(HEADING, 1)[1].split("\n## ", 1)[0])
+    assert RULE in section
+    for clause in OPERATIVE:
+        assert _norm(clause) in section, clause
+    assert section.index(_norm(OPERATIVE[1])) < section.index(RULE)
 
 
 def test_step_0_and_test_mode_point_at_the_rule_without_restating_it() -> None:
@@ -64,5 +83,15 @@ def test_step_0_and_test_mode_point_at_the_rule_without_restating_it() -> None:
         text = _norm((ROOT / rel).read_text(encoding="utf-8"))
         assert POINTER in text, rel
         assert "`CLAUDE.md`" in text, rel
-        assert "Default candidate" not in text, rel
         assert RULE not in text, rel
+        assert not CLASSIFYING.search(text), rel
+
+
+def test_any_other_prose_that_ties_repo_sessions_to_keys_points_and_never_classifies() -> None:
+    for path in _prose_files():
+        if path == ROOT / "CLAUDE.md":
+            continue
+        text = _norm(path.read_text(encoding="utf-8"))
+        if "repo session" in text and "[[" in text:
+            assert POINTER in text, path
+        assert not CLASSIFYING.search(text), path
