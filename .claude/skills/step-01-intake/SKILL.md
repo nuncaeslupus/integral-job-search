@@ -145,6 +145,8 @@ What the tool says out loud when the step ends, verbatim — the settled example
 
 Writes `last_activity`.
 
+If the conversation is already long, `CLAUDE.md`, section "Suggest compacting once, at a step boundary", says whether and how to suggest compacting here.
+
 ## Checkpoint — the number, not the prose
 
 The step's acceptance gate is **`intake_field_provenance == 1.0`**,
