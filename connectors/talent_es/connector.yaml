@@ -92,8 +92,12 @@ list:
     # "Trinetix•Valencia, Comunidad Valenciana, Spain" as the location, and no
     # `take:` member splits on a bullet. So the hashes are load-bearing here and
     # are what `connector_health.assess_package` will see rot first.
-    company: {css: "span.JobCard_company__NmRol"}
-    location_raw: {css: "span.JobCard_location__nmTtw"}
+    company:
+      css: "span.JobCard_company__NmRol"
+      build_hash_accepted: "company, bullet and location are three sibling spans told apart only by the CSS-module hash; no tag, id or data attribute separates them"
+    location_raw:
+      css: "span.JobCard_location__nmTtw"
+      build_hash_accepted: "see company: the CSS-module hash is the only thing that distinguishes this span"
 
 detail:
   fields:
@@ -105,12 +109,31 @@ detail:
     # company, the posting age and a trailing "Crear una alerta de empleo"
     # block.
     #
-    # `sc-f4dbceab-10` is a styled-components hash and will not survive a
-    # redeploy that touches this component. There is no stabler anchor on the
-    # page: no id, no data attribute, no semantic element around the body. That
-    # is what `connector_health.assess_package` is for, and it is the first
-    # thing to check when this package returns rows with no text.
-    text: {css: "div.sc-f4dbceab-10"}
+    # `sc-f4dbceab-10` is a styled-components hash and it STOPPED MATCHING (T234):
+    # a candidate session measured es.talent.com/view?id=635737020307146631 on
+    # 2026-10-02 - HTTP 200, 310,755 bytes, 0 elements with this class. The
+    # committed `fixture/detail.html` still has it twice, so no fixture can see
+    # the rot; that is why `sourcing` now counts and prints a 200 detail page
+    # that yields no text (`BoardOutcome.empty_detail`, the "EMPTY DETAIL" line).
+    #
+    # NOT FIXED HERE, and not re-verified: the environment that wrote this had
+    # no route to talent.com, so the live page's current hash is unknown and no
+    # new fixture was fabricated. A durable anchor was looked for in the
+    # committed fixture and does not exist for this engine: the body `<div>`
+    # carries only `class="sc-f4dbceab-10 fRvput"` - no id, no data attribute,
+    # no semantic element, no itemprop; the page has no `ld+json`; the advert
+    # text is also in Next.js flight data (`self.__next_f.push`), a JS string
+    # rather than a JSON document `from_json` could read. The one stable thing
+    # beside it is the label "Descripcion del trabajo" in the previous sibling,
+    # and the selector grammar has no combinator or text match to reach through
+    # it. Fix when a live page is available: read the current class from it, or
+    # extend the grammar.
+    #
+    # `build_hash_accepted` is the load-time exception the engine now requires
+    # for any selector on a generated class (`connectors.generated_classes`).
+    text:
+      css: "div.sc-f4dbceab-10"
+      build_hash_accepted: "the body div has no id, data attribute or semantic tag, only this styled-components hash (stale on the live page as of 2026-10-02; not re-verified)"
 
 # Why the body is fetched per advert rather than read off the listing.
 #

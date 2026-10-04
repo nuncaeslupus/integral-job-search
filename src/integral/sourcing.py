@@ -234,6 +234,16 @@ class BoardOutcome:
     #: robots stopped one, which is a truncated pass and not an empty board.
     detail_needed: int = 0
     detail_fetched: int = 0
+    #: T234. Advert pages that answered 200 and parsed, and yielded **no
+    #: text** although the connector's `detail:` declares a `text` selector —
+    #: the signature of a selector that has stopped matching (a build hash
+    #: rotated), which is otherwise indistinguishable from an advert with no
+    #: body. Not a bucket beside `dropped`: such a row is usually dropped too
+    #: (and counted there), but not always — other detail fields can still
+    #: complete the offer, which is then added with this count still raised. So
+    #: it is named in `_NOT_AN_UNREALIZED_ROW_FIELD` and never summed into
+    #: `_unrealized_rows`, where it would count a dropped row twice.
+    empty_detail: int = 0
     #: T167. Rows an unsteered board returned that matched none of the
     #: candidate's phrases — filtered before any advert page was opened.
     off_aim: int = 0
@@ -334,6 +344,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "error",
         "detail_needed",
         "detail_fetched",
+        "empty_detail",
         "employers_failed",
         "excluded_because",
         "no_employer",
@@ -632,6 +643,13 @@ class Run:
                 lines.append(
                     f"  FILTERED {outcome.connector}: {outcome.off_aim} of {outcome.items} "
                     "row(s) matched none of your phrases"
+                )
+            if outcome.empty_detail:
+                lines.append(
+                    f"  EMPTY DETAIL {outcome.connector}: {outcome.empty_detail} advert page(s) "
+                    "answered 200 and yielded no text — the connector's detail selector "
+                    "matches nothing on the live page, which is not the same as an advert "
+                    "with no body"
                 )
             if outcome.excluded:
                 lines.append(
@@ -1172,6 +1190,21 @@ def _origin(url: str) -> str:
     return f"{scheme}://{parts.hostname or ''}:{port}"
 
 
+def _detail_declares_text(connector: Connector) -> bool:
+    """Whether `connector.detail` promises an advert body at all (T234).
+
+    An empty record from a detail page that declares no `text` is the connector
+    doing what it says; only a declared `text` that came back absent is a
+    selector that stopped matching.
+    """
+    detail = connector.detail
+    if detail is None:
+        return False
+    if detail.from_json is not None:
+        return "text" in detail.from_json.fields
+    return "text" in detail.fields
+
+
 def _detail_record(
     connector: Connector, url: str, *, fetch: Fetch
 ) -> tuple[dict[str, str] | None, str | None]:
@@ -1192,6 +1225,10 @@ def _detail_record(
     silent in the worst way: the fetch answered 200 with the site's shell, the
     detail selectors matched nothing, and 40 adverts were dropped for "no text"
     over a board that had returned all 50 rows.
+
+    A 200 page that parsed but carries no `text` although `detail:` declares one
+    comes back as `({}, None)` — an empty record, never `None` — so the caller
+    can tell "the selector matched nothing" (T234) from "the page failed".
     """
     detail = connector.detail
     headers = client_headers(detail.client, detail.client_target) if detail else {}
@@ -1266,6 +1303,7 @@ def _one_board(
     dropped = 0
     detail_needed = 0
     detail_fetched = 0
+    empty_detail = 0
     off_aim = 0
     unopened = 0
     over_ceiling = 0
@@ -1303,6 +1341,7 @@ def _one_board(
             stale=stale,
             detail_needed=detail_needed,
             detail_fetched=detail_fetched,
+            empty_detail=empty_detail,
             off_aim=off_aim,
             unopened=unopened,
             over_ceiling=over_ceiling,
@@ -1430,6 +1469,15 @@ def _one_board(
                         refused_origins[origin] = f"{refusal}, on an advert page ({detail_url})"
                     elif fields:
                         offer, why = _offer_from(connector, item, fields, url=detail_url)
+                    if (
+                        refusal is None
+                        and fields is not None
+                        and "text" not in fields
+                        and _detail_declares_text(connector)
+                    ):
+                        # T234. A 200 page, parsed, with no body where the
+                        # connector says one is: counted and printed per board.
+                        empty_detail += 1
                 if origin in refused_origins:
                     # T174: the host refused, not the row — so it is unread,
                     # never "dropped" as a connector that produced no text.
