@@ -33,6 +33,8 @@ A resolved handle. Better with Intake behind it, and does not require it: with n
 - Follow the candidate rather than the checklist — someone who starts talking about the manager who left is handing over the episode already; take it.
 - **Every negative episode gets a follow-up about what was learned or what they would do differently** — never a judgement.
 
+- **Public work, when the role family has it.** For a candidate whose work leaves a public trail — software and data developers, designers, writers, researchers, and other portfolio roles — ask once, after the first role, for their GitHub or other public projects (repositories, a portfolio, published writing). Skip it for roles with no such trail (hospitality, healthcare, trades, retail, teaching, administrative). A link is evidence the step can read directly: record each project as an episode in `profile/stories.jsonl` with the link as its source, `disclosure: private` until the candidate approves it. Step 11 links own projects that are public, only on per-use approval. Never require one; "I don't have any" is a full answer.
+
 **This is where the invitation earns its keep — repeat it.** An episode nobody would put on
 a CV is usually the one that carries a trait: a bad week, something they fixed for free, a
 hobby that turned out to be the same skill. Say plainly that anything counts, good or bad,
