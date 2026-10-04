@@ -883,7 +883,7 @@ class Robots:
                 # recovering it is not license to read it more loosely.
                 try:
                     text = self._browser_fetch(robots_url)
-                except (urllib.error.HTTPError, OSError) as retry_exc:
+                except (urllib.error.HTTPError, OSError, http.client.HTTPException) as retry_exc:
                     raise RobotsError(
                         f"{origin}/robots.txt returned 403, and the browser-agent "
                         f"retry could not read it either: {retry_exc}"

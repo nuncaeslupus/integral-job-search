@@ -19,7 +19,7 @@ import pytest
 from integral.candidate import Aim, CandidateConstraints, Location
 from integral.connectors import ListRequest
 from integral.identity import ProfileStore, create_profile
-from integral.robots import Robots, RobotsUnreachable
+from integral.robots import Robots, RobotsError, RobotsUnreachable
 from integral.sourcing import Response, _may_fetch, source
 
 ALLOW_ALL = "User-agent: *\nAllow: /\n"
@@ -210,3 +210,21 @@ def test_a_malformed_response_is_a_network_failure_retried_and_cached(
         robots.allows(URL)
     asked, skipped = _run(store, _robots(_Flaky(10**6, error))[0])
     assert asked == [] and skipped and all(s and "unreachable" in s for s in skipped), skipped
+
+
+def test_a_403_whose_browser_retry_raises_a_malformed_response_is_refused() -> None:
+    """The T71 browser-agent retry can fail with `http.client.HTTPException` too;
+    that is a refusal like its other failures, not an escape."""
+
+    def browser(url: str) -> str:
+        raise http.client.BadStatusLine("garbage")
+
+    robots = Robots(
+        fetch=_Flaky(10**6, _http(403)),
+        browser_fetch=browser,
+        retry_delays=(),
+        sleep=lambda _: None,
+    )
+    with pytest.raises(RobotsError):
+        robots.allows(URL)
+    assert _may_fetch(robots, URL) is False
