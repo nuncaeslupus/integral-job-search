@@ -8,17 +8,17 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "lineno": 3507
+      "lineno": 3629
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "lineno": 3502
+      "lineno": 3624
     },
     {
       "module": "approval",
       "name": "_SHINGLE",
-      "lineno": 475
+      "lineno": 482
     },
     {
       "module": "arsenal_source",

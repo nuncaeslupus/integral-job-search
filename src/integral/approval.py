@@ -400,6 +400,12 @@ named in `applications/` is the only record of what was actually sent, and §7
 makes it immutable, so the purge has to skip those and that is a task, not a
 line.
 
+**`send/` narrows that gap without closing it (T212).** `stage_send` copies exactly
+the payload's documents into `<version>/send/` after the same check `record_sent`
+makes, and `record_sent` refuses a version whose `send/` is not byte-for-byte what
+was staged. The candidate still presses send; what the folder adds is that the
+files they are handed are the files that were approved.
+
 **What the confirmation proves, and what it does not.** `record_sent` requires
 the payload's own digest, which pins *which* payload was named — a standing "send
 whatever you like" and a yes given to a different draft both fail it. It says
@@ -432,6 +438,7 @@ from integral.cv_store import (
     Experience,
     Skill,
     SourcedText,
+    _atomic_write,
     _atomic_write_json,
     write_master,
 )
@@ -555,6 +562,10 @@ def payload_digest(payload: Payload) -> str:
     """The name of this exact payload. What the candidate confirms is *this*."""
     body = json.dumps(payload.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+SEND_DIR = "send"
+SEND_RECORD = "send.json"
 
 
 def _version_parts(offer_id: str, version: int) -> tuple[str, ...]:
@@ -787,21 +798,13 @@ def read_approvals(store: ProfileStore, offer_id: str, version: int) -> Approval
     return Approvals.model_validate_json(path.read_text(encoding="utf-8"))
 
 
-def record_sent(
-    store: ProfileStore,
-    master: CVMaster,
-    offer_id: str,
-    version: int,
-    *,
-    confirms: str,
-    sent_at: str | None = None,
-) -> Path:
-    """Record that the candidate sent this application. Nothing here sends it.
+def _confirmed_payload(
+    store: ProfileStore, master: CVMaster, offer_id: str, version: int, confirms: str
+) -> tuple[Payload, str]:
+    """Re-measure the documents as they stand and check the confirmation names the payload.
 
-    The documents are re-measured against the approvals **as they stand now**,
-    because a file can change between drafting and sending, and then the digest
-    must name the payload on disk. See the module docstring for what that digest
-    does and does not prove.
+    The one place both `stage_send` and `record_sent` ask the T46 question, so the
+    send/ folder can never be filled under a weaker check than the record is.
     """
     measured = measure_prepared(store, master, offer_id, version)
     if measured["unapproved_episode_disclosures"]:
@@ -819,6 +822,125 @@ def record_sent(
             f"the confirmation does not name this payload ({digest}) — approval is given "
             "once per application, over the payload that would actually go, and never "
             "as a standing permission"
+        )
+    return payload, digest
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def stage_send(
+    store: ProfileStore,
+    master: CVMaster,
+    offer_id: str,
+    version: int,
+    *,
+    confirms: str,
+) -> Path:
+    """Collect exactly the approved final files into `<version>/send/` — step 11's output.
+
+    Only after the same check `record_sent` makes: the documents re-measured against
+    the approvals now, and `confirms` naming this payload's digest. The folder holds
+    the payload's own documents (`payload.documents`) and nothing else, byte for byte
+    what was measured; the digest of each is written beside it, in `send.json`, never
+    inside it, so the folder contains only files that go. A second call over an intact
+    folder is a no-op; over a folder that is not what was approved it refuses rather
+    than overwrite, because a stray file there is a finding, not clutter to tidy away.
+    Nothing here sends.
+    """
+    payload, digest = _confirmed_payload(store, master, offer_id, version, confirms)
+    where = _version_parts(offer_id, version)
+    folder = store.path(*where, SEND_DIR)
+    if folder.exists() or store.path(*where, SEND_RECORD).exists():
+        defects = verify_send(store, offer_id, version, payload=payload)
+        if defects:
+            raise ApprovalError(
+                "send/ already exists and is not what was approved — it is not overwritten: "
+                + "; ".join(defects)
+            )
+        return folder
+    files: dict[str, str] = {}
+    for name in payload.documents:
+        content = store.path(*where, name).read_bytes()
+        _atomic_write(store, content, *where, SEND_DIR, name)
+        files[name] = _sha256(content)
+    _atomic_write_json(
+        store,
+        {"schema_version": SCHEMA_VERSION, "confirmed_digest": digest, "files": files},
+        *where,
+        SEND_RECORD,
+    )
+    return folder
+
+
+def verify_send(
+    store: ProfileStore, offer_id: str, version: int, *, payload: Payload | None = None
+) -> list[str]:
+    """What in `send/` is not what was approved. Empty means it is exactly that.
+
+    Compared against the digests recorded at staging **and** the payload on disk: a
+    file edited, added, removed or swapped for a link or directory after approval is
+    named. A version with no `send/` and no record has nothing to disagree with.
+    """
+    where = _version_parts(offer_id, version)
+    folder = store.path(*where, SEND_DIR)
+    record_path = store.path(*where, SEND_RECORD)
+    if not folder.exists() and not record_path.exists():
+        return []
+    if not record_path.exists():
+        return ["send/ exists but was not staged by stage_send, so nothing approved it"]
+    if not folder.is_dir() or folder.is_symlink():
+        return ["send/ is missing or is not a directory"]
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        recorded: dict[str, str] = dict(record["files"])
+        confirmed = str(record["confirmed_digest"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return ["send.json is unreadable, so send/ cannot be shown to be what was approved"]
+    if payload is None:
+        payload = read_payload(store, offer_id, version)
+    defects: list[str] = []
+    if confirmed != payload_digest(payload):
+        defects.append("send.json was staged over a different payload than the one on disk")
+    if sorted(recorded) != sorted(payload.documents):
+        defects.append("send.json does not list exactly the payload's documents")
+    present = {entry.name: entry for entry in folder.iterdir()}
+    for name in sorted(set(present) - set(recorded)):
+        defects.append(f"{name} is in send/ and was never approved")
+    for name, expected in sorted(recorded.items()):
+        entry = present.get(name)
+        if entry is None:
+            defects.append(f"{name} was approved and is missing from send/")
+        elif entry.is_symlink() or not entry.is_file():
+            defects.append(f"{name} in send/ is not a regular file")
+        elif _sha256(entry.read_bytes()) != expected:
+            defects.append(f"{name} in send/ differs from what was approved")
+    return defects
+
+
+def record_sent(
+    store: ProfileStore,
+    master: CVMaster,
+    offer_id: str,
+    version: int,
+    *,
+    confirms: str,
+    sent_at: str | None = None,
+) -> Path:
+    """Record that the candidate sent this application. Nothing here sends it.
+
+    The documents are re-measured against the approvals **as they stand now**,
+    because a file can change between drafting and sending, and then the digest
+    must name the payload on disk. See the module docstring for what that digest
+    does and does not prove.
+    """
+    payload, digest = _confirmed_payload(store, master, offer_id, version, confirms)
+    defects = verify_send(store, offer_id, version, payload=payload)
+    if defects:
+        raise ApprovalError(
+            "the send/ folder is not what was approved, so nothing here is sendable: "
+            + "; ".join(defects)
         )
     parts = ("applications", offer_id, f"v{version}.json")
     if store.path(*parts).exists():

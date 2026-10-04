@@ -5,17 +5,17 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3507
+      "line": 3629
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3502
+      "line": 3624
     },
     {
       "module": "approval",
       "name": "_SHINGLE",
-      "line": 475
+      "line": 482
     },
     {
       "module": "arsenal_source",
