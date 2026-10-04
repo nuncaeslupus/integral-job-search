@@ -104,10 +104,72 @@ def test_a_different_employer_containing_the_name_is_not_ruled_out(
 
 @pytest.mark.parametrize(
     "title",
-    ["Camarero en Barclays", "Engineer en Barcelona", "Barista en Bar Central"],
+    [
+        "Camarero en Barclays",
+        "Engineer en Barcelona",
+        "Barista en Bar Central",
+        "Ingeniero en Barcelona",
+        "Experto en Python",
+    ],
 )
-def test_a_title_naming_another_employer_is_not_ruled_out(title: str) -> None:
-    assert not _out("Bar", title=title, company=None)
+def test_a_title_tail_naming_nobody_excluded_never_passes_an_advert_with_no_company(
+    title: str,
+) -> None:
+    """F1: " en X" may rule an advert OUT, never IN — "Experto en Python" names
+    a skill, not an employer, so with no company the advert stays undecidable
+    and is held rather than shown."""
+    exclusion = Exclusion(about="employer:Bar", stated_at_cycle=1, words="w")
+    candidate = se.Candidate(offer_id="x", title=title, text="t", employer=None)
+    assert se.employer_verdict(candidate, exclusion) == se.UNDECIDED
+    assert se.matches(candidate, exclusion)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Camarero en Acme | Madrid",
+        "Camarero en Acme - Barcelona",
+        "Camarero en Acme (Madrid)",
+        "Camarero en Acme, Madrid",
+        "Camarero en Acme S.L. · Madrid",
+    ],
+)
+def test_a_tail_with_trailing_text_still_reaches_the_employer(title: str) -> None:
+    exclusion = Exclusion(about="employer:Acme", stated_at_cycle=1, words="w")
+    candidate = se.Candidate(offer_id="x", title=title, text="t", employer=None)
+    assert se.employer_verdict(candidate, exclusion) == se.OUT
+
+
+# F3: a legal form missing from a list is fail-open, so each spelling is a case.
+_FORMS = [
+    "SCCL", "S.Coop.", "S. Coop.", "SLL", "AIE", "Sp. z o.o.", "Co.", "Ltd.", "Corporation",
+    "SA de CV", "S. A. de C. V.", "S. A.", "S. L.", "S.L.U.", "S. de R.L.", "GmbH", "Inc.",
+    "S.A.", "SL", "Limited", "LLC", "logo", "S.L. logo",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("form", _FORMS)
+def test_every_legal_form_spelling_leaves_the_same_employer(form: str) -> None:
+    assert se.employer_key(f"Acme {form}") == "acme"
+    assert _out("Acme", company=f"Acme {form}")
+    assert _out("Acme", company=f"ACME, {form}")
+
+
+@pytest.mark.parametrize("form", _FORMS)
+def test_the_stated_value_is_reduced_by_the_same_rule(form: str) -> None:
+    """F4: `employer:Acme SCCL` must exclude an advert from plain "Acme"."""
+    assert _out(f"Acme {form}", company="Acme")
+    assert _out(f"Acme {form}", company="acme s.l. logo")
+
+
+def test_a_legal_form_is_only_stripped_from_the_end() -> None:
+    assert se.employer_key("Co Acme") == "co acme"
+    assert not _out("Acme", company="Acme Industries SL")
+
+
+def test_a_name_that_is_only_a_legal_form_is_kept() -> None:
+    assert se.employer_key("S.L.") == "sl"
+    assert se.employer_key("Co.") == "co"
 
 
 @pytest.mark.parametrize("company", [None, "", "   ", "\u200b"])
@@ -219,3 +281,34 @@ def test_partition_holds_back_stored_offers_of_a_newly_ruled_out_employer(
     show, held = partition(store, ids)
     assert held and all("employer:employer 2" in h.reason for h in held)
     assert {load_offer(store, i).company for i in show} == before - {"Employer 2"}
+
+
+# --- F6: held only because the employer is unknown says so --------------------
+
+
+def test_an_undecided_advert_is_labelled_employer_unknown() -> None:
+    exclusion = Exclusion(about="employer:Foo", stated_at_cycle=1, words="w")
+    anon = se.Candidate(offer_id="a", title="Camarero", text="t", employer=None)
+    named = se.Candidate(offer_id="b", title="Camarero", text="t", employer="Foo logo")
+    assert se.ruled_out_by(anon, [exclusion]) == ("employer:Foo (employer unknown)",)
+    assert se.ruled_out_by(named, [exclusion]) == ("employer:Foo",)
+
+
+def test_a_sector_exclusion_is_never_labelled_employer_unknown() -> None:
+    exclusion = Exclusion(about="sector:banca", stated_at_cycle=1, words="w")
+    anon = se.Candidate(offer_id="a", title="banca", text="banca", employer=None)
+    assert se.ruled_out_by(anon, [exclusion]) == ("sector:banca",)
+
+
+def test_partition_says_the_employer_is_unknown(store: ProfileStore, tmp_path: Path) -> None:
+    from integral.lifecycle import collect_offer
+    from integral.offers import Offer, compute_offer_id
+
+    _run(store, tmp_path)
+    text = "Camarero de sala, Madrid"
+    anon = Offer(id=compute_offer_id(text), source="test", text=text, title="Camarero")
+    collect_offer(store, anon, at=AT)
+    record_exclusion(store, Exclusion(about="employer:Foo", stated_at_cycle=1, words="no"))
+    _, held = partition(store, [anon.id])
+    assert held and "no dice quién lo publica" in held[0].reason
+    assert "employer unknown" in held[0].reason

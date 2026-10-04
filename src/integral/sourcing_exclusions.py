@@ -337,80 +337,145 @@ def _stems(needle: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     return (forms + tuple(abstract), suffixes + (_ABSTRACT_SUFFIXES if abstract else ()))
 
 
-#: Legal-form tokens a company name may end in. Dots are removed first, so
-#: "S.L.", "S.L.U." and "SL" all read as one token.
+#: What a company name may end in besides the name: a legal form, joined (so
+#: "S. A. de C. V." is `sadecv` and "Sp. z o.o." is `spzoo`), or what a board
+#: appends. The rule that makes this closed rather than a list of examples is
+#: `employer_key`: runs of single letters are joined first, so every dotted or
+#: spaced spelling of a form ("S.L.", "S. L.", "SL") reaches the same token.
+#: A form missing from here is **fail-open** (it stays in the key and the
+#: excluded employer passes), which is why the set is wide and symmetric: the
+#: stated value is reduced by the same function.
 _LEGAL_FORMS = frozenset(
     [
         "sl",
         "slu",
+        "sll",
         "sa",
         "sau",
-        "sc",
+        "sccl",
+        "scoop",
         "scp",
         "srl",
         "spa",
         "sas",
         "sarl",
+        "sderl",
+        "sadecv",
+        "spzoo",
+        "zoo",
         "ltd",
+        "ltda",
         "limited",
         "inc",
+        "incorporated",
         "llc",
-        "gmbh",
-        "ag",
-        "bv",
-        "nv",
+        "llp",
+        "lp",
         "plc",
         "corp",
+        "corporation",
+        "co",
+        "company",
+        "cia",
+        "coop",
+        "cooperativa",
+        "aie",
+        "gie",
+        "eirl",
+        "gmbh",
+        "ag",
+        "kg",
+        "ohg",
+        "ug",
+        "bv",
+        "nv",
+        "oy",
+        "pty",
+        "pte",
+        "sdn",
+        "bhd",
+        "logo",
     ]
 )
-#: What a board appends to the employer's name: JobFluent writes "Foo logo".
-_BOARD_SUFFIXES = frozenset({"logo"})
+_PHRASE_LENGTHS = (3, 2, 1)
 
 
 def employer_key(name: str | None) -> str:
     """An employer's name reduced to what two spellings of it share.
 
-    Case, accents, punctuation, a board's trailing "logo" and trailing legal
-    forms ("S.L.", "Inc") are dropped, so "Fòrum Restauración, S.L. logo" and
-    "forum restauracion" are the same employer. Whole-name only: the key is
-    compared for equality, never searched inside, because "Bar" is not
-    "Barclays".
+    Case, accents and punctuation are dropped, runs of single letters are
+    joined ("S. L." -> "sl"), then trailing legal forms and a board's "logo"
+    are stripped, longest phrase first ("SA de CV", "Sp. z o.o."). So
+    "Fòrum Restauración, S. L. logo" and "forum restauracion" are the same
+    employer. Whole-name only: the key is compared for equality, never
+    searched inside, because "Bar" is not "Barclays".
     """
-    folded = _fold(re.sub(r"\.", "", name or ""), " ")
-    tokens = re.sub(r"[^0-9a-z]+", " ", folded).split()
-    while len(tokens) > 1 and tokens[-1] in _BOARD_SUFFIXES | _LEGAL_FORMS:
-        tokens.pop()
-    return " ".join(tokens)
+    words = re.sub(r"[^0-9a-z.]+", " ", _fold(name or "", " ")).split()
+    tokens = [w.replace(".", "") for w in words if w.replace(".", "")]
+    # A dotted initialism ("o.o.", "s.l.u.") is one token already; adjacent
+    # single letters ("s", "l") are one initialism written with spaces.
+    joined: list[str] = []
+    run = ""
+    for token in tokens:
+        if len(token) == 1:
+            run += token
+            continue
+        if run:
+            joined.append(run)
+            run = ""
+        joined.append(token)
+    if run:
+        joined.append(run)
+    stripped = True
+    while stripped and len(joined) > 1:
+        stripped = False
+        for size in _PHRASE_LENGTHS:
+            if len(joined) > size and "".join(joined[-size:]) in _LEGAL_FORMS:
+                del joined[-size:]
+                stripped = True
+                break
+    return " ".join(joined)
 
 
-def _employer_matches(candidate: Candidate, exclusion: Exclusion) -> bool:
-    """Is this advert from an employer the candidate named?
+#: How an employer exclusion sees one advert.
+OUT, UNDECIDED, IN = "out", "undecided", "in"
+#: What `ruled_out_by` appends when an advert is held only because nothing in it
+#: says who published it, so the candidate is not told it is "a topic".
+EMPLOYER_UNKNOWN = "employer unknown"
+_TAIL_CUT = re.compile(r"\s*[|(\[,;:/\u00b7\u2013\u2014]|\s+-\s+")
 
-    Reads the company field, and the title's " en <Empresa>" tail for the
-    adverts that carry no company at all (every possible split on " en " is
-    tried, so a name that itself contains " en " is still reached). An advert
-    that names no employer at all is **undecidable** and counts as ruled out.
+
+def employer_verdict(candidate: Candidate, exclusion: Exclusion) -> str:
+    """`OUT`, `IN` or `UNDECIDED`: is this advert from the employer named?
+
+    An advert with a company is decided by it alone. One with **no** company
+    can only be ruled OUT by its title's " en <Empresa>" tail (every split on
+    " en " is tried, and the tail is also tried cut at a separator, so
+    "en Acme | Madrid" and "en Acme (Madrid)" reach Acme); a tail naming
+    somebody else proves nothing — "Ingeniero en Barcelona" and "Experto en
+    Python" are not employers — so it stays `UNDECIDED`, which is not
+    satisfied and is held.
     """
     wanted = {employer_key(v) for v in (exclusion.value, *exclusion.terms)} - {""}
     if not wanted:
-        return False
-    if employer_key(candidate.employer) in wanted:
-        return True
-    title = candidate.title or ""
-    parts = re.split(r"\s+en\s+", title, flags=re.IGNORECASE)
-    if any(employer_key(" en ".join(parts[i:])) in wanted for i in range(1, len(parts))):
-        return True
-    # An advert that names no employer anywhere (a board that does not publish
-    # one) cannot be shown to be somebody else's: the exclusion is undecidable
-    # for it, which is not the same as satisfied, so it is held and said.
-    return not names_an_employer(candidate.employer) and len(parts) == 1
+        return IN
+    if names_an_employer(candidate.employer):
+        return OUT if employer_key(candidate.employer) in wanted else IN
+    parts = re.split(r"\s+en\s+", candidate.title or "", flags=re.IGNORECASE)
+    for i in range(1, len(parts)):
+        tail = " en ".join(parts[i:])
+        cut = _TAIL_CUT.split(tail, maxsplit=1)[0]
+        if {employer_key(tail), employer_key(cut)} & wanted:
+            return OUT
+    return UNDECIDED
 
 
 def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     """Is this advert one the candidate ruled out?
 
     The `employer:` facet is a different question — who published it — and is
-    answered by `_employer_matches` on the normalised company, never by text.
+    answered by `employer_verdict` on the normalised company, never by text;
+    an advert whose employer cannot be told is held (`UNDECIDED`), not passed.
 
     The stated value, and every `term` recorded beside it, is matched as a
     **word plus a closed set of endings** (`SUFFIXES`), never as free text:
@@ -422,7 +487,7 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     on the banking topic whether or not its text says so.
     """
     if exclusion.facet.strip().lower() == "employer":
-        return _employer_matches(candidate, exclusion)
+        return employer_verdict(candidate, exclusion) != IN
     raw = f"{candidate.title or ''} {candidate.employer or ''} {candidate.text}"
     for join in ("", " "):
         haystack = _fold(raw, join)
@@ -469,8 +534,18 @@ def record_exclusion(store: ProfileStore, exclusion: Exclusion) -> Path:
 
 
 def ruled_out_by(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple[str, ...]:
-    """The `about` of every exclusion this advert trips, in the order stated."""
-    return tuple(e.about for e in exclusions if matches(candidate, e))
+    """The `about` of every exclusion this advert trips, in the order stated.
+
+    An employer exclusion that trips only because the advert names no employer
+    says so (`EMPLOYER_UNKNOWN`) rather than passing for a ruled-out topic.
+    """
+    return tuple(
+        f"{e.about} ({EMPLOYER_UNKNOWN})"
+        if e.facet.strip().lower() == "employer" and employer_verdict(candidate, e) == UNDECIDED
+        else e.about
+        for e in exclusions
+        if matches(candidate, e)
+    )
 
 
 # ---------------------------------------------------------------------------
