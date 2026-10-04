@@ -29,6 +29,7 @@ None — this is the one step with no preconditions, because every other step de
 ## Protocol — the manner, not the mechanism
 
 - Open by asking who this is, in one short friendly line.
+- **Resolve and open with one command, never by walking `profiles/` by hand.** `uv run python -m integral.step0_open open [--handle <name>] [--confirmed]` does the whole of the next bullet's order in a single call: it reads display names only until a handle resolves, then reads the recorded position once, writes `last_activity` and returns the opening line. Run it with no flags first; relay its question (`confirm` or `choose`) to the candidate and run it again with `--confirmed` or `--handle`. That is at most two calls for a returning candidate (T207) — listing directories, opening `identity.json` or `session/state.json` one file at a time, and working the resumption out yourself is the minutes of silence the owner reported, and is not done. Say one line before the first call ("Let me find you — one moment") and say what it returned when it comes back.
 - Resolve in order: an explicit handle or name; exactly one profile exists — name it and ask for confirmation, never assume; otherwise list display names and ask; no match — offer to create a profile.
 - On a first run, ask what they would like to be called and derive a directory-safe handle from the answer. A nickname is fine; a legal name is not required and is not asked for. The name they choose is the identifier, unless it is already taken.
 - Record the language they wrote in — the rest of the process happens in it.
