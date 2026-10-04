@@ -72,6 +72,14 @@ A session is a candidate session unless the conversation opens with `[[…]]` ke
   `tests/test_session_kind_rule.py` fails if the rule is deleted, duplicated or
   paraphrased elsewhere, or a pointer is removed.
 
+## Suggest compacting once, at a step boundary
+
+A candidate session can run long enough that the context fills before the process ends. The owner's note (test session b461d09a, step 9): when context is growing, ask the user to compact it. This section is the one place the rule lives; each step skill's Boundary points here and never restates it.
+
+- **When:** only at a step boundary, after the step's checkpoint has run and before the next step opens, and only when the conversation is already long. Never mid-step: a half-finished step has state that `state.json` has not recorded yet.
+- **Once per session:** suggest it a single time. If the candidate declines or ignores it, never raise it again in that session.
+- **What to say:** that compacting keeps `session/state.json`, the profile and every step's outputs, because they live on disk and not in the conversation, so resuming after it is safe and the candidate loses nothing; it only shortens the chat history. Then invite them forward as the step's Boundary does; compacting is a suggestion and never a condition for the next step.
+
 ## The GitHub channel depends on the surface — detect it, don't assume
 
 `bash claude-arsenal/bin/github_channel.sh --detect` answers this, and its answer
