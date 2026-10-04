@@ -140,9 +140,17 @@ def test_a_run_collects_offers_and_records_how_each_arrived(store: ProfileStore)
     assert offers_without_a_recorded_fetch(store) == []
 
 
-def test_a_second_pass_over_the_same_boards_adds_nothing(store: ProfileStore) -> None:
+def test_a_second_pass_over_the_same_boards_adds_nothing(
+    store: ProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """T168: `added` is what survived dedup. The same adverts sighted again are
-    a real result that adds no offer — counting them re-reports yesterday's run."""
+    a real result that adds no offer — counting them re-reports yesterday's run.
+
+    The ceiling is lifted (T253): a board held to its share leaves rows
+    uncollected, and a second pass legitimately collects those — which is a
+    different property from dedup and is pinned in `test_source_offer_ceiling`.
+    """
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 100_000)
     first = _run(store, _answer_with_captures())
     assert first.added > 0, first.summary()
 
@@ -1449,6 +1457,7 @@ def test_the_headline_counts_only_the_boards_that_answered(
         at=AT,
         directory=tmp_path / "connectors",
         robots=_robots(),
+        board_cap=OFFER_CEILING,  # T253: this is the run ceiling alone
     )
     assert run.summary().startswith(f"{OFFER_CEILING} offer(s) added from 1 board(s)"), (
         run.summary()
@@ -1689,7 +1698,7 @@ def test_the_unrealized_row_fields_are_derived_not_hand_listed() -> None:
     assert set(result) == {f.name for f in dc_fields(Sample)} - {"kept_out", "also_kept_out"}
 
 
-def test_the_board_outcome_unrealized_row_fields_are_todays_six_terms() -> None:
+def test_the_board_outcome_unrealized_row_fields_are_todays_eight_terms() -> None:
     """Pins what `_UNREALIZED_ROW_FIELDS` resolves to today — `dropped`,
     `off_aim`, `unopened`, `over_ceiling`, `refused_rows`, `excluded` — so a change to
     `BoardOutcome` or to the exclusion set it is derived against is visible
@@ -1697,7 +1706,9 @@ def test_the_board_outcome_unrealized_row_fields_are_todays_six_terms() -> None:
     behaviour. `refused_rows` (T174, #466 review round 1 F6) is the fifth: a
     row whose advert host had already refused before it was read, counted in
     none of the original four. `excluded` (T203) is the sixth: a row built into
-    an offer and left out because its topic was ruled out."""
+    an offer and left out because its topic was ruled out. `over_board_cap` and
+    `out_of_reach` (T253) are the seventh and eighth: rows left uncollected by a
+    board's share of the ceiling and by the candidate's stated reach."""
     from integral.sourcing import _UNREALIZED_ROW_FIELDS
 
     assert set(_UNREALIZED_ROW_FIELDS) == {
@@ -1707,11 +1718,23 @@ def test_the_board_outcome_unrealized_row_fields_are_todays_six_terms() -> None:
         "over_ceiling",
         "refused_rows",
         "excluded",
+        "over_board_cap",
+        "out_of_reach",
     }
 
 
 @pytest.mark.parametrize(
-    "bucket", ["dropped", "off_aim", "unopened", "over_ceiling", "refused_rows", "excluded"]
+    "bucket",
+    [
+        "dropped",
+        "off_aim",
+        "unopened",
+        "over_ceiling",
+        "refused_rows",
+        "excluded",
+        "over_board_cap",
+        "out_of_reach",
+    ],
 )
 def test_employer_boards_excludes_a_board_whose_rows_are_all_one_bucket(bucket: str) -> None:
     """Round 6, F2: T172's partition (`items > dropped+off_aim+unopened+
