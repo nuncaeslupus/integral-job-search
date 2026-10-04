@@ -55,10 +55,12 @@ from integral.lifecycle import (
     LifecycleRecord,
     advert_components,
     load_lifecycle_offer,
+    read_application_status,
     stored_identities,
     stored_posting_keys,
 )
-from integral.offers import Offer
+from integral.offers import Offer, names_an_employer
+from integral.same_vacancy import employer_key, same_vacancy
 from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -81,6 +83,14 @@ _RULED = frozenset({"shortlisted", "applied", "screened_out", "rejected", "archi
 #: The two statuses `partition` withholds. One definition, because T224 reads it
 #: for the offer itself and for every other stored copy of the same advert.
 _RULED_OUT = ("screened_out", "rejected")
+
+
+#: T250. Why an offer is held back because the same vacancy (see
+#: `same_vacancy`) is already on record. One constant per kind, so
+#: `withheld_line` counts them per reason rather than in one lump.
+REASON_APPLIED = "ya te presentaste a esta vacante"
+REASON_SHORTLISTED = "ya la tenías en tu lista de interesantes"
+REASON_SHOWN = "el mismo anuncio ya se te mostró"
 
 
 class PresentationError(Exception):
@@ -205,6 +215,73 @@ def _presented_ids(store: ProfileStore) -> set[str]:
     return {str(i) for row in _rows(store) for i in row.get("offer_ids", ())}
 
 
+def _status_of(store: ProfileStore, offer_id: str) -> str | None:
+    loaded = _loaded(store, offer_id)
+    return loaded[0].status if loaded is not None else None
+
+
+def _has_applied(store: ProfileStore, offer_id: str, status: str | None) -> bool:
+    """T250. Applied by the offer's status, or by an `applications/<id>/status.json`
+    record past `drafted` (a draft is not an application), which can exist while
+    the offer still reads `new`. A record that cannot be read is not evidence of
+    an application: the offer is shown."""
+    if status == "applied":
+        return True
+    try:
+        recorded = read_application_status(store, offer_id)
+        return recorded is not None and recorded != "drafted"
+    except Exception:
+        return False
+
+
+def _keys_by_employer(
+    keys: dict[str, str | None],
+) -> dict[tuple[str, ...], list[tuple[str, str]]]:
+    """Stored posting keys indexed by comparable employer: employer -> [(id, title)]."""
+    index: dict[tuple[str, ...], list[tuple[str, str]]] = {}
+    for stored_id, key in keys.items():
+        if key is None:
+            continue
+        employer, title = json.loads(key)
+        comparable = employer_key(employer)
+        if comparable is not None:
+            index.setdefault(comparable, []).append((stored_id, title))
+    return index
+
+
+def _similar_stored(
+    offer: Offer, offer_id: str, by_employer: dict[tuple[str, ...], list[tuple[str, str]]]
+) -> set[str]:
+    """Stored ids, other than `offer_id`, that are the same vacancy by
+    employer and title. A blank employer finds nothing (`names_an_employer`)."""
+    if not names_an_employer(offer.company):
+        return set()
+    comparable = employer_key(offer.company)
+    if comparable is None:
+        return set()
+    return {
+        stored_id
+        for stored_id, title in by_employer.get(comparable, ())
+        if stored_id != offer_id and same_vacancy(offer.company, offer.title, offer.company, title)
+    }
+
+
+def unchecked_line(store: ProfileStore, offer_ids: list[str]) -> str:
+    """T250. Offers shown without being compared, because no employer is named.
+
+    `partition` cannot tell a blank-employer offer from one already seen, so it
+    shows it; the candidate is told, since for these the check did not run.
+    """
+    blank = [
+        i
+        for i in offer_ids
+        if (loaded := _loaded(store, i)) and not names_an_employer(loaded[0].company)
+    ]
+    if not blank:
+        return ""
+    return f"{len(blank)} sin empresa indicada: no se pudo comprobar si ya las habías visto"
+
+
 def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], list[Withheld]]:
     """Split a batch into what to show and what is being held back, with why.
 
@@ -216,10 +293,16 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     stored offer in the same connected component (`lifecycle.advert_components`):
     linked by the same `advert_identity` (same URL) or the same `posting_key`
     (same employer and title; see `lifecycle.posting_key`), directly or through
-    a chain of such links. A sibling holds
-    an offer back when it is ruled out (`screened_out`/`rejected`), or when it
-    was already shown through `present()` and this offer was not. Withheld rows
-    from a sibling carry its id in `Withheld.sibling`.
+    a chain of such links, **or** (T250) the same vacancy by `same_vacancy`:
+    one employer and a similar title, which joins another board's wording. A
+    sibling holds an offer back when it was applied to (by status or by an
+    application record past `drafted`), shortlisted, ruled out
+    (`screened_out`/`rejected`), or already shown through `present()` while this
+    offer was not; in that order. Each kind has its own reason, so
+    `withheld_line` counts them separately. Withheld rows from a sibling carry
+    its id in `Withheld.sibling`. Nothing is deleted: a withheld offer stays
+    stored. An offer with no employer is compared with nothing and is shown;
+    `unchecked_line` says so.
     """
     show: list[str] = []
     held: list[Withheld] = []
@@ -231,24 +314,27 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     keys = stored_posting_keys(store)
     presented = _presented_ids(store)
     components = advert_components(identities, keys)
+    by_employer = _keys_by_employer(keys)
     shown_by_component: dict[tuple[str, ...], str] = {}
+    shown_in_batch: list[tuple[str, str | None, str | None]] = []
     for offer_id in offer_ids:
         loaded = _loaded(store, offer_id)
         component = components.get(offer_id, ())
-        siblings = [i for i in component if i != offer_id]
+        # T250. The same vacancy under another board's wording is not in the
+        # component (no shared URL, no equal key): add it by employer and title.
+        siblings = sorted(
+            {i for i in component if i != offer_id}
+            | (_similar_stored(loaded[0], offer_id, by_employer) if loaded else set())
+        )
         # T224. A rule-out recorded against one stored copy of an advert covers
         # every other copy: the offer id hashes text, which a list row changes on
         # every search, so the same advert was stored under several ids and only
         # one of them carried the verdict. Read-time, not a migration: the copies
         # stay as the board served them and the verdict follows the advert.
-        ruled_copy = next(
-            (
-                copy
-                for copy in siblings
-                if (other := _loaded(store, copy)) is not None and other[0].status in _RULED_OUT
-            ),
-            None,
-        )
+        statuses = {copy: _status_of(store, copy) for copy in siblings}
+        applied_copy = next((c for c in siblings if _has_applied(store, c, statuses[c])), None)
+        shortlisted_copy = next((c for c in siblings if statuses[c] == "shortlisted"), None)
+        ruled_copy = next((c for c in siblings if statuses[c] in _RULED_OUT), None)
         # T225. Likewise a copy the candidate was already shown holds back the
         # others, unless this one was shown itself: repeating an offer is what
         # `passed_over` counts and is not this rule's business.
@@ -258,14 +344,27 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
             else next((copy for copy in siblings if copy in presented), None)
         )
         in_batch = shown_by_component.get(component) if component else None
+        if in_batch is None and loaded is not None:
+            in_batch = next(
+                (
+                    other
+                    for other, company, title in shown_in_batch
+                    if same_vacancy(loaded[0].company, loaded[0].title, company, title)
+                ),
+                None,
+            )
         if loaded is not None and loaded[0].status in _RULED_OUT:
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
+        elif applied_copy is not None:
+            held.append(Withheld(offer_id, REASON_APPLIED, applied_copy))
+        elif shortlisted_copy is not None:
+            held.append(Withheld(offer_id, REASON_SHORTLISTED, shortlisted_copy))
         elif ruled_copy is not None:
             held.append(
                 Withheld(offer_id, reason_for(store, ruled_copy) or "ruled out earlier", ruled_copy)
             )
         elif shown_copy is not None:
-            held.append(Withheld(offer_id, "el mismo anuncio ya se te mostró", shown_copy))
+            held.append(Withheld(offer_id, REASON_SHOWN, shown_copy))
         elif in_batch is not None:
             # The same advert twice in one batch is one advert shown once.
             held.append(Withheld(offer_id, "el mismo anuncio ya está en esta lista", in_batch))
@@ -275,6 +374,8 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
             show.append(offer_id)
             if component:
                 shown_by_component[component] = offer_id
+            if loaded is not None:
+                shown_in_batch.append((offer_id, loaded[0].company, loaded[0].title))
     return show, held
 
 
