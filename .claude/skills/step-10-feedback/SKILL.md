@@ -148,6 +148,8 @@ an offer stopped at that offer's own history — so "the list moved because you 
 checkable. It does not measure whether the re-ordering is any good; that is `rank_spearman`,
 which is T20's and still open.
 
+**A discard recorded with no decision behind it is not coverage (T226).** The script also reports, under `unrecorded_discards`, every step-10 decision row (`kind="statement"`, `source="offer_reaction"`) that no offer's lifecycle history carries as a reason (`integral.presentation_audit.unrecorded_discards`). It also reports, under `unpresented_ranking`, a re-ranked list shown with no `present()` row. Either one makes `coverage_met` false. The remedy for a flagged discard is to **ask the candidate** whether to rule that offer out, then record what they answer. Never call `rule_out` or `choose` to clear the flag. A status the candidate did not give is the inference this step forbids. Step-5 stimulus reactions and step-10 asides recorded as `kind="reaction"` are not read, and an offer purged after it was ruled out is carried by its tombstone.
+
 The script writes its result to the candidate's own tree at `session/checkpoint-feedback.json`, never to a shared or
 global path.
 

@@ -42,6 +42,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 from integral.identity import IdentityError, ProfileStore  # noqa: E402
+from integral.presentation_audit import (  # noqa: E402
+    unpresented_ranking,
+    unrecorded_discards,
+)
 from integral.process_spec import Step, StepList, load_steps  # noqa: E402
 from integral.session import SessionError, SessionStore  # noqa: E402
 from integral.state_home import (  # noqa: E402
@@ -98,7 +102,11 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         session
         and (on_this_step or finished or STEP_ID in session.pending_steps)
     )
-    coverage_met = finished and not outstanding
+    # T226: a gap the two records disagree on is not coverage (see presentation_audit).
+    # A list re-shown after the re-rank owes a present() row here too.
+    audit_gap = unrecorded_discards(store)
+    list_gap = unpresented_ranking(store)
+    coverage_met = finished and not outstanding and not audit_gap and not list_gap
 
     result: dict[str, Any] = {
         "step": STEP_ID,
@@ -111,6 +119,8 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         "position_outstanding": outstanding,
         "started": started,
         "coverage_met": coverage_met,
+        "unrecorded_discards": audit_gap,
+        "unpresented_ranking": list_gap,
         # Whether a met checkpoint may be read as the step having passed. It is
         # not implied by `coverage_met`: coverage counts artefacts, and the gate
         # measures whether they are any good (D-21).
