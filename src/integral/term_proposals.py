@@ -18,7 +18,7 @@ yes.
    One vacancy cross-posted on three boards is one vacancy, and counting it
    thrice would propose a term from a single advert. Boards are reported
    (`boards`) and rank ties, so a title seen across boards sorts first;
-2. it has at least `WORDS_NEEDED` (2) significant words once gender markers, level
+2. it has at least 2 significant words once gender markers, level
    words, work-mode words, a trailing location, function words (`of`, `de`)
    and grade tokens (`II`, `2`) are removed - a bare `engineer` is
    not a search, it is the whole market;
@@ -65,7 +65,6 @@ from integral.sourcing import _words, matches_aim, recorded_offer_ids
 from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
 
 DECLINED_FILE = ("search", "declined_terms.json")
-WORDS_NEEDED = 2
 
 _MODE = frozenset({"remote", "remoto", "hybrid", "hibrido", "onsite", "presencial"})
 _SEPARATED_TAIL = re.compile(r"\s+[-\u2013\u2014|@]\s+.*$|,\s.*$")
@@ -73,6 +72,11 @@ _SEPARATED_TAIL = re.compile(r"\s+[-\u2013\u2014|@]\s+.*$|,\s.*$")
 _GENDER_SLASH = re.compile(r"(?<=[^\W\d_])/[ao]\b", re.IGNORECASE)
 _STOP = _NOISE - {"software", "remote", "remoto", "hybrid", "hibrido", "onsite", "presencial"}
 _PARENTHESES = re.compile(r"\([^)]*\)|\[[^\]]*\]")
+
+
+def specific(key: frozenset[str]) -> bool:
+    """Two significant words at least: a bare `engineer` is the whole market."""
+    return len(key) >= 2
 
 
 def recurs(vacancies: int) -> bool:
@@ -183,7 +187,7 @@ def propose(store: ProfileStore, offer_ids: set[str] | None = None) -> list[Prop
             continue
         phrase = clean_title(offer["title"])
         key = _key(phrase)
-        if len(key) < WORDS_NEEDED or key in refused:
+        if not specific(key) or key in refused:
             continue
         if _covers(aim.terms, clean_title(offer["title"], literal=True)):
             continue
