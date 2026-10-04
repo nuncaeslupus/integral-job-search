@@ -116,6 +116,23 @@ connector for a board you name, or work through your own browser session on a si
 logged into. Either of interest?"
 ```
 
+### Fallback search — expand, run in parallel, union, then filter
+
+A single query only finds the adverts that use that one phrase. When the fallback runs, do it in
+this order, and do it yourself rather than asking the candidate for synonyms:
+
+1. **Expand the terms into synonyms.** Turn the candidate's target role into every title the field
+   uses for it ("AI engineer" also reads "LLM engineer", "prompt engineer", "context engineer",
+   "agentic engineer"), plus the market's own language.
+2. **Run the queries in parallel**, one per expanded term, not one after another.
+3. **Union the results** and dedupe by advert before anything is judged.
+4. **Only then apply the `## Liveness` check and the candidate's eligibility constraints
+   (residence, pay floor, mobility, permits) and the topics they ruled out in their own words (`search/exclusions.json`) to the whole union.** Never to one query's results. Most of a union is
+   dead (410) or restricted to one country, so a filter applied per query, or skipped for the
+   queries that looked good, shows the candidate adverts nobody confirmed.
+
+The disclosure above and the `source: web_search` label apply to every result in the union.
+
 ## Boards served only to a real browser — read them through the candidate's own
 
 Some boards show their listings only to a browser that runs their JavaScript check; the tool's

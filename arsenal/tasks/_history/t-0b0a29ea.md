@@ -3,6 +3,7 @@ id: t-0b0a29ea
 title: "T187: step-07-sourcing: synonym-expand and parallel-search the web-search fallback before filtering"
 priority: 5
 tags: [step-07-sourcing]
+status: merged
 ---
 
 Candidate note (2026-09-16, step `sourcing`): when this step falls back to a
@@ -22,13 +23,6 @@ results.
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run --extra dev pytest tests/test_sourcing_fallback_synonyms.py -q
 ```
