@@ -3354,6 +3354,17 @@ class Connector(Strict):
     #: about the board and `tests/test_advert_identity.py` re-checks it against
     #: every committed fixture.
     identity_query: tuple[str, ...] | None = None
+    #: T236. Declares that adverts on this board may carry **no employer name**,
+    #: and says why. `None` (the default) is the claim that every advert the
+    #: board serves names its employer, and `tests/test_employer_published.py`
+    #: re-checks it against every committed fixture: a connector whose own
+    #: fixture yields an empty `company` fails unless it declares this, and one
+    #: that declares it with no empty row left in its fixture fails too, so the
+    #: declaration cannot outlive its cause. The reason is a sentence for the
+    #: next reader; it must say whether the board genuinely withholds the name
+    #: or the parser has not reached it yet. Sourcing counts the offers built
+    #: with no employer per board either way (`BoardOutcome.no_employer`).
+    employer_unpublished: str | None = None
     list: ListPage
     detail: DetailPage | None = None
 
@@ -3400,6 +3411,18 @@ class Connector(Strict):
                     "nowhere — no advert is served from it"
                 )
         return hosts
+
+    @field_validator("employer_unpublished")
+    @classmethod
+    def _employer_unpublished_gives_a_reason(cls, reason: str | None) -> str | None:
+        # A validator, never a repair: a bare `true`-shaped declaration is the
+        # exemption with nothing behind it. Blank is refused, not defaulted.
+        if reason is not None and not reason.strip():
+            raise ValueError(
+                "employer_unpublished: give the reason — a blank one exempts the "
+                "board from the employer check and says nothing about why"
+            )
+        return reason
 
     @field_validator("identity_query")
     @classmethod

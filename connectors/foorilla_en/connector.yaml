@@ -48,6 +48,9 @@ locale: en
 version: "1.0.0"
 last_verified: "2026-09-06"
 auth: none
+# T236: see `Connector.employer_unpublished`. Declared because this connector's own fixture
+# yields rows with no `company`; `tests/test_employer_published.py` re-checks both ways.
+employer_unpublished: "GAP, not an omission: the board names the employer on the advert (hiring/companies link, and in the slug) and this connector maps none of it. Filed as T235, which owns the fix."
 
 list:
   # `job_search` is the board's own parameter, taken from the recorded capture

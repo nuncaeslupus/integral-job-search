@@ -79,7 +79,7 @@ from integral.lifecycle import (
     save_lifecycle_offer,
     track_new_offer,
 )
-from integral.offers import Offer, SourceKind, compute_offer_id
+from integral.offers import Offer, SourceKind, compute_offer_id, names_an_employer
 from integral.robots import Robots, RobotsError
 from integral.salary_recovery import applied, band_in_text, recover
 from integral.sourcing_exclusions import Exclusion, candidate_of, load_exclusions, ruled_out_by
@@ -257,6 +257,17 @@ class BoardOutcome:
     #: One entry per row counted in `excluded`: the advert and every `about`
     #: it tripped, so the candidate can be told what was left out and why.
     excluded_because: tuple[str, ...] = ()
+    #: T236. Offers this pass built and kept with **no employer name** — a
+    #: card with a blank employer, and a row every employer-keyed decision
+    #: (a ruled-out employer, 'ruled out before' on company and title) cannot
+    #: see. Counted apart from `dropped` (the offer exists) and from every
+    #: unrealized bucket, so a board whose rows all lack an employer reads as
+    #: exactly that rather than as healthy.
+    no_employer: int = 0
+    #: T236. What `connector.yaml`'s `employer_unpublished` says, when it
+    #: declares one: the count above is then expected of this board, and the
+    #: report says so instead of raising it as a fault.
+    employer_unpublished: str | None = None
     #: T144. On an ATS host each request is a different employer's board, so
     #: one employer's failure is that employer's, never the host's: the others
     #: are still read, and the failures are named here rather than ending the
@@ -321,6 +332,8 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "detail_fetched",
         "employers_failed",
         "excluded_because",
+        "no_employer",
+        "employer_unpublished",
         "source_kind",
     }
 )
@@ -614,6 +627,16 @@ class Run:
                 lines.append(
                     f"  EXCLUDED {outcome.connector}: {outcome.excluded} of {outcome.items} "
                     "row(s) are on a topic you ruled out — " + "; ".join(outcome.excluded_because)
+                )
+            if outcome.no_employer:
+                note = (
+                    f"the board does not publish one — {outcome.employer_unpublished}"
+                    if outcome.employer_unpublished
+                    else "UNDECLARED: connector.yaml does not say this board omits it"
+                )
+                lines.append(
+                    f"  NO EMPLOYER {outcome.connector}: {outcome.no_employer} of "
+                    f"{outcome.items} row(s) became an offer with no employer name — {note}"
                 )
             if outcome.unopened:
                 lines.append(
@@ -1134,6 +1157,7 @@ def _one_board(
     refused_rows = 0
     excluded = 0
     excluded_because: list[str] = []
+    no_employer = 0
     drop_reason: str | None = None
     stale = False
     refused: str | None = None
@@ -1170,6 +1194,8 @@ def _one_board(
             refused_rows=refused_rows,
             excluded=excluded,
             excluded_because=tuple(excluded_because),
+            no_employer=no_employer,
+            employer_unpublished=connector.employer_unpublished,
             employers_failed=tuple(failed),
             source_kind=source_kind_of(connector),
             skipped=skipped,
@@ -1309,6 +1335,11 @@ def _one_board(
                 excluded += 1
                 excluded_because.append(f"{offer.title or offer.id} ({', '.join(ruled_out)})")
                 continue
+            if not names_an_employer(offer.company):
+                # T236. Counted per board, at the one place an offer is built
+                # and kept — whatever the connector, whichever page supplied
+                # the row.
+                no_employer += 1
             outcome = collect_offer(store, offer, at=at)
             # T224. A refused duplicate was never stored under this id; the
             # fetch record names the copy that is.
