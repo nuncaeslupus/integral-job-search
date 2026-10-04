@@ -826,6 +826,17 @@ def matches_aim(item: dict[str, str], phrases: Sequence[str]) -> bool:
 _pause = time.sleep
 
 
+def _check_offset(aim: Aim, offset: int) -> None:
+    """Windows tile the phrases only if every offset is a whole window in."""
+    if offset < 0 or offset % PHRASE_CEILING:
+        raise ValueError(f"offset must be a non-negative multiple of {PHRASE_CEILING}: {offset}")
+    if offset and offset >= len(aim.terms):
+        raise ValueError(
+            f"offset {offset} is past the end of the {len(aim.terms)} phrase(s): "
+            "every phrase was already searched"
+        )
+
+
 def _connector_of(package: Package, directory: Path) -> Connector:
     return load_connector(directory / package.name)
 
@@ -841,6 +852,7 @@ def source(
     page_count: int = 1,
     robots: Robots | None = None,
     browser: Fetch | None = None,
+    offset: int = 0,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -854,8 +866,19 @@ def source(
     `from_captures` over the pages `browser_urls` asked the candidate's browser
     to save. Without it those boards are reported skipped; they are never sent
     to `fetch` (T173).
+
+    `offset` (T237) is how the phrases past `PHRASE_CEILING` get searched: pass
+    the **full** aim again with `offset=PHRASE_CEILING` (then twice that, ...)
+    and the window `aim.terms[offset:offset + PHRASE_CEILING]` is searched.
+    Never pass the remainder as if it were the aim: a slice is not what the
+    candidate said. `source()` stays the one writer of the aim: it records the
+    aim it was given exactly when `offset == 0`. A pass with `offset > 0` is a
+    continuation and never writes, so a slice cannot reach the store and a
+    changed aim at offset 0 is still saved.
     """
     from integral.search_terms import save_aim  # circular at module scope
+
+    _check_offset(aim, offset)
 
     directory = directory or DEFAULT_CONNECTORS_DIR
     adjudicator = Robots() if robots is None else robots
@@ -864,9 +887,14 @@ def source(
     # next session did not know what had worked — and a persistence step that
     # has to be called separately is one that is skipped exactly when the
     # session ends badly, which is when it was most needed.
-    if aim.terms:
+    #
+    # T237: only the first pass writes. The second pass over the terms past the
+    # ceiling used to be called with the remainder, which overwrote the
+    # candidate's aim with a slice of it; continuations (`offset > 0`) carry
+    # the full aim and never write, so the store is not read or touched.
+    if aim.terms and offset == 0:
         save_aim(store, aim)
-    run = Run(unsearched=aim.terms[PHRASE_CEILING:])
+    run = Run(unsearched=aim.terms[offset + PHRASE_CEILING :])
     # What went unasked is the *difference*, never a branch per bucket. A branch
     # per bucket is one more thing to remember: #562 added a third bucket to
     # `packages_for` and no branch here, so a run that deliberately withheld five
@@ -878,7 +906,7 @@ def source(
     run.unreached = tuple(p.name for p in withheld)
     if run.unreached:
         run.unreached_because = _why_unreached(constraints, withheld)
-    phrases = aim.terms[:PHRASE_CEILING]
+    phrases = aim.terms[offset : offset + PHRASE_CEILING]
     # T203. Read here, by the act of searching, and not handed in: the module
     # that applies them was correct and tested for as long as nothing on this
     # path called it, and a parameter a caller must remember is the same gap.
@@ -931,6 +959,7 @@ def browser_urls(
     directory: Path | None = None,
     page_count: int = 1,
     robots: Robots | None = None,
+    offset: int = 0,
 ) -> list[str]:
     """The listing URLs `source` will ask `browser` for — what to open, in order.
 
@@ -938,9 +967,10 @@ def browser_urls(
     boards, robots adjudicated the same way first: the candidate's browser is
     never sent to a path the tool itself may not read.
     """
+    _check_offset(aim, offset)
     directory = directory or DEFAULT_CONNECTORS_DIR
     adjudicator = Robots() if robots is None else robots
-    phrases = aim.terms[:PHRASE_CEILING]
+    phrases = aim.terms[offset : offset + PHRASE_CEILING]
     urls: list[str] = []
     for package in packages_for(constraints, directory):
         try:
