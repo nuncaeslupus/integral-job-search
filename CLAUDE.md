@@ -48,6 +48,30 @@ plugin writes its output there too, not to its own default location.
 > pushing. Do not edit the block above to say so — it is auto-managed and `/init`
 > will overwrite it; this note is the host-owned place to record it.
 
+## Which kind of session this is
+
+Decide this before running anything in either protocol above or in
+`claude-arsenal/AGENTS.md`; it is the owner's rule (2026-10-02) and this is the
+only place its text lives.
+
+A session is a candidate session unless the conversation opens with `[[…]]` keys (keys as `integral.test_mode.parse_turn` reads them: outside a paste, since the paste guard declines `[[…]]` inside a pasted advert or CV, so keys inside a paste never count, while a short non-paste turn's `[[…]]` does) or tells it to work in the repo, or is told to work in the repo after its first response, in which case it is a repo session for the rest of the session. Default candidate; repo when asked for.
+
+- **The board protocol applies only in a repo session.** Neither the "Automatic
+  session protocol" above nor the "Session-start protocol" of
+  `claude-arsenal/AGENTS.md` ("At the start of every session") is run in a
+  candidate session: no issue fetch, no board, no claim, no handover read, no
+  pick-up of work. Test-mode's own end-of-session seeding of task files is not
+  board protocol and is unaffected.
+- **A session spawned with a task assigned is a repo session**, whatever its brief
+  says word for word.
+- **A candidate session** runs the candidate process from step 0
+  (`.claude/skills/step-00-identify/SKILL.md`) and proceeds as a real one. A repo
+  session that the owner opened with `[[…]]` to test the tool still runs the
+  candidate process alongside, as test-mode describes.
+- Step 0 and the test-mode skill point here; they never restate the rule.
+  `tests/test_session_kind_rule.py` fails if the rule is deleted, duplicated or
+  paraphrased elsewhere, or a pointer is removed.
+
 ## The GitHub channel depends on the surface — detect it, don't assume
 
 `bash claude-arsenal/bin/github_channel.sh --detect` answers this, and its answer
