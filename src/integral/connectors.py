@@ -4169,7 +4169,7 @@ def build_search_offer(
             id=compute_offer_id(text),
             source=SEARCH_SOURCE,
             source_ref=source_ref,
-            url=url,
+            url=advert_url([url]),  # T252: a search hit may be the form
             title=title,
             company=company,
             language=language,
