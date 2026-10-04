@@ -278,7 +278,7 @@ def test_an_unreadable_robots_refuses_rather_than_permits(store: ProfileStore) -
         fetch=fetch,
         at=AT,
         directory=_CONNECTORS,
-        robots=Robots(fetch=broken),
+        robots=Robots(fetch=broken, sleep=lambda _: None),
     )
     assert asked == []
     assert all(o.skipped for o in run.outcomes), run.summary()

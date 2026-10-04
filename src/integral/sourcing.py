@@ -80,7 +80,7 @@ from integral.lifecycle import (
     track_new_offer,
 )
 from integral.offers import Offer, SourceKind, compute_offer_id, names_an_employer
-from integral.robots import Robots, RobotsError
+from integral.robots import Robots, RobotsError, RobotsUnreachable
 from integral.salary_recovery import applied, band_in_text, recover
 from integral.sourcing_exclusions import Exclusion, candidate_of, load_exclusions, ruled_out_by
 
@@ -1346,8 +1346,20 @@ def _one_board(
                 if request.employer:
                     failed.append(f"{request.employer} (robots.txt disallows it)")
                     continue
-                return ended(request.url, skipped=f"robots.txt disallows {request.url}")
-        except (RobotsError, OSError) as exc:
+                return ended(
+                    request.url,
+                    skipped=f"refused: robots.txt disallows {request.url}",
+                )
+        except (RobotsUnreachable, OSError) as exc:
+            # T238: no answer at all, after the retries — a network fault, not the
+            # board's decision, so say so: the candidate can try again later. It
+            # is still not permission, and still ends the board's round.
+            return ended(
+                request.url,
+                skipped=f"unreachable: robots.txt could not be fetched, so the board "
+                f"was not read this round and the path is not permitted: {exc}",
+            )
+        except RobotsError as exc:
             return ended(
                 request.url,
                 skipped=f"robots.txt could not be read, so the path is not permitted: {exc}",

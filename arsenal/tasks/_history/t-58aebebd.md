@@ -3,6 +3,7 @@ id: t-58aebebd
 title: "T238: one failed read of robots.txt drops the whole board for the round, with no retry"
 label: "T238: robots read retried once"
 priority: 10
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2).
@@ -14,13 +15,6 @@ Retry a network-level failure (not an HTTP answer) a bounded number of times bef
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run pytest tests/test_robots_retry.py -q
 ```
