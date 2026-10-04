@@ -8,9 +8,9 @@ improvised the walk: list `profiles/`, open each `identity.json`, open
 `session/state.json`, work out the resumption by hand — one tool call, and one
 model round trip, per file.
 
-`uv run python -m integral.step0_open open [--handle NAME] [--confirmed]` is that walk
-as one call. It does what `identity.resolve_handle` already decides, and only once
-a handle has resolved does it read the profile:
+`uv run python -m integral.step0_open open [--name N | --handle H] [--confirmed]` is that
+walk as one call. It follows §6.1's order, and only once the candidate has confirmed
+who they are does it read the profile:
 
 * **before resolution** it reads display names (`identity.json`, the roster) and
   nothing else, and says who it would offer — `confirm`, `choose` or `create`;
@@ -20,8 +20,8 @@ a handle has resolved does it read the profile:
   runtime says is open next.
 
 So the cost of step 0 is the number of times the candidate has to answer, never
-the number of files read: one call when the handle is given, two when they must
-confirm or choose.
+the number of files read: two calls when the candidate is the only profile or names
+themselves (offer, then yes), three when they must first choose or give a handle.
 
 **What the count measures, and what it does not.** `probe_calls` drives `run()`
 the way the skill tells a session to — ask, relay the candidate's answer, ask
@@ -53,6 +53,7 @@ from integral.identity import (
     Resolution,
     create_profile,
     default_profiles_root,
+    derive_handle,
     list_identities,
     resolve_handle,
 )
@@ -71,11 +72,11 @@ MAX_SECONDS = 60.0
 #: Each is pinned exactly — a ceiling alone (the plan's `<= 3`, asserted in the tests)
 #: would let one call split into two, or two into three, pass.
 EXPECTED_CALLS = {
-    "names_themselves": 1,
+    "names_themselves": 2,
     "only_profile_confirms": 2,
-    "one_of_several": 2,
-    "same_display_name_first": 2,
-    "same_display_name_second": 2,
+    "one_of_several": 3,
+    "same_display_name_first": 3,
+    "same_display_name_second": 3,
 }
 
 
@@ -143,7 +144,7 @@ def _names(identities: tuple[Identity, ...]) -> str:
         _same_name(names[i], names[j]) for i in range(len(names)) for j in range(i + 1, len(names))
     )
     if collides:
-        shown += " (two of these share a name, so give me your handle rather than your name)"
+        shown += " (some of these share a name, so give me your handle rather than your name)"
     return shown
 
 
@@ -163,8 +164,8 @@ def _broken_profiles(root: Path) -> list[str]:
     """Directories that are profiles by their `identity.json` and fail to parse it.
 
     Decided per directory, never by comparing counts: a readable simulated
-    profile is not broken, and a stray or half-written directory with no
-    `identity.json` is not a profile at all. Only the directory names are
+    profile is not broken, and a stray directory with neither an
+    `identity.json` nor a `session/state.json` is not a profile at all. Only the directory names are
     returned, and only so a caller can tell whether the arrival is one of them.
     """
     if not root.is_dir():
@@ -173,8 +174,8 @@ def _broken_profiles(root: Path) -> list[str]:
     for child in sorted(root.iterdir()):
         if child.name.startswith(".") or child.is_symlink() or not child.is_dir():
             continue
-        if not (child / ROSTER_FILE).is_file():
-            continue
+        if not (child / ROSTER_FILE).is_file() and not (child / "session" / "state.json").is_file():
+            continue  # no identity and no recorded position: not a profile at all
         try:
             ProfileStore(root, child.name).identity()
         except (IdentityError, ProfileLeak, ProfileError, ValueError):
@@ -183,42 +184,47 @@ def _broken_profiles(root: Path) -> list[str]:
     return broken
 
 
-def run(
-    root: Path,
-    *,
-    handle: str | None = None,
-    confirmed: bool = False,
-    now: datetime | None = None,
-    include_fiction: bool = False,
-) -> Opened:
-    """One call of step 0: resolve, and once resolved, open."""
-    moment = now or datetime.now(UTC)
-    resolution = resolve_handle(
-        root, named=handle, confirmed=confirmed, include_fiction=include_fiction
-    )
-    if not resolution.is_resolved or resolution.candidate is None:
-        broken = _broken_profiles(root)
-        wanted = (handle or "").strip()
-        readable = list_identities(root, include_fiction=include_fiction)
-        # Unreadable only when the arrival could be the unreadable one: they named
-        # it, or nobody readable is left to be. A newcomer is still offered create,
-        # and the message names nothing (no handle is shown before resolution).
-        if broken and ((wanted and wanted in broken) or (not wanted and not readable)):
-            return Opened(
-                outcome="unreadable",
-                say="A saved profile could not be read, so I can't tell who this is yet.",
-            )
-        return _unresolved(resolution)
+def _unreadable(wanted: str, root: Path, include_fiction: bool) -> Opened | None:
+    """`unreadable` only when this arrival could be the profile that cannot be read.
 
-    store = resolution.store(root)
+    They named it (by its handle, or by a name it would derive that handle from,
+    matched caseless like any other name), or nobody readable is left to be. A
+    newcomer is still offered create, and the message names nothing: no handle is
+    shown before resolution.
+    """
+    broken = [name.casefold() for name in _broken_profiles(root)]
+    if not broken:
+        return None
+    readable = list_identities(root, include_fiction=include_fiction)
+    key = wanted.strip()
+    named_it = bool(key) and (
+        key.casefold() in broken or derive_candidate_handle(key).casefold() in broken
+    )
+    if named_it or (not key and not readable):
+        return Opened(
+            outcome="unreadable",
+            say="A saved profile could not be read, so I can't tell who this is yet.",
+        )
+    return None
+
+
+def derive_candidate_handle(text: str) -> str:
+    try:
+        return derive_handle(text)
+    except IdentityError:
+        return ""
+
+
+def _open(root: Path, identity: Identity, moment: datetime) -> Opened:
+    store = ProfileStore(root, identity.handle)
     sessions = SessionStore(store)
     try:
         state = sessions.read()
     except (SessionError, IdentityError, ProfileLeak, ProfileError):
         return Opened(
             outcome="unreadable",
-            say=f"The saved position for {resolution.handle} could not be read; nothing changed.",
-            handle=resolution.handle,
+            say=f"The saved position for {identity.handle} could not be read; nothing changed.",
+            handle=identity.handle,
         )
     resumption = decide_resumption(state)
     situation = look(ProfileView(store))
@@ -226,20 +232,82 @@ def run(
     # The step's own rule: last_activity moves before anything else begins.
     sessions.record(at=moment.isoformat(timespec="seconds"))
 
-    name = resolution.candidate.display_name
     when = _ago(previous, moment)
     if state is None:
-        say = f"Hello {name} — {resumption.announcement()}"
+        say = f"Hello {identity.display_name} — {resumption.announcement()}"
     else:
         since = f", {when}" if when else ""
-        say = f"Hello again, {name}{since}. {resumption.announcement()}"
+        say = f"Hello again, {identity.display_name}{since}. {resumption.announcement()}"
     return Opened(
         outcome="opened",
         say=say,
-        handle=resolution.handle,
+        handle=identity.handle,
         last_activity=previous,
         offered=situation.offered,
     )
+
+
+def run(
+    root: Path,
+    *,
+    name: str | None = None,
+    handle: str | None = None,
+    confirmed: bool = False,
+    now: datetime | None = None,
+    include_fiction: bool = False,
+) -> Opened:
+    """One call of step 0: resolve, and once resolved, open.
+
+    The two inputs are kept apart, because one string can be a stranger's handle
+    and another person's name (`profiles/ana` is "Bea"; "Ana" is `bea-x`):
+
+    * `name` matches **display names only** (NFC, caseless). One match is offered
+      for confirmation, several are a collision (nothing is listed; the candidate
+      is asked for their handle), none is a newcomer.
+    * `handle` matches **handles only**, exactly, and is for answering a
+      collision. It is still offered for confirmation by display name, so a
+      mistyped handle cannot open someone else's profile silently.
+
+    No input opens a profile without `confirmed`, which is the caller reporting
+    that the human said yes to the offer made on the previous call.
+    """
+    moment = now or datetime.now(UTC)
+    identities = list_identities(root, include_fiction=include_fiction)
+
+    if handle is not None and handle.strip():
+        wanted = handle.strip()
+        hit = next((i for i in identities if i.handle == wanted), None)
+        if hit is None:
+            return _unreadable(wanted, root, include_fiction) or _unresolved(
+                Resolution(outcome="create", reason="no profile has that handle")
+            )
+        if not confirmed:
+            return Opened(outcome="confirm", say=f"Is this {hit.display_name}?")
+        return _open(root, hit, moment)
+
+    if name is not None and name.strip():
+        wanted = name.strip()
+        matches = [i for i in identities if _same_name(i.display_name, wanted)]
+        if len(matches) == 1:
+            if not confirmed:
+                return Opened(outcome="confirm", say=f"Is this {matches[0].display_name}?")
+            return _open(root, matches[0], moment)
+        if len(matches) > 1:
+            return Opened(
+                outcome="choose",
+                say=(
+                    "More than one profile answers to that name, so give me your handle "
+                    "(the short name you chose) rather than your name."
+                ),
+            )
+        return _unreadable(wanted, root, include_fiction) or _unresolved(
+            Resolution(outcome="create", reason="no profile matches that name")
+        )
+
+    resolution = resolve_handle(root, confirmed=confirmed, include_fiction=include_fiction)
+    if resolution.is_resolved and resolution.candidate is not None:
+        return _open(root, resolution.candidate, moment)
+    return _unreadable("", root, include_fiction) or _unresolved(resolution)
 
 
 # ---------------------------------------------------------------------------
@@ -272,16 +340,34 @@ def probe_calls() -> dict[str, Any]:
     """Calls and seconds for each way a returning candidate arrives."""
     now = datetime(2026, 10, 4, tzinfo=UTC)
     marcos, nuria, twin = ("marcos", "Marcos"), ("nuria", "Núria"), ("marcos-b", "Marcos")
-    # label -> (profiles that exist, first call's arguments, answers, who opens)
+    yes = {"confirmed": True}
+    # label -> (profiles that exist, first call's arguments, answers, who opens).
+    # An answer repeats what the candidate said and adds their yes to the offer.
     arrivals: dict[
         str, tuple[tuple[tuple[str, str], ...], dict[str, Any], list[dict[str, Any]], str]
     ] = {
-        "names_themselves": ((marcos,), {"handle": "marcos"}, [], "marcos"),
-        "only_profile_confirms": ((marcos,), {}, [{"confirmed": True}], "marcos"),
-        "one_of_several": ((marcos, nuria), {}, [{"handle": "marcos"}], "marcos"),
-        # The default case: the first profile's handle is derived from the shared name.
-        "same_display_name_first": ((marcos, twin), {}, [{"handle": "marcos"}], "marcos"),
-        "same_display_name_second": ((marcos, twin), {}, [{"handle": "marcos-b"}], "marcos-b"),
+        "names_themselves": ((marcos,), {"name": "Marcos"}, [{"name": "Marcos", **yes}], "marcos"),
+        "only_profile_confirms": ((marcos,), {}, [yes], "marcos"),
+        "one_of_several": (
+            (marcos, nuria),
+            {},
+            [{"name": "Marcos"}, {"name": "Marcos", **yes}],
+            "marcos",
+        ),
+        # The first profile's handle is derived from the shared name: the case the
+        # name path cannot answer and the handle path has to.
+        "same_display_name_first": (
+            (marcos, twin),
+            {},
+            [{"handle": "marcos"}, {"handle": "marcos", **yes}],
+            "marcos",
+        ),
+        "same_display_name_second": (
+            (marcos, twin),
+            {},
+            [{"handle": "marcos-b"}, {"handle": "marcos-b", **yes}],
+            "marcos-b",
+        ),
     }
     calls: dict[str, int] = {}
     slowest = 0.0
@@ -330,7 +416,10 @@ def _main(argv: list[str]) -> int:
     """
     if len(argv) > 1 and argv[1] == "open":
         parser = argparse.ArgumentParser(prog="step0_open open")
-        parser.add_argument("--handle", help="a handle or display name the candidate gave")
+        parser.add_argument("--name", help="the name the candidate gave (display names only)")
+        parser.add_argument(
+            "--handle", help="a handle, only after a name collision (handles only, exact)"
+        )
         parser.add_argument("--confirmed", action="store_true", help="the candidate said yes")
         parser.add_argument("--root", type=Path, help="profiles root (default: $INTEGRAL_HOME)")
         parser.add_argument(
@@ -340,6 +429,7 @@ def _main(argv: list[str]) -> int:
         root = args.root or default_profiles_root()
         opened = run(
             root,
+            name=args.name,
             handle=args.handle,
             confirmed=args.confirmed,
             include_fiction=args.include_fiction,

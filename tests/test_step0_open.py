@@ -17,6 +17,7 @@ from integral.step0_open import EXPECTED_CALLS, drive, run
 NOW = datetime(2026, 10, 4, tzinfo=UTC)
 SKILL = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "step-00-identify" / "SKILL.md"
 STAMP = "2026-09-13T09:00:00+00:00"
+YES = {"confirmed": True}
 
 
 def _profile(root: Path, handle: str, display: str, *, stamp: str = STAMP) -> ProfileStore:
@@ -26,23 +27,23 @@ def _profile(root: Path, handle: str, display: str, *, stamp: str = STAMP) -> Pr
     return store
 
 
+def _state(store: ProfileStore) -> bytes:
+    return store.path("session", "state.json").read_bytes()
+
+
 def test_calls_per_arrival_are_exactly_what_the_skill_prescribes(tmp_path: Path) -> None:
-    """A ceiling alone passes a one-call step split in two; the counts are pinned each."""
+    """A ceiling alone passes one call split in two; the counts are pinned each."""
     solo = tmp_path / "solo"
     _profile(solo, "marcos", "Marcos")
-    assert (
-        drive(solo, [], NOW, first={"handle": "marcos"})[0]
-        == EXPECTED_CALLS["names_themselves"]
-        == 1
-    )
-    assert (
-        drive(solo, [{"confirmed": True}], NOW)[0] == EXPECTED_CALLS["only_profile_confirms"] == 2
-    )
+    named = drive(solo, [{"name": "Marcos", **YES}], NOW, first={"name": "Marcos"})[0]
+    assert named == EXPECTED_CALLS["names_themselves"] == 2
+    assert drive(solo, [YES], NOW)[0] == EXPECTED_CALLS["only_profile_confirms"] == 2
 
     several = tmp_path / "several"
     _profile(several, "marcos", "Marcos")
     _profile(several, "nuria", "Núria")
-    assert drive(several, [{"handle": "marcos"}], NOW)[0] == EXPECTED_CALLS["one_of_several"] == 2
+    answers: list[dict[str, Any]] = [{"name": "Marcos"}, {"name": "Marcos", **YES}]
+    assert drive(several, answers, NOW)[0] == EXPECTED_CALLS["one_of_several"] == 3
     assert max(EXPECTED_CALLS.values()) <= 3
 
 
@@ -52,13 +53,18 @@ def test_nothing_inside_a_profile_is_read_or_written_before_a_handle_resolves(
     root = tmp_path / "profiles"
     first = _profile(root, "marcos", "Marcos", stamp="2026-01-01T00:00:00+00:00")
     _profile(root, "nuria", "Núria", stamp="2026-01-02T00:00:00+00:00")
-    before = first.path("session", "state.json").read_bytes()
+    before = _state(first)
 
-    attempts: list[dict[str, Any]] = [{}, {"handle": "nobody"}]
+    attempts: list[dict[str, Any]] = [
+        {},
+        {"name": "nobody"},
+        {"name": "Marcos"},
+        {"handle": "marcos"},
+    ]
     for kwargs in attempts:
         said = json.dumps(run(root, now=NOW, **kwargs).as_json())
         assert "2026-01-01" not in said and "history" not in said
-    assert first.path("session", "state.json").read_bytes() == before
+    assert _state(first) == before
 
 
 def test_a_sole_profile_offered_for_confirmation_reveals_nothing_from_inside_it(
@@ -68,12 +74,91 @@ def test_a_sole_profile_offered_for_confirmation_reveals_nothing_from_inside_it(
     who has not yet said they are that person."""
     root = tmp_path / "profiles"
     store = _profile(root, "marcos", "Marcos", stamp="2026-01-01T00:00:00+00:00")
-    before = store.path("session", "state.json").read_bytes()
+    before = _state(store)
     result = run(root, now=NOW)
     said = json.dumps(result.as_json())
     assert result.outcome == "confirm"
     assert "2026-01-01" not in said and "history" not in said
-    assert store.path("session", "state.json").read_bytes() == before
+    assert _state(store) == before
+
+
+def test_a_sole_profile_is_offered_and_never_assumed(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    store = _profile(root, "marcos", "Marcos")
+    before = _state(store)
+    result = run(root, now=NOW)
+    assert result.outcome == "confirm" and result.handle is None
+    assert _state(store) == before
+
+
+def test_an_unknown_name_offers_to_create(tmp_path: Path) -> None:
+    result = run(tmp_path / "profiles", name="ada", now=NOW)
+    assert result.outcome == "create"
+
+
+def test_opening_says_when_and_where_and_writes_last_activity(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    store = _profile(root, "marcos", "Marcos")
+    result = run(root, name="Marcos", confirmed=True, now=NOW)
+    assert result.outcome == "opened" and result.handle == "marcos"
+    assert "Hello again, Marcos, about 3 weeks ago." in result.say
+    assert result.last_activity == STAMP
+    after = SessionStore(store).read()
+    assert after is not None and after.last_activity == "2026-10-04T00:00:00+00:00"
+
+
+def test_a_first_visit_is_not_told_it_is_a_return(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada", language="en", handle="ada")
+    result = run(root, name="Ada", confirmed=True, now=NOW)
+    assert result.outcome == "opened"
+    assert "again" not in result.say and result.last_activity is None
+
+
+def test_a_name_never_opens_anyone_without_a_yes(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    store = _profile(root, "marcos", "Marcos")
+    before = _state(store)
+    result = run(root, name="Marcos", now=NOW)
+    assert result.outcome == "confirm" and result.say == "Is this Marcos?"
+    assert _state(store) == before
+
+
+def test_a_name_that_is_another_persons_handle_never_opens_that_profile(tmp_path: Path) -> None:
+    """`profiles/ana` is Bea; Ana is `bea-x`. Ana typing `ana` is a name, not a handle."""
+    root = tmp_path / "profiles"
+    bea = _profile(root, "ana", "Bea")
+    ana = _profile(root, "bea-x", "Ana")
+    before = (_state(bea), _state(ana))
+    result = run(root, name="ana", now=NOW)
+    assert result.outcome == "confirm" and result.say == "Is this Ana?"
+    assert (_state(bea), _state(ana)) == before
+    # Even the answer to the confirmation is bound to the profile named Ana.
+    assert run(root, name="ana", confirmed=True, now=NOW).handle == "bea-x"
+
+
+def test_a_mistyped_handle_is_confirmed_by_name_before_it_opens_anyone(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    bea = _profile(root, "ana", "Bea")
+    before = _state(bea)
+    result = run(root, handle="ana", now=NOW)
+    assert result.outcome == "confirm" and result.say == "Is this Bea?"
+    assert _state(bea) == before
+
+
+def test_the_second_of_two_same_named_people_typing_the_first_handle_opens_nothing(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "profiles"
+    first = _profile(root, "marcos", "Marcos")
+    second = _profile(root, "marcos-b", "Marcos")
+    before = (_state(first), _state(second))
+    by_name = run(root, name="marcos", now=NOW)
+    assert by_name.outcome == "choose" and by_name.handle is None
+    assert run(root, name="marcos", confirmed=True, now=NOW).outcome == "choose"
+    by_handle = run(root, handle="marcos", now=NOW)
+    assert by_handle.outcome == "confirm" and by_handle.handle is None
+    assert (_state(first), _state(second)) == before
 
 
 def test_two_profiles_with_one_display_name_ask_for_a_handle_and_list_none(
@@ -82,10 +167,10 @@ def test_two_profiles_with_one_display_name_ask_for_a_handle_and_list_none(
     root = tmp_path / "profiles"
     _profile(root, "marcos", "Marcos")
     _profile(root, "marcos-b", "Marcos")
-    said = run(root, now=NOW).say
-    assert "give me your handle" in said
-    assert "marcos" not in said.lower().replace("marcos, marcos", "")
-    assert "marcos-b" not in said
+    for said in (run(root, now=NOW).say, run(root, name="Marcos", now=NOW).say):
+        assert "give me your handle" in said
+        assert "marcos-b" not in said
+        assert "marcos" not in said.lower().replace("marcos, marcos", "")
 
 
 def test_either_of_two_same_named_profiles_opens_by_its_own_handle(tmp_path: Path) -> None:
@@ -93,15 +178,25 @@ def test_either_of_two_same_named_profiles_opens_by_its_own_handle(tmp_path: Pat
     root = tmp_path / "profiles"
     _profile(root, "marcos", "Marcos")
     _profile(root, "marcos-b", "Marcos")
-    assert drive(root, [{"handle": "marcos"}], NOW)[1].handle == "marcos"
-    assert drive(root, [{"handle": "marcos-b"}], NOW)[1].handle == "marcos-b"
+    for handle in ("marcos", "marcos-b"):
+        answers: list[dict[str, Any]] = [{"handle": handle}, {"handle": handle, **YES}]
+        assert drive(root, answers, NOW)[1].handle == handle
 
 
 def test_names_compare_in_nfc_so_a_decomposed_name_still_collides(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
-    _profile(root, "nuria-a", "N\u00faria")
-    _profile(root, "nuria-b", "Nu\u0301ria")
+    _profile(root, "nuria-a", "Núria")
+    _profile(root, "nuria-b", "Núria")
     assert "give me your handle" in run(root, now=NOW).say
+    assert run(root, name="NÚRIA", now=NOW).outcome == "choose"
+
+
+def test_the_collision_wording_does_not_count(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    for handle in ("sam-a", "sam-b", "sam-c"):
+        _profile(root, handle, "Sam")
+    said = run(root, now=NOW).say
+    assert "two" not in said.lower() and "give me your handle" in said
 
 
 def test_distinct_names_are_not_cluttered_with_handles(tmp_path: Path) -> None:
@@ -116,10 +211,10 @@ def test_a_simulated_candidate_is_reachable_only_when_asked_for(
 ) -> None:
     root = tmp_path / "profiles"
     create_profile(root, "Ada", language="en", handle="ada", fiction=True)
-    assert step0_open._main(["x", "open", "--root", str(root), "--handle", "ada"]) == 0
+    base = ["x", "open", "--root", str(root), "--name", "Ada", "--confirmed"]
+    assert step0_open._main(base) == 0
     assert json.loads(capsys.readouterr().out)["outcome"] == "create"
-    args = ["x", "open", "--root", str(root), "--handle", "ada", "--include-fiction"]
-    assert step0_open._main(args) == 0
+    assert step0_open._main([*base, "--include-fiction"]) == 0
     assert json.loads(capsys.readouterr().out)["outcome"] == "opened"
 
 
@@ -131,7 +226,7 @@ def test_a_leftover_simulated_profile_does_not_block_or_name_a_real_candidate(
     create_profile(root, "Ada", language="en", handle="sim-ada", fiction=True)
     sole = run(root, now=NOW)
     assert sole.outcome == "confirm" and sole.say == "Is this Marcos?"
-    newcomer = run(root, handle="zoe", now=NOW)
+    newcomer = run(root, name="zoe", now=NOW)
     assert newcomer.outcome == "create"
     assert "sim-ada" not in json.dumps(newcomer.as_json())
 
@@ -142,7 +237,8 @@ def test_a_stray_directory_blocks_nobody_and_is_never_named(tmp_path: Path) -> N
     _profile(root, "nuria", "Núria")
     (root / "zz-half-written").mkdir()
     assert run(root, now=NOW).outcome == "choose"
-    assert run(root, handle="ada", now=NOW).outcome == "create"
+    assert run(root, name="ada", now=NOW).outcome == "create"
+    assert run(root, name="zz-half-written", now=NOW).outcome == "create"
     assert run(root, handle="zz-half-written", now=NOW).outcome == "create"
 
 
@@ -152,23 +248,46 @@ def test_a_root_holding_only_a_stray_directory_offers_create(tmp_path: Path) -> 
     assert run(root, now=NOW).outcome == "create"
 
 
+def test_a_directory_with_a_state_file_but_no_identity_is_unreadable_not_stray(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "profiles"
+    store = _profile(root, "marcos", "Marcos")
+    store.path("identity.json").unlink()
+    result = run(root, handle="marcos", now=NOW)
+    assert result.outcome == "unreadable" and "marcos" not in result.say.lower()
+    assert run(root, now=NOW).outcome == "unreadable"
+
+
 def test_a_corrupt_profile_blocks_only_its_own_arrival_and_names_nothing(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     _profile(root, "marcos", "Marcos")
     broken = _profile(root, "nuria", "Núria")
     broken.path("identity.json").write_text("{not json", encoding="utf-8")
     assert run(root, handle="nuria", now=NOW).outcome == "unreadable"
-    assert run(root, handle="ada", now=NOW).outcome == "create"
+    assert run(root, name="ada", now=NOW).outcome == "create"
     assert run(root, now=NOW).outcome == "confirm"
     said = json.dumps(run(root, handle="nuria", now=NOW).as_json())
     assert "nuria" not in said.lower().replace("unreadable", "")
+
+
+def test_a_corrupt_profile_named_by_its_display_name_is_matched_like_any_name(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "profiles"
+    broken = _profile(root, "marcos", "Marcos")
+    _profile(root, "nuria", "Núria")
+    broken.path("identity.json").write_text("{not json", encoding="utf-8")
+    for spelled in ("Marcos", "marcos", "MARCOS"):
+        assert run(root, name=spelled, now=NOW).outcome == "unreadable"
+    assert run(root, name="Ada", now=NOW).outcome == "create"
 
 
 def test_a_corrupt_state_file_is_reported_not_raised_and_left_alone(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     store = _profile(root, "marcos", "Marcos")
     store.path("session", "state.json").write_text("{not json", encoding="utf-8")
-    result = run(root, handle="marcos", now=NOW)
+    result = run(root, handle="marcos", confirmed=True, now=NOW)
     assert result.outcome == "unreadable" and result.handle == "marcos"
     assert store.path("session", "state.json").read_text(encoding="utf-8") == "{not json"
 
@@ -201,7 +320,8 @@ def test_the_command_line_prints_one_json_opening(
 ) -> None:
     root = tmp_path / "profiles"
     _profile(root, "marcos", "Marcos")
-    assert step0_open._main(["x", "open", "--root", str(root), "--handle", "marcos"]) == 0
+    args = ["x", "open", "--root", str(root), "--name", "Marcos", "--confirmed"]
+    assert step0_open._main(args) == 0
     printed = json.loads(capsys.readouterr().out)
     assert printed["outcome"] == "opened" and printed["handle"] == "marcos"
 
@@ -235,4 +355,11 @@ def test_the_skill_does_not_ask_for_a_second_call_to_build_the_opening() -> None
     assert "it is the only call step 0 makes" in text
     assert "with no further file reads" in text
     assert "--include-fiction" in text
-    assert "give me your handle" in text or "give their handle" in text
+
+
+def test_the_skill_keeps_names_and_handles_apart() -> None:
+    text = SKILL.read_text(encoding="utf-8")
+    assert "Keep what they say apart" in text
+    assert "`--name`" in text and "`--handle`" in text
+    assert "used only after" in text and "giving their handle" in text
+    assert "never lists handles" in text
