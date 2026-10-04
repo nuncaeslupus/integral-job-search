@@ -520,7 +520,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T249 | Asking an explicit question and recording the answer is left to the session instead of required by every step (test-mode 453a5c19) | 5 | M | — | `steps_without_an_explicit_question_and_record_rule == 0` | gate set in its own PR | ☐ |
 | T250 | Adverts the candidate has already been shown or applied to are presented again as new (test-mode 453a5c19) | 5 | M | — | `offers_presented_as_new_that_were_already_shown_or_applied_to == 0` | gate set in its own PR | ☐ |
 | T251 | Only the first six aim terms are searched, so most of a candidate's terms never reach any board (test-mode 453a5c19) | 5 | M | — | `aim_terms_never_searched_on_a_steered_board == 0` | gate set in its own PR | ☐ |
-| T252 | An offer's link can be the application form instead of the advert (test-mode 453a5c19) | 10 | S | — | `offers_presented_whose_url_is_an_application_form == 0` | gate set in its own PR | ☐ |
+| T252 | An offer's link can be the application form instead of the advert (test-mode 453a5c19) | 10 | S | — | `offers_presented_whose_url_is_an_application_form == 0` | `tests/test_advert_link.py` — builds every offer every committed fixture yields and reads `Offer.url`; the classifier cases are parsed path segments, not substrings | ☑ |
 
 ### Divergences
 
