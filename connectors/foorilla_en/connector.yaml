@@ -48,10 +48,14 @@ locale: en
 version: "1.0.0"
 last_verified: "2026-09-06"
 auth: none
-# T236: the board names the employer on every advert and this connector reads none of it.
-# Not an omission, so not `employer_unpublished`: `employer_gap` names the task that owns
-# the fix, is reported as a connector fault, and fails its test once T235 is merged.
-employer_gap: "T235"
+# T236/T235: see `Connector.employer_unpublished`. The board shows the employer to a signed-in
+# reader only. The advert page committed as `fixture/detail.html` renders it as the stub
+# `@ C...` (one letter and an ellipsis) linking to `/hiring/companies/`, which this board's
+# own robots.txt disallows; the list card carries no employer at all. Reading that stub as
+# `company` would store a non-name, so none is read and sourcing reports the board's offers
+# as having no employer. Live pages could not be re-fetched when this was written (403 from
+# the agent proxy); the claim rests on the committed fixture alone.
+employer_unpublished: "The employer is shown only as a stub (`@ C...`) linking to the disallowed /hiring/companies/ on the advert page, and not at all on the list card."
 
 list:
   # `job_search` is the board's own parameter, taken from the recorded capture
@@ -70,9 +74,14 @@ list:
     detail_url:
       css: "a.stretched-link"
       attr: "hx-get"
-    # No `text` here on purpose, and no salary either. A row carries a band and
-    # a location, but the body lives on the advert's own page, which is what
-    # `detail` below is for.
+    # The location sits in the card's right-hand `div.text-end`; the `[R]`
+    # remote marker is a child span, not part of the place. A card with several
+    # places is cut by the board with an ellipsis (`Mountain View, CA, USA;
+    # New York, …`), and that is what the board publishes, so it is stored so.
+    location_raw:
+      css: ".text-end"
+    # No `text` here on purpose, and no salary either. The body lives on the
+    # advert's own page, which is what `detail` below is for.
 
 detail:
   client: htmx

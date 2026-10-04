@@ -10,6 +10,7 @@ added later is held to it without anyone remembering to list it.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -43,7 +44,6 @@ MINIMUM_CONNECTORS = 25
 MINIMUM_ROWS = 100
 MINIMUM_CONNECTORS_NAMING_AN_EMPLOYER = 15
 MINIMUM_DECLARED = 1
-MINIMUM_GAPS = 1
 
 
 def _directory(connector: Connector) -> Path:
@@ -92,7 +92,6 @@ def test_the_library_is_large_enough_for_the_rule_to_mean_something() -> None:
     assert sum(rows for rows, _ in measured) >= MINIMUM_ROWS
     assert sum(1 for _, empty in measured if empty == 0) >= MINIMUM_CONNECTORS_NAMING_AN_EMPLOYER
     assert sum(1 for c in CONNECTORS if c.employer_unpublished) >= MINIMUM_DECLARED
-    assert sum(1 for c in CONNECTORS if c.employer_gap) >= MINIMUM_GAPS
 
 
 @pytest.mark.parametrize("site", SITES)
@@ -140,20 +139,30 @@ def test_a_gap_names_a_task_that_is_still_open(site: str) -> None:
         )
 
 
+def _with_a_gap(task: str) -> str:
+    """tecnoempleo's package with its omission declaration swapped for a gap.
+
+    No committed connector carries an `employer_gap` once T235 is done (a gap
+    is a debt that ends), so the key's validators are exercised on a package
+    built from a real one rather than on a floor of connectors that has to
+    keep owing something.
+    """
+    text = (ROOT / "connectors" / "tecnoempleo_es" / "connector.yaml").read_text(encoding="utf-8")
+    kept = [line for line in text.splitlines() if not line.startswith("employer_unpublished:")]
+    return "\n".join(kept).replace("\nauth:", f'\nemployer_gap: "{task}"\nauth:', 1)
+
+
 @pytest.mark.parametrize("task", ["", "t235", "T235 ", "T", "T-1", "T235 owns it", "235"])
 def test_a_gap_that_names_no_task_is_refused(task: str) -> None:
-    text = (ROOT / "connectors" / "foorilla_en" / "connector.yaml").read_text(encoding="utf-8")
-    assert parse_connector(text).employer_gap == "T235"
-    broken = text.replace('employer_gap: "T235"', f'employer_gap: "{task}"', 1)
+    assert parse_connector(_with_a_gap("T235")).employer_gap == "T235"
     with pytest.raises(ConnectorError, match="employer_gap"):
-        parse_connector(broken)
+        parse_connector(_with_a_gap(task))
 
 
 def test_a_board_cannot_both_omit_the_employer_and_miss_a_selector() -> None:
-    text = (ROOT / "connectors" / "foorilla_en" / "connector.yaml").read_text(encoding="utf-8")
-    both = text.replace(
-        'employer_gap: "T235"', 'employer_gap: "T235"\nemployer_unpublished: "x"', 1
-    )
+    text = (ROOT / "connectors" / "tecnoempleo_es" / "connector.yaml").read_text(encoding="utf-8")
+    assert parse_connector(text).employer_unpublished
+    both = text.replace("\nauth:", '\nemployer_gap: "T235"\nauth:', 1)
     with pytest.raises(ConnectorError, match="exclusive"):
         parse_connector(both)
 
@@ -352,3 +361,56 @@ def test_pythonorg_reads_the_employer_and_only_the_employer() -> None:
         "Softech Associate",
     ]
     assert connector.employer_unpublished is None and connector.employer_gap is None
+
+
+# T235 — foorilla. What the committed fixtures publish, pinned as values.
+
+_FOORILLA = ROOT / "connectors" / "foorilla_en"
+
+
+def _foorilla() -> Connector:
+    return parse_connector((_FOORILLA / "connector.yaml").read_text(encoding="utf-8"))
+
+
+def test_foorilla_reads_the_place_each_card_publishes() -> None:
+    """The expected places are typed from `fixture/list.html` (the `[R]` / `[WH]`
+    markers are the board's own and stay in the raw string). Non-empty is not
+    the property: the card's workplace marker and a second row's place must not
+    be swapped, dropped or shifted by a row."""
+    rows = parse_list_page(_foorilla(), (_FOORILLA / "fixture" / "list.html").read_text("utf-8"))
+    assert len(rows) == 50
+    assert [row["location_raw"] for row in rows[:6]] == [
+        "Vancouver, British Columbia, Canada [R]",
+        "Mountain View, CA, USA; New York, \u2026",
+        "Zaragoza, ES, Aragon [R]",
+        "Atlanta, Georgia",
+        "San Ramon, California",
+        "Middletown, New Jersey",
+    ]
+    assert "Santa Clara, CA [WH]" in {row["location_raw"] for row in rows}
+
+
+def test_foorilla_places_agree_with_the_card_markup_read_another_way() -> None:
+    """A second derivation, from the raw markup with a regex instead of the
+    engine's selector, over every row: the engine and the page must agree."""
+    html = (_FOORILLA / "fixture" / "list.html").read_text(encoding="utf-8")
+    blocks = re.findall(r'<div class="text-end">\s*<small>(.*?)</small>', html, flags=re.S)
+    expected = [" ".join(re.sub(r"<[^>]+>", " ", block).split()) for block in blocks]
+    rows = parse_list_page(_foorilla(), html)
+    assert len(expected) == len(rows) == 50
+    assert [row["location_raw"] for row in rows] == expected
+
+
+def test_foorilla_publishes_no_employer_and_says_so() -> None:
+    """The advert page's only employer is the stub `@ C...`; the list card has
+    none. Reading the stub as `company` would pass the empty-row rule with a
+    non-name, so the connector must read nothing and declare the omission."""
+    connector = _foorilla()
+    detail = (_FOORILLA / "fixture" / "detail.html").read_text(encoding="utf-8")
+    assert ">@ C...</a>" in detail
+    assert "company" not in connector.list.fields
+    assert connector.detail is not None and "company" not in connector.detail.fields
+    assert connector.employer_unpublished and "@ C..." in connector.employer_unpublished
+    assert connector.employer_gap is None
+    rows = parse_list_page(connector, (_FOORILLA / "fixture" / "list.html").read_text("utf-8"))
+    assert not any(names_an_employer(row.get("company")) for row in rows)
