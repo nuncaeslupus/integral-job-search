@@ -62,7 +62,12 @@ from integral.lifecycle import (
 )
 from integral.offers import Offer, names_an_employer
 from integral.same_vacancy import employer_key, same_vacancy
-from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
+from integral.sourcing_exclusions import (
+    EMPLOYER_UNKNOWN,
+    candidate_of,
+    load_exclusions,
+    ruled_out_by,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T139.json"
@@ -381,7 +386,13 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
             # The same advert twice in one batch is one advert shown once.
             held.append(Withheld(offer_id, "el mismo anuncio ya está en esta lista", in_batch))
         elif loaded is not None and (topics := ruled_out_by(candidate_of(loaded[0]), exclusions)):
-            held.append(Withheld(offer_id, f"es de un tema que descartaste ({', '.join(topics)})"))
+            shown_as = ", ".join(topics)
+            if all(t.endswith(f"({EMPLOYER_UNKNOWN})") for t in topics):
+                # F6: held because nothing says who published it, not for a topic.
+                reason = f"no dice quién lo publica y descartaste un empleador ({shown_as})"
+            else:
+                reason = f"es de un tema que descartaste ({shown_as})"
+            held.append(Withheld(offer_id, reason))
         else:
             show.append(offer_id)
             if component:

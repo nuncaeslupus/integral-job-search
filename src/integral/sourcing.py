@@ -746,7 +746,8 @@ class Run:
             if outcome.excluded:
                 lines.append(
                     f"  EXCLUDED {outcome.connector}: {outcome.excluded} of {outcome.items} "
-                    "row(s) are on a topic you ruled out — " + "; ".join(outcome.excluded_because)
+                    "row(s) are on a topic you ruled out, or have no employer to check "
+                    "against one you ruled out — " + "; ".join(outcome.excluded_because)
                 )
             if outcome.no_employer:
                 if outcome.employer_unpublished:
