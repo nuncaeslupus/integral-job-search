@@ -15,8 +15,9 @@ ROOT = Path(__file__).resolve().parent.parent
 RULE = (
     "A session is a candidate session unless the conversation opens with `[[…]]` "
     "keys (keys as `integral.test_mode.parse_turn` reads them: outside a paste, since "
-    "the paste guard declines `[[…]]` inside a pasted advert or CV, so a paste or "
-    "stray brackets never make a repo session) or tells it to work in the repo, or "
+    "the paste guard declines `[[…]]` inside a pasted advert or CV, so keys inside a "
+    "paste never count, while a short non-paste turn's `[[…]]` does) or tells it to "
+    "work in the repo, or "
     "is told to work in the repo after its first response, in which case it is a "
     "repo session for the rest of the session. Default candidate; repo when asked for."
 )
@@ -30,6 +31,9 @@ OPERATIVE = (
     "A session spawned with a task assigned is a repo session",
 )
 # Any sentence that classifies a session is the rule restated, in whatever words.
+# `[[…]]`, `[[a note]]`, `[[! act]]`; not a TOML table (`[[tool.mypy]]`, no space)
+# or shell's `[[ -f x ]]` (leading space).
+KEY_MARKER = re.compile(r"\[\[(?:…|!|\S[^\[\]]*\s[^\[\]]*)\]\]")
 CLASSIFYING = re.compile(
     r"(?:\b(?:is|becomes?|counts as|makes? it|opens?) an? (?:repo|candidate) session"
     r"|default(?:s| to)? candidate|repo when asked)",
@@ -92,6 +96,6 @@ def test_any_other_prose_that_ties_repo_sessions_to_keys_points_and_never_classi
         if path == ROOT / "CLAUDE.md":
             continue
         text = _norm(path.read_text(encoding="utf-8"))
-        if "repo session" in text and "[[" in text:
+        if KEY_MARKER.search(text) and ("repo" in text.lower() or "candidate" in text.lower()):
             assert POINTER in text, path
         assert not CLASSIFYING.search(text), path

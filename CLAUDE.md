@@ -54,7 +54,7 @@ Decide this before running anything in either protocol above or in
 `claude-arsenal/AGENTS.md`; it is the owner's rule (2026-10-02) and this is the
 only place its text lives.
 
-A session is a candidate session unless the conversation opens with `[[…]]` keys (keys as `integral.test_mode.parse_turn` reads them: outside a paste, since the paste guard declines `[[…]]` inside a pasted advert or CV, so a paste or stray brackets never make a repo session) or tells it to work in the repo, or is told to work in the repo after its first response, in which case it is a repo session for the rest of the session. Default candidate; repo when asked for.
+A session is a candidate session unless the conversation opens with `[[…]]` keys (keys as `integral.test_mode.parse_turn` reads them: outside a paste, since the paste guard declines `[[…]]` inside a pasted advert or CV, so keys inside a paste never count, while a short non-paste turn's `[[…]]` does) or tells it to work in the repo, or is told to work in the repo after its first response, in which case it is a repo session for the rest of the session. Default candidate; repo when asked for.
 
 - **The board protocol applies only in a repo session.** Neither the "Automatic
   session protocol" above nor the "Session-start protocol" of
