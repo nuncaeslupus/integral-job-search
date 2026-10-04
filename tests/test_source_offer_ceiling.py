@@ -255,8 +255,8 @@ def test_the_summary_names_a_capped_board_and_what_it_lost(
     assert run.capped == {"flood_en": (45 - share, 0, ("term1", "term2"))}
     line = (
         f"CAPPED  flood_en: held to its {share}-offer share of the {OFFER_CEILING}-offer "
-        f"ceiling — {45 - share} matching row(s) not collected, 0 further request(s) of "
-        "this term not made; never searched for: term1, term2"
+        f"ceiling — {45 - share} matching row(s) not collected, 0 further request(s) not made"
+        "; never searched for: term1, term2"
     )
     assert line in run.summary()
     assert "small_en" not in "".join(x for x in run.summary().splitlines() if "CAPPED" in x)
@@ -376,7 +376,7 @@ def test_a_share_filled_at_a_page_boundary_is_reported(store: ProfileStore, worl
     assert [t for s, t in world.asked if s == "alpha"] == ["term0"]  # one page only
     assert run.capped == {"alpha_en": (0, 2, ())}
     assert "CAPPED  alpha_en" in run.summary()
-    assert "2 further request(s) of this term not made" in run.summary()
+    assert "2 further request(s) not made" in run.summary()
 
 
 def test_a_share_filled_by_the_last_request_is_not_capped(
@@ -414,3 +414,27 @@ def test_out_of_reach_rows_after_the_share_are_still_out_of_reach(
     run = _walk(store, world, Aim(state="stated", terms=("term0",)))
     first = run.outcomes[0]
     assert (first.added, first.over_board_cap, first.out_of_reach) == (share, 3, 4)
+
+
+def test_a_fully_remote_row_abroad_is_counted_for_a_remote_reach(
+    store: ProfileStore, world: World
+) -> None:
+    """The default candidate (ES, remote + commute): free remote text on a US row
+    is undecidable, so it is kept - pinned apart from the `En sede` cases, whose
+    reach admits relocation and so cannot tell the guard from its absence."""
+    world.board("alpha", lambda term: [("US", "fully remote")])
+    run = _walk(store, world, Aim(state="stated", terms=("term0",)))
+    assert (run.outcomes[0].added, run.outcomes[0].out_of_reach) == (1, 0)
+
+
+def test_a_board_stopped_by_the_run_ceiling_is_not_also_listed_capped(
+    store: ProfileStore, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One board, so its share equals the ceiling: whichever bound ends it, the
+    first is the run's to say. Pages left unrequested are the ceiling's loss."""
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 4)
+    world.board("alpha", lambda term: [IN_REACH] * 4)  # three pages of 4
+    run = _walk(store, world, Aim(state="stated", terms=("term0",)), page_count=3)
+    assert [t for s, t in world.asked if s == "alpha"] == ["term0"]  # one page only
+    assert run.capped == {} and "CAPPED" not in run.summary()
+    assert "STOPPED at the 4-offer ceiling" in run.summary()

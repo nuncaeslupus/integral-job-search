@@ -716,7 +716,7 @@ class Run:
             lines.append(
                 f"  CAPPED  {board}: held to its {self.board_cap}-offer share of the "
                 f"{OFFER_CEILING}-offer ceiling — {rows} matching row(s) not collected, "
-                f"{pages} further request(s) of this term not made{unsent}"
+                f"{pages} further request(s) not made{unsent}"
             )
         if self.parsed_nothing:
             lines.append(
