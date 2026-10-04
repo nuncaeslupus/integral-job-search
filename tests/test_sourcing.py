@@ -804,6 +804,97 @@ def test_a_phrase_stopped_by_the_ceiling_is_not_reported_as_searched(
     assert "NOT asked, after the ceiling: tecnoempleo_es (rust)" in run.summary()
 
 
+def test_the_offer_ceiling_stops_a_walk_of_every_window_and_names_where_to_resume(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T251: the ceiling is one ceiling for the whole run. The first window
+    fills it, so no later window is opened, and the terms it would have
+    searched come back named, with the offset that resumes there."""
+    import shutil
+
+    from integral.sourcing import PHRASE_CEILING, source_every_phrase
+
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 1)
+    shutil.copytree(_CONNECTORS / "tecnoempleo_es", tmp_path / "tecnoempleo_es")
+    terms = tuple(f"term{i}" for i in range(2 * PHRASE_CEILING + 1))
+    asked: list[str] = []
+    answer = _answer_with_detail()
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        response: Response = answer(request)
+        return response
+
+    run = source_every_phrase(
+        store,
+        _spain(),
+        Aim(state="stated", terms=terms),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+    )
+    assert run.added == 1, run.summary()
+    assert run.unsearched == terms[PHRASE_CEILING:], run.summary()
+    assert run.next_offset == PHRASE_CEILING
+    assert f"continue with offset={PHRASE_CEILING}" in run.summary()
+    assert not any(t in u for t in terms[PHRASE_CEILING:] for u in asked), "a later window ran"
+
+
+def test_the_offers_a_window_wrote_count_against_the_next_windows_room(
+    store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T251: one ceiling per run, not one per window. A later window is told how
+    many offers the earlier ones wrote (`already_added`) and, handed it, spends
+    no more than the room that is left."""
+    import shutil
+
+    import integral.sourcing as sourcing
+    from integral.sourcing import PHRASE_CEILING, source_every_phrase
+
+    monkeypatch.setattr("integral.sourcing.OFFER_CEILING", 100)
+    shutil.copytree(_CONNECTORS / "tecnoempleo_es", tmp_path / "tecnoempleo_es")
+    terms = tuple(f"term{i}" for i in range(PHRASE_CEILING + 1))
+    told: list[tuple[int, int]] = []
+    real = sourcing.source
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        run = real(*args, **kwargs)
+        told.append((kwargs["already_added"], run.added))
+        return run
+
+    monkeypatch.setattr("integral.sourcing.source", spy)
+    run = source_every_phrase(
+        store,
+        _spain(),
+        Aim(state="stated", terms=terms),
+        fetch=_answer_with_detail(),
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+    )
+    assert len(told) == 2 and told[0] == (0, run.added) and run.added > 0, told
+    assert told[1][0] == told[0][1], told
+    # and a window handed all the room already spent asks nothing
+    asked: list[str] = []
+
+    def record(r: ListRequest) -> Response:
+        asked.append(r.url)
+        return Response(None, "", error="x")
+
+    spent = real(
+        store,
+        _spain(),
+        Aim(state="stated", terms=terms),
+        fetch=record,
+        at=AT,
+        directory=tmp_path,
+        robots=_robots(),
+        already_added=100,
+    )
+    assert asked == [] and spent.added == 0
+
+
 def test_a_ceiling_that_fills_at_a_page_end_is_still_reported(
     store: ProfileStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

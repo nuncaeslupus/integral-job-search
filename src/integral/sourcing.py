@@ -377,6 +377,10 @@ class Run:
     #: that searched six of nine and reported "6 boards searched" describes a
     #: partial pass as a whole one.
     unsearched: tuple[str, ...] = ()
+    #: The `offset` that searches `unsearched` next, or None when nothing is
+    #: left (T251). Said in the summary, so a session continues from the report
+    #: rather than from arithmetic it might get wrong.
+    next_offset: int | None = None
     #: Worldwide boards left out because the candidate's reach does not include
     #: remote work, and why in the candidate's terms. Said, so a quiet run is
     #: not read as a quiet world.
@@ -589,7 +593,8 @@ class Run:
             lines.append(f"  searched, one phrase at a time: {', '.join(self.searched)}")
         if self.unsearched:
             lines.append(
-                f"  NOT searched this run (over the {PHRASE_CEILING}-phrase ceiling): "
+                f"  NOT searched this run (over the {PHRASE_CEILING}-phrase ceiling "
+                f"or the offer ceiling), continue with offset={self.next_offset}: "
                 f"{', '.join(self.unsearched)}"
             )
         if self.steered:
@@ -885,6 +890,7 @@ def source(
     robots: Robots | None = None,
     browser: Fetch | None = None,
     offset: int = 0,
+    already_added: int = 0,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -907,6 +913,10 @@ def source(
     aim it was given exactly when `offset == 0`. A pass with `offset > 0` is a
     continuation and never writes, so a slice cannot reach the store and a
     changed aim at offset 0 is still saved.
+
+    `already_added` (T251) is how many offers earlier windows of the same run
+    already wrote, so `OFFER_CEILING` stays one ceiling for the whole run;
+    `source_every_phrase` is the caller that sets it.
     """
     from integral.search_terms import save_aim  # circular at module scope
 
@@ -927,6 +937,8 @@ def source(
     if aim.terms and offset == 0:
         save_aim(store, aim)
     run = Run(unsearched=aim.terms[offset + PHRASE_CEILING :])
+    if run.unsearched:
+        run.next_offset = offset + PHRASE_CEILING
     # What went unasked is the *difference*, never a branch per bucket. A branch
     # per bucket is one more thing to remember: #562 added a third bucket to
     # `packages_for` and no branch here, so a run that deliberately withheld five
@@ -958,7 +970,7 @@ def source(
             steerable = False
         queries: tuple[str | None, ...] = phrases if steerable and phrases else (None,)
         for query in queries:
-            room = OFFER_CEILING - run.added
+            room = OFFER_CEILING - already_added - run.added
             if room <= 0:
                 run.outcomes.append(
                     BoardOutcome(package.name, None, steerable, query, skipped=_CEILING_SKIP)
@@ -982,6 +994,42 @@ def source(
                 )
             )
     return run
+
+
+def source_every_phrase(
+    store: ProfileStore,
+    constraints: CandidateConstraints,
+    aim: Aim,
+    **kwargs: Any,
+) -> Run:
+    """`source()` over every window of the aim, one run (T251).
+
+    The candidate's rule is that a term in the aim is searched on every board
+    that takes a query, and duplicates are discarded afterwards — not that the
+    first `PHRASE_CEILING` are and the rest wait for somebody to remember
+    `offset`. So this walks the windows from `offset=0` (the one that saves the
+    aim) and merges them.
+
+    The offer ceiling stays one ceiling for the run: once it is reached no later
+    window is opened, and the terms it would have searched are returned as
+    `unsearched` with the `next_offset` that resumes there. Every term is
+    therefore either searched or named with the offset that searches it.
+    """
+    merged = Run()
+    offset = 0
+    while True:
+        run = source(store, constraints, aim, offset=offset, already_added=merged.added, **kwargs)
+        if offset == 0:
+            merged.unreached = run.unreached
+            merged.unreached_because = run.unreached_because
+        merged.outcomes.extend(run.outcomes)
+        offset += PHRASE_CEILING
+        if offset >= len(aim.terms):
+            return merged
+        if merged.added >= OFFER_CEILING:
+            merged.unsearched = aim.terms[offset:]
+            merged.next_offset = offset
+            return merged
 
 
 def browser_urls(
@@ -1022,6 +1070,24 @@ def browser_urls(
             for request in requests:
                 if _may_fetch(adjudicator, request.url) and request.url not in urls:
                     urls.append(request.url)
+    return urls
+
+
+def browser_urls_every_phrase(
+    constraints: CandidateConstraints,
+    aim: Aim,
+    **kwargs: Any,
+) -> list[str]:
+    """`browser_urls` over every window of the aim, in order, without repeats.
+
+    The partner of `source_every_phrase`: a browser board is asked for every
+    phrase too, so the candidate's browser is told every page to save at once.
+    """
+    urls: list[str] = []
+    for offset in range(0, max(len(aim.terms), 1), PHRASE_CEILING):
+        for url in browser_urls(constraints, aim, offset=offset, **kwargs):
+            if url not in urls:
+                urls.append(url)
     return urls
 
 
