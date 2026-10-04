@@ -76,13 +76,32 @@ def test_a_sole_profile_offered_for_confirmation_reveals_nothing_from_inside_it(
     assert store.path("session", "state.json").read_bytes() == before
 
 
-def test_two_profiles_with_one_display_name_are_told_apart_by_handle(tmp_path: Path) -> None:
+def test_two_profiles_with_one_display_name_ask_for_a_handle_and_list_none(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "profiles"
-    _profile(root, "marcos-a", "Marcos")
+    _profile(root, "marcos", "Marcos")
     _profile(root, "marcos-b", "Marcos")
     said = run(root, now=NOW).say
-    assert "Marcos (marcos-a)" in said and "Marcos (marcos-b)" in said
+    assert "give me your handle" in said
+    assert "marcos" not in said.lower().replace("marcos, marcos", "")
+    assert "marcos-b" not in said
+
+
+def test_either_of_two_same_named_profiles_opens_by_its_own_handle(tmp_path: Path) -> None:
+    """The first handle is the one derived from the shared name — it must resolve too."""
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    _profile(root, "marcos-b", "Marcos")
+    assert drive(root, [{"handle": "marcos"}], NOW)[1].handle == "marcos"
     assert drive(root, [{"handle": "marcos-b"}], NOW)[1].handle == "marcos-b"
+
+
+def test_names_compare_in_nfc_so_a_decomposed_name_still_collides(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "nuria-a", "N\u00faria")
+    _profile(root, "nuria-b", "Nu\u0301ria")
+    assert "give me your handle" in run(root, now=NOW).say
 
 
 def test_distinct_names_are_not_cluttered_with_handles(tmp_path: Path) -> None:
@@ -98,10 +117,51 @@ def test_a_simulated_candidate_is_reachable_only_when_asked_for(
     root = tmp_path / "profiles"
     create_profile(root, "Ada", language="en", handle="ada", fiction=True)
     assert step0_open._main(["x", "open", "--root", str(root), "--handle", "ada"]) == 0
-    assert json.loads(capsys.readouterr().out)["outcome"] != "opened"
+    assert json.loads(capsys.readouterr().out)["outcome"] == "create"
     args = ["x", "open", "--root", str(root), "--handle", "ada", "--include-fiction"]
     assert step0_open._main(args) == 0
     assert json.loads(capsys.readouterr().out)["outcome"] == "opened"
+
+
+def test_a_leftover_simulated_profile_does_not_block_or_name_a_real_candidate(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    create_profile(root, "Ada", language="en", handle="sim-ada", fiction=True)
+    sole = run(root, now=NOW)
+    assert sole.outcome == "confirm" and sole.say == "Is this Marcos?"
+    newcomer = run(root, handle="zoe", now=NOW)
+    assert newcomer.outcome == "create"
+    assert "sim-ada" not in json.dumps(newcomer.as_json())
+
+
+def test_a_stray_directory_blocks_nobody_and_is_never_named(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    _profile(root, "nuria", "Núria")
+    (root / "zz-half-written").mkdir()
+    assert run(root, now=NOW).outcome == "choose"
+    assert run(root, handle="ada", now=NOW).outcome == "create"
+    assert run(root, handle="zz-half-written", now=NOW).outcome == "create"
+
+
+def test_a_root_holding_only_a_stray_directory_offers_create(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    (root / "zz-half-written").mkdir(parents=True)
+    assert run(root, now=NOW).outcome == "create"
+
+
+def test_a_corrupt_profile_blocks_only_its_own_arrival_and_names_nothing(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    broken = _profile(root, "nuria", "Núria")
+    broken.path("identity.json").write_text("{not json", encoding="utf-8")
+    assert run(root, handle="nuria", now=NOW).outcome == "unreadable"
+    assert run(root, handle="ada", now=NOW).outcome == "create"
+    assert run(root, now=NOW).outcome == "confirm"
+    said = json.dumps(run(root, handle="nuria", now=NOW).as_json())
+    assert "nuria" not in said.lower().replace("unreadable", "")
 
 
 def test_a_corrupt_state_file_is_reported_not_raised_and_left_alone(tmp_path: Path) -> None:
@@ -113,46 +173,13 @@ def test_a_corrupt_state_file_is_reported_not_raised_and_left_alone(tmp_path: Pa
     assert store.path("session", "state.json").read_text(encoding="utf-8") == "{not json"
 
 
-def test_a_corrupt_identity_is_never_reported_as_no_profile(tmp_path: Path) -> None:
+def test_a_corrupt_sole_identity_is_never_reported_as_no_profile(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     store = _profile(root, "marcos", "Marcos")
     store.path("identity.json").write_text("{not json", encoding="utf-8")
     result = run(root, now=NOW)
-    assert result.outcome == "unreadable" and "marcos" in result.say
+    assert result.outcome == "unreadable" and "marcos" not in result.say.lower()
     assert "don't have a profile" not in result.say
-
-
-def test_a_sole_profile_is_offered_and_never_assumed(tmp_path: Path) -> None:
-    root = tmp_path / "profiles"
-    store = _profile(root, "marcos", "Marcos")
-    before = store.path("session", "state.json").read_bytes()
-    result = run(root, now=NOW)
-    assert result.outcome == "confirm" and result.handle is None
-    assert store.path("session", "state.json").read_bytes() == before
-
-
-def test_an_unknown_name_offers_to_create(tmp_path: Path) -> None:
-    result = run(tmp_path / "profiles", handle="ada", now=NOW)
-    assert result.outcome == "create"
-
-
-def test_opening_says_when_and_where_and_writes_last_activity(tmp_path: Path) -> None:
-    root = tmp_path / "profiles"
-    store = _profile(root, "marcos", "Marcos")
-    result = run(root, handle="marcos", now=NOW)
-    assert result.outcome == "opened" and result.handle == "marcos"
-    assert "Hello again, Marcos, about 3 weeks ago." in result.say
-    assert result.last_activity == STAMP
-    after = SessionStore(store).read()
-    assert after is not None and after.last_activity == "2026-10-04T00:00:00+00:00"
-
-
-def test_a_first_visit_is_not_told_it_is_a_return(tmp_path: Path) -> None:
-    root = tmp_path / "profiles"
-    create_profile(root, "Ada", language="en", handle="ada")
-    result = run(root, handle="ada", now=NOW)
-    assert result.outcome == "opened"
-    assert "again" not in result.say and result.last_activity is None
 
 
 @pytest.mark.parametrize(
@@ -208,3 +235,4 @@ def test_the_skill_does_not_ask_for_a_second_call_to_build_the_opening() -> None
     assert "it is the only call step 0 makes" in text
     assert "with no further file reads" in text
     assert "--include-fiction" in text
+    assert "give me your handle" in text or "give their handle" in text

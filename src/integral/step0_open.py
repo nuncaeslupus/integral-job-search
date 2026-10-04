@@ -38,12 +38,14 @@ import json
 import sys
 import tempfile
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from integral.identity import (
+    ROSTER_FILE,
     Identity,
     IdentityError,
     ProfileLeak,
@@ -72,7 +74,8 @@ EXPECTED_CALLS = {
     "names_themselves": 1,
     "only_profile_confirms": 2,
     "one_of_several": 2,
-    "same_display_name": 2,
+    "same_display_name_first": 2,
+    "same_display_name_second": 2,
 }
 
 
@@ -118,23 +121,30 @@ def _ago(then: str | None, now: datetime) -> str | None:
     return f"about {round(days / 30)} months ago"
 
 
-def _names(identities: tuple[Identity, ...]) -> str:
-    """Display names; where two collide, each also carries its handle.
-
-    §6.1: two people who answer to one name are asked for something that tells
-    them apart. The handle is the identifier the candidate chose, so it is not
-    sensitive, and it is what `--handle` resolves on the next call.
-    """
-    counts: dict[str, int] = {}
-    for identity in identities:
-        key = identity.display_name.casefold()
-        counts[key] = counts.get(key, 0) + 1
-    return ", ".join(
-        f"{identity.display_name} ({identity.handle})"
-        if counts[identity.display_name.casefold()] > 1
-        else identity.display_name
-        for identity in identities
+def _same_name(left: str, right: str) -> bool:
+    """Display names compare as people read them: NFC, then caseless."""
+    return (
+        unicodedata.normalize("NFC", left).casefold()
+        == unicodedata.normalize("NFC", right).casefold()
     )
+
+
+def _names(identities: tuple[Identity, ...]) -> str:
+    """Display names only; a collision is said, never resolved by listing handles.
+
+    A handle is an identifier, and before anyone has said who they are the only
+    cross-profile data step 0 may show is a display name (SKILL, Reads). So two
+    profiles with one name are announced as such and the candidate is asked to
+    give their own handle.
+    """
+    names = [identity.display_name for identity in identities]
+    shown = ", ".join(names)
+    collides = any(
+        _same_name(names[i], names[j]) for i in range(len(names)) for j in range(i + 1, len(names))
+    )
+    if collides:
+        shown += " (two of these share a name, so give me your handle rather than your name)"
+    return shown
 
 
 def _unresolved(resolution: Resolution) -> Opened:
@@ -149,16 +159,28 @@ def _unresolved(resolution: Resolution) -> Opened:
     )
 
 
-def _unreadable_profiles(root: Path, readable: int) -> list[str]:
-    """Handles of profile directories the roster could not read (names only)."""
+def _broken_profiles(root: Path) -> list[str]:
+    """Directories that are profiles by their `identity.json` and fail to parse it.
+
+    Decided per directory, never by comparing counts: a readable simulated
+    profile is not broken, and a stray or half-written directory with no
+    `identity.json` is not a profile at all. Only the directory names are
+    returned, and only so a caller can tell whether the arrival is one of them.
+    """
     if not root.is_dir():
         return []
-    found = [
-        child.name
-        for child in sorted(root.iterdir())
-        if not child.name.startswith(".") and not child.is_symlink() and child.is_dir()
-    ]
-    return found if len(found) > readable else []
+    broken: list[str] = []
+    for child in sorted(root.iterdir()):
+        if child.name.startswith(".") or child.is_symlink() or not child.is_dir():
+            continue
+        if not (child / ROSTER_FILE).is_file():
+            continue
+        try:
+            ProfileStore(root, child.name).identity()
+        except (IdentityError, ProfileLeak, ProfileError, ValueError):
+            broken.append(child.name)
+            continue
+    return broken
 
 
 def run(
@@ -175,15 +197,16 @@ def run(
         root, named=handle, confirmed=confirmed, include_fiction=include_fiction
     )
     if not resolution.is_resolved or resolution.candidate is None:
-        known = list_identities(root, include_fiction=include_fiction)
-        broken = _unreadable_profiles(root, len(known))
-        if broken:
+        broken = _broken_profiles(root)
+        wanted = (handle or "").strip()
+        readable = list_identities(root, include_fiction=include_fiction)
+        # Unreadable only when the arrival could be the unreadable one: they named
+        # it, or nobody readable is left to be. A newcomer is still offered create,
+        # and the message names nothing (no handle is shown before resolution).
+        if broken and ((wanted and wanted in broken) or (not wanted and not readable)):
             return Opened(
                 outcome="unreadable",
-                say=(
-                    "A profile on this machine could not be read "
-                    f"({', '.join(broken)}) — I can't tell who this is until that is looked at."
-                ),
+                say="A saved profile could not be read, so I can't tell who this is yet.",
             )
         return _unresolved(resolution)
 
@@ -248,21 +271,24 @@ def drive(
 def probe_calls() -> dict[str, Any]:
     """Calls and seconds for each way a returning candidate arrives."""
     now = datetime(2026, 10, 4, tzinfo=UTC)
-    people = (("marcos", "Marcos"), ("nuria", "Núria"), ("marcos-b", "Marcos"))
-    # label -> (profiles that exist, first call's arguments, answers to questions asked)
-    arrivals: dict[str, tuple[int, dict[str, Any], list[dict[str, Any]]]] = {
-        "names_themselves": (1, {"handle": "marcos"}, []),
-        "only_profile_confirms": (1, {}, [{"confirmed": True}]),
-        "one_of_several": (2, {}, [{"handle": "marcos"}]),
-        "same_display_name": (2, {}, [{"handle": "marcos-b"}]),
+    marcos, nuria, twin = ("marcos", "Marcos"), ("nuria", "Núria"), ("marcos-b", "Marcos")
+    # label -> (profiles that exist, first call's arguments, answers, who opens)
+    arrivals: dict[
+        str, tuple[tuple[tuple[str, str], ...], dict[str, Any], list[dict[str, Any]], str]
+    ] = {
+        "names_themselves": ((marcos,), {"handle": "marcos"}, [], "marcos"),
+        "only_profile_confirms": ((marcos,), {}, [{"confirmed": True}], "marcos"),
+        "one_of_several": ((marcos, nuria), {}, [{"handle": "marcos"}], "marcos"),
+        # The default case: the first profile's handle is derived from the shared name.
+        "same_display_name_first": ((marcos, twin), {}, [{"handle": "marcos"}], "marcos"),
+        "same_display_name_second": ((marcos, twin), {}, [{"handle": "marcos-b"}], "marcos-b"),
     }
     calls: dict[str, int] = {}
     slowest = 0.0
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="integral-t207-") as tmp:
-        for label, (count, first, answers) in arrivals.items():
+        for label, (roster, first, answers, expected) in arrivals.items():
             root = Path(tmp) / label / "profiles"
-            roster = (people[0], people[2]) if label == "same_display_name" else people[:count]
             for handle, display in roster:
                 create_profile(root, display, language="en", handle=handle)
                 SessionStore(ProfileStore(root, handle)).record(
@@ -274,6 +300,8 @@ def probe_calls() -> dict[str, Any]:
             calls[label] = used
             if "3 weeks ago" not in opened.say:
                 failures.append(f"{label}: the opening never said how long ago")
+            if opened.handle != expected:
+                failures.append(f"{label}: opened {opened.handle!r}, expected {expected!r}")
             if used != EXPECTED_CALLS[label]:
                 failures.append(f"{label}: took {used} calls, expected {EXPECTED_CALLS[label]}")
     return {

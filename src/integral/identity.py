@@ -418,11 +418,17 @@ def resolve_handle(
 
     if named:
         wanted = named.strip()
-        matches = [
-            identity
-            for identity in identities
-            if identity.handle == wanted or identity.display_name.casefold() == wanted.casefold()
-        ]
+        # An exact handle is the one thing that names a single profile, so it wins
+        # over display names: the first of two same-named people has a handle
+        # derived from the shared name, and would otherwise never resolve.
+        matches = [identity for identity in identities if identity.handle == wanted]
+        if not matches:
+            folded = unicodedata.normalize("NFC", wanted).casefold()
+            matches = [
+                identity
+                for identity in identities
+                if unicodedata.normalize("NFC", identity.display_name).casefold() == folded
+            ]
         if len(matches) == 1:
             return Resolution(
                 outcome="resolved",
