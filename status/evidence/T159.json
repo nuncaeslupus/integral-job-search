@@ -551,7 +551,6 @@
     "task_gate.MINIMUM_PRESENCE_RECORDING_FIELDS",
     "task_gate.MINIMUM_RECORD_KEYS_COMPARED",
     "task_gate.MINIMUM_STATUS_KEY_GATES",
-    "term_proposals.WORDS_NEEDED",
     "test_mode.PASTE_CHARS",
     "trait_sufficiency.MINIMUM_TRAITS",
     "verified_gate.MINIMUM_CONTRACTS",
