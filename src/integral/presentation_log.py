@@ -53,6 +53,7 @@ from integral.feedback import DecisionResult, record_decision
 from integral.identity import ProfileStore
 from integral.lifecycle import (
     LifecycleRecord,
+    _ever_reached,
     advert_components,
     load_lifecycle_offer,
     read_application_status,
@@ -215,17 +216,27 @@ def _presented_ids(store: ProfileStore) -> set[str]:
     return {str(i) for row in _rows(store) for i in row.get("offer_ids", ())}
 
 
-def _status_of(store: ProfileStore, offer_id: str) -> str | None:
+def _ever(store: ProfileStore, offer_id: str, statuses: frozenset[str]) -> bool:
+    """T250. Whether the stored offer is, or ever was, in one of `statuses`.
+
+    Lifecycle §7.2's "ever, not currently" (`lifecycle._ever_reached`): an advert
+    applied to and then archived, or shortlisted and then expired, is still one
+    the candidate acted on, and reading only the current status re-presents it."""
     loaded = _loaded(store, offer_id)
-    return loaded[0].status if loaded is not None else None
+    if loaded is None:
+        return False
+    offer, record = loaded
+    return offer.status in statuses or _ever_reached(record, statuses)  # type: ignore[arg-type]
 
 
-def _has_applied(store: ProfileStore, offer_id: str, status: str | None) -> bool:
-    """T250. Applied by the offer's status, or by an `applications/<id>/status.json`
-    record past `drafted` (a draft is not an application), which can exist while
-    the offer still reads `new`. A record that cannot be read is not evidence of
-    an application: the offer is shown."""
-    if status == "applied":
+def _has_applied(store: ProfileStore, offer_id: str) -> bool:
+    """T250. Ever applied, or an `applications/<id>/status.json` record past
+    `drafted` (a draft is not an application) which can exist while the offer
+    still reads `new`. A record that cannot be read is not evidence of an
+    application: the offer is shown. Only siblings are asked: an offer's own
+    application record is left to the ranking (T242 ranks applied offers on
+    purpose)."""
+    if _ever(store, offer_id, frozenset({"applied"})):
         return True
     try:
         recorded = read_application_status(store, offer_id)
@@ -331,10 +342,11 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
         # every search, so the same advert was stored under several ids and only
         # one of them carried the verdict. Read-time, not a migration: the copies
         # stay as the board served them and the verdict follows the advert.
-        statuses = {copy: _status_of(store, copy) for copy in siblings}
-        applied_copy = next((c for c in siblings if _has_applied(store, c, statuses[c])), None)
-        shortlisted_copy = next((c for c in siblings if statuses[c] == "shortlisted"), None)
-        ruled_copy = next((c for c in siblings if statuses[c] in _RULED_OUT), None)
+        applied_copy = next((c for c in siblings if _has_applied(store, c)), None)
+        shortlisted_copy = next(
+            (c for c in siblings if _ever(store, c, frozenset({"shortlisted"}))), None
+        )
+        ruled_copy = next((c for c in siblings if _ever(store, c, frozenset(_RULED_OUT))), None)
         # T225. Likewise a copy the candidate was already shown holds back the
         # others, unless this one was shown itself: repeating an offer is what
         # `passed_over` counts and is not this rule's business.

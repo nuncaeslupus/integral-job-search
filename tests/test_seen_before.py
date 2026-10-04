@@ -18,7 +18,7 @@ import pytest
 from integral.feedback import record_decision
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import record_application_status, save_lifecycle_offer, track_new_offer
-from integral.offers import Offer, compute_offer_id
+from integral.offers import Offer, OfferStatus, compute_offer_id
 from integral.presentation_log import (
     REASON_APPLIED,
     REASON_SHORTLISTED,
@@ -94,6 +94,20 @@ DIFFERENT_ROLE = [
     ("Backend Engineer", "Backend Engineer Platform Infrastructure"),  # the boundary: 2/4
 ]
 
+# A number on one side only is a salary, a year or a percentage: same role.
+NUMBER_ON_ONE_SIDE = [
+    ("Backend Engineer \u2013 60.000\u20ac", "Backend Engineer"),
+    ("Backend Engineer (2026)", "Backend Engineer"),
+    ("Backend Engineer 100% remote", "Backend Engineer"),
+    ("Backend Engineer II", "Backend Engineer"),
+]
+# A number on both sides that disagrees is a grade or a different posting.
+NUMBERS_DISAGREE = [
+    ("Engineer II", "Engineer III"),
+    ("Engineer 2", "Engineer 3"),
+    ("Backend Engineer (2025)", "Backend Engineer (2026)"),
+]
+
 
 @pytest.mark.parametrize(("a", "b"), SAME_ROLE)
 def test_the_same_role_in_another_boards_words_is_the_same_vacancy(a: str, b: str) -> None:
@@ -114,6 +128,53 @@ def test_the_threshold_sits_inside_the_gap_between_the_two_populations() -> None
     different = [title_similarity(a, b) for a, b in DIFFERENT_ROLE]
     assert min(same) == TITLE_THRESHOLD == 0.75
     assert max(different) == 0.5 < TITLE_THRESHOLD
+
+
+@pytest.mark.parametrize(("a", "b"), NUMBER_ON_ONE_SIDE)
+def test_a_number_on_one_title_only_is_ignored(a: str, b: str) -> None:
+    assert same_vacancy("Cala", a, "Cala", b)
+    assert same_vacancy("Cala", b, "Cala", a)
+
+
+@pytest.mark.parametrize(("a", "b"), NUMBERS_DISAGREE)
+def test_numbers_on_both_titles_must_agree(a: str, b: str) -> None:
+    assert not same_vacancy("Cala", a, "Cala", b)
+    assert same_vacancy("Cala", a, "Cala", a)
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["Backend Engineer (all genders)", "Backend Engineer (m/w/divers)", "Backend Engineer (m/f/d)"],
+)
+def test_gender_markers_are_dropped(title: str) -> None:
+    assert same_vacancy("Cala", title, "Cala", "Backend Engineer")
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Cala", "Cala S. L."),
+        ("Foo", "Foo GmbH & Co. KG"),
+        ("Foo", "Foo SAS"),
+        ("Foo", "Foo S.L.L."),
+        ("Foo", "Foo Pty Ltd"),
+    ],
+)
+def test_trailing_legal_forms_are_stripped(a: str, b: str) -> None:
+    assert same_vacancy(a, "Backend Engineer", b, "Backend Engineer")
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Spa Resort Group", "Resort Group"),
+        ("SA Power Networks", "Power Networks"),
+        ("AB Foods", "Foods"),
+        ("Co-op", "Op"),
+    ],
+)
+def test_a_legal_form_word_inside_a_name_is_part_of_the_name(a: str, b: str) -> None:
+    assert not same_vacancy(a, "Backend Engineer", b, "Backend Engineer")
 
 
 @pytest.mark.parametrize(
@@ -214,6 +275,38 @@ def test_the_same_title_at_another_employer_is_shown(store: ProfileStore, how: s
         store, "elsewhere", title="Python Developer", company="Cala", source="board-b"
     )
     assert partition(store, [elsewhere]) == ([elsewhere], [])
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("shortlisted", "applied", "archived"),
+        ("shortlisted", "expired"),
+        ("shortlisted", "archived"),
+        ("screened_out", "archived"),
+        ("screened_out", "expired"),
+    ],
+)
+def test_a_prior_state_survives_the_copy_moving_on(
+    store: ProfileStore, path: tuple[OfferStatus, ...]
+) -> None:
+    """Lifecycle 7.2: "ever, not currently". Applied then archived is still applied to."""
+    prior = _save(store, "prior", title="Python Developer", company="Haddock")
+    for status in path:
+        record_decision(
+            store, prior, status, at=_AT, reason="no" if status == "screened_out" else None
+        )
+    again = _save(store, "again", title="Python Engineer", company="Haddock", source="board-b")
+    show, held = partition(store, [again])
+    assert show == []
+    assert [h.sibling for h in held] == [prior]
+
+
+def test_an_archived_copy_that_was_only_new_withholds_nothing(store: ProfileStore) -> None:
+    prior = _save(store, "prior", title="Python Developer", company="Haddock")
+    record_decision(store, prior, "archived", at=_AT, reason=None)
+    again = _save(store, "again", title="Python Engineer", company="Haddock", source="board-b")
+    assert partition(store, [again]) == ([again], [])
 
 
 def test_a_drafted_application_is_not_an_application(store: ProfileStore) -> None:

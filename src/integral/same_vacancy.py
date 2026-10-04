@@ -9,14 +9,17 @@ applied to or rejected came back as new.
 **The rule.** Two adverts are the same vacancy when
 
 1. both name an employer (`offers.names_an_employer`) and the employers are
-   equal once case, accents, punctuation and legal-form words (`S.L.`,
-   `GmbH`, `Ltd`...) are removed. Employers are compared exactly, never
-   fuzzily: two companies with similar names are two companies;
+   equal once case, accents, punctuation and a *trailing* run of legal-form
+   words (`S.L.`, `GmbH & Co. KG`, `Ltd`...) are removed. Employers are
+   compared exactly, never fuzzily: two companies with similar names are two
+   companies;
 2. both titles have at least one significant word left, and the *level* words
-   (`junior`, `senior`, `lead`, `principal`, `staff`, `head`, `intern`, plus
-   any number or roman numeral) of the two are the same set: a junior and a
-   senior role at one employer are two
-   vacancies, however much else they share;
+   (`junior`, `senior`, `lead`, `principal`, `staff`, `head`, `intern`) of the
+   two are the same set: a junior and a senior role at one employer are two
+   vacancies, however much else they share. Numbers and roman numerals count
+   the same way only when *both* titles carry one (`Engineer II` is not
+   `Engineer III`); a number on one side alone is a salary, a year or a
+   percentage a board appended, and is ignored;
 3. the Jaccard overlap of the titles' significant words is at least
    `TITLE_THRESHOLD` (0.75).
 
@@ -51,7 +54,7 @@ TITLE_THRESHOLD = 0.75
 _LEGAL_FORMS = frozenset(
     {
         "sl", "slu", "sa", "sau", "gmbh", "ltd", "limited", "inc", "llc", "bv", "ag",
-        "plc", "corp", "co", "srl", "spa", "ab", "oy",
+        "plc", "corp", "co", "srl", "spa", "ab", "oy", "kg", "sas", "sll", "pty",
     }
 )  # fmt: skip
 
@@ -81,12 +84,30 @@ _SYNONYMS = {
 
 _COMPOUNDS = re.compile(r"\b(full|front|back)[\s-]*(stack|end)\b")
 
-_GENDER = re.compile(r"\(?\b[mwfdhx]\s*[/\\-]\s*[mwfdhx](?:\s*[/\\-]\s*[mwfdhx])?\b\)?")
+_G = r"(?:[mwfdhx]|divers[e]?)"
+_GENDER = re.compile(rf"\(?\b{_G}\s*[/\\-]\s*{_G}(?:\s*[/\\-]\s*{_G})?\b\)?|\(?\ball genders\b\)?")
 
 
 def _ascii_fold(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text)
     return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
+def _join_initials(words: list[str]) -> list[str]:
+    """`S. L.` is `sl`: a run of single letters is one word."""
+    joined: list[str] = []
+    run = ""
+    for word in words:
+        if len(word) == 1:
+            run += word
+            continue
+        if run:
+            joined.append(run)
+            run = ""
+        joined.append(word)
+    if run:
+        joined.append(run)
+    return joined
 
 
 def employer_key(company: str | None) -> tuple[str, ...] | None:
@@ -95,34 +116,49 @@ def employer_key(company: str | None) -> tuple[str, ...] | None:
     if not names_an_employer(company):
         return None
     text = _ascii_fold(normalise_name(company)).replace(".", "")
-    words = tuple(w for w in re.split(r"[\W_]+", text) if w and w not in _LEGAL_FORMS)
-    return words or None
+    words = _join_initials([w for w in re.split(r"[\W_]+", text) if w])
+    # Legal forms count only as a trailing run (`Foo GmbH & Co. KG`): `Spa
+    # Resort Group`, `SA Power Networks` and `Co-op` name their employer with
+    # the word, and stripping it would merge them with a different company.
+    while words and words[-1] in _LEGAL_FORMS:
+        words.pop()
+    return tuple(words) or None
 
 
-def title_words(title: str | None) -> tuple[frozenset[str], frozenset[str]]:
-    """(significant words, level words) of a title."""
+def title_words(title: str | None) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """(significant words, level words, numbers) of a title. Numbers and roman
+    numerals are kept apart from the words: whether they matter depends on the
+    other title (see `title_similarity`)."""
     text = _ascii_fold(normalise_name(title))
     text = _GENDER.sub(" ", text)
     text = _COMPOUNDS.sub(r"\1\2", text)
     words: set[str] = set()
     levels: set[str] = set()
+    numbers: set[str] = set()
     for word in re.split(r"[\W_]+", text):
         word = _LEVEL_SPELLINGS.get(word, word)
         if not word or word in _NOISE:
             continue
-        if word in _LEVELS or word.isdigit() or word in _ROMAN:
+        if word.isdigit() or word in _ROMAN:
+            numbers.add(word)
+        elif word in _LEVELS:
             levels.add(word)
         else:
             words.add(_SYNONYMS.get(word, word))
-    return frozenset(words), frozenset(levels)
+    return frozenset(words), frozenset(levels), frozenset(numbers)
 
 
 def title_similarity(a: str | None, b: str | None) -> float:
     """Jaccard overlap of the significant words; 0.0 when either has none or
     the level words differ."""
-    words_a, levels_a = title_words(a)
-    words_b, levels_b = title_words(b)
+    words_a, levels_a, numbers_a = title_words(a)
+    words_b, levels_b, numbers_b = title_words(b)
     if not words_a or not words_b or levels_a != levels_b:
+        return 0.0
+    # A number is a grade (`Engineer II`, `Engineer 3`) when both titles carry
+    # one, and then they must agree; when only one does it is a salary, a year
+    # or a percentage appended by one board, and says nothing about the role.
+    if numbers_a and numbers_b and numbers_a != numbers_b:
         return 0.0
     return len(words_a & words_b) / len(words_a | words_b)
 
