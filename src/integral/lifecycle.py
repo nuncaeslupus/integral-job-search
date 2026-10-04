@@ -95,6 +95,7 @@ import os
 import re
 import sys
 import tempfile
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -624,26 +625,68 @@ def purge_batch(
 #: a file whose stamp moved, so `collect_offer` over a 3,000-offer tree is one
 #: directory scan rather than 3,000 JSON parses per incoming advert. Only the
 #: *identity* is cached; a status is always read from disk (see `stored_copies`).
-_IDENTITY_CACHE: dict[Path, dict[str, tuple[tuple[int, int], str | None]]] = {}
+_IDENTITY_CACHE: dict[Path, dict[str, tuple[tuple[int, int], tuple[str | None, str | None]]]] = {}
 
 
-def _identity_on_disk(path: Path) -> str | None:
-    """The identity of the offer file at `path`, from its raw JSON. An
-    unreadable or url-less file has none — it cannot be matched, never matched
-    wrongly."""
+def posting_key(title: str | None, company: str | None) -> str | None:
+    """T225. The key under which two copies with different URLs are one advert.
+
+    **Fields: employer (`company`) and `title`, nothing else.** Boards re-list
+    one posting under their own URL, so the URL identity above cannot join the
+    copies; what every copy does carry is who is hiring and for what. Location,
+    salary and text are left out on purpose: boards format them differently
+    (`Madrid` vs `Madrid, España`), so keying on them would split the very
+    copies this exists to join.
+
+    Normalised by NFKC, dropping invisible format characters (Unicode category
+    `Cf`), `casefold` and collapsing every whitespace run to one space, and by
+    nothing more. Punctuation and words stay, so `Backend
+    engineer` and `Backend engineer (senior)` are different adverts: an
+    over-merge hides an advert the candidate never saw, which is as bad as the
+    re-show this prevents. A missing or blank employer or title returns `None`,
+    and `None` matches nothing — not even another `None`.
+    """
+
+    def norm(value: str | None) -> str:
+        # Format characters (category Cf: zero-width space/joiners, BOM, soft
+        # hyphen, ...) are invisible, so a copy carrying one is the same advert.
+        text = unicodedata.normalize("NFKC", value or "")
+        text = "".join(c for c in text if unicodedata.category(c) != "Cf")
+        return " ".join(text.casefold().split())
+
+    employer, role = norm(company), norm(title)
+    if not employer or not role:
+        return None
+    return json.dumps([employer, role], ensure_ascii=False)
+
+
+def _fields_on_disk(path: Path) -> tuple[str | None, str | None]:
+    """(advert identity, posting key) of the offer file at `path`, from its raw
+    JSON. An unreadable file has neither — it cannot be matched, never matched
+    wrongly. A url-less file still has a posting key when it names both an
+    employer and a title (T225)."""
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         url = raw.get("url")
         source = raw.get("source")
+        title = raw.get("title")
+        company = raw.get("company")
     except (OSError, ValueError, AttributeError):
-        return None
-    if not isinstance(url, str) or not isinstance(source, str):
-        return None
-    return advert_identity(url, source)
+        return (None, None)
+    identity = (
+        advert_identity(url, source) if isinstance(url, str) and isinstance(source, str) else None
+    )
+    key = posting_key(
+        title if isinstance(title, str) else None, company if isinstance(company, str) else None
+    )
+    return (identity, key)
 
 
-def stored_identities(store: ProfileStore) -> dict[str, str | None]:
-    """Every stored offer id -> its advert identity (`None` when it has none)."""
+def _identity_on_disk(path: Path) -> str | None:
+    return _fields_on_disk(path)[0]
+
+
+def _scan_stored(store: ProfileStore) -> dict[str, tuple[str | None, str | None]]:
     directory = Path(store.path("offers"))
     if not directory.is_dir():
         return {}
@@ -659,8 +702,18 @@ def stored_identities(store: ProfileStore) -> dict[str, str | None]:
     for offer_id, stamp in present.items():
         cached = cache.get(offer_id)
         if cached is None or cached[0] != stamp:
-            cache[offer_id] = (stamp, _identity_on_disk(directory / f"{offer_id}.json"))
+            cache[offer_id] = (stamp, _fields_on_disk(directory / f"{offer_id}.json"))
     return {offer_id: cached[1] for offer_id, cached in cache.items()}
+
+
+def stored_identities(store: ProfileStore) -> dict[str, str | None]:
+    """Every stored offer id -> its advert identity (`None` when it has none)."""
+    return {offer_id: fields[0] for offer_id, fields in _scan_stored(store).items()}
+
+
+def stored_posting_keys(store: ProfileStore) -> dict[str, str | None]:
+    """Every stored offer id -> its `posting_key` (`None` when it has none)."""
+    return {offer_id: fields[1] for offer_id, fields in _scan_stored(store).items()}
 
 
 def copies_among(identities: dict[str, str | None], offer_id: str) -> list[str]:
@@ -671,6 +724,51 @@ def copies_among(identities: dict[str, str | None], offer_id: str) -> list[str]:
     if own is None:
         return []
     return sorted(i for i, identity in identities.items() if identity == own and i != offer_id)
+
+
+def advert_components(
+    identities: dict[str, str | None], keys: dict[str, str | None]
+) -> dict[str, tuple[str, ...]]:
+    """T225. Group stored ids into *connected components* of "same advert".
+
+    Two ids are linked when they share an `advert_identity` or a `posting_key`;
+    the component is the transitive closure. One step is not enough: A and B can
+    share a URL while B and C share employer and title, so A and C are the same
+    advert although neither relation links them directly, and a rule-out on A
+    must reach C. A `None` links nothing, so an id with neither is alone in its
+    component. Each id maps to its whole component, itself included, sorted.
+    """
+    parent: dict[str, str] = {i: i for i in set(identities) | set(keys)}
+
+    def find(i: str) -> str:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for table in (identities, keys):
+        first: dict[str, str] = {}
+        for offer_id, value in table.items():
+            if value is None:
+                continue
+            if value in first:
+                parent[find(offer_id)] = find(first[value])
+            else:
+                first[value] = offer_id
+    groups: dict[str, list[str]] = {}
+    for offer_id in parent:
+        groups.setdefault(find(offer_id), []).append(offer_id)
+    return {i: tuple(sorted(members)) for members in groups.values() for i in members}
+
+
+def siblings_among(
+    identities: dict[str, str | None], keys: dict[str, str | None], offer_id: str
+) -> list[str]:
+    """T225. Every other stored id in `offer_id`'s component (see
+    `advert_components`): the same advert by URL, by employer and title, or by
+    any chain of the two. An offer with neither has no siblings."""
+    component = advert_components(identities, keys).get(offer_id, ())
+    return [i for i in component if i != offer_id]
 
 
 def stored_copies_of(store: ProfileStore, identity: str, *, excluding: str) -> list[str]:

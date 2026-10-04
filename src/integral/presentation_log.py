@@ -53,9 +53,10 @@ from integral.feedback import DecisionResult, record_decision
 from integral.identity import ProfileStore
 from integral.lifecycle import (
     LifecycleRecord,
-    copies_among,
+    advert_components,
     load_lifecycle_offer,
     stored_identities,
+    stored_posting_keys,
 )
 from integral.offers import Offer
 from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
@@ -92,6 +93,9 @@ class Withheld:
 
     offer_id: str
     reason: str
+    #: T225. The other stored copy of the same advert that caused the hold, when
+    #: one did; `None` when the offer's own record or an exclusion did.
+    sibling: str | None = None
 
 
 def present(
@@ -197,12 +201,25 @@ def reason_for(store: ProfileStore, offer_id: str) -> str | None:
     return None
 
 
+def _presented_ids(store: ProfileStore) -> set[str]:
+    return {str(i) for row in _rows(store) for i in row.get("offer_ids", ())}
+
+
 def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], list[Withheld]]:
     """Split a batch into what to show and what is being held back, with why.
 
     Both halves are returned because returning only the first is the silent
     filter this module exists to prevent: four of nine withheld looks exactly
     like five having been found.
+
+    **What counts as the same advert (T224, T225).** A *sibling* is another
+    stored offer in the same connected component (`lifecycle.advert_components`):
+    linked by the same `advert_identity` (same URL) or the same `posting_key`
+    (same employer and title; see `lifecycle.posting_key`), directly or through
+    a chain of such links. A sibling holds
+    an offer back when it is ruled out (`screened_out`/`rejected`), or when it
+    was already shown through `present()` and this offer was not. Withheld rows
+    from a sibling carry its id in `Withheld.sibling`.
     """
     show: list[str] = []
     held: list[Withheld] = []
@@ -211,9 +228,14 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     # by `source()`, and would otherwise be shown with the exclusion on file.
     exclusions = load_exclusions(store)
     identities = stored_identities(store)
-    shown: dict[str, str] = {}
+    keys = stored_posting_keys(store)
+    presented = _presented_ids(store)
+    components = advert_components(identities, keys)
+    shown_by_component: dict[tuple[str, ...], str] = {}
     for offer_id in offer_ids:
         loaded = _loaded(store, offer_id)
+        component = components.get(offer_id, ())
+        siblings = [i for i in component if i != offer_id]
         # T224. A rule-out recorded against one stored copy of an advert covers
         # every other copy: the offer id hashes text, which a list row changes on
         # every search, so the same advert was stored under several ids and only
@@ -222,25 +244,37 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
         ruled_copy = next(
             (
                 copy
-                for copy in copies_among(identities, offer_id)
+                for copy in siblings
                 if (other := _loaded(store, copy)) is not None and other[0].status in _RULED_OUT
             ),
             None,
         )
-        identity = identities.get(offer_id)
+        # T225. Likewise a copy the candidate was already shown holds back the
+        # others, unless this one was shown itself: repeating an offer is what
+        # `passed_over` counts and is not this rule's business.
+        shown_copy = (
+            None
+            if offer_id in presented
+            else next((copy for copy in siblings if copy in presented), None)
+        )
+        in_batch = shown_by_component.get(component) if component else None
         if loaded is not None and loaded[0].status in _RULED_OUT:
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
         elif ruled_copy is not None:
-            held.append(Withheld(offer_id, reason_for(store, ruled_copy) or "ruled out earlier"))
-        elif identity is not None and identity in shown:
+            held.append(
+                Withheld(offer_id, reason_for(store, ruled_copy) or "ruled out earlier", ruled_copy)
+            )
+        elif shown_copy is not None:
+            held.append(Withheld(offer_id, "el mismo anuncio ya se te mostró", shown_copy))
+        elif in_batch is not None:
             # The same advert twice in one batch is one advert shown once.
-            held.append(Withheld(offer_id, "el mismo anuncio ya está en esta lista"))
+            held.append(Withheld(offer_id, "el mismo anuncio ya está en esta lista", in_batch))
         elif loaded is not None and (topics := ruled_out_by(candidate_of(loaded[0]), exclusions)):
             held.append(Withheld(offer_id, f"es de un tema que descartaste ({', '.join(topics)})"))
         else:
             show.append(offer_id)
-            if identity is not None:
-                shown[identity] = offer_id
+            if component:
+                shown_by_component[component] = offer_id
     return show, held
 
 
