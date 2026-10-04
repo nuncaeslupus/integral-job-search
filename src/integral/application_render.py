@@ -23,6 +23,7 @@ import re
 
 from integral.brand_palette import BrandPalette
 from integral.brand_palette import css as palette_css
+from integral.report_style import page
 
 PHOTO_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
 KINDS = ("letter", "cv")
@@ -52,8 +53,6 @@ header.photo img { width: 32mm; height: 40mm; object-fit: cover; border-radius: 
   body { max-width: none; margin: 0; padding: 0; }
 }
 """
-
-CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'"
 
 
 def inline(text: str) -> str:
@@ -134,11 +133,11 @@ def render_document(
         raise ValueError("photo must be non-empty bytes and is only valid for kind='cv'")
     extra_css = palette_css(palette) if palette else ""
     header = _photo_header(photo, photo_mime, title) if photo is not None and kind == "cv" else ""
-    return (
-        "<!doctype html>\n"
-        f'<html lang="{lang}">\n<head>\n<meta charset="utf-8">\n'
-        f'<meta http-equiv="Content-Security-Policy" content="{CSP}">\n'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>{html.escape(title)}</title>\n<style>\n{CSS}{extra_css}</style>\n</head>\n"
-        f'<body class="{kind}">\n{header}{markdown_to_body(markdown)}\n</body>\n</html>\n'
+    return page(
+        title,
+        f"{header}{markdown_to_body(markdown)}",
+        lang=lang,
+        body_class=kind,
+        extra_css=CSS + extra_css,
+        adaptive=False,
     )

@@ -23,6 +23,7 @@ from integral.brand_palette import (
     to_hex,
     trazabilidad_section,
 )
+from integral.report_style import LIGHT_TOKENS
 
 
 def rgb(text: str) -> tuple[int, int, int]:
@@ -252,8 +253,9 @@ def themed_css(palette: BrandPalette) -> str:
     """The stylesheet ``render_document`` emits with this palette, minus the base CSS."""
     html_out = render_document("# H\n\n## S\n\ntext", title="t", palette=palette)
     emitted = html_out.split("<style>\n", 1)[1].split("</style>", 1)[0]
-    assert emitted.startswith(BASE_CSS)
-    return emitted[len(BASE_CSS) :]
+    shell = LIGHT_TOKENS + BASE_CSS  # the shell's tokens (T241), then the document's own rules
+    assert emitted.startswith(shell)
+    return emitted[len(shell) :]
 
 
 def test_text_colours_are_ink_or_the_aa_variant_and_rules_carry_the_brand() -> None:
