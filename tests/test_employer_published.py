@@ -234,3 +234,31 @@ def test_a_blank_employer_trips_no_exclusion(employer: str | None) -> None:
     )
     assert not matches(unrelated, exclusion)
     assert matches(related, exclusion)
+
+
+# --- the one definition agrees with the one that links copies (T225) -------
+
+_NAMES = [
+    None,
+    "",
+    " ",
+    "\t\n",
+    chr(0xA0),
+    chr(0x200B),  # zero-width space: invisible, category Cf
+    chr(0xFEFF) + " " + chr(0x200D),
+    "Acme",
+    " Acme ",
+    chr(0x200B) + "Acme",
+    chr(0xFF21) + "cme",  # fullwidth A: NFKC folds it
+]
+
+
+@pytest.mark.parametrize("company", _NAMES)
+def test_an_empty_company_links_nothing_and_names_nobody(company: str | None) -> None:
+    """`posting_key` joins copies by employer and title; a company that
+    `names_an_employer` refuses must give no key, so it can never join two
+    adverts. Both directions, over invisible-only names too: a definition that
+    called a zero-width space an employer would let every such offer share one."""
+    from integral.lifecycle import posting_key
+
+    assert (posting_key("Backend engineer", company) is not None) is names_an_employer(company)

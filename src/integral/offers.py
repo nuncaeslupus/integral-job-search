@@ -61,6 +61,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -243,7 +244,8 @@ def names_an_employer(company: str | None) -> bool:
     is: a blank string compared to a blank string is equal, and that equality
     is not a match. Any employer-keyed comparison asks this first.
     """
-    return bool(company and company.strip())
+    text = unicodedata.normalize("NFKC", company or "")
+    return any(not c.isspace() and unicodedata.category(c) != "Cf" for c in text)
 
 
 def compute_offer_id(text: str) -> str:
