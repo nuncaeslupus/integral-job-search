@@ -638,8 +638,9 @@ def posting_key(title: str | None, company: str | None) -> str | None:
     (`Madrid` vs `Madrid, España`), so keying on them would split the very
     copies this exists to join.
 
-    Normalised by NFKC, `casefold` and collapsing every whitespace run to one
-    space — and by nothing more. Punctuation and words stay, so `Backend
+    Normalised by NFKC, dropping invisible format characters (Unicode category
+    `Cf`), `casefold` and collapsing every whitespace run to one space, and by
+    nothing more. Punctuation and words stay, so `Backend
     engineer` and `Backend engineer (senior)` are different adverts: an
     over-merge hides an advert the candidate never saw, which is as bad as the
     re-show this prevents. A missing or blank employer or title returns `None`,
@@ -647,7 +648,11 @@ def posting_key(title: str | None, company: str | None) -> str | None:
     """
 
     def norm(value: str | None) -> str:
-        return " ".join(unicodedata.normalize("NFKC", value or "").casefold().split())
+        # Format characters (category Cf: zero-width space/joiners, BOM, soft
+        # hyphen, ...) are invisible, so a copy carrying one is the same advert.
+        text = unicodedata.normalize("NFKC", value or "")
+        text = "".join(c for c in text if unicodedata.category(c) != "Cf")
+        return " ".join(text.casefold().split())
 
     employer, role = norm(company), norm(title)
     if not employer or not role:
@@ -721,19 +726,49 @@ def copies_among(identities: dict[str, str | None], offer_id: str) -> list[str]:
     return sorted(i for i, identity in identities.items() if identity == own and i != offer_id)
 
 
+def advert_components(
+    identities: dict[str, str | None], keys: dict[str, str | None]
+) -> dict[str, tuple[str, ...]]:
+    """T225. Group stored ids into *connected components* of "same advert".
+
+    Two ids are linked when they share an `advert_identity` or a `posting_key`;
+    the component is the transitive closure. One step is not enough: A and B can
+    share a URL while B and C share employer and title, so A and C are the same
+    advert although neither relation links them directly, and a rule-out on A
+    must reach C. A `None` links nothing, so an id with neither is alone in its
+    component. Each id maps to its whole component, itself included, sorted.
+    """
+    parent: dict[str, str] = {i: i for i in set(identities) | set(keys)}
+
+    def find(i: str) -> str:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for table in (identities, keys):
+        first: dict[str, str] = {}
+        for offer_id, value in table.items():
+            if value is None:
+                continue
+            if value in first:
+                parent[find(offer_id)] = find(first[value])
+            else:
+                first[value] = offer_id
+    groups: dict[str, list[str]] = {}
+    for offer_id in parent:
+        groups.setdefault(find(offer_id), []).append(offer_id)
+    return {i: tuple(sorted(members)) for members in groups.values() for i in members}
+
+
 def siblings_among(
     identities: dict[str, str | None], keys: dict[str, str | None], offer_id: str
 ) -> list[str]:
-    """T225. Every other stored id that is the same advert as `offer_id`: the
-    same `advert_identity` (same URL) **or** the same `posting_key` (same
-    employer and title under a different URL). Either alone is enough, because
-    each catches what the other misses; a `None` on either side matches nothing,
-    so an offer with neither has no siblings."""
-    found = set(copies_among(identities, offer_id))
-    own = keys.get(offer_id)
-    if own is not None:
-        found.update(i for i, key in keys.items() if key == own and i != offer_id)
-    return sorted(found)
+    """T225. Every other stored id in `offer_id`'s component (see
+    `advert_components`): the same advert by URL, by employer and title, or by
+    any chain of the two. An offer with neither has no siblings."""
+    component = advert_components(identities, keys).get(offer_id, ())
+    return [i for i in component if i != offer_id]
 
 
 def stored_copies_of(store: ProfileStore, identity: str, *, excluding: str) -> list[str]:

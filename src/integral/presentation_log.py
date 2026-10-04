@@ -53,8 +53,8 @@ from integral.feedback import DecisionResult, record_decision
 from integral.identity import ProfileStore
 from integral.lifecycle import (
     LifecycleRecord,
+    advert_components,
     load_lifecycle_offer,
-    siblings_among,
     stored_identities,
     stored_posting_keys,
 )
@@ -213,9 +213,10 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     like five having been found.
 
     **What counts as the same advert (T224, T225).** A *sibling* is another
-    stored offer with the same `advert_identity` (same URL) or the same
-    `posting_key` (same employer and title, different URL; see
-    `lifecycle.posting_key` for the fields and why only those). A sibling holds
+    stored offer in the same connected component (`lifecycle.advert_components`):
+    linked by the same `advert_identity` (same URL) or the same `posting_key`
+    (same employer and title; see `lifecycle.posting_key`), directly or through
+    a chain of such links. A sibling holds
     an offer back when it is ruled out (`screened_out`/`rejected`), or when it
     was already shown through `present()` and this offer was not. Withheld rows
     from a sibling carry its id in `Withheld.sibling`.
@@ -229,11 +230,12 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     identities = stored_identities(store)
     keys = stored_posting_keys(store)
     presented = _presented_ids(store)
-    shown_by_identity: dict[str, str] = {}
-    shown_by_key: dict[str, str] = {}
+    components = advert_components(identities, keys)
+    shown_by_component: dict[tuple[str, ...], str] = {}
     for offer_id in offer_ids:
         loaded = _loaded(store, offer_id)
-        siblings = siblings_among(identities, keys, offer_id)
+        component = components.get(offer_id, ())
+        siblings = [i for i in component if i != offer_id]
         # T224. A rule-out recorded against one stored copy of an advert covers
         # every other copy: the offer id hashes text, which a list row changes on
         # every search, so the same advert was stored under several ids and only
@@ -255,11 +257,7 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
             if offer_id in presented
             else next((copy for copy in siblings if copy in presented), None)
         )
-        identity = identities.get(offer_id)
-        key = keys.get(offer_id)
-        in_batch = (shown_by_identity.get(identity) if identity is not None else None) or (
-            shown_by_key.get(key) if key is not None else None
-        )
+        in_batch = shown_by_component.get(component) if component else None
         if loaded is not None and loaded[0].status in _RULED_OUT:
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
         elif ruled_copy is not None:
@@ -275,10 +273,8 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
             held.append(Withheld(offer_id, f"es de un tema que descartaste ({', '.join(topics)})"))
         else:
             show.append(offer_id)
-            if identity is not None:
-                shown_by_identity[identity] = offer_id
-            if key is not None:
-                shown_by_key[key] = offer_id
+            if component:
+                shown_by_component[component] = offer_id
     return show, held
 
 

@@ -236,3 +236,91 @@ def test_the_report_names_the_reason_and_the_count(store: ProfileStore) -> None:
     assert (
         withheld_line(partition(store, [other])[1]) == "1 descartada(s): 1 porque «no es mi perfil»"
     )
+
+
+# --- chains: the same advert reached in more than one step -------------------
+
+
+def _chain(store: ProfileStore) -> tuple[str, str, str]:
+    """A~B share a canonical URL, B~C share employer and title, A and C share
+    neither: C is the same advert as A only through B."""
+    a = _save(store, "a", url="https://a.example/jobs/1?utm_source=x", title="Role A", company="Co")
+    b = _save(store, "b", url="https://a.example/jobs/1?utm_source=y", title="Role B", company="Co")
+    c = _save(store, "c", url="https://c.example/ofertas/7", title="Role B", company="Co")
+    return a, b, c
+
+
+def test_the_chain_is_really_two_steps(store: ProfileStore) -> None:
+    from integral.lifecycle import stored_identities, stored_posting_keys
+
+    a, b, c = _chain(store)
+    ids, keys = stored_identities(store), stored_posting_keys(store)
+    assert ids[a] == ids[b] != ids[c]
+    assert keys[b] == keys[c] != keys[a]
+
+
+@pytest.mark.parametrize("ruled_index", [0, 1, 2])
+def test_a_rule_out_reaches_every_copy_of_a_chain(store: ProfileStore, ruled_index: int) -> None:
+    chain = _chain(store)
+    ruled = chain[ruled_index]
+    rule_out(store, ruled, "no", at=_AT)
+    others = [i for i in chain if i != ruled]
+    kept, held = partition(store, others)
+    assert kept == []
+    assert [h.offer_id for h in held] == others
+    assert all(h.sibling is not None for h in held)
+
+
+@pytest.mark.parametrize("shown_index", [0, 1, 2])
+def test_a_shown_copy_reaches_every_other_copy_of_a_chain(
+    store: ProfileStore, shown_index: int
+) -> None:
+    chain = _chain(store)
+    present(store, [chain[shown_index]], at=_AT)
+    others = [i for i in chain if i != chain[shown_index]]
+    kept, held = partition(store, others)
+    assert kept == []
+    assert [h.offer_id for h in held] == others
+
+
+def test_two_ends_of_a_chain_are_one_advert_shown_once(store: ProfileStore) -> None:
+    # c is linked to a only through b, which is not in the batch.
+    a, _b, c = _chain(store)
+    kept, held = partition(store, [a, c])
+    assert kept == [a]
+    assert [(h.offer_id, h.sibling) for h in held] == [(c, a)]
+
+
+def test_a_chain_of_three_is_one_advert_in_a_full_batch(store: ProfileStore) -> None:
+    a, b, c = _chain(store)
+    kept, held = partition(store, [a, b, c])
+    assert kept == [a]
+    assert [h.offer_id for h in held] == [b, c]
+
+
+def test_a_chain_does_not_swallow_an_unrelated_advert(store: ProfileStore) -> None:
+    a, _b, c = _chain(store)
+    other = _save(store, "z", url="https://z.example/jobs/9", title="Role Z", company="Other")
+    rule_out(store, a, "no", at=_AT)
+    kept, held = partition(store, [c, other])
+    assert kept == [other]
+    assert [h.offer_id for h in held] == [c]
+
+
+# --- invisible characters ------------------------------------------------------
+
+
+@pytest.mark.parametrize("invisible", ["​", "‌", "‍", "﻿", "­", "⁠"])
+def test_an_invisible_character_does_not_make_a_different_advert(
+    store: ProfileStore, invisible: str
+) -> None:
+    ruled, other = _pair(
+        store, title=f"Back{invisible}end engineer", company=f"{invisible}ACME{invisible}"
+    )
+    rule_out(store, ruled, "no", at=_AT)
+    assert [h.sibling for h in partition(store, [other])[1]] == [ruled]
+
+
+def test_a_title_of_only_invisible_characters_is_blank() -> None:
+    assert posting_key("​﻿", "ACME") is None
+    assert posting_key("Backend engineer", "​") is None
