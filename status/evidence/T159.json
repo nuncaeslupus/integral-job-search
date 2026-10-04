@@ -513,6 +513,8 @@
     "pay_normalise.MINIMUM_REFUSAL_STATES",
     "photo_extract.MIN_SHORT_SIDE",
     "photo_extract._TIMEOUT_SECONDS",
+    "plan_milestones.MINIMUM_MERGED_RESOLVED",
+    "plan_milestones.MINIMUM_ROW_LABELS",
     "plan_v2.MINIMUM_BOARD_SIZE",
     "plan_v2.MINIMUM_MERGED_TASKS",
     "presentation.DEFAULT_LIMIT",

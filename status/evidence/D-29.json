@@ -1,0 +1,11 @@
+{
+  "milestone_row_membership_violations": 0,
+  "gate_status": "measured",
+  "merged_still_listed": [],
+  "listed_without_a_task": [],
+  "open_but_unlisted": [],
+  "open_but_listed_more_than_once": [],
+  "violations": [],
+  "merged_tasks_resolved_at_least": 100,
+  "milestone_labels_scanned_at_least": 20
+}
