@@ -143,7 +143,7 @@ class _References(HTMLParser):
         self._style = tag == "style"
         if tag in ("link", "base"):
             self.found.append(f"<{tag}>")
-        if tag == "meta" and dict(attrs).get("http-equiv", "").strip().lower() == "refresh":
+        if tag == "meta" and (dict(attrs).get("http-equiv") or "").strip().lower() == "refresh":
             self.found.append("<meta http-equiv=refresh>")
         for name, value in attrs:
             value = (value or "").strip()
