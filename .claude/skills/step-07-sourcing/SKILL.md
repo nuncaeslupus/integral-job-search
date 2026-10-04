@@ -127,7 +127,7 @@ this order, and do it yourself rather than asking the candidate for synonyms:
 2. **Run the queries in parallel**, one per expanded term, not one after another.
 3. **Union the results** and dedupe by advert before anything is judged.
 4. **Only then apply the `## Liveness` check and the candidate's eligibility constraints
-   (residence, pay floor, mobility, permits) to the whole union.** Never to one query's results. Most of a union is
+   (residence, pay floor, mobility, permits) and the topics they ruled out in their own words (`search/exclusions.json`) to the whole union.** Never to one query's results. Most of a union is
    dead (410) or restricted to one country, so a filter applied per query, or skipped for the
    queries that looked good, shows the candidate adverts nobody confirmed.
 

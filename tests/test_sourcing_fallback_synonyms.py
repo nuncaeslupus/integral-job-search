@@ -12,6 +12,23 @@ import re
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1] / ".claude/skills/step-07-sourcing/SKILL.md"
+EXPECTED_SECTION = (
+    "### Fallback search — expand, run in parallel, union, then filter A single query only "
+    "finds the adverts that use that one phrase. When the fallback runs, do it in this "
+    "order, and do it yourself rather than asking the candidate for synonyms: 1. **Expand "
+    "the terms into synonyms.** Turn the candidate's target role into every title the "
+    'field uses for it ("AI engineer" also reads "LLM engineer", "prompt engineer", '
+    '"context engineer", "agentic engineer"), plus the market\'s own language. 2. **Run the '
+    "queries in parallel**, one per expanded term, not one after another. 3. **Union the "
+    "results** and dedupe by advert before anything is judged. 4. **Only then apply the "
+    "`## Liveness` check and the candidate's eligibility constraints (residence, pay "
+    "floor, mobility, permits) and the topics they ruled out in their own words "
+    "(`search/exclusions.json`) to the whole union.** Never to one query's results. Most "
+    "of a union is dead (410) or restricted to one country, so a filter applied per query, "
+    "or skipped for the queries that looked good, shows the candidate adverts nobody "
+    "confirmed. The disclosure above and the `source: web_search` label apply to every "
+    "result in the union."
+)
 HEADING = re.compile(r"^### Fallback search\b.*$", re.M)
 
 
@@ -70,3 +87,17 @@ def test_disclosure_and_label_apply_to_the_union() -> None:
         "in the union."
     )
     assert sentence in _flat()
+
+
+def test_exclusions_apply_to_the_union() -> None:
+    assert (
+        "and the topics they ruled out in their own words (`search/exclusions.json`) "
+        "to the whole union." in _flat()
+    )
+
+
+def test_whole_section_equals_the_committed_literal() -> None:
+    """Closed rule: nothing may be added, wrapped, negated or narrowed around the clauses."""
+    heading = HEADING.search(SKILL.read_text(encoding="utf-8"))
+    assert heading
+    assert f"{heading.group(0)} {_flat()}" == EXPECTED_SECTION
