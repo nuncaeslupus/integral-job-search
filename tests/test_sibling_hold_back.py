@@ -22,7 +22,15 @@ from integral.feedback import record_decision
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import posting_key, save_lifecycle_offer, track_new_offer
 from integral.offers import Offer, compute_offer_id
-from integral.presentation_log import Withheld, partition, present, rule_out, withheld_line
+from integral.presentation_log import (
+    REASON_APPLIED,
+    REASON_SHORTLISTED,
+    Withheld,
+    partition,
+    present,
+    rule_out,
+    withheld_line,
+)
 
 _AT = "2026-01-01T00:00:00+00:00"
 
@@ -184,7 +192,6 @@ def test_case_and_whitespace_do_not_make_a_different_advert(
         ("Backend", "ACME"),
         ("Backend engineers", "ACME"),
         ("Backend engineer", "ACME Labs"),
-        ("Backend-engineer", "ACME"),
     ],
 )
 def test_near_misses_are_not_merged(store: ProfileStore, title: str, company: str) -> None:
@@ -198,15 +205,20 @@ def test_near_misses_are_not_merged(store: ProfileStore, title: str, company: st
 
 
 @pytest.mark.parametrize("status", ["shortlisted", "applied"])
-def test_a_sibling_the_candidate_is_pursuing_does_not_hold_back_by_status(
+def test_a_sibling_the_candidate_is_pursuing_holds_back_by_status(
     store: ProfileStore, status: str
 ) -> None:
-    # Not ruled out and not presented: nothing here says the candidate has seen the copy.
+    # T250 reverses T225 here: a copy shortlisted or applied to is a vacancy the
+    # candidate has already acted on, shown or not (an application can be made
+    # outside the tool, so no `present()` row need exist).
     chosen, other = _pair(store)
     record_decision(store, chosen, "shortlisted", at=_AT, reason=None)
     if status == "applied":
         record_decision(store, chosen, "applied", at=_AT, reason=None)
-    assert partition(store, [other]) == ([other], [])
+    held = partition(store, [other])[1]
+    assert [(h.reason, h.sibling) for h in held] == [
+        (REASON_APPLIED if status == "applied" else REASON_SHORTLISTED, chosen)
+    ]
 
 
 # --- the same advert in one batch ---------------------------------------------

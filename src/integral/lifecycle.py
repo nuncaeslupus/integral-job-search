@@ -628,6 +628,18 @@ def purge_batch(
 _IDENTITY_CACHE: dict[Path, dict[str, tuple[tuple[int, int], tuple[str | None, str | None]]]] = {}
 
 
+def normalise_name(value: str | None) -> str:
+    """NFKC, drop invisible format characters (category `Cf`: zero-width
+    space/joiners, BOM, soft hyphen, ...), casefold, collapse whitespace.
+
+    The one normalisation every employer/title comparison starts from
+    (`posting_key`, T250's fuzzy match), so they cannot disagree on what a
+    name is."""
+    text = unicodedata.normalize("NFKC", value or "")
+    text = "".join(c for c in text if unicodedata.category(c) != "Cf")
+    return " ".join(text.casefold().split())
+
+
 def posting_key(title: str | None, company: str | None) -> str | None:
     """T225. The key under which two copies with different URLs are one advert.
 
@@ -647,14 +659,7 @@ def posting_key(title: str | None, company: str | None) -> str | None:
     and `None` matches nothing — not even another `None`.
     """
 
-    def norm(value: str | None) -> str:
-        # Format characters (category Cf: zero-width space/joiners, BOM, soft
-        # hyphen, ...) are invisible, so a copy carrying one is the same advert.
-        text = unicodedata.normalize("NFKC", value or "")
-        text = "".join(c for c in text if unicodedata.category(c) != "Cf")
-        return " ".join(text.casefold().split())
-
-    employer, role = norm(company), norm(title)
+    employer, role = normalise_name(company), normalise_name(title)
     if not employer or not role:
         return None
     return json.dumps([employer, role], ensure_ascii=False)

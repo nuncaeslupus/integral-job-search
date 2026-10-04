@@ -158,11 +158,13 @@ Showing a batch is itself a fact, and it is the one that later turns into a
 question worth asking. Two calls, around the list:
 
 ```python
-from integral.presentation_log import partition, present, withheld_line
+from integral.presentation_log import partition, present, unchecked_line, withheld_line
 
 show, held = partition(store, ranked_ids)      # never `show` alone
 present(store, show, at=now, phrase=phrase)
 ```
+
+`partition` also withholds the same vacancy under another board's wording (same employer, similar title) when a copy was ever shown, shortlisted, applied to, rejected or archived after any of those. Each kind is its own reason in `withheld_line`. An offer with no employer cannot be compared and is shown: say so with `unchecked_line(store, show)` (empty when there is none).
 
 `partition` also withholds any stored offer on a topic the candidate ruled out (`search/exclusions.json`), including offers stored before they said it.
 
