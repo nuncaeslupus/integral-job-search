@@ -891,6 +891,7 @@ def source(
     browser: Fetch | None = None,
     offset: int = 0,
     already_added: int = 0,
+    refused_origins: dict[str, str] | None = None,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -916,7 +917,19 @@ def source(
 
     `already_added` (T251) is how many offers earlier windows of the same run
     already wrote, so `OFFER_CEILING` stays one ceiling for the whole run;
-    `source_every_phrase` is the caller that sets it.
+    `source_every_phrase` is the caller that sets it. `refused_origins` is the
+    same idea for T174's refusal map: a host's refusal is its answer for the
+    whole run, so a caller running several windows hands one dict through them.
+
+    A board that takes no query is asked once per run, at `offset == 0`, and its
+    rows are filtered against the **whole** aim: asking it again per window is
+    the same request for the same answer, and filtering each time against that
+    window's six phrases would call a row that matched in window 0 a row that
+    "matched none of your phrases".
+
+    When the offer ceiling fills partway through a window, the phrases of that
+    window it never sent come back in `unsearched` and `next_offset` is **this**
+    window's offset: resuming past it would skip them.
     """
     from integral.search_terms import save_aim  # circular at module scope
 
@@ -957,7 +970,7 @@ def source(
     exclusions = load_exclusions(store)
     # T174: shared by every board and phrase, so a host's refusal is its
     # answer for the rest of the run rather than for one request.
-    refused_origins: dict[str, str] = {}
+    refused_origins = {} if refused_origins is None else refused_origins
     for package in packages_for(constraints, directory):
         # A board that does not search returns the same list whatever was
         # asked, so asking it once per phrase is N identical requests for one
@@ -968,6 +981,8 @@ def source(
             steerable = accepts_query(_connector_of(package, directory))
         except (ConnectorError, OSError):
             steerable = False
+        if offset and not (steerable and phrases):
+            continue  # asked, and filtered against the whole aim, at offset 0
         queries: tuple[str | None, ...] = phrases if steerable and phrases else (None,)
         for query in queries:
             room = OFFER_CEILING - already_added - run.added
@@ -986,13 +1001,25 @@ def source(
                     directory=directory,
                     page_count=page_count,
                     robots=adjudicator,
-                    phrases=phrases,
+                    phrases=phrases if steerable else aim.terms,
                     room=room,
                     browser=browser,
                     refused_origins=refused_origins,
                     exclusions=exclusions,
                 )
             )
+    # Phrases the ceiling stopped before they were sent to a board that takes a
+    # query. They sit inside this window, so the window — not the next one — is
+    # where a resumed run must start, and they are named rather than left only
+    # in the "NOT asked, after the ceiling" line.
+    cut = tuple(
+        dict.fromkeys(
+            o.query for o in run.outcomes if o.skipped == _CEILING_SKIP and o.query is not None
+        )
+    )
+    if cut:
+        run.unsearched = cut + run.unsearched
+        run.next_offset = offset
     return run
 
 
@@ -1017,12 +1044,25 @@ def source_every_phrase(
     """
     merged = Run()
     offset = 0
+    refused: dict[str, str] = {}
     while True:
-        run = source(store, constraints, aim, offset=offset, already_added=merged.added, **kwargs)
+        run = source(
+            store,
+            constraints,
+            aim,
+            offset=offset,
+            already_added=merged.added,
+            refused_origins=refused,
+            **kwargs,
+        )
         if offset == 0:
             merged.unreached = run.unreached
             merged.unreached_because = run.unreached_because
         merged.outcomes.extend(run.outcomes)
+        if run.next_offset == offset:  # the ceiling cut this window short
+            merged.unsearched = run.unsearched
+            merged.next_offset = offset
+            return merged
         offset += PHRASE_CEILING
         if offset >= len(aim.terms):
             return merged

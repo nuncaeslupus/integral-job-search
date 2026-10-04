@@ -260,6 +260,6 @@ def test_a_single_window_still_names_the_offset_that_continues_it(store: Profile
 def test_browser_boards_are_asked_for_every_term_too() -> None:
     aim = Aim(state="stated", terms=_terms(2 * PHRASE_CEILING + 1))
     urls = browser_urls_every_phrase(_spain(), aim, directory=_CONNECTORS, robots=_allow())
-    if urls:  # no steerable browser board installed -> nothing to compare
-        for term in aim.terms:
-            assert any(term in u for u in urls), term
+    assert urls, "no steerable browser board is installed, so this proves nothing"
+    for term in aim.terms:
+        assert any(term in u for u in urls), term
