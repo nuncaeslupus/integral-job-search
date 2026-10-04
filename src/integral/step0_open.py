@@ -45,13 +45,17 @@ from typing import Any
 
 from integral.identity import (
     Identity,
+    IdentityError,
+    ProfileLeak,
     ProfileStore,
     Resolution,
     create_profile,
     default_profiles_root,
+    list_identities,
     resolve_handle,
 )
-from integral.session import SessionStore, decide_resumption
+from integral.profile import ProfileError
+from integral.session import SessionError, SessionStore, decide_resumption
 from integral.step_runtime import ProfileView, look
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -64,7 +68,12 @@ MAX_SECONDS = 60.0
 #: How each kind of arrival is answered: the calls the skill tells a session to make.
 #: Each is pinned exactly — a ceiling alone (the plan's `<= 3`, asserted in the tests)
 #: would let one call split into two, or two into three, pass.
-EXPECTED_CALLS = {"names_themselves": 1, "only_profile_confirms": 2, "one_of_several": 2}
+EXPECTED_CALLS = {
+    "names_themselves": 1,
+    "only_profile_confirms": 2,
+    "one_of_several": 2,
+    "same_display_name": 2,
+}
 
 
 @dataclass(frozen=True)
@@ -110,7 +119,22 @@ def _ago(then: str | None, now: datetime) -> str | None:
 
 
 def _names(identities: tuple[Identity, ...]) -> str:
-    return ", ".join(identity.display_name for identity in identities)
+    """Display names; where two collide, each also carries its handle.
+
+    §6.1: two people who answer to one name are asked for something that tells
+    them apart. The handle is the identifier the candidate chose, so it is not
+    sensitive, and it is what `--handle` resolves on the next call.
+    """
+    counts: dict[str, int] = {}
+    for identity in identities:
+        key = identity.display_name.casefold()
+        counts[key] = counts.get(key, 0) + 1
+    return ", ".join(
+        f"{identity.display_name} ({identity.handle})"
+        if counts[identity.display_name.casefold()] > 1
+        else identity.display_name
+        for identity in identities
+    )
 
 
 def _unresolved(resolution: Resolution) -> Opened:
@@ -123,6 +147,18 @@ def _unresolved(resolution: Resolution) -> Opened:
         outcome="create",
         say="I don't have a profile for you yet — what would you like to be called?",
     )
+
+
+def _unreadable_profiles(root: Path, readable: int) -> list[str]:
+    """Handles of profile directories the roster could not read (names only)."""
+    if not root.is_dir():
+        return []
+    found = [
+        child.name
+        for child in sorted(root.iterdir())
+        if not child.name.startswith(".") and not child.is_symlink() and child.is_dir()
+    ]
+    return found if len(found) > readable else []
 
 
 def run(
@@ -139,11 +175,28 @@ def run(
         root, named=handle, confirmed=confirmed, include_fiction=include_fiction
     )
     if not resolution.is_resolved or resolution.candidate is None:
+        known = list_identities(root, include_fiction=include_fiction)
+        broken = _unreadable_profiles(root, len(known))
+        if broken:
+            return Opened(
+                outcome="unreadable",
+                say=(
+                    "A profile on this machine could not be read "
+                    f"({', '.join(broken)}) — I can't tell who this is until that is looked at."
+                ),
+            )
         return _unresolved(resolution)
 
     store = resolution.store(root)
     sessions = SessionStore(store)
-    state = sessions.read()
+    try:
+        state = sessions.read()
+    except (SessionError, IdentityError, ProfileLeak, ProfileError):
+        return Opened(
+            outcome="unreadable",
+            say=f"The saved position for {resolution.handle} could not be read; nothing changed.",
+            handle=resolution.handle,
+        )
     resumption = decide_resumption(state)
     situation = look(ProfileView(store))
     previous = state.last_activity if state else None
@@ -195,12 +248,13 @@ def drive(
 def probe_calls() -> dict[str, Any]:
     """Calls and seconds for each way a returning candidate arrives."""
     now = datetime(2026, 10, 4, tzinfo=UTC)
-    people = (("marcos", "Marcos"), ("nuria", "Núria"))
+    people = (("marcos", "Marcos"), ("nuria", "Núria"), ("marcos-b", "Marcos"))
     # label -> (profiles that exist, first call's arguments, answers to questions asked)
     arrivals: dict[str, tuple[int, dict[str, Any], list[dict[str, Any]]]] = {
         "names_themselves": (1, {"handle": "marcos"}, []),
         "only_profile_confirms": (1, {}, [{"confirmed": True}]),
         "one_of_several": (2, {}, [{"handle": "marcos"}]),
+        "same_display_name": (2, {}, [{"handle": "marcos-b"}]),
     }
     calls: dict[str, int] = {}
     slowest = 0.0
@@ -208,7 +262,8 @@ def probe_calls() -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="integral-t207-") as tmp:
         for label, (count, first, answers) in arrivals.items():
             root = Path(tmp) / label / "profiles"
-            for handle, display in people[:count]:
+            roster = (people[0], people[2]) if label == "same_display_name" else people[:count]
+            for handle, display in roster:
                 create_profile(root, display, language="en", handle=handle)
                 SessionStore(ProfileStore(root, handle)).record(
                     at="2026-09-13T09:00:00+00:00", current_step="history"
@@ -250,9 +305,17 @@ def _main(argv: list[str]) -> int:
         parser.add_argument("--handle", help="a handle or display name the candidate gave")
         parser.add_argument("--confirmed", action="store_true", help="the candidate said yes")
         parser.add_argument("--root", type=Path, help="profiles root (default: $INTEGRAL_HOME)")
+        parser.add_argument(
+            "--include-fiction", action="store_true", help="test mode: reach simulated candidates"
+        )
         args = parser.parse_args(argv[2:])
         root = args.root or default_profiles_root()
-        opened = run(root, handle=args.handle, confirmed=args.confirmed)
+        opened = run(
+            root,
+            handle=args.handle,
+            confirmed=args.confirmed,
+            include_fiction=args.include_fiction,
+        )
         print(json.dumps(opened.as_json(), ensure_ascii=False))
         return 0
 

@@ -61,6 +61,67 @@ def test_nothing_inside_a_profile_is_read_or_written_before_a_handle_resolves(
     assert first.path("session", "state.json").read_bytes() == before
 
 
+def test_a_sole_profile_offered_for_confirmation_reveals_nothing_from_inside_it(
+    tmp_path: Path,
+) -> None:
+    """The confirm path: the one arrival where a profile's contents could reach someone
+    who has not yet said they are that person."""
+    root = tmp_path / "profiles"
+    store = _profile(root, "marcos", "Marcos", stamp="2026-01-01T00:00:00+00:00")
+    before = store.path("session", "state.json").read_bytes()
+    result = run(root, now=NOW)
+    said = json.dumps(result.as_json())
+    assert result.outcome == "confirm"
+    assert "2026-01-01" not in said and "history" not in said
+    assert store.path("session", "state.json").read_bytes() == before
+
+
+def test_two_profiles_with_one_display_name_are_told_apart_by_handle(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos-a", "Marcos")
+    _profile(root, "marcos-b", "Marcos")
+    said = run(root, now=NOW).say
+    assert "Marcos (marcos-a)" in said and "Marcos (marcos-b)" in said
+    assert drive(root, [{"handle": "marcos-b"}], NOW)[1].handle == "marcos-b"
+
+
+def test_distinct_names_are_not_cluttered_with_handles(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    _profile(root, "nuria", "Núria")
+    assert "(" not in run(root, now=NOW).say
+
+
+def test_a_simulated_candidate_is_reachable_only_when_asked_for(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada", language="en", handle="ada", fiction=True)
+    assert step0_open._main(["x", "open", "--root", str(root), "--handle", "ada"]) == 0
+    assert json.loads(capsys.readouterr().out)["outcome"] != "opened"
+    args = ["x", "open", "--root", str(root), "--handle", "ada", "--include-fiction"]
+    assert step0_open._main(args) == 0
+    assert json.loads(capsys.readouterr().out)["outcome"] == "opened"
+
+
+def test_a_corrupt_state_file_is_reported_not_raised_and_left_alone(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    store = _profile(root, "marcos", "Marcos")
+    store.path("session", "state.json").write_text("{not json", encoding="utf-8")
+    result = run(root, handle="marcos", now=NOW)
+    assert result.outcome == "unreadable" and result.handle == "marcos"
+    assert store.path("session", "state.json").read_text(encoding="utf-8") == "{not json"
+
+
+def test_a_corrupt_identity_is_never_reported_as_no_profile(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    store = _profile(root, "marcos", "Marcos")
+    store.path("identity.json").write_text("{not json", encoding="utf-8")
+    result = run(root, now=NOW)
+    assert result.outcome == "unreadable" and "marcos" in result.say
+    assert "don't have a profile" not in result.say
+
+
 def test_a_sole_profile_is_offered_and_never_assumed(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     store = _profile(root, "marcos", "Marcos")
@@ -119,15 +180,19 @@ def test_the_command_line_prints_one_json_opening(
 
 
 def test_the_bare_command_measures_and_never_opens_a_profile(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`make evidence` runs every module bare; that run must not touch a real profile."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("INTEGRAL_HOME", str(home))
     target = tmp_path / "T207.json"
     assert step0_open._main(["x", str(target)]) == 0
     written = json.loads(target.read_text(encoding="utf-8"))
     assert written["scenario_calls"] == EXPECTED_CALLS
     assert written["step0_calls_before_profile_read"] <= 3
     assert "slowest_seconds" not in written  # a timing would drift on every run
+    assert list(home.rglob("*")) == [], "the evidence run wrote under the candidate store"
 
 
 def test_the_skill_names_the_command_and_refuses_the_hand_walk() -> None:
@@ -135,3 +200,11 @@ def test_the_skill_names_the_command_and_refuses_the_hand_walk() -> None:
     text = SKILL.read_text(encoding="utf-8")
     assert "integral.step0_open open" in text
     assert "never by walking `profiles/` by hand" in text
+
+
+def test_the_skill_does_not_ask_for_a_second_call_to_build_the_opening() -> None:
+    """The metric counts the tool's calls; the skill must not add one the evidence cannot see."""
+    text = SKILL.read_text(encoding="utf-8")
+    assert "it is the only call step 0 makes" in text
+    assert "with no further file reads" in text
+    assert "--include-fiction" in text

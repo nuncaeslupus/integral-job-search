@@ -2,7 +2,8 @@
   "scenario_calls": {
     "names_themselves": 1,
     "only_profile_confirms": 2,
-    "one_of_several": 2
+    "one_of_several": 2,
+    "same_display_name": 2
   },
   "step0_calls_before_profile_read": 2,
   "failures": []
