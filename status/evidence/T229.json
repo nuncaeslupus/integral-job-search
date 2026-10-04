@@ -1,0 +1,11 @@
+{
+  "status": "measured",
+  "adverts_requiring_a_ruled_out_skill_presented": 0,
+  "adverts_not_requiring_a_ruled_out_skill_held": 0,
+  "pending_adverts_held": 0,
+  "stored_corpus_status": "unmeasured",
+  "stored_corpus_adverts_requiring_a_ruled_out_skill_presented": -1,
+  "stored_corpus_note": "no stored extraction carries `skills` yet; the model's reading of an advert is the one thing this repository cannot measure",
+  "requiring_cases_at_least": 10,
+  "not_requiring_cases_at_least": 50
+}

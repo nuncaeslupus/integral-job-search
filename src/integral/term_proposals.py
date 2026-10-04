@@ -183,7 +183,7 @@ def propose(store: ProfileStore, offer_ids: set[str] | None = None) -> list[Prop
     exclusions = load_exclusions(store)
     groups: dict[frozenset[str], list[tuple[str, str, str]]] = {}
     for offer in _offers(store, ids):
-        if ruled_out_by(candidate_of(offer["offer"]), exclusions):
+        if ruled_out_by(candidate_of(offer["offer"], store), exclusions):
             continue
         phrase = clean_title(offer["title"])
         key = _key(phrase)

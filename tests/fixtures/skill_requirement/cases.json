@@ -4,734 +4,1693 @@
   "title": "Backend Engineer",
   "text": "Requirements:\n- 3+ years of experience with Go\n- PostgreSQL",
   "requires": true,
-  "note": "required list"
+  "note": "required list",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "E2",
   "title": "Backend Engineer",
   "text": "Requirements: Experience with Java, Go or Python.",
   "requires": false,
-  "note": "option among several"
+  "note": "option among several",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E3",
   "title": "Backend Engineer",
   "text": "Nice to have: Go",
   "requires": false,
-  "note": "nice to have"
+  "note": "nice to have",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E4",
   "title": "Backend Engineer",
   "text": "Bonus points for Go experience.",
   "requires": false,
-  "note": "bonus"
+  "note": "bonus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E5",
   "title": "Backend Engineer",
   "text": "Requirements:\n- Python\n\nNice to have:\n- Go\n- Rust",
   "requires": false,
-  "note": "section scope"
+  "note": "section scope",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E6",
   "title": "Backend Engineer",
   "text": "Nice to have:\n- Kafka\n\nRequirements:\n- Go",
   "requires": true,
-  "note": "section scope reversed"
+  "note": "section scope reversed",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "E7",
   "title": "Backend Engineer",
   "text": "We go the extra mile. Requirements: Python.",
   "requires": false,
-  "note": "verb lower"
+  "note": "verb lower",
+  "extracted": []
  },
  {
   "id": "E8",
   "title": "Backend Engineer",
   "text": "Strong experience in Go/Rust.",
   "requires": false,
-  "note": "slash alternative"
+  "note": "slash alternative",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E9",
   "title": "Backend Engineer",
   "text": "Experience with Go is a plus.",
   "requires": false,
-  "note": "plus"
+  "note": "plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E10",
   "title": "Backend Engineer",
   "text": "Go experience is not required; we will teach you.",
   "requires": false,
-  "note": "negation"
+  "note": "negation",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E11",
   "title": "Backend Engineer",
   "text": "Experience with a modern language such as Go, Rust or Kotlin.",
   "requires": false,
-  "note": "example"
+  "note": "example",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E12",
   "title": "Backend Engineer",
   "text": "Preferred qualifications:\n- Go",
   "requires": false,
-  "note": "preferred heading"
+  "note": "preferred heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E13",
   "title": "Backend Engineer",
   "text": "Requirements: Go and Python.",
   "requires": true,
-  "note": "conjunction"
+  "note": "conjunction",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "E14",
   "title": "Backend Engineer",
   "text": "Proficiency in Go or a similar language.",
   "requires": false,
-  "note": "or similar"
+  "note": "or similar",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E15",
   "title": "Golang Developer",
   "text": "You will build microservices.",
   "requires": true,
-  "note": "title"
+  "note": "title",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "E16",
   "title": "Backend Engineer",
   "text": "No prior Go experience needed - we will train you.",
   "requires": false,
-  "note": "negation 2"
+  "note": "negation 2",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E17",
   "title": "Backend Engineer",
   "text": "About us: our platform is built in Go and Kubernetes.\n\nRequirements:\n- Python\n- SQL",
   "requires": false,
-  "note": "company stack mention only"
+  "note": "company stack mention only",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E18",
   "title": "Backend Engineer",
   "text": "Benefits:\n- Training budget to learn Go\n\nRequirements:\n- Python",
   "requires": false,
-  "note": "benefit mention"
+  "note": "benefit mention",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E19",
   "title": "Backend Engineer",
   "text": "Requirements:\n- Python\n\nWhat we offer:\n- A chance to learn Go",
   "requires": false,
-  "note": "offer mention"
+  "note": "offer mention",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E20",
   "title": "Backend Engineer",
   "text": "Ready to Go? Apply now! Requirements: Python.",
   "requires": false,
-  "note": "verb Go?"
+  "note": "verb Go?",
+  "extracted": []
  },
  {
   "id": "E21",
   "title": "Backend Engineer",
   "text": "Responsibilities:\n- Go above and beyond for our customers\nRequirements:\n- Python",
   "requires": false,
-  "note": "verb in bullet"
+  "note": "verb in bullet",
+  "extracted": []
  },
  {
   "id": "E22",
   "title": "Backend Engineer",
   "text": "Familiarity with Go would be beneficial.",
   "requires": false,
-  "note": "beneficial"
+  "note": "beneficial",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E23",
   "title": "Backend Engineer",
   "text": "Any experience with Go is welcome but not essential.",
   "requires": false,
-  "note": "welcome but not essential"
+  "note": "welcome but not essential",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E24",
   "title": "Backend Engineer",
   "text": "You don't need to know Go.",
   "requires": false,
-  "note": "don't need"
+  "note": "don't need",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E25",
   "title": "Backend Engineer",
   "text": "Willingness to learn Go.",
   "requires": false,
-  "note": "willing to learn"
+  "note": "willing to learn",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E26",
   "title": "Backend Engineer",
   "text": "Experience in at least one of the following: Python, Java, Go.",
   "requires": false,
-  "note": "at least one of"
+  "note": "at least one of",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E27",
   "title": "Backend Engineer",
   "text": "Go is required and Python is a plus.",
   "requires": true,
-  "note": "required + other plus"
+  "note": "required + other plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "E28",
   "title": "Backend Engineer",
   "text": "Requirements:\n- Python, Java or Go",
   "requires": false,
-  "note": "bullet alternatives"
+  "note": "bullet alternatives",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E29",
   "title": "Backend Engineer",
   "text": "Experience with Django and MongoDB. Google Cloud.",
   "requires": false,
-  "note": "substrings"
+  "note": "substrings",
+  "extracted": []
  },
  {
   "id": "E30",
   "title": "Backend Engineer",
   "text": "Go to market experience required.",
   "requires": false,
-  "note": "go to"
+  "note": "go to",
+  "extracted": []
  },
  {
   "id": "E31",
   "title": "Backend Engineer",
   "text": "Experience in Go, or any other backend language.",
   "requires": false,
-  "note": "or any other"
+  "note": "or any other",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E32",
   "title": "Backend Engineer",
   "text": "Go knowledge is optional.",
   "requires": false,
-  "note": "optional"
+  "note": "optional",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "E33",
   "title": "Backend Engineer",
   "text": "Go preferred.",
   "requires": false,
-  "note": "preferred"
+  "note": "preferred",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E34",
   "title": "Backend Engineer",
   "text": "Python (Go is a plus).",
   "requires": false,
-  "note": "paren plus"
+  "note": "paren plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E35",
   "title": "Backend Engineer",
   "text": "Must have:\n- Golang",
   "requires": true,
-  "note": "must have"
+  "note": "must have",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "E36",
   "title": "Backend Engineer",
   "text": "Python, Go or similar.",
   "requires": false,
-  "note": "or similar"
+  "note": "or similar",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E37",
   "title": "Backend Engineer",
   "text": "Experience with Go would be a big advantage.",
   "requires": false,
-  "note": "big advantage"
+  "note": "big advantage",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E38",
   "title": "Backend Engineer",
   "text": "Ideally you have used Go.",
   "requires": false,
-  "note": "ideally"
+  "note": "ideally",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E39",
   "title": "Backend Engineer",
   "text": "It's a plus if you know Go.",
   "requires": false,
-  "note": "plus if"
+  "note": "plus if",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E40",
   "title": "Backend Engineer",
   "text": "Knowing Go is a strong plus.",
   "requires": false,
-  "note": "strong plus"
+  "note": "strong plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E41",
   "title": "Backend Engineer",
   "text": "Go would be nice.",
   "requires": false,
-  "note": "would be nice"
+  "note": "would be nice",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E42",
   "title": "Backend Engineer",
   "text": "Experience with Go is a huge plus.",
   "requires": false,
-  "note": "huge plus"
+  "note": "huge plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E43",
   "title": "Backend Engineer",
   "text": "Extra credit: Go.",
   "requires": false,
-  "note": "extra credit"
+  "note": "extra credit",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E44",
   "title": "Backend Engineer",
   "text": "Good to have: Go",
   "requires": false,
-  "note": "good to have"
+  "note": "good to have",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E45",
   "title": "Backend Engineer",
   "text": "Not required but helpful: Go",
   "requires": false,
-  "note": "not required but helpful heading"
+  "note": "not required but helpful heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E46",
   "title": "Backend Engineer",
   "text": "Go (preferred) or Python.",
   "requires": false,
-  "note": "preferred paren"
+  "note": "preferred paren",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E47",
   "title": "Backend Engineer",
   "text": "Experience with Python. Go is a bonus.",
   "requires": false,
-  "note": "bonus sentence"
+  "note": "bonus sentence",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E48",
   "title": "Backend Engineer",
   "text": "Python; Go is nice-to-have",
   "requires": false,
-  "note": "semicolon"
+  "note": "semicolon",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "E49",
   "title": "Backend Engineer",
   "text": "Experience with Python and/or Go.",
   "requires": false,
-  "note": "and/or"
+  "note": "and/or",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "E50",
   "title": "Backend Engineer",
   "text": "Experience with Python, Java, Go, etc.",
   "requires": false,
-  "note": "etc list"
+  "note": "etc list",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "S1",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Experiencia con Go",
   "requires": true,
-  "note": "req"
+  "note": "req",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "S2",
   "title": "Desarrollador Backend",
   "text": "Se valora experiencia en Go.",
   "requires": false,
-  "note": "se valora"
+  "note": "se valora",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S3",
   "title": "Desarrollador Backend",
   "text": "Valorable: Go",
   "requires": false,
-  "note": "valorable"
+  "note": "valorable",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S4",
   "title": "Desarrollador Backend",
   "text": "Deseable: conocimientos de Go",
   "requires": false,
-  "note": "deseable"
+  "note": "deseable",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S5",
   "title": "Desarrollador Backend",
   "text": "Experiencia en Java, Go o Python.",
   "requires": false,
-  "note": "o"
+  "note": "o",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "S6",
   "title": "Desarrollador Backend",
   "text": "Imprescindible: Golang",
   "requires": true,
-  "note": "imprescindible"
+  "note": "imprescindible",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "S7",
   "title": "Desarrollador Backend",
   "text": "No es necesario saber Go.",
   "requires": false,
-  "note": "neg"
+  "note": "neg",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S8",
   "title": "Desarrollador Backend",
   "text": "Requisitos: Python. Se valorará positivamente Go.",
   "requires": false,
-  "note": "se valorara"
+  "note": "se valorara",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S9",
   "title": "Desarrollador Backend",
   "text": "Requisitos deseados:\n- Go",
   "requires": false,
-  "note": "deseados heading"
+  "note": "deseados heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S10",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nValorable:\n- Go",
   "requires": false,
-  "note": "section"
+  "note": "section",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S11",
   "title": "Desarrollador Backend",
   "text": "Será un plus conocer Go.",
   "requires": false,
-  "note": "un plus"
+  "note": "un plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S12",
   "title": "Desarrollador Backend",
   "text": "Experiencia con Go o Rust.",
   "requires": false,
-  "note": "o"
+  "note": "o",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "S13",
   "title": "Desarrollador Backend",
   "text": "Experiencia en Go (o similar).",
   "requires": false,
-  "note": "o similar"
+  "note": "o similar",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "S14",
   "title": "Desarrollador Backend",
   "text": "Conocimientos de Go/Python.",
   "requires": false,
-  "note": "slash"
+  "note": "slash",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "S15",
   "title": "Desarrollador Backend",
   "text": "No se requiere experiencia previa en Go.",
   "requires": false,
-  "note": "no se requiere"
+  "note": "no se requiere",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S16",
   "title": "Desarrollador Backend",
   "text": "¿Sin experiencia en Go? No pasa nada, te formamos.",
   "requires": false,
-  "note": "sin exp"
+  "note": "sin exp",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S17",
   "title": "Desarrollador Backend",
   "text": "Ofrecemos:\n- Formación en Go\nRequisitos:\n- Python",
   "requires": false,
-  "note": "ofrecemos"
+  "note": "ofrecemos",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S18",
   "title": "Desarrollador Backend",
   "text": "Nuestro stack: Go, Kafka, AWS.\nRequisitos:\n- Python",
   "requires": false,
-  "note": "stack mention"
+  "note": "stack mention",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S19",
   "title": "Desarrollador Backend",
   "text": "Requisitos: Go y Python.",
   "requires": true,
-  "note": "y"
+  "note": "y",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "S20",
   "title": "Desarrollador Backend",
   "text": "Se valorarán conocimientos en Go, Rust o Kotlin.",
   "requires": false,
-  "note": "valoraran"
+  "note": "valoraran",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S21",
   "title": "Desarrollador Backend",
   "text": "Puntos extra: Go",
   "requires": false,
-  "note": "puntos extra"
+  "note": "puntos extra",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S22",
   "title": "Desarrollador Backend",
   "text": "Es un plus: Go",
   "requires": false,
-  "note": "es un plus"
+  "note": "es un plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S23",
   "title": "Desarrollador Backend",
   "text": "Conocimientos de Go (valorable).",
   "requires": false,
-  "note": "paren valorable"
+  "note": "paren valorable",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S24",
   "title": "Desarrollador Backend",
   "text": "Se valorará experiencia con Kafka. Imprescindible Go.",
   "requires": true,
-  "note": "imprescindible after"
+  "note": "imprescindible after",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "S25",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nSe valorará:\n- Go\n- Rust",
   "requires": false,
-  "note": "se valorara heading"
+  "note": "se valorara heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S26",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nPlus:\n- Go",
   "requires": false,
-  "note": "Plus heading"
+  "note": "Plus heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S27",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nDeseables:\n- Go",
   "requires": false,
-  "note": "Deseables"
+  "note": "Deseables",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S28",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nNo imprescindible pero valorable:\n- Go",
   "requires": false,
-  "note": "no imprescindible heading"
+  "note": "no imprescindible heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S29",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nOtros conocimientos valorables:\n- Go",
   "requires": false,
-  "note": "valorables heading"
+  "note": "valorables heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S30",
   "title": "Desarrollador Backend",
   "text": "Lenguajes como Go, Rust o Python.",
   "requires": false,
-  "note": "como"
+  "note": "como",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
  },
  {
   "id": "S31",
   "title": "Desarrollador Backend",
   "text": "Aprenderás Go.",
   "requires": false,
-  "note": "learn"
+  "note": "learn",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S32",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nSi además conoces Go, ¡genial!",
   "requires": false,
-  "note": "si ademas"
+  "note": "si ademas",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
  },
  {
   "id": "S33",
   "title": "Desarrollador Backend",
   "text": "Requisitos:\n- Python\nPuntos a favor:\n- Go",
   "requires": false,
-  "note": "puntos a favor"
+  "note": "puntos a favor",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S34",
   "title": "Desarrollador Backend",
   "text": "Experiencia en Go valorable",
   "requires": false,
-  "note": "valorable after"
+  "note": "valorable after",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "S35",
   "title": "Desarrollador Backend",
   "text": "Experiencia con Go: valorable.",
   "requires": false,
-  "note": "valorable colon"
+  "note": "valorable colon",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "C1",
   "title": "Desenvolupador",
   "text": "Es valorarà Go.",
   "requires": false,
-  "note": "catalan"
+  "note": "catalan",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "C2",
   "title": "Desenvolupador",
   "text": "Requisits:\n- Go",
   "requires": true,
-  "note": "catalan req"
+  "note": "catalan req",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "C3",
   "title": "Desenvolupador",
   "text": "Requisits:\n- Python\nEs valorarà:\n- Go",
   "requires": false,
-  "note": "catalan heading"
+  "note": "catalan heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "C4",
   "title": "Desenvolupador",
   "text": "Es valorarà coneixement de Go.",
   "requires": false,
-  "note": "accented"
+  "note": "accented",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X2",
   "title": "Backend Engineer",
   "text": "requirements:\n- golang",
   "requires": true,
-  "note": "lowercase golang"
+  "note": "lowercase golang",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  },
  {
   "id": "X3",
   "title": "Backend Engineer",
   "text": "**Nice to have**\n- Go",
   "requires": false,
-  "note": "markdown heading"
+  "note": "markdown heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X4",
   "title": "Backend Engineer",
   "text": "### Nice to have\n- Go",
   "requires": false,
-  "note": "md h3"
+  "note": "md h3",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X5",
   "title": "Backend Engineer",
   "text": "NICE TO HAVE\n- Go",
   "requires": false,
-  "note": "caps heading"
+  "note": "caps heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X6",
   "title": "Backend Engineer",
   "text": "Nice to have\n\n- Go\n\n- Docker",
   "requires": false,
-  "note": "blank lines in section"
+  "note": "blank lines in section",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X7",
   "title": "Backend Engineer",
   "text": "Nice to have:\nGo, Docker",
   "requires": false,
-  "note": "unbulleted content after heading"
+  "note": "unbulleted content after heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X9",
   "title": "Backend Engineer",
   "text": "Bonus:\n- Go\nAbout you:\n- Curious",
   "requires": false,
-  "note": "section after bonus"
+  "note": "section after bonus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X10",
   "title": "Backend Engineer",
   "text": "Requirements:\n- Python\n\nBonus:\n\n  * Go",
   "requires": false,
-  "note": "indented bullet"
+  "note": "indented bullet",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X11",
   "title": "Backend Engineer",
   "text": "Nice to have:\n- Kubernetes\n- Experience with Go in production",
   "requires": false,
-  "note": "long bullet in nice section"
+  "note": "long bullet in nice section",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X12",
   "title": "Backend Engineer",
   "text": "Nice to have:\n- Go\nResponsibilities:\n- Build APIs",
   "requires": false,
-  "note": "go before responsibilities"
+  "note": "go before responsibilities",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X13",
   "title": "Backend Engineer",
   "text": "Pluses:\n- Go",
   "requires": false,
-  "note": "Pluses heading"
+  "note": "Pluses heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X14",
   "title": "Backend Engineer",
   "text": "Bonus points if you have:\n- Go",
   "requires": false,
-  "note": "bonus points if"
+  "note": "bonus points if",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X15",
   "title": "Backend Engineer",
   "text": "Even better if you have:\n- Go",
   "requires": false,
-  "note": "even better"
+  "note": "even better",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X16",
   "title": "Backend Engineer",
   "text": "Things that would make you stand out:\n- Go",
   "requires": false,
-  "note": "stand out"
+  "note": "stand out",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "X17",
   "title": "Backend Engineer",
   "text": "Requirements:\n- Python\nAdditional (not mandatory):\n- Go",
   "requires": false,
-  "note": "not mandatory heading"
+  "note": "not mandatory heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
  },
  {
   "id": "corpus:wwr-superplane-product-engineer-1",
   "title": "Product Engineer",
   "text": "Headquarters:\nUSA\n\nURL:\n\nhttps://superplane.com\n\nWe are hiring a product engineer to join SuperPlane and own meaningful projects end to end.\n\nThis is a remote role. We currently work across GMT+2 to GMT-3 and welcome candidates in that range.\n\nAt SuperPlane, we don't split engineering into frontend and backend. Everyone is a well-rounded builder who moves across the stack, makes product and technical calls, asks for help when needed, and delivers features from start to finish. You might spend one day building an API endpoint or workflow engine improvement, and the next day polishing a React surface that users touch every day.\n\nWe're looking for someone at a mid-level to senior level: you've shipped real products, you can work independently, and you're ready to grow fast in a high-trust, high-pace environment. You don't need to have done everything before, but you need to learn quickly and take ownership of what you build.\n\n\n\nWhat We Are Looking For\n\nYou are genuinely full-stack.\n\nYour workflow is AI-driven and you know how to stay fast without getting sloppy.\n\nYou have strong backend experience in a systems-oriented language. While we use Go, we don't expect you to be an expert already, just to ramp up fast.\n\nYou have solid systems judgment. APIs, data models, reliability, and trade-offs matter to you.\n\nYou're comfortable with TypeScript and React -- the modern frontend stack.\n\nYou are comfortable with cloud-native tooling and modern software delivery.\n\nYou want ownership, not a narrow lane.\n\nYou want an early-stage company where the pace is high, the standards are high, and the upside is big.\n\n\n\nHow To Apply\n\nWe care more about proof of work than polished applications, and we want to see how you show up in open source.\n\nBefore you apply, submit at least one pull request to superplanehq/superplane. It can be small and it does not need to be merged.\n\nWhen you apply, send your GitHub username and a link to your pull request. We verify both, and applications missing either field will not move forward.\n\n\n\nWhy You'll Love Working at SuperPlane\n\nBuild a frontier product used by engineers across the globe.\n\nMeaningful equity and real ownership.\n\nSmall team, fast feedback loops.\n\nRemote role that lets you focus and create.\n\nTo apply:\n\nhttps://weworkremotely.com/remote-jobs/superplane-product-engineer-1",
   "requires": false,
-  "note": "stored advert: 'While we use Go, we don't expect you to be an expert already'"
+  "note": "stored advert: 'While we use Go, we don't expect you to be an expert already'",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R1",
+  "title": "Backend Engineer",
+  "text": "You must be fluent in Python, and our backend team writes Go.",
+  "requires": false,
+  "note": "cue bound to another skill",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R2",
+  "title": "Backend Engineer",
+  "text": "Strong Python skills are essential for this role alongside our Go team.",
+  "requires": false,
+  "note": "cue bound to another skill",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R3",
+  "title": "Backend Engineer",
+  "text": "Imprescindible Python, el equipo también trabaja con Go.",
+  "requires": false,
+  "note": "cue bound to another skill, es",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R5",
+  "title": "Backend Engineer",
+  "text": "Necesitamos alguien con Python que colabore con el equipo de Go.",
+  "requires": false,
+  "note": "need bound to another skill, es",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R6",
+  "title": "Backend Engineer",
+  "text": "Python is required to work with our Go and Kafka services.",
+  "requires": false,
+  "note": "cue bound to another skill",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R8",
+  "title": "Backend Engineer",
+  "text": "We need someone who loves building products with a team that writes Go.",
+  "requires": false,
+  "note": "everyday need",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R10",
+  "title": "Backend Engineer",
+  "text": "Customers need fast APIs, which we build in Go.",
+  "requires": false,
+  "note": "everyday need, company stack",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R12",
+  "title": "Backend Engineer",
+  "text": "Built around our clients' needs, our platform runs on Go.",
+  "requires": false,
+  "note": "needs as a noun",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R13",
+  "title": "Backend Engineer",
+  "text": "Go is essential to our platform, but we will teach you.",
+  "requires": false,
+  "note": "learning wording beats the cue",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "optional"
+   }
+  ]
+ },
+ {
+  "id": "R15",
+  "title": "Ready to Go? Python Engineer",
+  "text": "Join us.",
+  "requires": false,
+  "note": "verb in title",
+  "extracted": []
+ },
+ {
+  "id": "R16",
+  "title": "Let's Go! Backend Engineer (Python)",
+  "text": "Join us.",
+  "requires": false,
+  "note": "verb in title",
+  "extracted": []
+ },
+ {
+  "id": "R18",
+  "title": "Backend Developer (Java/Go)",
+  "text": "Join us.",
+  "requires": false,
+  "note": "title option among several",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
+ },
+ {
+  "id": "R19",
+  "title": "Backend Engineer (Java or Go)",
+  "text": "Join us.",
+  "requires": false,
+  "note": "title option among several",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
+ },
+ {
+  "id": "R20",
+  "title": "Python Engineer (Go a plus)",
+  "text": "Join us.",
+  "requires": false,
+  "note": "title plus",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
+ },
+ {
+  "id": "R21",
+  "title": "Senior Backend Engineer - Python, Go nice to have",
+  "text": "Join us.",
+  "requires": false,
+  "note": "title nice to have",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
+ },
+ {
+  "id": "R22",
+  "title": "Backend Engineer",
+  "text": "Requisitos no excluyentes:\n- Go",
+  "requires": false,
+  "note": "plural softener heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
+ },
+ {
+  "id": "R23",
+  "title": "Backend Engineer",
+  "text": "Requisitos no imprescindibles:\n- Go",
+  "requires": false,
+  "note": "plural softener heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
+ },
+ {
+  "id": "R25",
+  "title": "Backend Engineer",
+  "text": "Requirements we'd love to see:\n- Go",
+  "requires": false,
+  "note": "soft wording under a requirements heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
+ },
+ {
+  "id": "R26",
+  "title": "Backend Engineer",
+  "text": "Extra qualifications:\n- Go",
+  "requires": false,
+  "note": "soft wording under a qualifications heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
+ },
+ {
+  "id": "R27",
+  "title": "Backend Engineer",
+  "text": "Qualifications that set you apart:\n- Go",
+  "requires": false,
+  "note": "soft wording under a qualifications heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "plus"
+   }
+  ]
+ },
+ {
+  "id": "R37",
+  "title": "Backend Engineer",
+  "text": "Requirements:\n- A compiled language (Go, Rust, C++)",
+  "requires": false,
+  "note": "examples under a requirements heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
+ },
+ {
+  "id": "R41",
+  "title": "Backend Engineer",
+  "text": "Requirements:\n- Any modern language: Go, Rust, Kotlin",
+  "requires": false,
+  "note": "one of several under a requirements heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "alternative"
+   }
+  ]
+ },
+ {
+  "id": "T1",
+  "title": "Desarrollador GO",
+  "text": "estamos buscando un Desarrollador Go con un mínimo de 3 años de experiencia. Que buscamos - Tres años de experiencia con Go",
+  "requires": true,
+  "note": "all-caps title, flattened heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
+ },
+ {
+  "id": "H1",
+  "title": "Backend Engineer",
+  "text": "Required skills:\n- 3+ years of Go",
+  "requires": true,
+  "note": "heading with the plain word required",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
+ },
+ {
+  "id": "H2",
+  "title": "Backend Engineer",
+  "text": "What you’ll need:\n- Go",
+  "requires": true,
+  "note": "curly apostrophe heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
+ },
+ {
+  "id": "H3",
+  "title": "Backend Engineer",
+  "text": "About you:\n- 4+ years of Go",
+  "requires": true,
+  "note": "candidate-facing heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
+ },
+ {
+  "id": "H4",
+  "title": "Ingeniero",
+  "text": "Perfil:\n- Experiencia en Go",
+  "requires": true,
+  "note": "perfil heading",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
+ },
+ {
+  "id": "H5",
+  "title": "Backend Engineer",
+  "text": "The ideal candidate has 4+ years of Go.",
+  "requires": true,
+  "note": "no heading, plain prose",
+  "extracted": [
+   {
+    "skill": "Go",
+    "role": "required"
+   }
+  ]
  }
 ]

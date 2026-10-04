@@ -61,7 +61,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from integral.dimensions import (
     DEFAULT_DIMENSIONS_DIR,
@@ -204,6 +204,38 @@ class DimensionScore(Strict):
     provenance: Provenance
 
 
+SkillRole = Literal["required", "optional", "alternative", "plus"]
+
+#: The roles a skill can have in an advert, as the step-8 model is told them.
+#: Only `required` can hold an advert for a `skill:<tech>` exclusion (T229).
+SKILL_ROLES: tuple[str, ...] = ("required", "optional", "alternative", "plus")
+
+
+class SkillReading(Strict):
+    """T229 — one skill an advert names, and how it holds the candidate to it.
+
+    Filled by the step-8 model **reading the advert**, never by a pattern: a
+    text match cannot tell "Go required" from "Go a plus", "Java, Go or Python"
+    or the verb. `skill` is the technology as the advert names it; `role` says
+    whether the advert requires it (`required`), only wants one of several
+    (`alternative`), calls it a plus or nice to have (`plus`), or otherwise
+    leaves it optional (`optional`: learning wording, a negated need, an
+    example, a stack the company uses). `span` is the advert's own words for
+    that reading, checked against the advert by `accept_skill_readings`.
+    """
+
+    skill: str = Field(min_length=1)
+    role: SkillRole
+    span: EvidenceSpan
+
+    @field_validator("skill")
+    @classmethod
+    def _skill_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("a skill reading must name a skill")
+        return value.strip()
+
+
 class NormalisedAd(Strict):
     """Stage 1 — one advert in the shape the later stages read.
 
@@ -235,6 +267,9 @@ class ModelRequest(Strict):
     language: Language
     text: str = Field(min_length=1)
     dimensions: list[str] = Field(default_factory=list)
+    #: T229. The model is also asked which skills the advert requires. An empty
+    #: `dimensions` no longer means the model need not be called while this is set.
+    read_skills: bool = True
 
 
 class OfferExtraction(Strict):
@@ -251,6 +286,11 @@ class OfferExtraction(Strict):
     # `ontology_hit_rate` reads these; an ontology that never learns what it is
     # missing cannot be told it is stale.
     unmapped_concepts: list[str] = Field(default_factory=list)
+    # T229. `None` = the model has not read this advert for skills yet (pending);
+    # `[]` = it read it and the advert names none. The two must never be merged:
+    # a `skill:` exclusion holds an advert only on a reading that lists the
+    # skill as `required`, and shows a pending one.
+    skills: list[SkillReading] | None = None
 
 
 def normalise(offer: Offer, *, default_language: Language = "es") -> NormalisedAd:
@@ -437,7 +477,7 @@ def unsettled_dimensions(dimensions: list[Dimension], scores: list[DimensionScor
 
 
 def model_request(ad: NormalisedAd, unsettled: list[str]) -> ModelRequest:
-    """Stage 3's input. Empty `dimensions` means the model need not be called."""
+    """Stage 3's input. The model is also asked for the advert's skills (T229)."""
     return ModelRequest(
         offer_id=ad.offer_id,
         language=ad.language,
@@ -487,12 +527,39 @@ def accept_model_scores(
     return accepted
 
 
+def accept_skill_readings(ad: NormalisedAd, proposed: list[SkillReading]) -> list[SkillReading]:
+    """Validate the model's skill readings before they become an extraction (T229).
+
+    Two refusals a schema cannot make: a span that is not what the advert says
+    at those offsets (an invented quote would put fabricated text in front of
+    the candidate as the employer's own words), and the same skill read in two
+    roles at once — "required" and "plus" for one skill leaves the extraction's
+    meaning to whichever copy a reader takes, and a hold must not depend on it.
+    """
+    seen: dict[str, str] = {}
+    for reading in proposed:
+        if ad.slice(reading.span.start, reading.span.end) != reading.span.quote:
+            raise ExtractionError(
+                f"{ad.offer_id}: skill {reading.skill!r} cites {reading.span.quote!r}, "
+                "which is not what the advert says at those offsets"
+            )
+        key = reading.skill.casefold()
+        if key in seen and seen[key] != reading.role:
+            raise ExtractionError(
+                f"{ad.offer_id}: skill {reading.skill!r} is read as both {seen[key]!r} "
+                f"and {reading.role!r}"
+            )
+        seen[key] = reading.role
+    return list(proposed)
+
+
 def extract(
     offer: Offer,
     dimensions: list[Dimension],
     *,
     model_scores: list[DimensionScore] | None = None,
     unmapped_concepts: list[str] | None = None,
+    model_skills: list[SkillReading] | None = None,
     default_language: Language = "es",
 ) -> OfferExtraction:
     """All three stages over one offer.
@@ -514,6 +581,7 @@ def extract(
         scores=sorted(scores, key=lambda s: s.dimension),
         unsettled=unsettled_dimensions(dimensions, scores),
         unmapped_concepts=sorted(unmapped_concepts or []),
+        skills=None if model_skills is None else accept_skill_readings(ad, model_skills),
     )
 
 

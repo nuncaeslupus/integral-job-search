@@ -2,231 +2,275 @@
 
 "Nunca he usado Go, así que fuera." A word match on `golang` held 128 stored
 adverts, many of which offer Go as one option among several, and 299 more say
-bare `Go`. The `skill:<technology>` facet holds an advert only where a mention
-of the technology is a requirement.
+bare `Go`. Text cannot tell required from mentioned — two regex readers each
+failed a second reader's cases in every round — so the step-8 model reads each
+advert and records, per skill, whether it is `required`
+(`extraction.OfferExtraction.skills`), and the `skill:<tech>` exclusion consumes
+that: it holds an advert only on a `required` reading, and shows (marks pending)
+one with no reading yet.
 
-Every case is derived from that statement, not from the implementation: what a
-person means by "required", "a plus" and "one of". The cases that matter most are
-the fail-open ones — an advert that **does** require the skill and is let through
-— so each softening cue is paired with a sentence where the same words soften
-something *else*, or are denied.
+These tests pin the **consuming path** and the extraction's schema. They cannot
+pin the model's reading — the cases' `extracted` field is what the reading of
+each advert should be, taken from the second reader's verdicts.
 """
 
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
+from integral import extraction as ex
 from integral import skill_requirement as sr
 from integral import sourcing_exclusions as se
+from integral.candidate import Aim, CandidateConstraints, Location, Reach
+from integral.connectors import ListRequest
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import collect_offer
 from integral.offers import Offer, compute_offer_id
-from integral.presentation_log import partition
+from integral.presentation_log import partition, pending_skill_line
+from integral.robots import Robots
+from integral.sourcing import Response, flood_board, source
 from integral.sourcing_exclusions import Exclusion, record_exclusion
 
 AT = "2026-01-01T00:00:00+00:00"
+FIXTURE = Path(__file__).parent / "fixtures" / "skill_requirement" / "cases.json"
+CASES = json.loads(FIXTURE.read_text(encoding="utf-8"))
+GO = Exclusion(about="skill:go", stated_at_cycle=1, words="w", terms=("golang",))
 
 
-def held(value: str, text: str, *, title: str | None = None, terms: tuple[str, ...] = ()) -> bool:
-    exclusion = Exclusion(about=f"skill:{value}", stated_at_cycle=1, words="w", terms=terms)
-    return se.matches(se.Candidate(offer_id="x", title=title, text=text), exclusion)
+def candidate(readings: list[dict[str, str]] | None, text: str = "t") -> se.Candidate:
+    """An advert whose extraction carries `readings` (`None` = not read yet)."""
+    skills = None if readings is None else sr.required_skills({"skills": readings})
+    return se.Candidate(offer_id="x", text=text, required_skills=skills)
 
 
-# --- required: the advert holds the candidate to it (fail-open if let through) ---
+def reading(skill: str, role: str) -> dict[str, Any]:
+    return {"skill": skill, "role": role}
 
 
-def req(text: str) -> str:
-    """`text` placed under a requirements heading, where a mention can hold."""
-    return f"Requirements:\n{text}"
+# --- the consuming path ---------------------------------------------------------
 
 
-REQUIRED = [
-    "We need 3 years of Go experience.",
-    "Go experience is required.",
-    "Imprescindible: Golang",
-    "Requisitos:\n- Python\n- Go\n- Docker",
-    "Requirements: Go and Python.",
-    "Python and Go are required.",
-    "Requirements:\nGo, Python",
-    "Nice to have:\n- Docker\nRequirements:\n- Go",
-    "Se valora:\n- Docker\nRequisitos:\n- Go",
-    "Python required, but Go is also required.",
-    "Go required, Python a plus.",
-    "Go is a plus for others; for this role Go is a must.",
-    "Go is not a plus, it is required.",
-    "Go no es opcional: es imprescindible.",
-    "Requirements: Golang backend work.",
-    "## Requirements\n- Go\n## Nice to have\n- Rust",
-    "Requirements: Strong Go. Docker is a plus.",
-    "Docker and Kubernetes (a plus); Go is required.",
-    "Go is required and Python is a plus.",
-    "Se valorará Kafka. Imprescindible Go.",
-]
+def test_a_required_reading_holds_the_advert() -> None:
+    assert se.matches(candidate([reading("Go", "required")]), GO)
 
 
-@pytest.mark.parametrize("text", REQUIRED)
-def test_an_advert_requiring_the_skill_is_held(text: str) -> None:
-    assert held("go", text, terms=("golang",))
+@pytest.mark.parametrize("role", ["optional", "alternative", "plus"])
+def test_any_other_role_shows_the_advert(role: str) -> None:
+    assert not se.matches(candidate([reading("Go", role)]), GO)
 
 
-def test_a_title_naming_the_skill_requires_it() -> None:
-    assert held("go", "Join our team.", title="Senior Go Developer")
-    assert held("go", "Join our team.", title="Backend Engineer (Golang)")
+def test_an_advert_with_no_reading_yet_is_shown_whatever_it_says() -> None:
+    """Pending: the text is never the deciding evidence."""
+    assert not se.matches(candidate(None, "Requirements:\n- 5 years of Go. Go required."), GO)
 
 
-def test_one_required_mention_among_optional_ones_holds_the_advert() -> None:
-    assert held("go", "Go is a plus.\nRequisitos:\n- Go")
+def test_a_read_advert_naming_no_skill_is_shown_and_not_pending() -> None:
+    assert not se.matches(candidate([]), GO)
+    assert se.pending_skill_checks(candidate([]), [GO]) == ()
 
 
-# --- not required: an option, a plus, an example (fail-closed if held) ----------
-
-NOT_REQUIRED = [
-    "Experience with Java, Go or Python.",
-    "Java, Python, Go or Rust.",
-    "Experiencia con Java, Go o Python.",
-    "Experiencia en Go/Java/Python.",
-    "Go and/or Java.",
-    "Go o similar.",
-    "Go (or equivalent).",
-    "Go or any other language.",
-    "Experience with one of: Go, Java.",
-    "Experience with one of the following:\n- Go\n- Java",
-    "Experiencia en alguno de estos:\n- Go\n- Java",
-    "Languages such as Go or Rust.",
-    "Lenguajes como Go o Rust.",
-    "Languages, e.g. Go.",
-    "Go is a plus.",
-    "Go would be nice to have.",
-    "Python required. Go is a nice-to-have.",
-    "Se valora Go.",
-    "Go es un plus.",
-    "Deseable Go.",
-    "Es valorarà Go.",
-    "Python, Go (nice to have), Docker",
-    "Python, Go (se valora), Docker",
-    "Python experience (Go a plus).",
-    "Backend developer (Go preferred)",
-    "Nice to have:\n- Go\n- Docker",
-    "Se valorará:\n- Go",
-    "## Nice to have\nGo",
-    "Go not required.",
-    "Go no es imprescindible.",
-    "Go preferred, Python required.",
-    "Ideally Go.",
-]
+def test_pending_names_the_exclusion_that_could_not_be_checked() -> None:
+    assert se.pending_skill_checks(candidate(None), [GO]) == ("skill:go",)
+    other = Exclusion(about="sector:banca", stated_at_cycle=1, words="w")
+    assert se.pending_skill_checks(candidate(None), [other]) == ()
 
 
-@pytest.mark.parametrize("text", NOT_REQUIRED)
-def test_an_advert_naming_the_skill_only_as_an_option_is_shown(text: str) -> None:
-    assert not held("go", text, terms=("golang",))
-    # and the same words where a mention *can* hold: the cue, not the missing heading, shows it
-    assert not held("go", req(text), terms=("golang",))
+def test_one_required_skill_among_other_roles_holds() -> None:
+    readings = [reading("Python", "plus"), reading("Go", "required"), reading("Rust", "plus")]
+    assert se.matches(candidate(readings), GO)
 
 
-def test_an_advert_that_does_not_name_it_is_shown() -> None:
-    assert not held("go", "Python engineer, Docker, AWS.")
+def test_a_required_other_skill_does_not_hold_a_go_exclusion() -> None:
+    assert not se.matches(candidate([reading("Python", "required"), reading("Go", "plus")]), GO)
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Let's go build things together.",
-        "We go to market in spring.",
-        "Ready to go ahead? Go further!",
-        "Go-to-market strategy lead.",
-        "Go live in Q3.",
-    ],
-)
-def test_the_verb_is_not_the_skill(text: str) -> None:
-    assert not held("go", text)
-
-
-# --- the cue binds to its own mention, not to a neighbour -----------------------
-
-
-def test_a_plus_for_one_skill_does_not_soften_another() -> None:
-    text = req("Python required, but Go is a plus.")
-    assert held("python", text)
-    assert not held("go", text)
-
-
-def test_a_parenthetical_plus_softens_only_the_item_before_it() -> None:
-    text = req("Python, Go (nice to have), Docker")
-    assert held("python", text)
-    assert held("docker", text)
-    assert not held("go", text)
-
-
-def test_a_cue_inside_a_parenthesis_does_not_soften_the_main_clause() -> None:
-    assert held("python", req("Python experience (Go a plus)."))
-    assert held("go", req("Python (Go)."))
-
-
-def test_a_plus_in_the_next_sentence_does_not_soften_this_one() -> None:
-    assert held("go", req("Strong Go. Docker is a plus."))
-    assert not held("docker", req("Strong Go. Docker is a plus."))
-
-
-def test_a_list_of_needs_is_not_a_list_of_alternatives() -> None:
-    text = req("Python, Go and Docker.")
-    assert all(held(skill, text) for skill in ("python", "go", "docker"))
-
-
-# --- other values --------------------------------------------------------------
-
-
-def test_a_skill_outside_the_vocabulary_is_read_the_same_way() -> None:
-    assert held("cobol", "COBOL required.")
-    assert held("cobol", req("Mainframe COBOL, JCL and CICS."))
-    assert not held("cobol", req("COBOL is a plus."))
-    assert not held("cobol", req("COBOL or RPG."))
-    assert not held("cobol", req("RPG or COBOL."))
-    assert not held("cobol", req("RPG/COBOL."))
+@pytest.mark.parametrize("spelling", ["Go", "go", "Golang", "golang", "GOLANG"])
+def test_the_skill_is_matched_by_its_technology_not_its_spelling(spelling: str) -> None:
+    assert se.matches(candidate([reading(spelling, "required")]), GO)
 
 
 def test_a_term_names_the_same_skill_in_another_spelling() -> None:
-    assert held("go", req("Golang developer."), terms=("golang",))
-    assert held("golang", req("Golang developer."))
-    assert held("kubernetes", req("K8s in production."))
+    cobol = Exclusion(about="skill:cobol-ish", stated_at_cycle=1, words="w", terms=("COBOL",))
+    assert se.matches(candidate([reading("cobol", "required")]), cobol)
 
 
-def test_a_skill_with_no_value_is_not_an_exclusion() -> None:
-    with pytest.raises(ValueError):
-        Exclusion(about="skill:", stated_at_cycle=1, words="w")
+def test_a_skill_outside_the_vocabulary_matches_as_a_whole_folded_word() -> None:
+    elixir = Exclusion(about="skill:Elixir", stated_at_cycle=1, words="w")
+    assert se.matches(candidate([reading("elixír", "required")]), elixir)
+    assert not se.matches(candidate([reading("Elixir-ish tooling", "required")]), elixir)
 
 
 def test_other_facets_are_untouched() -> None:
-    exclusion = Exclusion(about="sector:banca", stated_at_cycle=1, words="w")
-    assert se.matches(se.Candidate(offer_id="x", text="Go is a plus. Trabajo en banca."), exclusion)
+    topic = Exclusion(about="topic:go", stated_at_cycle=1, words="w")
+    assert se.matches(se.Candidate(offer_id="x", text="we play go on weekends"), topic)
 
 
-# --- applied where adverts reach the candidate ---------------------------------
+@pytest.mark.parametrize(
+    "payload",
+    [None, [], "x", {}, {"skills": None}, {"skills": "go"}, {"skills": {"skill": "Go"}}],
+)
+def test_a_payload_without_a_list_of_readings_is_pending(payload: object) -> None:
+    assert sr.required_skills(payload) is None
+
+
+def test_a_malformed_reading_is_not_a_requirement() -> None:
+    payload = {"skills": [{"skill": 3, "role": "required"}, "Go", {"role": "required"}]}
+    assert sr.required_skills(payload) == ()
+
+
+# --- the reviewer's cases, read as extractions ----------------------------------
+
+
+def test_the_reviewer_corpus_is_all_there() -> None:
+    assert len(CASES) >= 130
+    assert any(c["id"].startswith("corpus:") for c in CASES)
+    assert {c["requires"] for c in CASES} == {True, False}
+    assert all("extracted" in c for c in CASES)
+
+
+def test_every_case_extraction_is_consistent_with_its_verdict() -> None:
+    """`requires` is exactly "the extraction lists Go as required" — nothing else."""
+    for case in CASES:
+        listed = any(r["role"] == "required" for r in case["extracted"])
+        assert listed == case["requires"], case["id"]
+
+
+@pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
+def test_the_reviewers_case_through_the_extraction(case: dict[str, object]) -> None:
+    as_read = se.Candidate(
+        offer_id=str(case["id"]),
+        title=str(case["title"]),
+        text=str(case["text"]),
+        required_skills=sr.required_skills({"skills": case["extracted"]}),
+    )
+    assert se.matches(as_read, GO) == case["requires"], case["note"]
+    unread = as_read.model_copy(update={"required_skills": None})
+    assert not se.matches(unread, GO), "an advert nobody has read is never held"
+
+
+# --- the schema the model fills -------------------------------------------------
+
+
+def _ad(text: str = "Requirements: Go and Python.") -> ex.NormalisedAd:
+    return ex.NormalisedAd(offer_id="o1", language="en", text=text)
+
+
+def _span(text: str, quote: str) -> ex.EvidenceSpan:
+    start = text.index(quote)
+    return ex.EvidenceSpan(start=start, end=start + len(quote), quote=quote)
+
+
+def test_a_role_outside_the_four_is_refused() -> None:
+    span = _span("Go", "Go")
+    with pytest.raises(ValidationError):
+        ex.SkillReading(skill="Go", role="mandatory", span=span)  # type: ignore[arg-type]
+
+
+def test_every_role_the_skill_text_names_is_a_role_of_the_schema() -> None:
+    text = (
+        Path(__file__).parents[1] / ".claude" / "skills" / "step-08-understanding" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    for role in ex.SKILL_ROLES:
+        assert f"`{role}`" in text
+
+
+def test_a_reading_must_name_a_skill() -> None:
+    with pytest.raises(ValidationError):
+        ex.SkillReading(skill="   ", role="required", span=_span("Go", "Go"))
+
+
+def test_a_reading_must_cite_the_advert() -> None:
+    ad = _ad()
+    invented = ex.SkillReading(
+        skill="Go",
+        role="required",
+        span=ex.EvidenceSpan(start=0, end=5, quote="Go is"),
+    )
+    with pytest.raises(ex.ExtractionError, match="not what the advert says"):
+        ex.accept_skill_readings(ad, [invented])
+
+
+def test_a_skill_read_in_two_roles_is_refused_and_the_same_role_twice_is_not() -> None:
+    ad = _ad("Requirements: Go. Go a plus.")
+    required = ex.SkillReading(skill="Go", role="required", span=_span(ad.text, "Requirements: Go"))
+    plus = ex.SkillReading(skill="golang", role="plus", span=_span(ad.text, "Go a plus"))
+    assert ex.accept_skill_readings(ad, [required, required]) == [required, required]
+    ex.accept_skill_readings(ad, [required, plus])  # different spelling is a different key
+    clash = plus.model_copy(update={"skill": "GO"})
+    with pytest.raises(ex.ExtractionError, match="both"):
+        ex.accept_skill_readings(ad, [required, clash])
+
+
+def _offer(text: str, title: str = "Backend") -> Offer:
+    return Offer(id=compute_offer_id(text), source="test", text=text, title=title)
+
+
+def test_extract_leaves_skills_pending_until_the_model_reads_them() -> None:
+    offer = _offer("Requirements: Go and Python.")
+    assert ex.extract(offer, []).skills is None
+    assert ex.extract(offer, [], model_skills=[]).skills == []
+    read = ex.SkillReading(skill="Go", role="required", span=_span(offer.text, "Go and"))
+    assert ex.extract(offer, [], model_skills=[read]).skills == [read]
+
+
+def test_extract_refuses_a_reading_the_advert_does_not_back() -> None:
+    offer = _offer("Requirements: Python.")
+    fabricated = ex.SkillReading(
+        skill="Go", role="required", span=ex.EvidenceSpan(start=0, end=2, quote="Go")
+    )
+    with pytest.raises(ex.ExtractionError):
+        ex.extract(offer, [], model_skills=[fabricated])
+
+
+def test_the_model_request_asks_for_skills_and_still_has_no_profile() -> None:
+    request = ex.model_request(_ad(), [])
+    assert request.read_skills is True
+    assert "profile" not in ex.ModelRequest.model_fields
+
+
+def test_an_extraction_stored_before_the_field_existed_still_loads_as_pending() -> None:
+    old = {
+        "offer_id": "o1",
+        "language": "en",
+        "scores": [],
+        "unsettled": [],
+        "unmapped_concepts": [],
+    }
+    loaded = ex.OfferExtraction.model_validate(old)
+    assert loaded.skills is None
+
+
+# --- applied where adverts reach the candidate ----------------------------------
 
 
 @pytest.fixture
 def store(tmp_path: Path) -> ProfileStore:
-    create_profile(tmp_path, "Test", handle="test", language="es", fiction=True)
-    return ProfileStore(tmp_path, "test")
+    create_profile(tmp_path, "tester")
+    return ProfileStore(tmp_path, "tester")
 
 
 def _store_offer(store: ProfileStore, text: str, title: str) -> str:
-    offer = Offer(id=compute_offer_id(text), source="test", text=text, title=title)
+    offer = _offer(text, title)
     collect_offer(store, offer, at=AT)
     return offer.id
 
 
-def test_partition_holds_back_only_the_adverts_that_require_the_skill(
-    store: ProfileStore,
-) -> None:
-    requires = _store_offer(store, "Requisitos:\n- Go\n- SQL", "Backend A")
-    option = _store_offer(store, "Experiencia con Java, Go o Python.", "Backend B")
-    plus = _store_offer(store, "Python. Se valora Go.", "Backend C")
-    bare = _store_offer(store, "Python, SQL y AWS.", "Backend D")
-    ids = [requires, option, plus, bare]
-    assert len(partition(store, ids)[0]) == 4
+def _read(store: ProfileStore, offer_id: str, readings: list[dict[str, Any]] | None) -> None:
+    offer = _offer("x")  # only the id's shape matters to the schema
+    payload = ex.OfferExtraction(offer_id=offer.id, language="en").model_dump()
+    payload["offer_id"] = offer_id
+    payload["skills"] = readings
+    store.write_json(payload, "extractions", f"{offer_id}.json")
+
+
+def _rule_out_go(store: ProfileStore) -> None:
     record_exclusion(
         store,
         Exclusion(
@@ -236,135 +280,190 @@ def test_partition_holds_back_only_the_adverts_that_require_the_skill(
             terms=("golang",),
         ),
     )
+
+
+def _span_of(text: str, quote: str) -> dict[str, object]:
+    start = text.index(quote)
+    return {"start": start, "end": start + len(quote), "quote": quote}
+
+
+def test_partition_holds_back_only_the_adverts_that_the_extraction_says_require_the_skill(
+    store: ProfileStore,
+) -> None:
+    requires_text = "Requisitos:\n- Go\n- SQL"
+    requires = _store_offer(store, requires_text, "Backend A")
+    option = _store_offer(store, "Experiencia con Java, Go o Python.", "Backend B")
+    unread = _store_offer(store, "Requisitos:\n- Go\n- SQL y más", "Backend C")
+    bare = _store_offer(store, "Python, SQL y AWS.", "Backend D")
+    ids = [requires, option, unread, bare]
+    assert len(partition(store, ids)[0]) == 4
+    _rule_out_go(store)
+    _read(store, requires, [{**reading("Go", "required"), "span": _span_of(requires_text, "Go")}])
+    _read(store, option, [{**reading("Go", "alternative"), "span": _span_of("Go", "Go")}])
+    _read(store, bare, [])
     show, hold = partition(store, ids)
     assert [h.offer_id for h in hold] == [requires]
-    assert set(show) == {option, plus, bare}
+    assert set(show) == {option, unread, bare}
     assert "skill:go" in hold[0].reason
 
 
-# --- T229 second reader: the polarity is "shown unless a requirement context" ---
-#
-# 105 cases written from the spec before the implementation was read, plus the one
-# stored advert the first version held although it says outright it does not expect
-# Go. `requires` is the verdict [SPEC-1] gives: does the advert hold the candidate
-# to Go. One reviewer case is deliberately absent: all-caps `GO` is not named at
-# all (`stack_fit` R3, exact case), so `REQUIREMENTS:\n- GO` is shown — fail-closed,
-# and true before this task.
-
-FIXTURE = Path(__file__).parent / "fixtures" / "skill_requirement" / "cases.json"
-CASES = json.loads(FIXTURE.read_text(encoding="utf-8"))
+def test_the_advert_that_says_go_is_required_is_shown_while_unread(store: ProfileStore) -> None:
+    text = "Requisitos:\n- Go\n- SQL"
+    offer_id = _store_offer(store, text, "Backend A")
+    _rule_out_go(store)
+    show, hold = partition(store, [offer_id])
+    assert (show, hold) == ([offer_id], [])
+    assert "skill:go" in pending_skill_line(store, [offer_id])
+    assert "1" in pending_skill_line(store, [offer_id])
 
 
-def test_the_reviewer_corpus_is_all_there() -> None:
-    assert len(CASES) >= 100
-    assert any(c["id"].startswith("corpus:") for c in CASES)
-    assert {c["requires"] for c in CASES} == {True, False}
+def test_nothing_is_pending_once_read_or_when_no_skill_is_ruled_out(store: ProfileStore) -> None:
+    offer_id = _store_offer(store, "Python", "Backend A")
+    assert pending_skill_line(store, [offer_id]) == ""
+    _rule_out_go(store)
+    assert pending_skill_line(store, [offer_id]) != ""
+    _read(store, offer_id, [])
+    assert pending_skill_line(store, [offer_id]) == ""
 
 
-@pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
-def test_the_reviewers_case(case: dict[str, object]) -> None:
-    got = sr.requires(case["title"], case["text"], sr.target_of("go", ("golang",)))  # type: ignore[arg-type]
-    assert got is case["requires"], case["note"]
+def test_an_unreadable_extraction_is_pending_not_held(store: ProfileStore) -> None:
+    offer_id = _store_offer(store, "Requisitos:\n- Go", "Backend A")
+    _rule_out_go(store)
+    store.path("extractions").mkdir(parents=True, exist_ok=True)
+    store.path("extractions", f"{offer_id}.json").write_text("{not json", encoding="utf-8")
+    assert partition(store, [offer_id])[0] == [offer_id]
 
 
-# --- the four closed rules, each pinned where it alone decides ------------------
+def _source_round(store: ProfileStore, tmp_path: Path) -> object:
+    pages = flood_board(tmp_path / "connectors", rows=4)
+
+    def fetch(request: ListRequest) -> Response:
+        return Response(200, pages[request.url].html)
+
+    return source(
+        store,
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True),
+            reach=Reach(state="stated", modes=("remote",)),
+        ),
+        Aim(state="stated", terms=("python engineer",)),
+        fetch=fetch,
+        at=AT,
+        directory=tmp_path / "connectors",
+        page_count=2,
+        robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+    )
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Experience with Go.",  # rule 1: plain prose names Go, requires nothing
-        "About us: our platform is built in Go.\nRequirements:\n- Python",
-        "Benefits:\n- Go conference budget",
-        "Our stack: Go, Kafka, AWS.",
-        "Ofrecemos:\n- Proyectos en Go",
-    ],
-)
-def test_rule_1_a_mention_outside_a_requirement_context_is_shown(text: str) -> None:
-    assert not held("go", text)
+def _stored_ids(store: ProfileStore) -> set[str]:
+    return {p.stem for p in Path(store.path("offers")).glob("*.json") if not p.name.startswith("_")}
 
 
-def test_rule_1_a_heading_the_module_does_not_know_still_resets_the_section() -> None:
-    assert not held("go", "Requirements:\n- Python\nSome Brand New Heading\n- Go")
+def test_source_applies_a_required_reading_and_shows_what_is_unread(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    root = tmp_path / "baseline"
+    root.mkdir()
+    create_profile(root, "Test", handle="test", language="es", fiction=True)
+    base = ProfileStore(root, "test")
+    _source_round(base, root)
+    baseline = _stored_ids(base)
+    assert len(baseline) >= 2
+    victim = sorted(baseline)[0]
+
+    _rule_out_go(store)
+    # Nothing read yet: every advert is shown, none is held on a guess.
+    _source_round(store, tmp_path)
+    assert _stored_ids(store) == baseline
+
+    # Once step 8 has read one advert as requiring Go, a fresh round leaves it out and says so.
+    other = tmp_path / "second"
+    other.mkdir()
+    create_profile(other, "Test", handle="test", language="es", fiction=True)
+    second = ProfileStore(other, "test")
+    _rule_out_go(second)
+    _read(
+        second, victim, [reading("Go", "required") | {"span": {"start": 0, "end": 1, "quote": "x"}}]
+    )
+    run = _source_round(second, other)
+    assert _stored_ids(second) == baseline - {victim}
+    (outcome,) = run.outcomes  # type: ignore[attr-defined]
+    assert outcome.excluded == 1
+    assert "skill:go" in outcome.excluded_because[0]
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Requirements:\n- No prior Go experience needed",
-        "Requisitos:\n- No se requiere experiencia en Go",
-        "Requirements:\n- You don't need to know Go",
-        "Requirements:\n- Without Go experience, apply anyway",
-        "Requisitos:\n- Sin experiencia en Go, no pasa nada",
-        "Requirements:\n- While we use Go, we don't expect you to be an expert",
-        "Requirements:\n- Go knowledge is not mandatory",
-    ],
-)
-def test_rule_2_a_negated_need_never_holds(text: str) -> None:
-    assert not held("go", text)
+# --- the measurement ------------------------------------------------------------
 
 
-def test_rule_2_a_negation_does_not_leak_across_punctuation() -> None:
-    assert held("go", req("Go is not a plus, it is required."))
-    assert held("go", req("Python is not required. Go is required."))
+def test_the_measurement_over_the_reviewers_cases_is_zero_on_both_sides() -> None:
+    measured = sr.measure()
+    assert measured["status"] == "measured"
+    assert measured["requiring_cases"] >= sr.FEWEST_REQUIRING_CASES
+    assert measured["adverts_requiring_a_ruled_out_skill_presented"] == 0
+    assert measured["adverts_not_requiring_a_ruled_out_skill_held"] == 0
+    assert measured["pending_adverts_held"] == 0
+    assert measured["stored_corpus_status"] == "unmeasured"
+    assert measured["stored_corpus_adverts_requiring_a_ruled_out_skill_presented"] == -1
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Requirements:\n- Willingness to learn Go",
-        "Requisitos:\n- Aprenderás Go con nosotros",
-        "Requirements:\n- Go (we will teach you)",
-        "Requirements:\n- Mentoring in Go",
-    ],
-)
-def test_rule_3_learning_wording_never_holds(text: str) -> None:
-    assert not held("go", text)
+def test_an_empty_population_is_unmeasured_not_a_clean_zero(tmp_path: Path) -> None:
+    empty = tmp_path / "cases.json"
+    empty.write_text("[]", encoding="utf-8")
+    measured = sr.measure(empty)
+    assert measured["status"] == "unmeasured"
+    assert measured["adverts_requiring_a_ruled_out_skill_presented"] == -1
+    assert measured["pending_adverts_held"] == -1
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Requirements:\n- Go above and beyond for our customers",
-        "Requirements:\n- Go big on quality",
-        "Requirements:\n- Python\n\nGo make an impact every day.",
-        "Requirements: Ready to Go? Apply now!",
-        "Requirements:\n- Be ready to Go.",
-    ],
-)
-def test_rule_4_the_verb_go_is_not_the_skill(text: str) -> None:
-    assert not held("go", text)
+def test_a_population_with_only_one_side_is_unmeasured(tmp_path: Path) -> None:
+    only_required = [c for c in CASES if c["requires"]]
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps(only_required), encoding="utf-8")
+    assert sr.measure(path)["status"] == "unmeasured"
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Requirements:\n- Go",
-        "Requirements:\n- Go, Python and Docker",
-        "Requirements:\n- Go (Golang)",
-        "Requirements:\n- Go experience",
-        "Requirements:\n- Go is the language of our backend",
-    ],
-)
-def test_rule_4_a_bullet_that_is_the_skill_still_holds(text: str) -> None:
-    assert held("go", text)
+def test_the_measurement_counts_a_required_advert_that_is_let_through(tmp_path: Path) -> None:
+    """The metric moves when the fixture says required and the path lets it by."""
+    broken = [dict(c) for c in CASES]
+    for case in broken:
+        if case["id"] == "E1":
+            case["extracted"] = [{"skill": "Rust", "role": "required"}]  # not Go
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps(broken), encoding="utf-8")
+    assert sr.measure(path)["adverts_requiring_a_ruled_out_skill_presented"] == 1
 
 
-def test_rule_5_a_conditional_is_an_invitation() -> None:
-    assert not held("go", "Requisitos:\n- Python\nSi además conoces Go, ¡genial!")
-    assert not held("go", "Even better if you have:\n- Go")
-    assert held("go", "Go is required if you join the platform team.")
+def test_the_measurement_counts_a_non_required_advert_that_is_held(tmp_path: Path) -> None:
+    broken = [dict(c) for c in CASES]
+    for case in broken:
+        if case["id"] == "E3":
+            case["extracted"] = [{"skill": "Go", "role": "required"}]
+    path = tmp_path / "cases.json"
+    path.write_text(json.dumps(broken), encoding="utf-8")
+    assert sr.measure(path)["adverts_not_requiring_a_ruled_out_skill_held"] == 1
 
 
-def test_rule_1_a_heading_with_its_text_on_the_same_line_resets_the_section() -> None:
-    assert not held("go", "Requirements:\n- Python\nOur stack: Go, Kafka.")
-    assert held("go", "Qualifications: Go and Python.")
+def test_the_committed_evidence_matches_the_measurement() -> None:
+    committed = json.loads(sr.DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8"))
+    assert committed == sr.record(sr.measure())
 
 
-def test_rule_4_go_with_an_exclamation_is_the_verb() -> None:
-    assert not held("go", "Requirements:\n- Python\n- Let's Go!")
+def test_the_regex_reader_is_gone() -> None:
+    """No text reading decides a hold: the module has no function that reads an advert's prose."""
+    public = {n for n in dir(sr) if not n.startswith("_")}
+    assert not public & {"requires", "read_mentions", "Reading"}
 
 
-def test_an_alternative_cue_alone_shows_a_single_mention() -> None:
-    assert not held("go", req("Experience in at least one of Go."))
-    assert not held("go", req("Experiencia en alguno de Go."))
+def test_the_module_reads_in_a_fresh_process() -> None:
+    """The evidence entry point runs and exits 0 in its own interpreter."""
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from integral import skill_requirement as s; print(s.measure()['status'])",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert done.stdout.strip() == "measured"

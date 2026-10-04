@@ -66,6 +66,7 @@ from integral.sourcing_exclusions import (
     EMPLOYER_UNKNOWN,
     candidate_of,
     load_exclusions,
+    pending_skill_checks,
     ruled_out_by,
 )
 
@@ -298,6 +299,28 @@ def unchecked_line(store: ProfileStore, offer_ids: list[str]) -> str:
     return f"{len(blank)} sin empresa indicada: no se pudo comprobar si ya las habías visto"
 
 
+def pending_skill_line(store: ProfileStore, offer_ids: list[str]) -> str:
+    """T229. Offers shown while a `skill:` exclusion could not be checked on them.
+
+    A `skill:<tech>` exclusion holds an advert only on its step-8 extraction
+    listing the skill as required. An advert not read yet is shown, and the
+    candidate is told for which skill, so an unread advert never passes for a
+    cleared one.
+    """
+    exclusions = load_exclusions(store)
+    pending: dict[str, int] = {}
+    for offer_id in offer_ids:
+        loaded = _loaded(store, offer_id)
+        if loaded is None:
+            continue
+        for about in pending_skill_checks(candidate_of(loaded[0], store), exclusions):
+            pending[about] = pending.get(about, 0) + 1
+    if not pending:
+        return ""
+    parts = ", ".join(f"{about} en {count}" for about, count in sorted(pending.items()))
+    return f"sin leer todavía para saber si lo exigen: {parts}"
+
+
 def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], list[Withheld]]:
     """Split a batch into what to show and what is being held back, with why.
 
@@ -385,7 +408,9 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
         elif in_batch is not None:
             # The same advert twice in one batch is one advert shown once.
             held.append(Withheld(offer_id, "el mismo anuncio ya está en esta lista", in_batch))
-        elif loaded is not None and (topics := ruled_out_by(candidate_of(loaded[0]), exclusions)):
+        elif loaded is not None and (
+            topics := ruled_out_by(candidate_of(loaded[0], store), exclusions)
+        ):
             shown_as = ", ".join(topics)
             if all(t.endswith(f"({EMPLOYER_UNKNOWN})") for t in topics):
                 # F6: held because nothing says who published it, not for a topic.
