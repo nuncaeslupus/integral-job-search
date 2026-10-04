@@ -78,6 +78,8 @@ Usually silent, folded into step 9's presentation. When run alone, it says:
 
 Writes `last_activity`.
 
+If the conversation is already long, `CLAUDE.md`, section "Suggest compacting once, at a step boundary", says whether and how to suggest compacting here.
+
 ## Checkpoint — the number, not the prose
 
 The step's acceptance gate is **`extraction_macro_f1 >= 0.75`**,

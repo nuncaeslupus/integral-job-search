@@ -93,6 +93,8 @@ the wording below is the guide's, so the two are not expected to match string fo
 
 Writes `last_activity` immediately, before any other step begins.
 
+If the conversation is already long, `CLAUDE.md`, section "Suggest compacting once, at a step boundary", says whether and how to suggest compacting here.
+
 ## Checkpoint — the number, not the prose
 
 The step's acceptance gate is **`cross_user_leaks == 0`**,
