@@ -138,7 +138,8 @@ that serves its listings only to a browser is read through the candidate's own, 
 
    ```text
    "InfoJobs only shows its listings to a real browser. I'll open these N searches in your Chrome
-   and save each page to your Downloads folder, about 1.3 MB each. OK?"
+   and save each page to your Downloads folder, about 1.3 MB each. Chrome may ask once whether this
+   site can download multiple files: please choose Allow, or the saving stops there. OK?"
    ```
 
 3. **Open each URL in the candidate's Chrome** and wait until the listing is on screen. The first
