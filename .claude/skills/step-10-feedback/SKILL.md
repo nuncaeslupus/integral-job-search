@@ -148,6 +148,8 @@ an offer stopped at that offer's own history — so "the list moved because you 
 checkable. It does not measure whether the re-ordering is any good; that is `rank_spearman`,
 which is T20's and still open.
 
+**A reaction heard with no `rule_out` is not coverage (T226).** The script also reports, under `unrecorded_discards`, every `offer_reaction` evidence row that no offer's lifecycle history carries as a reason (`integral.presentation_audit.unrecorded_discards`) — words recorded without the decision — and `coverage_met` is false until `rule_out`/`choose` has been called for it.
+
 The script writes its result to the candidate's own tree at `session/checkpoint-feedback.json`, never to a shared or
 global path.
 
