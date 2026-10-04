@@ -1,7 +1,9 @@
 """T208 — step 3 follows up on public work where step 1 did not get it.
 
-The ask is pinned by its position, polarity, condition and recording instruction,
-not by keywords: a negated, inverted, misplaced or mis-recorded bullet must fail.
+The bullet is pinned whole, as an exact sentence after whitespace normalisation, and
+by position (under Protocol, before the Never: list). For a prose instruction any
+wording change is a behaviour change, and an enumeration of forbidden phrases has no
+last element. Changing the instruction means changing EXPECTED here, on purpose.
 """
 
 from __future__ import annotations
@@ -21,48 +23,39 @@ def _protocol() -> str:
 def _bullet() -> str:
     """The one Protocol bullet about public projects, from before the Never: list."""
     before_never = _protocol().split("**Never:**", 1)[0]
-    bullets = [b for b in re.split(r"\n(?=- )", before_never) if "public" in b.lower()]
+    bullets = [b for b in re.split(r"\n(?=- )|\n\n", before_never) if "public" in b.lower()]
     bullets = [b for b in bullets if b.startswith("- ") and "episode" in b]
     assert len(bullets) == 1, "exactly one public-projects bullet, outside the Never list"
     return bullets[0]
 
 
-def _step1_software_row() -> str:
-    """The field label step 1's artefact table uses for repositories, read from step 1."""
-    for line in STEP1.read_text().splitlines():
-        if line.startswith("|") and "public repositories" in line:
-            return line.split("|")[1].strip()
-    raise AssertionError("step 1 has no repositories row")
+EXPECTED = (
+    "- **Public projects, only where intake did not get them.** Step 1 already asks "
+    "each field for its artefacts, public repositories for software and data. Where "
+    "intake recorded none for a role in software or data (declined, or never came "
+    "up), follow up when they describe that work: ask whether it left public "
+    "repositories or other public projects. Record each as "
+    '`EvidenceLog.append(kind="episode", source="conversation", …)` with the link '
+    "in `text`, `disclosure` left `private`, and `dimensions` set to what the "
+    "project evidences; never edit `profile/stories.jsonl`, which is derived. Never "
+    'require one; "I don\'t have any" is a full answer.'
+)
 
 
-def test_ask_sits_under_protocol_not_never() -> None:
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
+def test_ask_is_pinned_whole_and_sits_under_protocol_not_never() -> None:
     assert "**Never:**" in _protocol()
-    assert _bullet().startswith("- **Public projects")
+    assert _norm(_bullet()) == EXPECTED
 
 
-def test_ask_polarity_condition_and_defers_to_step1() -> None:
-    text = _bullet()
-    low = text.lower()
-    assert "ask whether it left public repositories or other public projects" in low
-    for refusal in ("never ask", "do not ask", "don't ask", "skip it", "except", "every"):
-        assert refusal not in low, refusal
-    # the condition: software/data fields, taken from step 1's own table, only where
-    # intake recorded nothing for the role
-    assert _step1_software_row() == "software and data"
-    assert "in software or data" in low
-    assert "where intake recorded none" in low
-    assert "follow up when they describe that work" in low
-
-
-def test_recording_is_an_episode_evidence_row_not_the_derived_file() -> None:
-    text = _bullet()
-    assert "`episode` evidence row" in text
-    assert "`source: conversation`" in text
-    assert "the link in `text`" in text
-    assert "`disclosure` left `private`" in text
-    assert "never by editing `profile/stories.jsonl`, which is derived" in text
-    assert "overwrit" not in text.lower()
-
-
-def test_no_unbacked_step11_claim() -> None:
-    assert "step 11" not in _bullet().lower()
+def test_step1_still_asks_software_and_data_for_repositories() -> None:
+    """The deferral names step 1's table, so that row must still exist there."""
+    rows = [
+        line.split("|")[1].strip()
+        for line in STEP1.read_text().splitlines()
+        if line.startswith("|") and "public repositories" in line
+    ]
+    assert rows == ["software and data"]
