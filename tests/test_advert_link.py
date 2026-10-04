@@ -20,6 +20,7 @@ import pytest
 
 from integral.advert_link import advert_url, is_application_form_url
 from integral.connectors import (
+    Connector,
     build_offer,
     build_search_offer,
     load_connectors,
@@ -28,7 +29,7 @@ from integral.connectors import (
 )
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import collect_offer
-from integral.offers import connect_manual
+from integral.offers import Offer, connect_manual
 from integral.reaction_elicit import check_stimulus
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,11 +45,11 @@ HOSTED_EU = "https://job-boards.eu.greenhouse.io/acme/jobs/4012345"
 EMPLOYER = "https://acme.example/careers?gh_jid=4012345"
 
 
-def _greenhouse():
+def _greenhouse() -> Connector:
     return next(c for c in CONNECTORS if c.site == "greenhouse")
 
 
-def _fixture_dir(connector) -> Path:
+def _fixture_dir(connector: Connector) -> Path:
     return ROOT / "connectors" / f"{connector.site}_{connector.locale}" / "fixture"
 
 
@@ -209,7 +210,7 @@ def test_a_pasted_form_url_does_not_become_the_advert() -> None:
 # --- what dropping the hosted link would have broken (B1) --------------------
 
 
-def _greenhouse_offer(text: str):
+def _greenhouse_offer(text: str) -> Offer:
     return build_offer(
         _greenhouse(),
         list_fields={"text": text, "title": "Engineer", "company": "Anthropic"},
