@@ -3,7 +3,7 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 48,
+  "unpinnable_floors_cleared_by_marker_restatement": 50,
   "marker_restatement_cleared": [
     {
       "module": "approval",
@@ -221,6 +221,16 @@
       "lineno": 921
     },
     {
+      "module": "skill_requirement",
+      "name": "FEWEST_NOT_REQUIRING_CASES",
+      "lineno": 78
+    },
+    {
+      "module": "skill_requirement",
+      "name": "FEWEST_REQUIRING_CASES",
+      "lineno": 71
+    },
+    {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
       "lineno": 119
@@ -246,7 +256,7 @@
       "lineno": 590
     }
   ],
-  "marker_restatement_scenarios_checked": 48,
+  "marker_restatement_scenarios_checked": 50,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 88
+  "scenarios_checked_at_least": 90
 }

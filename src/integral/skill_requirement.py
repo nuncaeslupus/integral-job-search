@@ -62,9 +62,19 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T229.json"
 DEFAULT_CASES_PATH = _REPO_ROOT / "tests" / "fixtures" / "skill_requirement" / "cases.json"
 
-#: Floors, not counts of the day: a population that shrinks below them makes the
-#: clean zeros below an empty claim (and the key reads `unmeasured` instead).
+#: The fewest adverts whose extraction lists the skill as required that the
+#: fixture may hold before the clean zeros below stop meaning anything. The
+#: population is `cases.json`, which this repository does not enumerate, so the
+#: margin is stated here: the fixture holds 18 such cases today, a margin of 8, so
+#: a handful may be retired before the claim lapses and not the whole side.
+#: arsenal-floor-margin: FEWEST_REQUIRING_CASES value=10
 FEWEST_REQUIRING_CASES = 10
+
+#: The same floor for the adverts that are not required (alternative, plus,
+#: optional, or no reading at all): 115 today, a margin of 65, because the
+#: fail-closed twin counts only over this side and a fixture of mostly-required
+#: adverts would leave it a clean zero over nothing.
+#: arsenal-floor-margin: FEWEST_NOT_REQUIRING_CASES value=50
 FEWEST_NOT_REQUIRING_CASES = 50
 
 

@@ -218,6 +218,16 @@
       "line": 921
     },
     {
+      "module": "skill_requirement",
+      "name": "FEWEST_NOT_REQUIRING_CASES",
+      "line": 78
+    },
+    {
+      "module": "skill_requirement",
+      "name": "FEWEST_REQUIRING_CASES",
+      "line": 71
+    },
+    {
       "module": "sourcing",
       "name": "DETAIL_FETCH_CEILING",
       "line": 119
@@ -307,20 +317,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3493,
+      "line": 3495,
       "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3520,
+      "line": 3522,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3385,
-      "population": 91
+      "line": 3387,
+      "population": 93
     },
     {
       "module": "freshness",
@@ -560,6 +570,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 91,
+  "floors_swept_at_least": 93,
   "floors_arithmetically_checked_at_least": 36
 }
