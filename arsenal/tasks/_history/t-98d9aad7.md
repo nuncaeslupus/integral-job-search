@@ -3,6 +3,7 @@ id: t-98d9aad7
 title: "T250: Adverts the candidate has already been shown or applied to are presented again as new"
 label: "T250: no re-showing adverts"
 priority: 5
+status: merged
 ---
 
 Filed from a candidate session (test-mode 453a5c19). The owner's act-now note: fix everything said in the session.
@@ -26,7 +27,5 @@ A round presented eight adverts as new. The candidate had already seen or applie
      visible rather than quietly inert. -->
 
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run --extra dev pytest tests/test_seen_before.py tests/test_sibling_hold_back.py -q
 ```
