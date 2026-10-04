@@ -570,7 +570,7 @@ from `arsenal/tasks/_history/`, never from the plan's own ticks.
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T15, T59, T91, T199, T202, T227, T229, T233 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T20, T69, T145, T207, T209, T226, T249 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T20, T69, T145, T207, T209, T249 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | T29, D-26, T141, T142, T143, T146, T148, T191, T192, T211, T240 |
 | **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | D-23, D-25, T112, T117, T105, T106, T131, T152, T189, T247, T254 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | T115, T119, T149, T160, T164, T165, T177, T190, T213, T239 |
