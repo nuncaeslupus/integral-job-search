@@ -145,6 +145,14 @@ _FORMS = [
     "SCCL", "S.Coop.", "S. Coop.", "SLL", "AIE", "Sp. z o.o.", "Co.", "Ltd.", "Corporation",
     "SA de CV", "S. A. de C. V.", "S. A.", "S. L.", "S.L.U.", "S. de R.L.", "GmbH", "Inc.",
     "S.A.", "SL", "Limited", "LLC", "logo", "S.L. logo",
+    # R2: the Spanish statutory register, each spelling a board prints.
+    "S.C.", "SC", "C.B.", "CB", "SAL", "S.A.L.", "S.L.P.", "SLP", "SLNE", "S.L.N.E.",
+    "SAU", "S.A.U.", "SCom", "S.C.A.", "SCA", "SGR", "SAD", "S.Coop. And.", "S. Coop. And.",
+    "S. Coop. Mad.", "SCoop Andaluza", "SL Unipersonal", "S.L. Unipersonal", "SA Unipersonal",
+    "Sociedad Limitada", "Sociedad Anónima", "Sociedad Limitada Unipersonal",
+    "Sociedad Limitada Profesional", "Sociedad Cooperativa", "Sociedad Cooperativa Andaluza",
+    "Comunidad de Bienes", "Sociedad Anónima Laboral", "Sociedad Civil", "Sociedad Colectiva",
+    "Sociedad Comanditaria", "Sociedad Limitada Nueva Empresa", "S.L. logo",
 ]  # fmt: skip
 
 
@@ -160,6 +168,37 @@ def test_the_stated_value_is_reduced_by_the_same_rule(form: str) -> None:
     """F4: `employer:Acme SCCL` must exclude an advert from plain "Acme"."""
     assert _out(f"Acme {form}", company="Acme")
     assert _out(f"Acme {form}", company="acme s.l. logo")
+
+
+@pytest.mark.parametrize(
+    "company",
+    [
+        "Acme S.L. - Madrid",
+        "Acme S.A. (Madrid)",
+        "Acme, S.L., Madrid",
+        "Acme Sociedad Limitada | Madrid",
+        "Acme S.L.U.; Barcelona",
+        "Acme SCCL \u2013 Girona",
+    ],
+)
+def test_a_legal_form_followed_by_more_text_still_leaves_the_employer(company: str) -> None:
+    assert se.employer_key(company) == "acme"
+    assert _out("Acme", company=company)
+
+
+@pytest.mark.parametrize("name", ["Madrid Zoo", "Madrid Company", "Foo Co", "Casa de Bienes"])
+def test_a_generic_word_is_not_a_legal_form_without_its_anchor(name: str) -> None:
+    """R3: "Madrid Zoo" is not "Madrid"; a name's own words are kept."""
+    assert se.employer_key(name) == name.lower()
+    assert not _out("Madrid", company=name)
+
+
+def test_a_recruiters_company_does_not_hide_the_employer_in_the_title() -> None:
+    """R1 (fail-open): company present must not stop the title being read."""
+    assert _out("Acme", company="Randstad", title="Camarero en Acme")
+    assert _out("Acme", company="Randstad", title="Camarero en Acme S.L. | Madrid")
+    assert not _out("Acme", company="Randstad", title="Camarero en Barclays")
+    assert not _out("Bar", company="Randstad", title="Experto en Python")
 
 
 def test_a_legal_form_is_only_stripped_from_the_end() -> None:
