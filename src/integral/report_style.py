@@ -17,8 +17,9 @@ place that owns the look, so a second page cannot differ from the first.
   document. A report is a body wrapped by it.
 * **Self-contained.** No external font, script or stylesheet: a candidate's
   report is personal data and must render offline, from a file. The shell's
-  Content-Security-Policy forbids the network, and ``page`` also refuses a body
-  that references it (``external_references``), so a violation is an error at
+  Content-Security-Policy forbids the network, and ``page`` also refuses the
+  common ways a body asks for it (``external_references`` lists what it
+  catches and what it leaves to the policy), so most violations are an error at
   the point of writing, not a missing font on someone's machine.
 
 A printed document (the letter, the CV) is one palette on paper and is not
@@ -117,6 +118,19 @@ _TONES = ("neutral", "positive", "negative", "accent")
 
 _LOADING_ATTRIBUTES = ("src", "srcset", "poster", "data", "action", "formaction")
 _CSS_FETCH = re.compile(r"@import|url\(\s*['\"]?(?!data:)", re.I)
+_CSS_ESCAPE = re.compile(r"\\(?:([0-9a-fA-F]{1,6})[ \t\n\r\f]?|(.))", re.S)
+
+
+def _decode_css(text: str) -> str:
+    """Resolve CSS escapes (``\\75 rl(``, ``@\\69mport``) the way a browser does before it reads."""
+
+    def one(m: re.Match[str]) -> str:
+        if m.group(1):
+            code = int(m.group(1), 16)
+            return chr(code) if 0 < code <= 0x10FFFF and not 0xD800 <= code <= 0xDFFF else "\ufffd"
+        return m.group(2)
+
+    return _CSS_ESCAPE.sub(one, text)
 
 
 class _References(HTMLParser):
@@ -129,28 +143,36 @@ class _References(HTMLParser):
         self._style = tag == "style"
         if tag in ("link", "base"):
             self.found.append(f"<{tag}>")
+        if tag == "meta" and dict(attrs).get("http-equiv", "").strip().lower() == "refresh":
+            self.found.append("<meta http-equiv=refresh>")
         for name, value in attrs:
             value = (value or "").strip()
             if name in _LOADING_ATTRIBUTES and value and not value.lower().startswith("data:"):
                 self.found.append(f"<{tag} {name}={value[:40]!r}>")
-            if name == "style" and _CSS_FETCH.search(value):
+            if name == "style" and _CSS_FETCH.search(_decode_css(value)):
                 self.found.append(f"<{tag} style> fetches")
 
     def handle_endtag(self, tag: str) -> None:
         self._style = False
 
     def handle_data(self, data: str) -> None:
-        if self._style and _CSS_FETCH.search(data):
+        if self._style and _CSS_FETCH.search(_decode_css(data)):
             self.found.append("<style> fetches")
 
 
 def external_references(document: str) -> list[str]:
     """What in ``document`` would make a browser reach for anything but the file.
 
-    ``<link>`` and ``<base>`` in any form, any ``src``/``srcset``/``poster``/
-    ``data``/``action`` that is not a ``data:`` URI, and any ``@import`` or
-    ``url()`` in CSS. A plain ``<a href>`` is navigation the reader chooses and
-    loads nothing, so it is not listed.
+    Catches ``<link>`` and ``<base>`` in any form, ``<meta http-equiv=refresh>``,
+    any ``src``/``srcset``/``poster``/``data``/``action``/``formaction`` that is
+    not a ``data:`` URI, and any ``@import`` or ``url()`` in ``<style>`` or a
+    ``style`` attribute, after CSS escapes are decoded. A plain ``<a href>`` is
+    navigation the reader chooses and loads nothing, so it is not listed.
+
+    It does **not** catch SVG ``href``/``xlink:href`` outside ``<a>``, ``ping``,
+    ``background``, ``srcdoc``, ``image-set()`` or entities inside a foreign
+    ``<style>``. The Content-Security-Policy is the layer that stops those, which
+    is why its exact directive set is pinned by the tests.
     """
     parser = _References()
     parser.feed(document)
