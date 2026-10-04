@@ -184,7 +184,9 @@ def candidate_of(offer: Offer, store: ProfileStore | None = None) -> Candidate:
         text=offer.text,
         employer=offer.company,
         required_skills=(
-            skill_requirement.required_skills_in(store, offer.id) if store is not None else None
+            skill_requirement.required_skills_in(store, offer.id, offer.text)
+            if store is not None
+            else None
         ),
     )
 

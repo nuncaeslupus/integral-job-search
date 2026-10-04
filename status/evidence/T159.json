@@ -220,12 +220,12 @@
     {
       "module": "skill_requirement",
       "name": "FEWEST_NOT_REQUIRING_CASES",
-      "line": 78
+      "line": 79
     },
     {
       "module": "skill_requirement",
       "name": "FEWEST_REQUIRING_CASES",
-      "line": 71
+      "line": 72
     },
     {
       "module": "sourcing",

@@ -8,7 +8,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 44,
+     "end": 46,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -21,7 +26,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 36,
+     "end": 38,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -34,7 +44,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 14,
+     "end": 16,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -47,7 +62,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 17,
+     "end": 19,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -60,7 +80,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 40,
+     "end": 42,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -73,7 +98,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 39,
+     "end": 41,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -94,7 +124,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 21,
+     "end": 23,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -107,7 +142,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 16,
+     "end": 18,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -120,7 +160,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 0,
+     "end": 2,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -133,7 +178,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 42,
+     "end": 44,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -146,7 +196,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 28,
+     "end": 30,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -159,7 +214,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 14,
+     "end": 16,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -172,7 +232,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 15,
+     "end": 17,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -185,9 +250,15 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 0,
+     "end": 6,
+     "quote": "Golang"
+    }
    }
-  ]
+  ],
+  "cited_in": "title"
  },
  {
   "id": "E16",
@@ -198,7 +269,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 9,
+     "end": 11,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -211,7 +287,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 35,
+     "end": 37,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -224,7 +305,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 37,
+     "end": 39,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -237,7 +323,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 59,
+     "end": 61,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -266,7 +357,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 17,
+     "end": 19,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -279,7 +375,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 20,
+     "end": 22,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -292,7 +393,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 23,
+     "end": 25,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -305,7 +411,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 21,
+     "end": 23,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -318,7 +429,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 59,
+     "end": 61,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -331,7 +447,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 0,
+     "end": 2,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -344,7 +465,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 32,
+     "end": 34,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -373,7 +499,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 14,
+     "end": 16,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -386,7 +517,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 0,
+     "end": 2,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -399,7 +535,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 0,
+     "end": 2,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -412,7 +553,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 8,
+     "end": 10,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -425,7 +571,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 13,
+     "end": 19,
+     "quote": "Golang"
+    }
    }
   ]
  },
@@ -438,7 +589,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 8,
+     "end": 10,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -451,7 +607,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 16,
+     "end": 18,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -464,7 +625,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 22,
+     "end": 24,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -477,7 +643,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 24,
+     "end": 26,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -490,7 +661,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 8,
+     "end": 10,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -503,7 +679,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 0,
+     "end": 2,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -516,7 +697,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 16,
+     "end": 18,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -529,7 +715,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 14,
+     "end": 16,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -542,7 +733,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 14,
+     "end": 16,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -555,7 +751,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 26,
+     "end": 28,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -568,7 +769,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 0,
+     "end": 2,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -581,7 +787,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 24,
+     "end": 26,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -594,7 +805,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 8,
+     "end": 10,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -607,7 +823,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 30,
+     "end": 32,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -620,7 +841,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 30,
+     "end": 32,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -633,7 +859,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 30,
+     "end": 32,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -646,7 +877,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 25,
+     "end": 27,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -659,7 +895,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 11,
+     "end": 13,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -672,7 +913,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 27,
+     "end": 29,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -685,7 +931,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 21,
+     "end": 23,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -698,7 +949,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 16,
+     "end": 22,
+     "quote": "Golang"
+    }
    }
   ]
  },
@@ -711,7 +967,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 22,
+     "end": 24,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -724,7 +985,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 46,
+     "end": 48,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -737,7 +1003,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 23,
+     "end": 25,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -750,7 +1021,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 34,
+     "end": 36,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -763,7 +1039,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 21,
+     "end": 23,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -776,7 +1057,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 16,
+     "end": 18,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -789,7 +1075,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 15,
+     "end": 17,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -802,7 +1093,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 17,
+     "end": 19,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -815,7 +1111,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 37,
+     "end": 39,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -828,7 +1129,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 20,
+     "end": 22,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -841,7 +1147,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 26,
+     "end": 28,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -854,7 +1165,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 15,
+     "end": 17,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -867,7 +1183,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 12,
+     "end": 14,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -880,7 +1201,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 30,
+     "end": 32,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -893,7 +1219,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 14,
+     "end": 16,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -906,7 +1237,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 12,
+     "end": 14,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -919,7 +1255,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 17,
+     "end": 19,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -932,7 +1273,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 50,
+     "end": 52,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -945,7 +1291,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 36,
+     "end": 38,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -958,7 +1309,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 29,
+     "end": 31,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -971,7 +1327,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 34,
+     "end": 36,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -984,7 +1345,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 57,
+     "end": 59,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -997,7 +1363,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 55,
+     "end": 57,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1010,7 +1381,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 15,
+     "end": 17,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1023,7 +1399,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 11,
+     "end": 13,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1036,7 +1417,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 39,
+     "end": 41,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1049,7 +1435,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 39,
+     "end": 41,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1062,7 +1453,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 15,
+     "end": 17,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1075,7 +1471,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 16,
+     "end": 18,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1088,7 +1489,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 12,
+     "end": 14,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1101,7 +1507,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 13,
+     "end": 15,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1114,7 +1525,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 35,
+     "end": 37,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1127,7 +1543,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 27,
+     "end": 29,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1140,7 +1561,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 16,
+     "end": 22,
+     "quote": "golang"
+    }
    }
   ]
  },
@@ -1153,7 +1579,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 19,
+     "end": 21,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1166,7 +1597,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 19,
+     "end": 21,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1179,7 +1615,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 15,
+     "end": 17,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1192,7 +1633,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 16,
+     "end": 18,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1205,7 +1651,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 14,
+     "end": 16,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1218,7 +1669,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 9,
+     "end": 11,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1231,7 +1687,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 36,
+     "end": 38,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1244,7 +1705,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 45,
+     "end": 47,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1257,7 +1723,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 16,
+     "end": 18,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1270,7 +1741,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 10,
+     "end": 12,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1283,7 +1759,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 28,
+     "end": 30,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1296,7 +1777,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 27,
+     "end": 29,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1309,7 +1795,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 40,
+     "end": 42,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1322,7 +1813,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 53,
+     "end": 55,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1335,7 +1831,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 1157,
+     "end": 1159,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1348,7 +1849,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 58,
+     "end": 60,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1361,7 +1867,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 63,
+     "end": 65,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1374,7 +1885,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 53,
+     "end": 55,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1387,7 +1903,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 61,
+     "end": 63,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1400,7 +1921,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 36,
+     "end": 38,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1413,7 +1939,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 68,
+     "end": 70,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1426,7 +1957,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 44,
+     "end": 46,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1439,7 +1975,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 54,
+     "end": 56,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1452,7 +1993,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "optional"
+    "role": "optional",
+    "span": {
+     "start": 0,
+     "end": 2,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1481,9 +2027,15 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 24,
+     "end": 26,
+     "quote": "Go"
+    }
    }
-  ]
+  ],
+  "cited_in": "title"
  },
  {
   "id": "R19",
@@ -1494,9 +2046,15 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 26,
+     "end": 28,
+     "quote": "Go"
+    }
    }
-  ]
+  ],
+  "cited_in": "title"
  },
  {
   "id": "R20",
@@ -1507,9 +2065,15 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 17,
+     "end": 19,
+     "quote": "Go"
+    }
    }
-  ]
+  ],
+  "cited_in": "title"
  },
  {
   "id": "R21",
@@ -1520,9 +2084,15 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 34,
+     "end": 36,
+     "quote": "Go"
+    }
    }
-  ]
+  ],
+  "cited_in": "title"
  },
  {
   "id": "R22",
@@ -1533,7 +2103,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 29,
+     "end": 31,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1546,7 +2121,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 33,
+     "end": 35,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1559,7 +2139,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 33,
+     "end": 35,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1572,7 +2157,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 24,
+     "end": 26,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1585,7 +2175,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "plus"
+    "role": "plus",
+    "span": {
+     "start": 37,
+     "end": 39,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1598,7 +2193,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 37,
+     "end": 39,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1611,7 +2211,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "alternative"
+    "role": "alternative",
+    "span": {
+     "start": 37,
+     "end": 39,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1624,7 +2229,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 34,
+     "end": 36,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1637,7 +2247,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 31,
+     "end": 33,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1650,7 +2265,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 20,
+     "end": 22,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1663,7 +2283,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 25,
+     "end": 27,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1676,7 +2301,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 25,
+     "end": 27,
+     "quote": "Go"
+    }
    }
   ]
  },
@@ -1689,7 +2319,12 @@
   "extracted": [
    {
     "skill": "Go",
-    "role": "required"
+    "role": "required",
+    "span": {
+     "start": 36,
+     "end": 38,
+     "quote": "Go"
+    }
    }
   ]
  }

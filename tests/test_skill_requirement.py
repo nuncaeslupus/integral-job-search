@@ -32,8 +32,14 @@ from integral.candidate import Aim, CandidateConstraints, Location, Reach
 from integral.connectors import ListRequest
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import collect_offer
-from integral.offers import Offer, compute_offer_id
-from integral.presentation_log import partition, pending_skill_line
+from integral.offers import Offer, compute_offer_id, load_offer
+from integral.presentation_log import (
+    partition,
+    pending_skill_counts,
+    pending_skill_line,
+    presented_pending_skill_counts,
+    shown_notes,
+)
 from integral.robots import Robots
 from integral.sourcing import Response, flood_board, source
 from integral.sourcing_exclusions import Exclusion, record_exclusion
@@ -44,14 +50,29 @@ CASES = json.loads(FIXTURE.read_text(encoding="utf-8"))
 GO = Exclusion(about="skill:go", stated_at_cycle=1, words="w", terms=("golang",))
 
 
-def candidate(readings: list[dict[str, str]] | None, text: str = "t") -> se.Candidate:
+#: An advert that contains every spelling the tests cite, so each reading can carry a
+#: real span of it.
+TEXT = (
+    "Go golang GOLANG Golang Python Rust elixír cobol Elixir-ish tooling "
+    "Go (Golang) Golang/Go Go language Go 1.21 Go lang"
+)
+
+
+def candidate(readings: list[dict[str, Any]] | None, text: str = TEXT) -> se.Candidate:
     """An advert whose extraction carries `readings` (`None` = not read yet)."""
-    skills = None if readings is None else sr.required_skills({"skills": readings})
+    skills = None if readings is None else sr.required_skills({"skills": readings}, text)
     return se.Candidate(offer_id="x", text=text, required_skills=skills)
 
 
-def reading(skill: str, role: str) -> dict[str, Any]:
-    return {"skill": skill, "role": role}
+def reading(skill: str, role: str, quote: str | None = None) -> dict[str, Any]:
+    """A reading citing `quote` (default: the skill's own spelling) in `TEXT`."""
+    quote = quote or skill
+    start = TEXT.index(quote)
+    return {
+        "skill": skill,
+        "role": role,
+        "span": {"start": start, "end": start + len(quote), "quote": quote},
+    }
 
 
 # --- the consuming path ---------------------------------------------------------
@@ -104,7 +125,8 @@ def test_a_term_names_the_same_skill_in_another_spelling() -> None:
 def test_a_skill_outside_the_vocabulary_matches_as_a_whole_folded_word() -> None:
     elixir = Exclusion(about="skill:Elixir", stated_at_cycle=1, words="w")
     assert se.matches(candidate([reading("elixír", "required")]), elixir)
-    assert not se.matches(candidate([reading("Elixir-ish tooling", "required")]), elixir)
+    assert se.matches(candidate([reading("Elixir-ish tooling", "required")]), elixir)
+    assert not se.matches(candidate([reading("cobol", "required")]), elixir)
 
 
 def test_other_facets_are_untouched() -> None:
@@ -117,12 +139,91 @@ def test_other_facets_are_untouched() -> None:
     [None, [], "x", {}, {"skills": None}, {"skills": "go"}, {"skills": {"skill": "Go"}}],
 )
 def test_a_payload_without_a_list_of_readings_is_pending(payload: object) -> None:
-    assert sr.required_skills(payload) is None
+    assert sr.required_skills(payload, TEXT) is None
 
 
-def test_a_malformed_reading_is_not_a_requirement() -> None:
-    payload = {"skills": [{"skill": 3, "role": "required"}, "Go", {"role": "required"}]}
-    assert sr.required_skills(payload) == ()
+def _one(**changes: Any) -> dict[str, Any]:
+    return reading("Go", "required") | changes
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        _one(role="Required"),
+        _one(role="requerido"),
+        _one(role=None),
+        _one(span=None),
+        {"skill": "Go", "role": "required"},  # no span at all
+        _one(span={"start": 0, "end": 15, "quote": "Go is mandatory"}),  # not in the advert
+        _one(span={"start": 5, "end": 7, "quote": "Go"}),  # offsets elsewhere
+        _one(skill="   "),
+        _one(unexpected=1),
+        "Go",
+        3,
+        None,
+    ],
+)
+def test_a_reading_that_does_not_validate_makes_the_whole_record_pending(bad: object) -> None:
+    """B1, B2 and the malformed ones: pending (shown, noted), never held, never "requires none"."""
+    for extra in ([], [reading("Python", "plus")]):
+        payload = {"skills": [*extra, bad]}
+        assert sr.required_skills(payload, TEXT) is None
+        assert not se.matches(
+            se.Candidate(
+                offer_id="x", text=TEXT, required_skills=sr.required_skills(payload, TEXT)
+            ),
+            GO,
+        )
+    pending = se.Candidate(offer_id="x", text=TEXT, required_skills=None)
+    assert se.pending_skill_checks(pending, [GO]) == ("skill:go",)
+
+
+def test_a_valid_span_in_another_advert_does_not_hold_this_one() -> None:
+    """Changing the text under a stored reading turns it pending: the span is checked on read."""
+    payload = {"skills": [reading("Go", "required")]}
+    assert sr.required_skills(payload, TEXT) == ("Go",)
+    assert sr.required_skills(payload, "x") is None
+    assert sr.required_skills(payload, "") is None
+    assert sr.required_skills(payload, "Python only, nothing else here") is None
+
+
+def test_the_span_is_checked_on_the_advert_as_the_extraction_saw_it() -> None:
+    """Extraction cites NFC text; a decomposed copy of the same advert still validates."""
+    import unicodedata
+
+    text = "Requisitos: Go y café"
+    payload = {"skills": [reading_of(text, "Go", "required")]}
+    assert sr.required_skills(payload, unicodedata.normalize("NFD", text)) == ("Go",)
+
+
+def reading_of(text: str, quote: str, role: str, skill: str = "Go") -> dict[str, Any]:
+    start = text.index(quote)
+    return {
+        "skill": skill,
+        "role": role,
+        "span": {"start": start, "end": start + len(quote), "quote": quote},
+    }
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["Go (Golang)", "Golang/Go", "Go language", "Go 1.21", "Go lang", " Go ", "go", "GOLANG"],
+)
+def test_the_obvious_spelling_variants_of_a_required_skill_still_hold(variant: str) -> None:
+    assert se.matches(candidate([reading(variant, "required")]), GO), variant
+
+
+@pytest.mark.parametrize("other", ["Google Cloud", "Django", "MongoDB", "Gopher", "Gone"])
+def test_a_different_word_that_starts_like_the_skill_does_not_hold(other: str) -> None:
+    text = f"{other} is what we use"
+    cand = se.Candidate(
+        offer_id="x",
+        text=text,
+        required_skills=sr.required_skills(
+            {"skills": [reading_of(text, other, "required", skill=other)]}, text
+        ),
+    )
+    assert not se.matches(cand, GO)
 
 
 # --- the reviewer's cases, read as extractions ----------------------------------
@@ -143,16 +244,33 @@ def test_every_case_extraction_is_consistent_with_its_verdict() -> None:
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
-def test_the_reviewers_case_through_the_extraction(case: dict[str, object]) -> None:
+def test_the_reviewers_case_through_the_extraction(case: dict[str, Any]) -> None:
+    advert = sr.advert_of(case)
     as_read = se.Candidate(
         offer_id=str(case["id"]),
         title=str(case["title"]),
-        text=str(case["text"]),
-        required_skills=sr.required_skills({"skills": case["extracted"]}),
+        text=advert,
+        required_skills=sr.required_skills({"skills": case["extracted"]}, advert),
     )
     assert se.matches(as_read, GO) == case["requires"], case["note"]
     unread = as_read.model_copy(update={"required_skills": None})
     assert not se.matches(unread, GO), "an advert nobody has read is never held"
+
+
+@pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
+def test_every_reading_is_cited_from_its_cases_own_text(case: dict[str, Any]) -> None:
+    """The readings carry spans of the case's advert, and only that advert validates them.
+
+    Replace the text with "x" and every reading is refused (pending), so no case holds
+    and the required ones fail `test_the_reviewers_case_through_the_extraction`.
+    """
+    advert = sr.advert_of(case)
+    for r in case["extracted"]:
+        span = r["span"]
+        assert advert[span["start"] : span["end"]] == span["quote"], case["id"]
+    if case["extracted"]:
+        assert sr.required_skills({"skills": case["extracted"]}, advert) is not None
+        assert sr.required_skills({"skills": case["extracted"]}, "x") is None
 
 
 # --- the schema the model fills -------------------------------------------------
@@ -263,8 +381,7 @@ def _store_offer(store: ProfileStore, text: str, title: str) -> str:
 
 
 def _read(store: ProfileStore, offer_id: str, readings: list[dict[str, Any]] | None) -> None:
-    offer = _offer("x")  # only the id's shape matters to the schema
-    payload = ex.OfferExtraction(offer_id=offer.id, language="en").model_dump()
+    payload = ex.OfferExtraction(offer_id=offer_id, language="en").model_dump()
     payload["offer_id"] = offer_id
     payload["skills"] = readings
     store.write_json(payload, "extractions", f"{offer_id}.json")
@@ -298,8 +415,9 @@ def test_partition_holds_back_only_the_adverts_that_the_extraction_says_require_
     ids = [requires, option, unread, bare]
     assert len(partition(store, ids)[0]) == 4
     _rule_out_go(store)
-    _read(store, requires, [{**reading("Go", "required"), "span": _span_of(requires_text, "Go")}])
-    _read(store, option, [{**reading("Go", "alternative"), "span": _span_of("Go", "Go")}])
+    option_text = "Experiencia con Java, Go o Python."
+    _read(store, requires, [reading_of(requires_text, "Go", "required")])
+    _read(store, option, [reading_of(option_text, "Go", "alternative")])
     _read(store, bare, [])
     show, hold = partition(store, ids)
     assert [h.offer_id for h in hold] == [requires]
@@ -382,14 +500,170 @@ def test_source_applies_a_required_reading_and_shows_what_is_unread(
     create_profile(other, "Test", handle="test", language="es", fiction=True)
     second = ProfileStore(other, "test")
     _rule_out_go(second)
-    _read(
-        second, victim, [reading("Go", "required") | {"span": {"start": 0, "end": 1, "quote": "x"}}]
-    )
+    advert = load_offer(base, victim).text
+    cited = {"skill": "Go", "role": "required", "span": _span_of(advert, advert[:2])}
+    _read(second, victim, [cited])
     run = _source_round(second, other)
     assert _stored_ids(second) == baseline - {victim}
     (outcome,) = run.outcomes  # type: ignore[attr-defined]
     assert outcome.excluded == 1
     assert "skill:go" in outcome.excluded_because[0]
+
+
+def test_a_stored_reading_with_a_span_not_in_the_advert_is_shown_with_a_note(
+    store: ProfileStore,
+) -> None:
+    """B1 through the real path: create, collect, extraction on disk, partition."""
+    text = "We use Python. Experience with Go is a plus."
+    offer_id = _store_offer(store, text, "Backend")
+    _rule_out_go(store)
+    forged = {
+        "skill": "Go",
+        "role": "required",
+        "span": {"start": 0, "end": 15, "quote": "Go is mandatory"},
+    }
+    _read(store, offer_id, [forged])
+    assert partition(store, [offer_id]) == ([offer_id], [])
+    assert pending_skill_counts(store, [offer_id]) == {"skill:go": 1}
+    _read(store, offer_id, [{"skill": "Go", "role": "required"}])  # B2: no span
+    assert partition(store, [offer_id]) == ([offer_id], [])
+    assert pending_skill_counts(store, [offer_id]) == {"skill:go": 1}
+
+
+def test_step_9_emits_the_pending_note_next_to_the_other_notes(store: ProfileStore) -> None:
+    offer_id = _store_offer(store, "Requisitos:\n- Go", "Backend")
+    assert not [n for n in shown_notes(store, [offer_id]) if "skill:go" in n]
+    _rule_out_go(store)
+    notes = [n for n in shown_notes(store, [offer_id]) if "skill:go" in n]
+    assert len(notes) == 1
+    _read(store, offer_id, [reading_of("Requisitos:\n- Go", "Go", "required")])
+    assert not [n for n in shown_notes(store, [offer_id]) if "skill:go" in n]
+
+
+def test_the_step_9_skill_calls_what_the_code_provides() -> None:
+    text = (
+        Path(__file__).parents[1] / ".claude" / "skills" / "step-09-ranking" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "shown_notes(store, show)" in text
+    imported = text.split("from integral.presentation_log import ", 1)[1].split("\n", 1)[0]
+    import integral.presentation_log as pl
+
+    for name in (n.strip() for n in imported.split(",")):
+        assert hasattr(pl, name), name
+
+
+def test_the_step_9_checkpoint_reports_the_shown_adverts_still_unread(store: ProfileStore) -> None:
+    offer_id = _store_offer(store, "Requisitos:\n- Go", "Backend")
+    _rule_out_go(store)
+    from integral.presentation_log import present
+
+    present(store, [offer_id], at=AT)
+    assert presented_pending_skill_counts(store) == {"skill:go": 1}
+    script = (
+        Path(__file__).parents[1]
+        / ".claude"
+        / "skills"
+        / "step-09-ranking"
+        / "scripts"
+        / "run_checkpoint.py"
+    ).read_text(encoding="utf-8")
+    assert '"skill_checks_pending_on_presented": presented_pending_skill_counts(store)' in script
+
+
+def test_the_live_round_says_a_skill_exclusion_was_not_applied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from integral import exclusion_live_round as live
+
+    assert live.measure_live_round()["skill_exclusions_not_applied"] == []
+    monkeypatch.setattr(
+        live,
+        "LIVE_ROUND_EXCLUSIONS",
+        (*live.LIVE_ROUND_EXCLUSIONS, ("skill:go", "nunca he usado Go", ("golang",))),
+    )
+    measured = live.measure_live_round()
+    assert measured["skill_exclusions_not_applied"] == ["skill:go"]
+    assert "skill:go" in measured["never_tripped"]
+
+
+# --- how a reading gets stored ---------------------------------------------------
+
+
+def test_the_step_8_write_path_stores_validated_readings(store: ProfileStore) -> None:
+    text = "Requisitos:\n- Go\n- SQL"
+    offer_id = _store_offer(store, text, "Backend")
+    _rule_out_go(store)
+    path = sr.store_readings(store, offer_id, [reading_of(text, "Go", "required")])
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["skills"][0]["role"] == "required" and stored["offer_id"] == offer_id
+    assert partition(store, [offer_id])[1][0].offer_id == offer_id
+
+
+def test_the_write_path_keeps_the_rest_of_an_existing_extraction(store: ProfileStore) -> None:
+    text = "Requisitos:\n- Go"
+    offer_id = _store_offer(store, text, "Backend")
+    store.write_json(
+        {
+            "offer_id": offer_id,
+            "language": "es",
+            "scores": [],
+            "unsettled": ["pay"],
+            "unmapped_concepts": ["x"],
+            "skills": None,
+        },
+        "extractions",
+        f"{offer_id}.json",
+    )
+    path = sr.store_readings(store, offer_id, [])
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["unsettled"] == ["pay"] and stored["unmapped_concepts"] == ["x"]
+    assert stored["skills"] == []
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"skill": "Go", "role": "required"},
+        {"skill": "Go", "role": "mandatory", "span": {"start": 0, "end": 2, "quote": "Re"}},
+        {"skill": "Go", "role": "required", "span": {"start": 0, "end": 2, "quote": "Xx"}},
+    ],
+)
+def test_the_write_path_refuses_a_bad_reading_and_writes_nothing(
+    store: ProfileStore, bad: dict[str, Any]
+) -> None:
+    offer_id = _store_offer(store, "Requisitos:\n- Go", "Backend")
+    with pytest.raises(ex.ExtractionError):
+        sr.store_readings(store, offer_id, [bad])
+    assert not store.path("extractions", f"{offer_id}.json").exists()
+
+
+def test_the_write_path_refuses_an_offer_that_is_not_stored(store: ProfileStore) -> None:
+    with pytest.raises(ex.ExtractionError):
+        sr.store_readings(store, "sha256:nope", [])
+
+
+def test_the_command_line_stores_and_exits_two_on_a_refusal(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    text = "Requisitos:\n- Go"
+    offer_id = _store_offer(store, text, "Backend")
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps([reading_of(text, "Go", "required")]), encoding="utf-8")
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps([{"skill": "Go", "role": "required"}]), encoding="utf-8")
+    base = ["--handle", store.home.name, "--offer", offer_id, "--root", str(store.home.parent)]
+    assert sr._store_main([*base, "--readings", str(bad)]) == 2
+    assert not store.path("extractions", f"{offer_id}.json").exists()
+    assert sr._store_main([*base, "--readings", str(good)]) == 0
+    assert store.path("extractions", f"{offer_id}.json").exists()
+
+
+def test_the_step_8_skill_names_the_command_the_code_provides() -> None:
+    text = (
+        Path(__file__).parents[1] / ".claude" / "skills" / "step-08-understanding" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "uv run python -m integral.skill_requirement store --handle" in text
+    assert "integral.stack_fit.VOCABULARY" in text
 
 
 # --- the measurement ------------------------------------------------------------
@@ -427,7 +701,7 @@ def test_the_measurement_counts_a_required_advert_that_is_let_through(tmp_path: 
     broken = [dict(c) for c in CASES]
     for case in broken:
         if case["id"] == "E1":
-            case["extracted"] = [{"skill": "Rust", "role": "required"}]  # not Go
+            case["extracted"] = [{**case["extracted"][0], "skill": "Rust"}]  # not Go
     path = tmp_path / "cases.json"
     path.write_text(json.dumps(broken), encoding="utf-8")
     assert sr.measure(path)["adverts_requiring_a_ruled_out_skill_presented"] == 1
@@ -437,7 +711,7 @@ def test_the_measurement_counts_a_non_required_advert_that_is_held(tmp_path: Pat
     broken = [dict(c) for c in CASES]
     for case in broken:
         if case["id"] == "E3":
-            case["extracted"] = [{"skill": "Go", "role": "required"}]
+            case["extracted"] = [{**case["extracted"][0], "role": "required"}]
     path = tmp_path / "cases.json"
     path.write_text(json.dumps(broken), encoding="utf-8")
     assert sr.measure(path)["adverts_not_requiring_a_ruled_out_skill_held"] == 1

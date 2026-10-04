@@ -44,6 +44,7 @@ its recorded terms.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import unicodedata
 from collections.abc import Iterable, Sequence
@@ -108,46 +109,80 @@ def target_of(value: str, terms: Iterable[str] = ()) -> Target:
 
 
 def names(skill: str, target: Target) -> bool:
-    """Does the extraction's `skill` name what the exclusion rules out?"""
+    """Does the extraction's `skill` name what the exclusion rules out?
+
+    The model is told to write the vocabulary name, but "Go (Golang)", "Go 1.21",
+    "Go language" and "Golang/Go" are what a model writes anyway, so a skill that
+    is not an exact vocabulary name is read the way an advert is
+    (`stack_fit.named`, label mode): any technology it names counts. A literal
+    target is matched as a whole folded word inside the folded skill.
+    """
+    skill = skill.strip()
     try:
-        if stack_fit.resolve_technology(skill.strip()) in target.technologies:
+        if stack_fit.resolve_technology(skill) in target.technologies:
             return True
     except stack_fit.StackFitError:
         pass
-    return _fold(skill) in target.literals
+    if target.technologies & set(stack_fit.named(skill, label=True)):
+        return True
+    folded = _fold(skill)
+    return any(re.search(rf"(?<!\w){re.escape(word)}(?!\w)", folded) for word in target.literals)
 
 
-def required_skills(payload: Any) -> tuple[str, ...] | None:
-    """The skills an extraction's JSON lists as `required`; `None` when unread.
+def valid_readings(payload: Any, text: str) -> list[Any] | None:
+    """The payload's skill readings, validated against the advert; `None` = pending.
 
-    `None` is *pending*: no `skills` key, a `null` one, or anything that is not
-    a list of readings. A malformed payload is pending, not required — it is
-    shown, never held, on a record nothing could validate.
+    The same rule `extraction.accept_skill_readings` applies at write time is
+    applied again here, because nothing guarantees a stored record came through
+    it: every reading must be a `SkillReading` (known role, a span), its span must
+    be what the advert says at those offsets, and no skill may carry two roles.
+    **One invalid reading makes the whole record pending** — a record that
+    cannot be trusted is shown, never held, and never read as "requires none".
     """
-    if not isinstance(payload, dict):
+    from pydantic import ValidationError
+
+    from integral.extraction import (
+        ExtractionError,
+        NormalisedAd,
+        SkillReading,
+        accept_skill_readings,
+    )
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("skills"), list):
         return None
-    readings = payload.get("skills")
-    if not isinstance(readings, list):
+    advert = unicodedata.normalize("NFC", text)
+    if not advert:
         return None
-    found: list[str] = []
-    for reading in readings:
-        if (
-            isinstance(reading, dict)
-            and reading.get("role") == REQUIRED
-            and isinstance(reading.get("skill"), str)
-        ):
-            found.append(reading["skill"])
-    return tuple(found)
+    try:
+        readings = [SkillReading.model_validate(r) for r in payload["skills"]]
+        return accept_skill_readings(
+            NormalisedAd(offer_id="validate", language="es", text=advert), readings
+        )
+    except (ValidationError, ExtractionError):
+        return None
 
 
-def required_skills_in(store: Any, offer_id: str) -> tuple[str, ...] | None:
+def required_skills(payload: Any, text: str) -> tuple[str, ...] | None:
+    """The skills an extraction's JSON lists as `required`; `None` when pending.
+
+    `None` is *pending*: no `skills` key, a `null` one, or any reading that does
+    not validate against the advert's `text` (`valid_readings`). Pending is
+    shown, never held.
+    """
+    readings = valid_readings(payload, text)
+    if readings is None:
+        return None
+    return tuple(r.skill for r in readings if r.role == REQUIRED)
+
+
+def required_skills_in(store: Any, offer_id: str, text: str) -> tuple[str, ...] | None:
     """`required_skills` of `extractions/<offer_id>.json`; `None` when absent or unreadable."""
     path = Path(store.path("extractions", f"{offer_id}.json"))
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return required_skills(payload)
+    return required_skills(payload, text)
 
 
 def holds(required: Sequence[str] | None, target: Target) -> bool:
@@ -158,7 +193,81 @@ def holds(required: Sequence[str] | None, target: Target) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# How a reading gets stored — the step-8 write path
+
+
+def store_readings(store: Any, offer_id: str, readings: Sequence[dict[str, Any]]) -> Path:
+    """Write the model's skill readings into `extractions/<offer_id>.json`.
+
+    This is what step 8 runs after reading an advert. The readings are validated
+    against the stored offer's own text (`extraction.accept_skill_readings`; a
+    reading that fails raises and **nothing is written**), then merged into the
+    extraction already on disk, or into a new, otherwise-unsettled one, leaving
+    every other field as it was. `[]` records "read, names no skill".
+    """
+    from pydantic import ValidationError
+
+    from integral.extraction import (
+        ExtractionError,
+        OfferExtraction,
+        SkillReading,
+        accept_skill_readings,
+        normalise,
+    )
+    from integral.offers import OfferError, load_offer
+
+    try:
+        offer = load_offer(store, offer_id)
+        ad = normalise(offer)
+        parsed = accept_skill_readings(ad, [SkillReading.model_validate(r) for r in readings])
+    except (OfferError, ValidationError, ExtractionError) as exc:
+        raise ExtractionError(f"{offer_id}: skill readings not stored: {exc}") from exc
+    path = Path(store.path("extractions", f"{offer_id}.json"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = None
+    if not isinstance(payload, dict):
+        payload = OfferExtraction(offer_id=offer_id, language=ad.language).model_dump()
+    payload["skills"] = [r.model_dump() for r in parsed]
+    return Path(store.write_json(payload, "extractions", f"{offer_id}.json"))
+
+
+def _store_main(argv: list[str]) -> int:
+    """`store --handle H --offer ID --readings FILE.json [--root DIR]`; exit 2 on a refusal."""
+    import argparse
+
+    from integral.extraction import ExtractionError
+    from integral.identity import ProfileStore, default_profiles_root
+
+    parser = argparse.ArgumentParser(prog="integral.skill_requirement store")
+    parser.add_argument("--handle", required=True)
+    parser.add_argument("--offer", required=True)
+    parser.add_argument("--readings", type=Path, required=True, help="JSON list of readings")
+    parser.add_argument("--root", type=Path, default=None)
+    args = parser.parse_args(argv)
+    store = ProfileStore(args.root or default_profiles_root(), args.handle)
+    try:
+        readings = json.loads(args.readings.read_text(encoding="utf-8"))
+        if not isinstance(readings, list):
+            raise ExtractionError("the readings file must hold a JSON list")
+        path = store_readings(store, args.offer, readings)
+    except (ExtractionError, OSError, ValueError) as exc:
+        print(f"store: {exc}", file=sys.stderr)
+        return 2
+    print(f"stored {len(readings)} skill reading(s) -> {path}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # T229's measurement — the consuming path, over the reviewer's cases
+
+
+def advert_of(case: dict[str, Any]) -> str:
+    """The text a case's readings cite: its text, or title + text when `cited_in` is `title`."""
+    if case.get("cited_in") == "title":
+        return f"{case['title']}\n{case['text']}"
+    return str(case["text"])
 
 
 def _verdicts(cases: Sequence[dict[str, Any]]) -> dict[str, int]:
@@ -168,12 +277,13 @@ def _verdicts(cases: Sequence[dict[str, Any]]) -> dict[str, int]:
 
     def held(case: dict[str, Any], *, extracted: bool) -> bool:
         readings = case["extracted"] if extracted else None
-        skills = None if readings is None else required_skills({"skills": readings})
+        advert = advert_of(case)
+        skills = None if readings is None else required_skills({"skills": readings}, advert)
         return matches(
             Candidate(
                 offer_id=str(case["id"]),
                 title=case.get("title"),
-                text=str(case["text"]),
+                text=advert,
                 required_skills=skills,
             ),
             exclusion,
@@ -255,6 +365,8 @@ def write_evidence(path: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
 
 
 def _main(argv: list[str]) -> int:
+    if len(argv) > 1 and argv[1] == "store":
+        return _store_main(argv[2:])
     recorded = write_evidence(Path(argv[1]) if len(argv) > 1 else DEFAULT_EVIDENCE_PATH)
     print(json.dumps(recorded, ensure_ascii=False))
     if recorded["status"] != "measured":

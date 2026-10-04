@@ -43,6 +43,7 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 from integral.identity import IdentityError, ProfileStore  # noqa: E402
 from integral.presentation_audit import unpresented_ranking  # noqa: E402
+from integral.presentation_log import presented_pending_skill_counts  # noqa: E402
 from integral.process_spec import Step, StepList, load_steps  # noqa: E402
 from integral.session import SessionError, SessionStore  # noqa: E402
 from integral.state_home import (  # noqa: E402
@@ -115,6 +116,9 @@ def checkpoint(profiles_root: Path, handle: str) -> dict[str, Any]:
         "started": started,
         "coverage_met": coverage_met,
         "unpresented_ranking": audit_gap,
+        # T229. Shown adverts a `skill:` exclusion could not be checked on (step 8
+        # has not read them). Informational: shown with a note, never a failure.
+        "skill_checks_pending_on_presented": presented_pending_skill_counts(store),
         # Whether a met checkpoint may be read as the step having passed. It is
         # not implied by `coverage_met`: coverage counts artefacts, and the gate
         # measures whether they are any good (D-21).

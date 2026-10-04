@@ -223,12 +223,12 @@
     {
       "module": "skill_requirement",
       "name": "FEWEST_NOT_REQUIRING_CASES",
-      "lineno": 78
+      "lineno": 79
     },
     {
       "module": "skill_requirement",
       "name": "FEWEST_REQUIRING_CASES",
-      "lineno": 71
+      "lineno": 72
     },
     {
       "module": "sourcing",

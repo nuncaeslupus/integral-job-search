@@ -158,7 +158,7 @@ Showing a batch is itself a fact, and it is the one that later turns into a
 question worth asking. Two calls, around the list:
 
 ```python
-from integral.presentation_log import partition, present, unchecked_line, withheld_line
+from integral.presentation_log import partition, present, shown_notes, unchecked_line, withheld_line
 
 show, held = partition(store, ranked_ids)      # never `show` alone
 present(store, show, at=now, phrase=phrase)
@@ -167,6 +167,8 @@ present(store, show, at=now, phrase=phrase)
 `partition` also withholds the same vacancy under another board's wording (same employer, similar title) when a copy was ever shown, shortlisted, applied to, rejected or archived after any of those. Each kind is its own reason in `withheld_line`. An offer with no employer cannot be compared and is shown: say so with `unchecked_line(store, show)` (empty when there is none).
 
 `partition` also withholds any stored offer on a topic the candidate ruled out (`search/exclusions.json`), including offers stored before they said it.
+
+**Say what was not checked, every time (T229).** `shown_notes(store, show)` returns the notes that go with the list: `unchecked_line` (no employer) and `pending_skill_line` — *"sin leer todavía para saber si lo exigen: skill:go en 3"* — for adverts shown while a `skill:<tech>` exclusion could not be applied because step 8 has not read them. Say each line you get. An advert step 8 read and found requiring the skill is already withheld by `partition`; one it has not read is shown **with this note**, never silently. If a note is non-empty, offer to run step 8 on those adverts first.
 
 **Say the withheld count and the reason, every time.** `withheld_line(held)`
 puts it in the shape the owner asked for — *"4 descartadas porque «son de

@@ -299,13 +299,12 @@ def unchecked_line(store: ProfileStore, offer_ids: list[str]) -> str:
     return f"{len(blank)} sin empresa indicada: no se pudo comprobar si ya las habías visto"
 
 
-def pending_skill_line(store: ProfileStore, offer_ids: list[str]) -> str:
-    """T229. Offers shown while a `skill:` exclusion could not be checked on them.
+def pending_skill_counts(store: ProfileStore, offer_ids: list[str]) -> dict[str, int]:
+    """T229. For each `skill:` exclusion, how many of these adverts it could not be checked on.
 
     A `skill:<tech>` exclusion holds an advert only on its step-8 extraction
-    listing the skill as required. An advert not read yet is shown, and the
-    candidate is told for which skill, so an unread advert never passes for a
-    cleared one.
+    listing the skill as required; an advert not read yet is shown, so it is
+    counted here rather than passing for a cleared one.
     """
     exclusions = load_exclusions(store)
     pending: dict[str, int] = {}
@@ -315,10 +314,33 @@ def pending_skill_line(store: ProfileStore, offer_ids: list[str]) -> str:
             continue
         for about in pending_skill_checks(candidate_of(loaded[0], store), exclusions):
             pending[about] = pending.get(about, 0) + 1
+    return pending
+
+
+def pending_skill_line(store: ProfileStore, offer_ids: list[str]) -> str:
+    """T229. The note for adverts shown while a `skill:` exclusion could not be checked.
+
+    Empty when nothing is pending. Spanish, like the other lines the candidate reads.
+    """
+    pending = pending_skill_counts(store, offer_ids)
     if not pending:
         return ""
     parts = ", ".join(f"{about} en {count}" for about, count in sorted(pending.items()))
     return f"sin leer todavía para saber si lo exigen: {parts}"
+
+
+def shown_notes(store: ProfileStore, show: list[str]) -> list[str]:
+    """Every note that must accompany a shown list: unchecked employers, unread skills.
+
+    The one call step 9 makes after `partition`, so a note added here reaches the
+    candidate without the SKILL having to name it.
+    """
+    return [line for line in (unchecked_line(store, show), pending_skill_line(store, show)) if line]
+
+
+def presented_pending_skill_counts(store: ProfileStore) -> dict[str, int]:
+    """`pending_skill_counts` over every advert ever shown (step 9's checkpoint)."""
+    return pending_skill_counts(store, sorted(_presented_ids(store)))
 
 
 def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], list[Withheld]]:
