@@ -292,6 +292,9 @@ class BoardOutcome:
     #: T253. Rows the candidate's stated reach rules out, left uncollected and
     #: not counted against the ceiling.
     out_of_reach: int = 0
+    #: T253. Requests (pages, employer boards) of this board never sent because
+    #: it had written its share. Not rows, so not in the unrealized partition.
+    requests_not_made: int = 0
     #: T174 (#466 review, round 1 F6). Rows whose advert host had already
     #: refused — this row's own fetch drew the refusal, or an earlier row's
     #: did — so the row was never read. Not `dropped`: nothing about the row
@@ -391,6 +394,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "employer_unpublished",
         "employer_gap",
         "source_kind",
+        "requests_not_made",
     }
 )
 
@@ -462,19 +466,27 @@ class Run:
         return sum(o.added for o in self.outcomes)
 
     @property
-    def capped(self) -> dict[str, tuple[int, int]]:
-        """Boards held to their share (T253): name -> (rows not collected, requests not made).
+    def capped(self) -> dict[str, tuple[int, int, tuple[str, ...]]]:
+        """Boards held to their share (T253): name -> (rows not collected,
+        requests not made, terms never sent to it).
 
-        A board is capped when a row was refused for it or a request was never
-        sent for it; either alone is a board that lost something to the share.
+        A board is capped when anything was left unread because of its share:
+        a row refused, a page or employer request not sent, or a term never
+        asked. A board that fills its share exactly at the end of its last
+        request lost nothing and is not capped.
         """
-        lost: dict[str, tuple[int, int]] = {}
+        lost: dict[str, tuple[int, int, tuple[str, ...]]] = {}
         for o in self.outcomes:
-            rows = o.over_board_cap
-            skipped = 1 if o.skipped == _BOARD_CAP_SKIP else 0
-            if rows or skipped:
-                before = lost.get(o.connector, (0, 0))
-                lost[o.connector] = (before[0] + rows, before[1] + skipped)
+            skipped = o.skipped == _BOARD_CAP_SKIP
+            if o.over_board_cap or o.requests_not_made or skipped:
+                rows, pages, terms = lost.get(o.connector, (0, 0, ()))
+                if skipped and o.query is not None and o.query not in terms:
+                    terms = (*terms, o.query)
+                lost[o.connector] = (
+                    rows + o.over_board_cap,
+                    pages + o.requests_not_made,
+                    terms,
+                )
         return lost
 
     @property
@@ -699,11 +711,12 @@ class Run:
                 "  NOT resumable by offset — these take no query, so a continuation never "
                 f"asks them; ask again with offset=0: {', '.join(self.unsteered_after_ceiling)}"
             )
-        for board, (rows, requests) in self.capped.items():
+        for board, (rows, pages, terms) in self.capped.items():
+            unsent = f"; never searched for: {', '.join(terms)}" if terms else ""
             lines.append(
                 f"  CAPPED  {board}: held to its {self.board_cap}-offer share of the "
                 f"{OFFER_CEILING}-offer ceiling — {rows} matching row(s) not collected, "
-                f"{requests} request(s) not made"
+                f"{pages} further request(s) of this term not made{unsent}"
             )
         if self.parsed_nothing:
             lines.append(
@@ -1368,15 +1381,19 @@ def _outside_reach(offer: Offer, constraints: CandidateConstraints) -> bool:
     The check is `candidate.filter_hard_constraints` itself, run over the
     candidate's `location` and `reach` alone and read for a removal **on the
     `reach` field**: restating the rule here would be a second copy to drift.
-    Any stated `remote` text is "remote", as `bulk_filter` reads it; a row with a
-    country and no remote text is on site there.
+    `Location.remote` is the board's own free text ("En sede", "En remoto",
+    "hybrid"), so any text there makes the delivery undecidable and the row is
+    counted: `bulk_filter` reads "some text" as remote only to *keep* a row, and
+    reading it that way to *remove* one dropped an on-site row in the
+    candidate's own country. Only a row with a country and **no** remote text is
+    taken to be on site there.
     """
     reach = constraints.reach
     where = offer.location
     if reach.state != "stated" or where is None:
         return False
     country = (where.country or "").strip()
-    if not _COUNTRY_CODE.fullmatch(country):
+    if not _COUNTRY_CODE.fullmatch(country) or (where.remote or "").strip():
         return False
     only = CandidateConstraints(
         **{name: getattr(constraints, name) for name in _REACH_ONLY},
@@ -1384,7 +1401,7 @@ def _outside_reach(offer: Offer, constraints: CandidateConstraints) -> bool:
     facts = OfferFacts(
         offer_id=offer.id,
         country=country,
-        delivery="remote" if (where.remote or "").strip() else "onsite",
+        delivery="onsite",
     )
     verdict = filter_hard_constraints(only, [facts])
     return any(r.field == "reach" for r in verdict.removed)
@@ -1500,6 +1517,7 @@ def _one_board(
             over_ceiling=over_ceiling,
             over_board_cap=over_board_cap,
             out_of_reach=out_of_reach,
+            requests_not_made=requests_not_made,
             refused_rows=refused_rows,
             excluded=excluded,
             excluded_because=tuple(excluded_because),
@@ -1514,8 +1532,11 @@ def _one_board(
         )
 
     limit = min(room, board_room)
+    requests_not_made = 0
     for index, request in enumerate(requests):
         if added >= limit:
+            if board_room < room:
+                requests_not_made = len(requests) - index
             break
         prior = refused_origins.get(_origin(request.url))
         if prior is not None:
@@ -1597,7 +1618,17 @@ def _one_board(
                 continue
             if added >= limit:
                 # Whichever bound ended it: a board's own share comes first
-                # when it is the smaller, and is said as such (T253).
+                # when it is the smaller, and is said as such (T253). A row
+                # the reach rules out is still out of reach, not "not
+                # collected": built from the list row alone, no page fetched.
+                if constraints is not None:
+                    early = {**item, "company": item.get("company") or request.employer or ""}
+                    early_offer, _ = _offer_from(
+                        connector, early, url=_absolute(item.get("detail_url"), request.url)
+                    )
+                    if early_offer is not None and _outside_reach(early_offer, constraints):
+                        out_of_reach += 1
+                        continue
                 if board_room < room:
                     over_board_cap += 1
                 else:
