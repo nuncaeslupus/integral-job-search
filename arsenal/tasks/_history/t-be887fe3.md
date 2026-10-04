@@ -3,6 +3,7 @@ id: t-be887fe3
 title: "T235: every foorilla offer is stored with no company and no location"
 label: "T235: foorilla company and location"
 priority: 10
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2).
@@ -14,13 +15,7 @@ Read both from the board (list row or advert page), or, if the board does not pu
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+UV_PYTHON=3.12 uv run --extra dev pytest tests/test_employer_published.py -q -k "foorilla"
 ```
+`arsenal-task: t-be887fe3`
