@@ -187,6 +187,21 @@ def named(text: str, *, label: bool = False) -> dict[str, str]:
     return found
 
 
+def spans_of(text: str, technology: str, *, label: bool = False) -> list[tuple[int, int]]:
+    """Every `(start, end)` at which `text` names `technology` (R1-R4).
+
+    T229: `named` keeps the first span of each technology, which is all a fit
+    needs; reading whether a mention is a *requirement* needs every one.
+    """
+    found: list[tuple[int, int]] = []
+    for pattern, is_go in _PATTERNS[technology]:
+        for match in pattern.finditer(text):
+            if is_go and _is_go_the_verb(text, match, label=label):
+                continue
+            found.append((match.start(), match.end()))
+    return sorted(found)
+
+
 def offer_named(title: str, text: str) -> dict[str, str]:
     """R5: what an offer names — its text as prose, its title as a label."""
     return named(text) | named(title, label=True)

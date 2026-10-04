@@ -3,6 +3,7 @@ id: t-37ea22aa
 title: "T229: A skill the candidate lacks cannot be ruled out by requirement: text matching cannot tell required from mentioned"
 label: "T229: A skill the candidate"
 priority: 5
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2).
@@ -12,13 +13,6 @@ Filed from a candidate session (test-mode 658fcce2).
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run pytest tests/test_skill_requirement.py -q
 ```

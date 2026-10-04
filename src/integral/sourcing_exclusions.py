@@ -46,6 +46,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from integral import skill_requirement
 from integral.candidate import CONSTRAINT_FIELD_NAMES, FIELD_MODELS
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer, names_an_employer
@@ -586,6 +587,10 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     answered by `employer_verdict` on the normalised company, never by text;
     an advert whose employer cannot be told is held (`UNDECIDED`), not passed.
 
+    The `skill:` facet (T229) is a third: the advert is held only where it
+    *requires* the technology, read by `skill_requirement.requires`; a mention
+    as a plus, an option among several or an example does not hold it.
+
     The stated value, and every `term` recorded beside it, is matched as a
     **word plus a closed set of endings** (`SUFFIXES`), never as free text:
     `banca` finds `bancario`, `bancos` and `bancari`, and `cloud` still does
@@ -597,6 +602,12 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     """
     if exclusion.facet.strip().lower() == "employer":
         return employer_verdict(candidate, exclusion) != IN
+    if exclusion.facet.strip().lower() == skill_requirement.FACET:
+        return skill_requirement.requires(
+            candidate.title,
+            candidate.text,
+            skill_requirement.target_of(exclusion.value, exclusion.terms),
+        )
     raw = f"{candidate.title or ''} {candidate.employer or ''} {candidate.text}"
     for join in ("", " "):
         haystack = _fold(raw, join)
