@@ -156,14 +156,54 @@ def test_coverage_is_what_a_boards_and_query_would_match(store: ProfileStore) ->
     assert _terms(store) == ["python engineer"]
 
 
-def test_a_decline_does_not_silence_a_different_word_order_with_other_words(
+def test_a_decline_silences_only_the_same_set_of_significant_words(
     store: ProfileStore,
 ) -> None:
     decline(store, "platform engineer")
-    for title in ("Developer Platform", "Platform Engineer Lead Tools"):
+    for title in ("Developer Platform", "Platform Engineer Lead Tools", "Engineer, Platform II"):
         _advert(store, title, "Acme")
         _advert(store, title, "Globex")
-    assert _terms(store) == ["developer platform"]
+    # same words in another order (and a grade) are declined; a superset is not
+    assert _terms(store) == ["developer platform", "platform engineer tools"]
+
+
+def test_declining_ai_engineer_does_not_hide_applied_ai_engineer(store: ProfileStore) -> None:
+    decline(store, "ai engineer")
+    _advert(store, "Applied AI Engineer", "Acme")
+    _advert(store, "Applied AI Engineer", "Globex")
+    assert _terms(store) == ["applied ai engineer"]
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["Head of Data", "Engineer III", "Engineer 2", "Software Engineer II", "Data de la"],
+)
+def test_function_words_and_grades_are_not_significant_words(
+    store: ProfileStore, title: str
+) -> None:
+    # "head of data" -> one word; "engineer iii/2" -> one; "software engineer ii" is
+    # the two-word "software engineer", which the aim (python developer) does not cover.
+    _advert(store, title, "Acme")
+    _advert(store, title, "Globex")
+    expected = ["software engineer"] if title == "Software Engineer II" else []
+    assert _terms(store) == expected
+
+
+def test_a_slash_gender_form_is_one_word_in_the_proposal(store: ProfileStore) -> None:
+    _advert(store, "Ingeniero/a de datos", "Acme")
+    _advert(store, "Ingeniero/a de Datos", "Globex")
+    assert _terms(store) == ["ingeniero datos"]
+    assert clean_title("Ingeniera/o de datos") == "ingeniera datos"
+
+
+def test_a_declined_term_typed_with_a_grade_or_function_word_still_matches(
+    store: ProfileStore,
+) -> None:
+    decline(store, "Platform of Engineer II")
+    assert decline(store, "engineer platform") == ["Platform of Engineer II"]
+    _advert(store, "Platform Engineer", "Acme")
+    _advert(store, "Platform Engineer", "Globex")
+    assert _terms(store) == []
 
 
 def test_adverts_on_a_ruled_out_topic_propose_nothing(store: ProfileStore) -> None:

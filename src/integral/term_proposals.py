@@ -18,16 +18,18 @@ yes.
    One vacancy cross-posted on three boards is one vacancy, and counting it
    thrice would propose a term from a single advert. Boards are reported
    (`boards`) and rank ties, so a title seen across boards sorts first;
-2. it has at least `WORDS_NEEDED` (2) words once gender markers, level words,
-   work-mode words and a trailing location are removed - a bare `engineer` is
+2. it has at least `WORDS_NEEDED` (2) significant words once gender markers, level
+   words, work-mode words, a trailing location, function words (`of`, `de`)
+   and grade tokens (`II`, `2`) are removed - a bare `engineer` is
    not a search, it is the whole market;
 3. no aim term already covers it: a board's AND-ed query for that term would
    match the title (`sourcing.matches_aim` - every word of the term is a whole
    word of the title), so `ai engineer` already finds `generative ai engineer`
    and `software engineer` does not cover `applied ai engineer`. No synonym
    folding: `developer` is not `engineer` to a board's query;
-4. the candidate has not declined it: a declined term whose words are all in
-   the title's is not asked again;
+4. the candidate has not declined it: a declined term with the same set of
+   significant words is not asked again (declining `ai engineer` does not hide
+   `applied ai engineer`);
 5. the advert is not about a topic the candidate ruled out
    (`search/exclusions.json`): a term must not be proposed from adverts the
    search would have dropped.
@@ -50,7 +52,14 @@ from typing import Any
 
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import load_offer
-from integral.same_vacancy import _GENDER, _LEVEL_SPELLINGS, _LEVELS, employer_key
+from integral.same_vacancy import (
+    _GENDER,
+    _LEVEL_SPELLINGS,
+    _LEVELS,
+    _NOISE,
+    _ROMAN,
+    employer_key,
+)
 from integral.search_terms import AIM_FILE, load_aim
 from integral.sourcing import _words, matches_aim, recorded_offer_ids
 from integral.sourcing_exclusions import candidate_of, load_exclusions, ruled_out_by
@@ -60,6 +69,9 @@ WORDS_NEEDED = 2
 
 _MODE = frozenset({"remote", "remoto", "hybrid", "hibrido", "onsite", "presencial"})
 _SEPARATED_TAIL = re.compile(r"\s+[-\u2013\u2014|@]\s+.*$|,\s.*$")
+#: `Ingeniero/a`, `desarrollador/a`: the slash-and-vowel gender form of one word.
+_GENDER_SLASH = re.compile(r"(?<=[^\W\d_])/[ao]\b", re.IGNORECASE)
+_STOP = _NOISE - {"software", "remote", "remoto", "hybrid", "hibrido", "onsite", "presencial"}
 _PARENTHESES = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 
 
@@ -74,22 +86,36 @@ class TermError(Exception):
     """A proposal could not be accepted or declined."""
 
 
-def clean_title(title: str) -> str:
-    """The title as a search phrase: lowercase, no gender, level, mode or location."""
+def _is_stop_or_grade(word: str) -> bool:
+    """A function word, or a grade (`II`, `iii`, `2`) - not part of what the role is."""
+    return word in _STOP or word in _ROMAN or word.isdigit()
+
+
+def clean_title(title: str, *, literal: bool = False) -> str:
+    """The title as a search phrase: lowercase, no gender, level, mode or location.
+
+    Unless `literal`, also without function words and grade tokens, so `Head of
+    Data` is `data` and `Software Engineer II` is `software engineer`. The
+    literal form keeps them, because a board's AND query reads them.
+    """
     text = _PARENTHESES.sub(" ", title)
+    text = _GENDER_SLASH.sub("", text)
     text = _GENDER.sub(" ", text.casefold())
     text = _SEPARATED_TAIL.sub("", text)
     kept = [
         w
         for w in re.findall(r"[^\W_]+(?:[+#]+)?", text)
-        if _LEVEL_SPELLINGS.get(w, w) not in _LEVELS and w not in _MODE
+        if _LEVEL_SPELLINGS.get(w, w) not in _LEVELS
+        and w not in _MODE
+        and (literal or not _is_stop_or_grade(w))
     ]
     return " ".join(kept)
 
 
 def _key(term: str) -> frozenset[str]:
-    """The words a board's query would read in `term` - no synonym folding."""
-    return frozenset(_words(term))
+    """The significant words of `term` - no synonym folding, no function words
+    or grades. Two terms are the same term when these sets are equal."""
+    return frozenset(w for w in _words(term) if not _is_stop_or_grade(w))
 
 
 def _covers(aim_terms: tuple[str, ...], phrase: str) -> bool:
@@ -157,9 +183,9 @@ def propose(store: ProfileStore, offer_ids: set[str] | None = None) -> list[Prop
             continue
         phrase = clean_title(offer["title"])
         key = _key(phrase)
-        if len(key) < WORDS_NEEDED or _covers(aim.terms, phrase):
+        if len(key) < WORDS_NEEDED or key in refused:
             continue
-        if any(r <= key for r in refused):
+        if _covers(aim.terms, clean_title(offer["title"], literal=True)):
             continue
         employer = employer_key(offer.get("company"))
         who = "|".join(employer) if employer else "no-employer"
