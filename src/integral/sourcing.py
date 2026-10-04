@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
-from integral.candidate import Aim, CandidateConstraints
+from integral.candidate import Aim, CandidateConstraints, OfferFacts, filter_hard_constraints
 from integral.candidate import Location as ConstraintLocation
 from integral.connector_coverage import Package, installed_packages
 from integral.connector_health import on_portal_host, rate_limited
@@ -133,6 +133,26 @@ PHRASE_CEILING = 6
 #: page is opened, nothing is collected and no further board is asked, and all
 #: three are reported.
 OFFER_CEILING = 50
+#:
+#: T253. The ceiling is **counted per board and after the reach constraint**.
+#:
+#: * A row the candidate's stated reach rules out (`_outside_reach`) is never
+#:   counted against it, and is not collected: it would be removed by the same
+#:   constraint on its way to the candidate, so spending room on it only
+#:   shrinks the room left for rows that can be read. A worldwide board
+#:   returning 195 rows, most of them abroad, filled the run's ceiling with
+#:   adverts nobody could take.
+#: * No board may spend more than `board_share(boards)` of it, over the whole
+#:   run (every phrase, every window). The share is `OFFER_CEILING // boards`,
+#:   never less than 1 and rounded **down**, so `boards x share` never exceeds
+#:   the ceiling: a rounded-up share let the first ten of eleven boards fill the
+#:   run and the last be reported "NOT asked". Room a board does not use is not
+#:   handed on — the ceiling is a maximum on what the candidate must read, not a
+#:   quota to fill, and redistribution would bring back exactly the starvation
+#:   the share removes. A board that reaches its share is reported (`capped`)
+#:   with how many rows and requests it lost, and it does not change
+#:   `unsearched` or `next_offset`: the walk over the aim continues on every
+#:   other board, so only the run-wide ceiling ends it.
 
 #: A package declaring this lists jobs wherever they are, so it serves no
 #: country in particular — see `packages_for`.
@@ -143,7 +163,20 @@ GLOBAL = "GLOBAL"
 #: without moving.
 _WORLDWIDE_REACH = frozenset({"remote", "cross_border_remote_employer"})
 
+_COUNTRY_CODE = re.compile(r"[A-Z]{2}")
+
 _CEILING_SKIP = "the run reached its offer ceiling"
+_BOARD_CAP_SKIP = "the board reached its share of the offer ceiling"
+
+
+def board_share(boards: int) -> int:
+    """How many new offers one board may write in a run (T253).
+
+    Rounded down and at least 1: `boards * board_share(boards) <= OFFER_CEILING`
+    holds for every `boards <= OFFER_CEILING`, which is what guarantees the last
+    board asked still has room when the first ones have each spent their share.
+    """
+    return max(1, OFFER_CEILING // max(1, boards))
 
 
 @dataclass(frozen=True)
@@ -252,6 +285,16 @@ class BoardOutcome:
     unopened: int = 0
     #: Matching rows left uncollected because the run reached `OFFER_CEILING`.
     over_ceiling: int = 0
+    #: T253. Matching rows left uncollected because this board had written its
+    #: share of the ceiling (`board_share`) — the board's own limit, not the
+    #: run's, so the two are said apart.
+    over_board_cap: int = 0
+    #: T253. Rows the candidate's stated reach rules out, left uncollected and
+    #: not counted against the ceiling.
+    out_of_reach: int = 0
+    #: T253. Requests (pages, employer boards) of this board never sent because
+    #: it had written its share. Not rows, so not in the unrealized partition.
+    requests_not_made: int = 0
     #: T174 (#466 review, round 1 F6). Rows whose advert host had already
     #: refused — this row's own fetch drew the refusal, or an earlier row's
     #: did — so the row was never read. Not `dropped`: nothing about the row
@@ -351,6 +394,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "employer_unpublished",
         "employer_gap",
         "source_kind",
+        "requests_not_made",
     }
 )
 
@@ -400,6 +444,9 @@ class Run:
     #: "every installed board, since …". A run blocked by an unstated location
     #: asks nobody at all, and said nothing until round 3's R2.
     unreached_because: str = ""
+    #: T253. The per-board share this run applied (`board_share`); 0 until a
+    #: pass has set it. Said beside every capped board.
+    board_cap: int = 0
 
     @property
     def searched(self) -> list[str]:
@@ -417,6 +464,39 @@ class Run:
     @property
     def added(self) -> int:
         return sum(o.added for o in self.outcomes)
+
+    @property
+    def capped(self) -> dict[str, tuple[int, int, tuple[str, ...]]]:
+        """Boards held to their share (T253): name -> (rows not collected,
+        requests not made, terms never sent to it).
+
+        A board is capped when anything was left unread because of its share:
+        a row refused, a page or employer request not sent, or a term never
+        asked. A board that fills its share exactly at the end of its last
+        request lost nothing and is not capped.
+        """
+        lost: dict[str, tuple[int, int, tuple[str, ...]]] = {}
+        for o in self.outcomes:
+            skipped = o.skipped == _BOARD_CAP_SKIP
+            if o.over_board_cap or o.requests_not_made or skipped:
+                rows, pages, terms = lost.get(o.connector, (0, 0, ()))
+                if skipped and o.query is not None and o.query not in terms:
+                    terms = (*terms, o.query)
+                lost[o.connector] = (
+                    rows + o.over_board_cap,
+                    pages + o.requests_not_made,
+                    terms,
+                )
+        return lost
+
+    @property
+    def unsteered_after_ceiling(self) -> list[str]:
+        """Boards that take no query and were not asked because the run's ceiling was full.
+
+        `next_offset` cannot resume them: a continuation (`offset > 0`) never
+        asks a board whose answer does not depend on the phrases.
+        """
+        return self._boards(lambda o: o.skipped == _CEILING_SKIP and o.query is None)
 
     def _boards(self, matching: Callable[[BoardOutcome], bool]) -> list[str]:
         """Board names, in order, without repeats.
@@ -626,6 +706,18 @@ class Run:
                 f"  STOPPED at the {OFFER_CEILING}-offer ceiling — any rows, pages or "
                 "boards after it were not read"
             )
+        if self.unsteered_after_ceiling:
+            lines.append(
+                "  NOT resumable by offset — these take no query, so a continuation never "
+                f"asks them; ask again with offset=0: {', '.join(self.unsteered_after_ceiling)}"
+            )
+        for board, (rows, pages, terms) in self.capped.items():
+            unsent = f"; never searched for: {', '.join(terms)}" if terms else ""
+            lines.append(
+                f"  CAPPED  {board}: held to its {self.board_cap}-offer share of the "
+                f"{OFFER_CEILING}-offer ceiling — {rows} matching row(s) not collected, "
+                f"{pages} further request(s) not made{unsent}"
+            )
         if self.parsed_nothing:
             lines.append(
                 "  NOTHING PARSED — answered with no advert on the page, which is not "
@@ -675,12 +767,18 @@ class Run:
                     f"  UNOPENED {outcome.connector}: {outcome.unopened} row(s) needed the "
                     f"advert's page after the {DETAIL_FETCH_CEILING}-page budget was spent"
                 )
+            if outcome.out_of_reach:
+                lines.append(
+                    f"  OUT OF REACH {outcome.connector}: {outcome.out_of_reach} of "
+                    f"{outcome.items} row(s) are outside your stated reach — not collected, "
+                    "not counted against the ceiling"
+                )
             if outcome.over_ceiling:
                 lines.append(
                     f"  CEILING  {outcome.connector}: {outcome.over_ceiling} matching row(s) "
                     f"not collected — {_CEILING_SKIP}"
                 )
-            if outcome.skipped == _CEILING_SKIP:
+            if outcome.skipped in (_CEILING_SKIP, _BOARD_CAP_SKIP):
                 continue
             if outcome.refused:
                 partial = f" — partial: {outcome.added} added before it" if outcome.added else ""
@@ -910,6 +1008,8 @@ def source(
     offset: int = 0,
     already_added: int = 0,
     refused_origins: dict[str, str] | None = None,
+    board_added: dict[str, int] | None = None,
+    board_cap: int | None = None,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -938,6 +1038,13 @@ def source(
     `source_every_phrase` is the caller that sets it. `refused_origins` is the
     same idea for T174's refusal map: a host's refusal is its answer for the
     whole run, so a caller running several windows hands one dict through them.
+
+    `board_added` (T253) is the same idea per board: how many offers each board
+    already wrote this run, so `board_share` bounds a board over every window.
+    A row outside the candidate's stated reach is neither collected nor counted.
+    `board_cap` replaces the computed share (`board_share`); passing `OFFER_CEILING`
+    lets a gate exercise the run-wide ceiling alone, since shares that sum to less
+    than it make it unreachable by construction.
 
     A board that takes no query is asked once per run, at `offset == 0`, and its
     rows are filtered against the **whole** aim: asking it again per window is
@@ -989,7 +1096,10 @@ def source(
     # T174: shared by every board and phrase, so a host's refusal is its
     # answer for the rest of the run rather than for one request.
     refused_origins = {} if refused_origins is None else refused_origins
-    for package in packages_for(constraints, directory):
+    board_added = {} if board_added is None else board_added
+    boards = packages_for(constraints, directory)
+    run.board_cap = board_share(len(boards)) if board_cap is None else board_cap
+    for package in boards:
         # A board that does not search returns the same list whatever was
         # asked, so asking it once per phrase is N identical requests for one
         # answer. Deciding here rather than inside `_one_board` is what makes
@@ -1009,6 +1119,12 @@ def source(
                     BoardOutcome(package.name, None, steerable, query, skipped=_CEILING_SKIP)
                 )
                 continue
+            board_room = run.board_cap - board_added.get(package.name, 0)
+            if board_room <= 0:
+                run.outcomes.append(
+                    BoardOutcome(package.name, None, steerable, query, skipped=_BOARD_CAP_SKIP)
+                )
+                continue
             run.outcomes.append(
                 _one_board(
                     store,
@@ -1021,11 +1137,14 @@ def source(
                     robots=adjudicator,
                     phrases=phrases if steerable else aim.terms,
                     room=room,
+                    board_room=board_room,
+                    constraints=constraints,
                     browser=browser,
                     refused_origins=refused_origins,
                     exclusions=exclusions,
                 )
             )
+            board_added[package.name] = board_added.get(package.name, 0) + run.outcomes[-1].added
     # Phrases the ceiling stopped before they were sent to a board that takes a
     # query. They sit inside this window, so the window — not the next one — is
     # where a resumed run must start, and they are named rather than left only
@@ -1063,6 +1182,7 @@ def source_every_phrase(
     merged = Run()
     offset = 0
     refused: dict[str, str] = {}
+    board_added: dict[str, int] = {}
     while True:
         run = source(
             store,
@@ -1071,8 +1191,10 @@ def source_every_phrase(
             offset=offset,
             already_added=merged.added,
             refused_origins=refused,
+            board_added=board_added,
             **kwargs,
         )
+        merged.board_cap = run.board_cap
         if offset == 0:
             merged.unreached = run.unreached
             merged.unreached_because = run.unreached_because
@@ -1244,6 +1366,47 @@ def _detail_record(
         return None, None
 
 
+_REACH_ONLY = ("location", "reach")
+
+
+def _outside_reach(offer: Offer, constraints: CandidateConstraints) -> bool:
+    """Whether the candidate's **stated** reach rules this row out (T253).
+
+    Only what the row states can decide it, and the answer is `False` — counted —
+    wherever it cannot: no stated reach, no two-letter country on the row, or a
+    verdict that is `unplaced` rather than a refusal. A wrongly counted row costs
+    one slot of the ceiling; a wrongly refused one is a job lost without a
+    reason, which is why `bulk_filter` makes the same choice.
+
+    The check is `candidate.filter_hard_constraints` itself, run over the
+    candidate's `location` and `reach` alone and read for a removal **on the
+    `reach` field**: restating the rule here would be a second copy to drift.
+    `Location.remote` is the board's own free text ("En sede", "En remoto",
+    "hybrid"), so any text there makes the delivery undecidable and the row is
+    counted: `bulk_filter` reads "some text" as remote only to *keep* a row, and
+    reading it that way to *remove* one dropped an on-site row in the
+    candidate's own country. Only a row with a country and **no** remote text is
+    taken to be on site there.
+    """
+    reach = constraints.reach
+    where = offer.location
+    if reach.state != "stated" or where is None:
+        return False
+    country = (where.country or "").strip()
+    if not _COUNTRY_CODE.fullmatch(country) or (where.remote or "").strip():
+        return False
+    only = CandidateConstraints(
+        **{name: getattr(constraints, name) for name in _REACH_ONLY},
+    )
+    facts = OfferFacts(
+        offer_id=offer.id,
+        country=country,
+        delivery="onsite",
+    )
+    verdict = filter_hard_constraints(only, [facts])
+    return any(r.field == "reach" for r in verdict.removed)
+
+
 def _one_board(
     store: ProfileStore,
     package: Package,
@@ -1256,13 +1419,18 @@ def _one_board(
     robots: Robots,
     phrases: Sequence[str] = (),
     room: int = OFFER_CEILING,
+    board_room: int = OFFER_CEILING,
+    constraints: CandidateConstraints | None = None,
     browser: Fetch | None = None,
     refused_origins: dict[str, str] | None = None,
     exclusions: Sequence[Exclusion] = (),
 ) -> BoardOutcome:
     """One board, asked `query` if it searches, else narrowed to `phrases`.
 
-    `room` is how many new offers the run may still write (`OFFER_CEILING`).
+    `room` is how many new offers the run may still write (`OFFER_CEILING`);
+    `board_room` is how many this board may (`board_share`, T253). The smaller
+    ends the read, and which of the two it was decides the counter a refused row
+    lands in. `constraints` supplies the reach a row is held to (`_outside_reach`).
     """
     refused_origins = {} if refused_origins is None else refused_origins
     try:
@@ -1307,6 +1475,8 @@ def _one_board(
     off_aim = 0
     unopened = 0
     over_ceiling = 0
+    over_board_cap = 0
+    out_of_reach = 0
     refused_rows = 0
     excluded = 0
     excluded_because: list[str] = []
@@ -1345,6 +1515,9 @@ def _one_board(
             off_aim=off_aim,
             unopened=unopened,
             over_ceiling=over_ceiling,
+            over_board_cap=over_board_cap,
+            out_of_reach=out_of_reach,
+            requests_not_made=requests_not_made,
             refused_rows=refused_rows,
             excluded=excluded,
             excluded_because=tuple(excluded_because),
@@ -1358,8 +1531,12 @@ def _one_board(
             refused=refused,
         )
 
+    limit = min(room, board_room)
+    requests_not_made = 0
     for index, request in enumerate(requests):
-        if added >= room:
+        if added >= limit:
+            if board_room < room:
+                requests_not_made = len(requests) - index
             break
         prior = refused_origins.get(_origin(request.url))
         if prior is not None:
@@ -1451,8 +1628,23 @@ def _one_board(
             if not steerable and not matches_aim(item, phrases):
                 off_aim += 1
                 continue
-            if added >= room:
-                over_ceiling += 1
+            if added >= limit:
+                # Whichever bound ended it: a board's own share comes first
+                # when it is the smaller, and is said as such (T253). A row
+                # the reach rules out is still out of reach, not "not
+                # collected": built from the list row alone, no page fetched.
+                if constraints is not None:
+                    early = {**item, "company": item.get("company") or request.employer or ""}
+                    early_offer, _ = _offer_from(
+                        connector, early, url=_absolute(item.get("detail_url"), request.url)
+                    )
+                    if early_offer is not None and _outside_reach(early_offer, constraints):
+                        out_of_reach += 1
+                        continue
+                if board_room < room:
+                    over_board_cap += 1
+                else:
+                    over_ceiling += 1
                 continue
             if request.employer and not item.get("company"):
                 # T144: an ATS posting rarely names its employer — the board is
@@ -1503,6 +1695,12 @@ def _one_board(
             if offer is None:
                 dropped += 1
                 drop_reason = drop_reason or why
+                continue
+            if constraints is not None and _outside_reach(offer, constraints):
+                # T253. Applied before the count, and before storing: the same
+                # constraint removes this row on its way to the candidate, so
+                # it must not spend room a readable row could use.
+                out_of_reach += 1
                 continue
             ruled_out = ruled_out_by(candidate_of(offer), exclusions)
             if ruled_out:
@@ -1788,6 +1986,8 @@ def measure_fixture() -> dict[str, Any]:
             at="2026-01-01T00:00:00+00:00",
             directory=DEFAULT_CONNECTORS_DIR,
             robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+            # T253: this gate measures fetch records and refusals, not shares.
+            board_cap=OFFER_CEILING,
         )
         driven = offers_without_a_recorded_fetch(store)
         collected = len(
@@ -1846,6 +2046,7 @@ def measure_fixture() -> dict[str, Any]:
             at="2026-01-01T00:00:00+00:00",
             directory=DEFAULT_CONNECTORS_DIR,
             robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+            board_cap=OFFER_CEILING,
         )
         # Counted by hostname, never by `_origin`: a metric that shares the
         # function it checks reads 0 whenever that function is wrong (#466 F2).
@@ -2307,6 +2508,11 @@ def measure_flood() -> dict[str, Any]:
             directory=directory,
             page_count=_FLOOD_PAGES,
             robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+            # T253: this gate is about the run-wide ceiling. Per-board shares
+            # sum to less than it, so with them the ceiling is never reached
+            # and every component below would count over a run that did not
+            # exercise it; the shares are pinned in `test_source_offer_ceiling`.
+            board_cap=OFFER_CEILING,
         )
         written = [load_offer(store, path.stem).text for path in on_disk()]
         selected_without_reach = [p.name for p in packages_for(unknown, directory)]
