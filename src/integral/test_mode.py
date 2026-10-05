@@ -309,7 +309,11 @@ def _is_opener(char: str) -> bool:
 
 
 def _ends_clause(word: str) -> bool:
-    """A word whose last character is punctuation (any Unicode `P*`) ends a clause."""
+    """A word whose last character is punctuation (any Unicode `P*`) ends a clause.
+
+    The caller also requires the word to carry a letter or digit: a lone hyphen,
+    dash or slash is a separator between list items, not the end of a clause.
+    """
     return unicodedata.category(word[-1]).startswith("P")
 
 
@@ -354,14 +358,14 @@ def _looks_pasted(text: str) -> bool:
         return True
     for line in lines:
         opening = line.lstrip("".join(c for c in line if _is_opener(c)))
-        if not opening or not opening[0].isalnum() or _LIST_LEAD.match(line):
+        if not opening or not opening[0].isalnum() or _LIST_LEAD.match(opening):
             return True
         if len(lines) > 1 and not _SENTENCE_END.search(line):
             return True
     run = 0
     for word in body.split():
         run += 1
-        if _ends_clause(word):
+        if any(char.isalnum() for char in word) and _ends_clause(word):
             run = 0
         elif run > 40:
             return True

@@ -263,3 +263,40 @@ def test_the_bullet_population_is_derived_from_unicode_not_listed() -> None:
 def test_every_bullet_glyph_alone_flips_prose_to_paste(char: str) -> None:
     assert detect_guard(REPRO) == "none"
     assert detect_guard(REPRO + " " + char + " Madrid.") == "long-turn"
+
+
+@pytest.mark.parametrize(
+    "separator", ["-", "\N{EN DASH}", "\N{EM DASH}", "/", "\N{MIDDLE DOT}", "|"]
+)
+def test_a_lone_separator_token_does_not_reset_the_run(separator: str) -> None:
+    flat = PASTES["flattened advert with no punctuation at all"]
+    spaced = f" {separator} ".join(flat.split())
+    assert len(spaced) >= PASTE_CHARS
+    turn = spaced + " " + NOTE
+    parsed = parse_turn(turn)
+    assert parsed.guard == "long-turn"
+    assert parsed.notes == ()
+    assert parsed.unparsed_markers == 1
+
+
+@pytest.mark.parametrize("separator", ["-", "\N{EN DASH}", "/"])
+def test_separators_between_prose_words_still_leave_the_run_unreset(separator: str) -> None:
+    words = " ".join(["palabra"] * 60)
+    assert (
+        detect_guard(REPRO + f" {separator} " + words.replace(" ", f" {separator} ")) == "long-turn"
+    )
+
+
+@pytest.mark.parametrize(
+    "lead",
+    [("(1)", "(2)", "(3)"), ("(a)", "(b)", "(c)"), ("1)", "2)", "3)")],
+)
+def test_a_parenthesised_list_is_a_list(lead: tuple[str, str, str]) -> None:
+    """The opener skip strips `(`; the enumerator test must see what is left."""
+    sentence = " Atender las mesas del local, preparar el café y cerrar la caja al final."
+    items = "\n".join(f"{mark}{sentence * 3}" for mark in lead)
+    assert len(items) >= PASTE_CHARS
+    assert len(items.splitlines()) == 3  # under the line-count limit: only the lead can decide
+    turn = items.replace("Atender", f"Atender {NOTE}", 1)
+    assert detect_guard(turn) == "long-turn"
+    assert parse_turn(turn).notes == ()
