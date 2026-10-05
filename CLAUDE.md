@@ -80,6 +80,12 @@ A candidate session can run long enough that the context fills before the proces
 - **Once per session:** suggest it a single time. If the candidate declines or ignores it, never raise it again in that session.
 - **What to say:** that compacting keeps `session/state.json`, the profile and every step's outputs, because they live on disk and not in the conversation, so resuming after it is safe and the candidate loses nothing; it only shortens the chat history. Then invite them forward as the step's Boundary does; compacting is a suggestion and never a condition for the next step.
 
+## End of a candidate session: what was learned goes to the process, not only to the profile
+
+A correction a candidate makes (how a gap is worded, what a letter must not say, a screening rule) lands in their `profile/evidence.jsonl` and helps nobody else unless it is routed. When such a correction is made, record it as a lesson, a rule in neutral words that holds for any candidate: `uv run python -m integral.lesson_triage --root <profiles root> --handle <handle> record --session <id> --step <step> --rule "<rule>"`. The recorder refuses a rule that repeats a run of the candidate's own words or their name.
+
+At the end of the session, run `... list --session <id>` and give every lesson exactly one decision: `seed <lesson>` prints the `create_task.py` invocation (rule and step only, nothing of the candidate), and after it is run `decide <lesson> seeded --task <t-id>`; or `decide <lesson> candidate_specific --reason "<why>"`. `... check --session <id>` exits 1 while any lesson is undecided. A decision is kept in `session/lessons.jsonl` and cannot be overwritten. `tests/test_lesson_triage.py` is the gate.
+
 ## The GitHub channel depends on the surface — detect it, don't assume
 
 `bash claude-arsenal/bin/github_channel.sh --detect` answers this, and its answer
