@@ -36,6 +36,11 @@ import html
 import re
 from collections.abc import Iterable, Sequence
 from html.parser import HTMLParser
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from integral.identity import ProfileStore
 
 #: The colour roles a page may use, in the order the stylesheet declares them.
 TOKENS = ("surface", "ink", "muted", "line", "accent", "positive", "negative")
@@ -204,10 +209,35 @@ def chip(text: str, tone: str = "neutral") -> str:
     return f'<span class="{cls}">{html.escape(text)}</span>'
 
 
+class Markup(str):
+    """Markup this module built (``link``), which ``facts`` must not escape again."""
+
+
+_WEB_URL = re.compile(r"https?://[^\s<>\"']+", re.I)
+
+
+def link(url: str, text: str | None = None) -> str:
+    """An anchor for a web address; anything else is shown as plain, escaped text.
+
+    Only ``http`` and ``https`` become a link: a stored ``javascript:`` or ``data:``
+    address is a report that runs on someone's machine, so a record that holds
+    one is shown, not followed.
+    """
+    shown = html.escape(text if text is not None else url)
+    if not _WEB_URL.fullmatch(url.strip()):
+        return Markup(shown)
+    href = html.escape(url.strip(), quote=True)
+    return Markup(f'<a href="{href}" rel="noopener noreferrer">{shown}</a>')
+
+
 def facts(pairs: Sequence[tuple[str, str]]) -> str:
-    """The fact grid: three columns on a desktop, one on a phone."""
+    """The fact grid: three columns on a desktop, one on a phone.
+
+    A value is escaped unless it is ``Markup`` from this module.
+    """
     cells = "".join(
-        f"<div><dt>{html.escape(term)}</dt><dd>{html.escape(value)}</dd></div>"
+        f"<div><dt>{html.escape(term)}</dt>"
+        f"<dd>{value if isinstance(value, Markup) else html.escape(value)}</dd></div>"
         for term, value in pairs
     )
     return f'<dl class="facts">{cells}</dl>'
@@ -248,3 +278,20 @@ def page(
     if found:
         raise ValueError(f"a page must be self-contained; it references {found}")
     return document
+
+
+_DOCTYPE = "<!doctype"
+
+
+def write_report(store: ProfileStore, document: str, *parts: str) -> Path:
+    """Write a finished ``page`` document into a candidate's tree.
+
+    The one writer of an ``.html`` report, so a module that renders one never
+    names a page path or opens a file itself. It refuses text the shell did not
+    produce.
+    """
+    if not parts or not parts[-1].endswith(".html"):
+        raise ValueError(f"a report is written to an .html path, not {'/'.join(parts)!r}")
+    if not document.startswith(_DOCTYPE) or external_references(document):
+        raise ValueError("a report is written only from a document the page shell produced")
+    return store.write_text(document, *parts)
