@@ -82,9 +82,15 @@ A candidate session can run long enough that the context fills before the proces
 
 ## End of a candidate session: what was learned goes to the process, not only to the profile
 
-A correction a candidate makes (how a gap is worded, what a letter must not say, a screening rule) lands in their `profile/evidence.jsonl` and helps nobody else unless it is routed. When such a correction is made, record it as a lesson, a rule in neutral words that holds for any candidate: `uv run python -m integral.lesson_triage --root <profiles root> --handle <handle> record --session <id> --step <step> --rule "<rule>"`. The recorder refuses a rule that repeats a run of the candidate's own words or their name.
+A correction a candidate makes (how a gap is worded, what a letter must not say, a screening rule) lands in their `profile/evidence.jsonl` and helps nobody else unless it is routed. The route reads the evidence log, not the session's memory: every `statement`, `constraint`, `retraction` and `candidate_statement` row appended since the session identified the candidate is open until it has one outcome. Run these from the repo root with `uv run python -m integral.lesson_triage --root <profiles root> --handle <handle> …`:
 
-At the end of the session, run `... list --session <id>` and give every lesson exactly one decision: `seed <lesson>` prints the `create_task.py` invocation (rule and step only, nothing of the candidate), and after it is run `decide <lesson> seeded --task <t-id>`; or `decide <lesson> candidate_specific --reason "<why>"`. `... check --session <id>` exits 1 while any lesson is undecided. A decision is kept in `session/lessons.jsonl` and cannot be overwritten. `tests/test_lesson_triage.py` is the gate.
+- `list --session <id>` shows every open row; an unknown session id exits 2.
+- `record --session <id> --step <step id> --rule "<rule>" --evidence-id <ev-…>` turns a correction into a lesson, a rule in neutral words that holds for any candidate. The recorder refuses a step that is not a process step, a rule containing a token of the candidate's name or handle, a word the candidate wrote that the process's own vocabulary lacks, or a run of four words shared with their text. These checks are not a proof of privacy: a paraphrase made only of the process's own words passes, so read the rule before it leaves.
+- `seed <lesson>` prints a shell-safe `create_task.py` invocation (rule and step only). After running it, `decide <lesson> seeded --task <t-id>`; the task must exist under `arsenal/tasks/` and carry the rule. Or `decide <lesson> candidate_specific --reason "<why>"`.
+- `dismiss <ev-…> --reason "<why>"` closes a row that is a plain fact and not a lesson.
+- `check --session <id>` exits 1 while anything is open. Nothing runs it automatically, so running it is the end-of-session step.
+
+Decisions are kept in `session/lessons.jsonl`; the reader refuses a file with a second decision for a lesson, so a decision cannot be overwritten by hand either. `tests/test_lesson_triage.py` is the gate, and `status/evidence/T239.json` records `candidate_session_corrections_left_untriaged` over a constructed session.
 
 ## The GitHub channel depends on the surface — detect it, don't assume
 
