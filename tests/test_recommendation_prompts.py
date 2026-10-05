@@ -111,58 +111,109 @@ def test_every_step_skill_recommends_or_says_why_not() -> None:
     assert _unclassified_or_unrecommending(skills, NO_BETTER_OPTION) == []
 
 
-def _first_run_skills() -> dict[str, bool]:
-    """First-run step skill dirs, each with whether the step is Required (from the spec)."""
-    return {
-        skill_dir_name(step): step.required
-        for step in load_steps().steps
-        if step.phase == "first_run"
-    }
+SKIP = "stop here and look at real jobs"
+MIN_LEAD_WORDS = 8  # a bare "I'd recommend we " is the lead-in, not a recommendation
 
 
-def _first_run_gaps(skills: dict[str, str], first_run: dict[str, bool]) -> list[str]:
-    """§3.3: every first-run step recommends going on over the offered skip.
+def _first_run_skills() -> dict[str, tuple[bool, frozenset[str]]]:
+    """First-run skill dir -> (Required, the words naming the step that follows), from the spec."""
+    steps = load_steps().steps
+    out = {}
+    for index, step in enumerate(steps):
+        if step.phase != "first_run":
+            continue
+        following = steps[index + 1] if index + 1 < len(steps) else None
+        words = f"{following.name} {following.id}".lower() if following else ""
+        out[skill_dir_name(step)] = (step.required, frozenset(re.findall(r"[a-z]{3,}", words)))
+    return out
 
-    A Required step is never the one skipped (no candidate reaches a ranking without it), so
-    its example recommends the *next* step and offers the skip only after it.
+
+def _first_run_gaps(
+    skills: dict[str, str], first_run: dict[str, tuple[bool, frozenset[str]]]
+) -> list[str]:
+    """§3.3: every first-run step recommends going on, and offers the skip second.
+
+    The example is split at the skip. What comes before it must be the recommendation (it
+    leads with "I'd recommend", is more than the lead-in, and never recommends stopping); a
+    Required step is never the one skipped, so what it recommends must name the step that
+    follows it in the spec's own order, not merely say "next".
     """
     gaps = []
-    for name, required in sorted(first_run.items()):
+    for name, (required, following) in sorted(first_run.items()):
         section = _section(skills.get(name, ""))
         block = re.search(r"```text\n(.*?)\n```", section, re.DOTALL)
-        if not _prompt_leads_with_a_recommendation(section):
+        if not _prompt_leads_with_a_recommendation(section) or block is None:
             gaps.append(f"{name}: no recommending example")
-        elif block is None or "stop here and look at real jobs" not in block.group(1):
+            continue
+        before, found, _ = block.group(1).partition(SKIP)
+        lead = before.lstrip('"').lower()
+        if not found:
             gaps.append(f"{name}: the example never names the offered skip")
-        elif required and " next" not in block.group(1):
-            gaps.append(f"{name}: a Required step's example must recommend the next step")
+        elif len(lead.split()) < MIN_LEAD_WORDS or "stop" in lead:
+            gaps.append(f"{name}: the recommendation before the skip is empty or is the skip")
+        elif required and not any(word in lead for word in following):
+            gaps.append(f"{name}: a Required step's example must name the step that follows")
     return gaps
 
 
 def test_every_first_run_step_recommends_finishing_over_the_skip() -> None:
     first_run = _first_run_skills()
     assert len(first_run) >= 7  # steps 0 to 6 when this landed
-    assert sum(first_run.values()) >= 2  # steps 0 and 2 are Required
+    assert sum(required for required, _ in first_run.values()) >= 2  # steps 0 and 2
     assert _first_run_gaps(_skills(), first_run) == []
     assert not set(first_run) & set(NO_BETTER_OPTION)
 
 
+def _example(text: str) -> dict[str, str]:
+    return {"step-0x": f'{SECTION}\n\n```text\n"{text}"\n```\n'}
+
+
+FOLLOWING = {"step-0x": (True, frozenset({"intake"}))}
+GOOD = (
+    "I'd recommend we do your intake next, now you're set up. "
+    "We can stop here and look at real jobs."
+)
+
+
+def test_the_first_run_rule_accepts_a_recommendation_before_the_skip() -> None:
+    assert _first_run_gaps(_example(GOOD), FOLLOWING) == []
+
+
 def test_the_first_run_rule_refuses_a_step_that_names_no_skip() -> None:
-    skills = {"step-01-x": f'{SECTION}\n\n```text\n"I\'d recommend we go on."\n```\n'}
     gap = "step-01-x: the example never names the offered skip"
-    assert _first_run_gaps(skills, {"step-01-x": False}) == [gap]
-    assert _first_run_gaps({}, {"step-02-y": True}) == ["step-02-y: no recommending example"]
+    skills = {"step-01-x": f'{SECTION}\n\n```text\n"I\'d recommend we go on."\n```\n'}
+    assert _first_run_gaps(skills, {"step-01-x": (False, frozenset())}) == [gap]
+    assert _first_run_gaps({}, {"step-02-y": (True, frozenset())}) == [
+        "step-02-y: no recommending example"
+    ]
 
 
-def test_a_required_step_may_not_offer_its_own_skip() -> None:
-    old_step_zero = (
-        "I'd recommend we finish this - it keeps your profile separate. We can stop here and "
-        "look at real jobs with what I have, but nothing would be kept for you."
+def test_a_recommendation_of_the_skip_itself_is_refused() -> None:
+    text = (
+        "I'd recommend we stop here and look at real jobs with what I have, "
+        "and do the rest next time."
     )
-    skills = {"step-00-x": f'{SECTION}\n\n```text\n"{old_step_zero}"\n```\n'}
-    found = _first_run_gaps(skills, {"step-00-x": True})
-    assert found == ["step-00-x: a Required step's example must recommend the next step"]
-    assert _first_run_gaps(skills, {"step-00-x": False}) == []
+    found = _first_run_gaps(_example(text), {"step-0x": (False, frozenset())})
+    assert found == ["step-0x: the recommendation before the skip is empty or is the skip"]
+
+
+def test_a_long_recommendation_to_stop_is_still_the_skip() -> None:
+    text = (
+        "I'd recommend we stop now and go look at the jobs, then do the rest later. "
+        f"We can {SKIP} with what I have."
+    )
+    found = _first_run_gaps(_example(text), {"step-0x": (False, frozenset())})
+    assert found == ["step-0x: the recommendation before the skip is empty or is the skip"]
+
+
+def test_a_required_step_must_name_the_step_that_follows_not_the_word_next() -> None:
+    old_step_zero = (
+        "I'd recommend we finish this - it keeps your profile separate. "
+        f"We can {SKIP} with what I have, but nothing would be kept for you. What next?"
+    )
+    found = _first_run_gaps(_example(old_step_zero), FOLLOWING)
+    assert found == ["step-0x: a Required step's example must name the step that follows"]
+    assert _first_run_gaps(_example(old_step_zero), {"step-0x": (False, frozenset())}) == []
 
 
 def test_the_sections_are_where_the_choices_are() -> None:
@@ -277,6 +328,10 @@ REFUSALS = [
     ("constraint", "Go/Rust no", {"go", "rust"}),
     ("constraint", "Go \u2014 never", {"go"}),
     ("constraint", "Prefiero no tocar Go.", {"go"}),
+    ("constraint", "No Go-based roles", {"go"}),
+    ("constraint", "nada de Go-heavy", {"go"}),
+    ("constraint", "Go-only shops, no", {"go"}),
+    ("constraint", "no quiero go-lang", {"go"}),
     ("constraint", "Quiero trabajar con Kubernetes", {"kubernetes"}),  # over-exclusion is accepted
     ("text", "golang", {"go"}),
     ("topic", "php", {"php"}),

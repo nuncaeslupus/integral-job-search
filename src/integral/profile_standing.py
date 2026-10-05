@@ -57,6 +57,11 @@ class Standing:
 _ANY_CASE_GO = re.compile(r"(?<![\w-])go(?!\w)", re.IGNORECASE)
 
 
+#: Only "go-to" (so "go-to-market") is carved out of a hyphenated go; "Go-based", "Go-only" and
+#: "go-lang" are Go.
+_GO_TO = re.compile(r"-to\b", re.IGNORECASE)
+
+
 def _mentioned(text: str) -> set[str]:
     """Every technology `text` names, in label mode so a sentence-opening "Go" counts.
 
@@ -71,7 +76,7 @@ def _mentioned(text: str) -> set[str]:
         found.add(stack_fit.resolve_technology(text.strip()))
     for match in _ANY_CASE_GO.finditer(text):
         rest = text[match.end() :]
-        if not (rest.startswith("-") or stack_fit._GO_VERB_NEXT.match(rest)):
+        if not (_GO_TO.match(rest) or stack_fit._GO_VERB_NEXT.match(rest)):
             found.add("go")
     for word in re.findall(r"[\w.+#]+", text):
         folded = _squash(word)

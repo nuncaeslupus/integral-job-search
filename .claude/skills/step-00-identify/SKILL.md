@@ -71,7 +71,7 @@ recommend the next step, with the reason in a clause, then name the skip second.
 takes the skip for them.
 
 ```text
-"I'd recommend we go through your CV next, now you're set up — it's what lets me match real jobs to you. We can stop here and look at real jobs with what I have, but the list will be rough. Shall we?"
+"I'd recommend we do your intake next, now you're set up — getting your CV in is what lets me match real jobs to you. We can stop here and look at real jobs with what I have, but the list will be rough. Shall we?"
 ```
 
 ## Stop rule
