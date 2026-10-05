@@ -173,7 +173,8 @@ def test_every_exemption_matches_exactly_what_it_records() -> None:
 
 def test_the_shell_has_exactly_one_document_opener() -> None:
     found = page_writes((SRC / f"{SHELL}.py").read_text(encoding="utf-8"), SHELL)
-    assert found == Counter({(SHELL, "page", OPENS): 1})
+    # `write_report` is the shell's one sanctioned file write; it opens no document.
+    assert found == Counter({(SHELL, "page", OPENS): 1, (SHELL, "write_report", WRITES): 1})
 
 
 BYPASSES = [

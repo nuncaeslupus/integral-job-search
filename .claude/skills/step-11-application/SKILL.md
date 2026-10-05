@@ -129,6 +129,8 @@ Each version also gets `carta.html` and `cv.html`, rendered from the Markdown by
 
 **Colours are the employer's own.** Measure the employer site's colours (count the elements carrying each computed colour), call `integral.brand_palette.extract_palette({colour: count})`, pass the result as `palette=` to `render_document`, and append `trazabilidad_section(palette, site_url)` to `trazabilidad.md` so the measurement is on record. The palette keeps the exact brand accent for rules and a darkened variant (at least 4.5:1 on the paper) for text; if the site cannot be read it falls back to a neutral palette and says so. Never pick a brand colour by guess.
 
+**The applications board.** When the candidate asks for the list of what they have sent, run `python -m integral.applications_board --id <handle> [--input-dir <profiles-root>]`; it writes `reports/applications.html` from the records on disk (employer, role, date, status, advert and tracking links, and per application what the advert required against what the profile holds, lacks or does not record). A tracking link the candidate reports later goes in with `--track <offer_id> <url>`, never into `applications/`. A status-only application shows the day it was noted, and the page says so; do not call that the send date, and do not call a skill "lacking" when the board says "not on record".
+
 ## Boundary
 
 **Invite forward; never close by offering to end the session.** Leaving is always allowed and

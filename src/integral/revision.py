@@ -60,6 +60,17 @@ _CLASSES: tuple[tuple[tuple[str, ...], ArtefactClass], ...] = (
     (("profile", "evidence.jsonl"), "historical"),
     (("offers", "tombstones.jsonl"), "historical"),
     (("applications",), "historical"),
+    # T240. A tracking link the candidate reported after sending (append-only,
+    # newest row wins) and the applications board rendered from the records
+    # above. Both sit beside `applications/`, never inside it:
+    # `approval.sends_without_confirmation` reads every `applications/**/*.json`
+    # as a send record, and an unplaced top-level folder would fall through to
+    # `authored`. The board is regenerated on request and carries no profile
+    # revision to fall behind; its "lacks" column does read the profile's stated
+    # levels, but only at the moment it is rendered, so it is a snapshot that
+    # `refresh` must not rewrite or flag, never a derived file to recompute.
+    (("tracking",), "historical"),
+    (("reports",), "historical"),
     (("interviews", "*", "preparation"), "authored"),
     (("interviews",), "historical"),
     (("cv", "source"), "historical"),
