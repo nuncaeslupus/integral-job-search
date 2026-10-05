@@ -3387,7 +3387,7 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: **95 with T227**, whose `topic_scope_gate` declares two floors
 #: (`FEWEST_HELD_CASES`, `FEWEST_SHOWN_CASES`). Still zero slack.
 #: **96 with T152**, whose `pagination_capture` declares one floor
-#: (`MINIMUM_DROPPED_PACKAGES_CHECKED`). Still zero slack.
+#: (`MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES`). Still zero slack.
 MINIMUM_FLOORS_SWEPT = 96
 
 
@@ -3495,7 +3495,7 @@ MINIMUM_FLOORS_SWEPT = 96
 #: over `reach._cases` — so it joins this count through that file. Measured
 #: with `uv run python -m integral.floor_sweep` against this branch. Still
 #: seven points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=44
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=43
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 

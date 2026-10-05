@@ -1,13 +1,18 @@
 {
-  "captured_at": "2026-09-02",
+  "captured_at": "2026-10-05",
   "url": "https://www.usajobs.gov/Search/ExecuteSearch",
   "method": "POST",
   "body": {
     "Keyword": "python",
-    "ResultsPerPage": 25
+    "ResultsPerPage": 25,
+    "Page": 2
   },
   "status": 200,
   "surface": "laptop",
-  "provenance": "transcribed",
-  "transcribed_from": "connectors/ruled-out.yaml"
+  "provenance": "live",
+  "response": {
+    "file": "list.html",
+    "bytes": 34064,
+    "sha256": "cb848458671ffa477ce4f87df21487859fb22e39ba209e3c14d865f7dd109c0a"
+  }
 }

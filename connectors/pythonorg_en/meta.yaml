@@ -5,7 +5,7 @@ site: python.org
 country: GLOBAL
 language: en
 maintainer: "@nuncaeslupus"
-last_verified: "2026-08-30"
+last_verified: "2026-10-05"
 
 # Checked with this repo's own audited matcher on the day above, not by eye:
 #

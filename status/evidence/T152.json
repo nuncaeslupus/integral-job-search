@@ -2,5 +2,5 @@
   "packages_dropped_for_an_unrecordable_capture": 0,
   "still_dropped": [],
   "gate_status": "measured",
-  "packages_checked_at_least": 1
+  "packages_scanned_at_least": 20
 }

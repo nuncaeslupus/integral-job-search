@@ -139,13 +139,18 @@
     },
     {
       "module": "pagination_capture",
+      "name": "MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES",
+      "line": 1481
+    },
+    {
+      "module": "pagination_capture",
       "name": "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
-      "line": 1312
+      "line": 1314
     },
     {
       "module": "pagination_capture",
       "name": "MINIMUM_REQUEST_KEYS",
-      "line": 123
+      "line": 125
     },
     {
       "module": "plan_v2",
@@ -328,7 +333,7 @@
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
       "line": 3499,
-      "population": 44
+      "population": 43
     },
     {
       "module": "floor_sweep",
