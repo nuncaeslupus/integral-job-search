@@ -31,7 +31,7 @@ Extractions for the live offers, and `profile/constraints.json`. Weights are opt
 - No questions — this step presents. **Presentation is half the specification**, not a rendering detail. Show a handful at a time, not forty.
 - Lead with the offer and the one thing that most moved it, not with a score. A card: title and employer, facts as bullets (pay gross and net-equivalent, hours, location, contract), then one line of what actually matters — including the bad part.
 - Where the list is rendered as a page, it is a template filled from the normalised offer JSON — never a paragraph assembled by a model.
-- Where an offer is out of reach today but reachable, say what it would take and ask whether that is of interest, rather than assigning homework.
+- Where an offer is out of reach today but reachable, say what it would take and ask whether that is of interest, rather than assigning homework. Lead with whether you recommend pursuing it (see "Lead with the recommendation").
 
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 
@@ -47,6 +47,42 @@ In this step that sounds like:
 
 - Never show what is unknown about an offer as neutral — an advert silent on hours is not an advert promising good ones.
 - Never assemble the card's prose a paragraph at a time by a model — it is a template filled from the normalised JSON.
+
+## Say what is working and what would widen the fit (T209)
+
+Presenting a list and saying nothing of the candidate is half a ranking. After the cards, say
+what in their profile is carrying the list and what would widen it — from the same `stack_fit`
+the cards used, never from a question and never invented:
+
+```python
+from integral.profile_standing import standing_for_store
+
+# `show` is `page_ids` (the same slice `presentation.page` renders) after `partition` —
+# the offers on screen, never the whole ranking.
+# The denominator counts every one of them, including adverts that name no technology.
+lines = standing_for_store(store, stack, show)
+present(store, show, at=now, phrase=phrase, standing=lines)   # the checkpoint reads this row
+say(lines.strengths)               # "Lo que juega a tu favor: Python (en 4 de las 5 mostradas)."
+say(lines.widen)                   # "Lo que ampliaría el encaje: Kubernetes (en 2 de las 5 mostradas)."
+```
+
+Both lines are always said, and `present(..., standing=lines)` records that they were: the checkpoint
+reports `unstated_standing` and withholds coverage when the newest presentation carries none. A strength is a technology the shown adverts name and the candidate
+holds at working level or above; a widening item is one they name that the CV lacks or holds
+low. Anything the candidate ruled out — an aversion, a `skill:` exclusion, a constraint naming it — is
+never listed as something to improve. The widen line ends by asking whether any of it is of
+interest; it is never assigned. When the adverts name no technology the lines say so, and when no
+fit was carried at all they say it was not assessed — never praising or faulting nothing.
+
+## Lead with the recommendation
+
+Where the candidate has a choice here — which of the shown offers to react to first, whether to
+pursue an offer that needs something they lack, whether to read the adverts for skills (step 8) before
+trusting the order — recommend one and say why, then name the others.
+
+```text
+"I'd recommend reacting to the Girona one first — it's first because of the no-on-call line, and your reaction to it moves the order most. Or take any of the others you prefer."
+```
 
 ## Pay reaches the ranking converted, or the offer is refused
 
@@ -158,9 +194,10 @@ Showing a batch is itself a fact, and it is the one that later turns into a
 question worth asking. Two calls, around the list:
 
 ```python
+from integral.presentation import page_ids
 from integral.presentation_log import partition, present, shown_notes, unchecked_line, withheld_line
 
-show, held = partition(store, ranked_ids)      # never `show` alone
+show, held = partition(store, page_ids(ranking, limit, offset))   # never `show` alone
 present(store, show, at=now, phrase=phrase)
 ```
 
@@ -168,7 +205,7 @@ present(store, show, at=now, phrase=phrase)
 
 `partition` also withholds any stored offer on a topic the candidate ruled out (`search/exclusions.json`), including offers stored before they said it.
 
-**Say what was not checked, every time (T229).** `shown_notes(store, show)` returns the notes that go with the list: `unchecked_line` (no employer) and `pending_skill_line` — *"sin leer todavía para saber si lo exigen: skill:go en 3"* — for adverts shown while a `skill:<tech>` exclusion could not be applied because step 8 has not read them. Say each line you get. An advert step 8 read and found requiring the skill is already withheld by `partition`; one it has not read is shown **with this note**, never silently. If a note is non-empty, offer to run step 8 on those adverts first.
+**Say what was not checked, every time (T229).** `shown_notes(store, show)` returns the notes that go with the list: `unchecked_line` (no employer) and `pending_skill_line` — *"sin leer todavía para saber si lo exigen: skill:go en 3"* — for adverts shown while a `skill:<tech>` exclusion could not be applied because step 8 has not read them. Say each line you get. An advert step 8 read and found requiring the skill is already withheld by `partition`; one it has not read is shown **with this note**, never silently. If a note is non-empty, recommend running step 8 on those adverts first.
 
 **Say the withheld count and the reason, every time.** `withheld_line(held)`
 puts it in the shape the owner asked for — *"4 descartadas porque «son de

@@ -32,10 +32,12 @@ from pathlib import Path
 from typing import Any
 
 from integral.feedback import _lifecycle_records
-from integral.identity import ProfileStore
+from integral.identity import Identity, IdentityError, ProfileStore
 from integral.lifecycle import current_tombstones
 from integral.presentation_log import _rows
 from integral.profile import EvidenceLog
+from integral.profile_standing import standing_for_store
+from integral.stack_fit import fits_for_store
 
 
 def _when(value: object) -> datetime | None:
@@ -92,6 +94,39 @@ def unpresented_ranking(store: ProfileStore) -> list[dict[str, Any]]:
         if offers & {str(i) for i in row.get("offer_ids", ())}:
             return []
     return [{"ranking": name, "problem": "no present() row", "offers": sorted(offers)}]
+
+
+def unstated_standing(store: ProfileStore) -> list[dict[str, Any]]:
+    """T209: the newest batch shown did not say the standing computed for *its* offers.
+
+    The lines are recomputed from the row's own `offer_ids` and the store
+    (`profile_standing.standing_for_store` over `stack_fit.fits_for_store`) and must equal
+    what the row recorded. Presence is not enough: a blank line, a "not assessed" pair
+    recorded while fits exist, or lines computed for other offers all fail. The newest
+    batch is the last row in the append-only file, by row identity, never by timestamp.
+    The language is the candidate's own (`identity.json`), never the row's: a recompute
+    parameterised by the record under test cannot disagree with it. The store is read as it
+    is now, so a later CV edit flags the batch — fail-closed, and presenting again clears it.
+    No rows is `unpresented_ranking`'s finding, not this one's.
+    """
+    rows = _rows(store)
+    if not rows:
+        return []
+    newest = rows[-1]
+    ids = [str(i) for i in newest.get("offer_ids", ())]
+    said = newest.get("standing")
+    try:
+        language: str = Identity.model_validate(store.read_json("identity.json")).language
+    except (IdentityError, ValueError, OSError):
+        return [{"at": newest.get("at"), "problem": "the candidate's language cannot be read"}]
+    expected = standing_for_store(store, fits_for_store(store, ids), ids, language=language)
+    if (
+        isinstance(said, dict)
+        and said.get("strengths") == expected.strengths
+        and said.get("widen") == expected.widen
+    ):
+        return []
+    return [{"at": newest.get("at"), "problem": "no standing lines for this batch's offers"}]
 
 
 def unrecorded_discards(store: ProfileStore) -> list[dict[str, str]]:

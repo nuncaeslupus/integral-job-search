@@ -428,6 +428,94 @@
         "text": "no consta al teu CV",
         "of": "041d2d1e07385f286539f16d2bda31f068418d1376d30a903cc29bdc5c3e50e9"
       }
+    },
+    "standing_strengths": {
+      "en": "What is working for you: {items}.",
+      "es": {
+        "text": "Lo que juega a tu favor: {items}.",
+        "of": "f21f85d31bb057d04b36aac35fc4f043f79ee2229b67aadc5642e781834d9267"
+      },
+      "ca": {
+        "text": "El que juga a favor teu: {items}.",
+        "of": "f21f85d31bb057d04b36aac35fc4f043f79ee2229b67aadc5642e781834d9267"
+      }
+    },
+    "standing_widen": {
+      "en": "What would widen the fit: {items}.",
+      "es": {
+        "text": "Lo que ampliaría el encaje: {items}.",
+        "of": "3fb21d456b04295283674e8c25af87f5ad62b823ab8f2dea2e767fc34ea9af78"
+      },
+      "ca": {
+        "text": "El que ampliaria l'encaix: {items}.",
+        "of": "3fb21d456b04295283674e8c25af87f5ad62b823ab8f2dea2e767fc34ea9af78"
+      }
+    },
+    "standing_item": {
+      "en": "{name} (in {count} of the {shown} shown)",
+      "es": {
+        "text": "{name} (en {count} de las {shown} mostradas)",
+        "of": "71600daa9a8be80146d9d4e7f1d5ed8877d43abaaa437750a3d0a889f7e65160"
+      },
+      "ca": {
+        "text": "{name} (en {count} de les {shown} mostrades)",
+        "of": "71600daa9a8be80146d9d4e7f1d5ed8877d43abaaa437750a3d0a889f7e65160"
+      }
+    },
+    "standing_no_strengths": {
+      "en": "None of the technologies the shown adverts name is one your CV or your words put at working level.",
+      "es": {
+        "text": "Ninguna de las tecnologías que nombran los anuncios mostrados consta en tu CV o en lo que dijiste como nivel de trabajo.",
+        "of": "fc019944a14a54044322c03c828671ebba3a295b8974d702fdd93c25c7af7370"
+      },
+      "ca": {
+        "text": "Cap de les tecnologies que anomenen els anuncis mostrats consta al teu CV o a allò que vas dir com a nivell de treball.",
+        "of": "fc019944a14a54044322c03c828671ebba3a295b8974d702fdd93c25c7af7370"
+      }
+    },
+    "standing_no_widen": {
+      "en": "Nothing the shown adverts name is missing from your stack or held at a low level.",
+      "es": {
+        "text": "Nada de lo que nombran los anuncios mostrados falta en tu stack o está a nivel bajo.",
+        "of": "247ba656600ab09fdd78dec86689528cd3515c7672366158124f51091587de7f"
+      },
+      "ca": {
+        "text": "Res del que anomenen els anuncis mostrats falta al teu stack o és a nivell baix.",
+        "of": "247ba656600ab09fdd78dec86689528cd3515c7672366158124f51091587de7f"
+      }
+    },
+    "standing_unknown": {
+      "en": "The shown adverts name no technology, so there is nothing to say about your stack from them.",
+      "es": {
+        "text": "Los anuncios mostrados no nombran tecnologías, así que no hay nada que decir de tu stack a partir de ellos.",
+        "of": "cfa4d4e02292ce107f3cca85b4b43d0c68f0eab5a959a619f29740cd8016b8fa"
+      },
+      "ca": {
+        "text": "Els anuncis mostrats no anomenen tecnologies, així que no hi ha res a dir del teu stack a partir d'ells.",
+        "of": "cfa4d4e02292ce107f3cca85b4b43d0c68f0eab5a959a619f29740cd8016b8fa"
+      }
+    },
+    "standing_more": {
+      "en": " and {n} more",
+      "es": {
+        "text": " y {n} más",
+        "of": "4406d1aee9a4abaa79a1dc0a42355245d2658aaa445a189a4b047c41d529010b"
+      },
+      "ca": {
+        "text": " i {n} més",
+        "of": "4406d1aee9a4abaa79a1dc0a42355245d2658aaa445a189a4b047c41d529010b"
+      }
+    },
+    "standing_ask": {
+      "en": "Is any of that of interest to you?",
+      "es": {
+        "text": "¿Te interesa alguna de esas?",
+        "of": "a22b178777b0e6031c2c3db5dacb6ef0f04ddece19f2de22d9a7c1519a350e7c"
+      },
+      "ca": {
+        "text": "T'interessa alguna d'aquestes?",
+        "of": "a22b178777b0e6031c2c3db5dacb6ef0f04ddece19f2de22d9a7c1519a350e7c"
+      }
     }
   }
 }

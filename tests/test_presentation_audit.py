@@ -24,6 +24,8 @@ from integral.presentation_audit import unpresented_ranking, unrecorded_discards
 from integral.presentation_log import present, rule_out
 from integral.profile import EvidenceLog, EvidenceSubject
 from integral.profile_capture import capture
+from integral.profile_standing import standing_for_store
+from integral.stack_fit import fits_for_store
 
 _RAN = "2026-10-01T09:00:00Z"
 _SHOWN = "2026-10-01T09:05:00Z"
@@ -276,12 +278,20 @@ def test_the_ranking_checkpoint_refuses_coverage_while_the_list_is_unpresented(
     _rank(gap, [_offer(gap)])
     shown = _offer(ok)
     _rank(ok, [shown])
-    present(ok, [shown], at=_SHOWN)
+    said = standing_for_store(ok, fits_for_store(ok, [shown]), [shown])
+    present(ok, [shown], at=_SHOWN, standing=said)
+    silent = _store(tmp_path, "silent")  # T209: shown, but the standing lines were never said
+    quiet = _offer(silent)
+    _rank(silent, [quiet])
+    present(silent, [quiet], at=_SHOWN)
 
     opened = _checkpoint(module, monkeypatch, tmp_path, "gap")
     closed = _checkpoint(module, monkeypatch, tmp_path, "ok")
+    mute = _checkpoint(module, monkeypatch, tmp_path, "silent")
     assert opened["unpresented_ranking"] and opened["coverage_met"] is False
     assert closed["unpresented_ranking"] == [] and closed["coverage_met"] is True
+    assert closed["unstated_standing"] == []
+    assert mute["unstated_standing"] and mute["coverage_met"] is False
 
 
 def test_the_feedback_checkpoint_refuses_coverage_while_a_reaction_has_no_rule_out(

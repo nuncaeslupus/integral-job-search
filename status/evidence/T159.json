@@ -531,6 +531,7 @@
     "presentation_log.PASS_OVER_THRESHOLD",
     "process_spec.MIN_ITEM_WORDS",
     "profile._ID_WIDTH",
+    "profile_standing.MAX_ITEMS",
     "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED",
     "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED",
     "repo_gate.MINIMUM_FILES_FORMATTED",

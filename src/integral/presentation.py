@@ -206,6 +206,21 @@ def chunks(sequence: Sequence[Any], size: int = DEFAULT_LIMIT) -> list[list[Any]
     return [list(sequence[start : start + size]) for start in range(0, len(sequence), size)]
 
 
+def page_ids(ranking: Mapping[str, Any], limit: int = DEFAULT_LIMIT, offset: int = 0) -> list[str]:
+    """The offer ids on one page of `ranking` — the slice `page` renders and nothing else.
+
+    T209: one definition of "what is on screen", used by `page` and by step 9's
+    standing lines, so the denominator of "in 3 of the 5 shown" cannot drift from the cards.
+    """
+    if limit < 0:
+        raise ValueError(f"limit must not be negative; got {limit}")
+    frontier = list(ranking["pareto"])
+    groups = chunks(frontier, limit) if limit else [list(frontier)]
+    if not 0 <= offset < max(len(groups), 1):
+        raise ValueError(f"offset {offset} is not a group of this ranking")
+    return [str(i) for i in groups[offset]] if groups else []
+
+
 def _salary(offer: Offer, language: str | None = None) -> str:
     """§5.2's salary, said as what it is: stated, estimated, or unknown.
 
@@ -430,10 +445,7 @@ def render(
     missing = [offer_id for offer_id in frontier if offer_id not in by_id]
     if missing:
         raise KeyError(f"{len(missing)} ranked offer(s) were not supplied: {', '.join(missing)}")
-    groups = chunks(frontier, limit) if limit else [list(frontier)]
-    if not 0 <= offset < max(len(groups), 1):
-        raise ValueError(f"offset {offset} is not a group of this ranking")
-    shown = groups[offset] if groups else []
+    shown = page_ids(ranking, limit, offset)
     remaining = len(frontier) - (offset + 1) * limit if limit else 0
     flagged = set(ranking.get("flagged", ()))
     # T222: the fits ride on the ranking (`rank(..., stack=...)`), so the page
@@ -463,7 +475,7 @@ def render(
         # Not "not shown" — that was the page reporting a truncation as if it
         # were the whole answer. The rest exists and is one word away, which is
         # the difference between a short list and a short *first* group.
-        further = len(groups) - offset - 1
+        further = len(chunks(frontier, limit)) - offset - 1
         lines.append(_t("more_groups", language).format(remaining=remaining, further=further))
     excluded = list(ranking.get("excluded", ()))
     if excluded:

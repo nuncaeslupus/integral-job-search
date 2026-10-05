@@ -115,6 +115,17 @@ reporting rather than repairing (T97). Never acknowledge before saying.
 - Never ask here for a legal name, an address, a telephone number, an identity number, a date of birth or a photograph — none improve a *search*. They are collected by step 11, for the document that actually needs them, when it needs them.
 - Never produce a document here — no PDF, no DOCX. A CV written before there is an advert to write it for is worse than what step 11 produces.
 
+## Lead with the recommendation
+
+§3.3 makes the shortcut the candidate's to take and the full run the default, and says why: the
+more the tool knows, the better the results. So at the end of this step the offered skip is
+never a neutral pair — recommend finishing, with the reason in a clause, then name the skip
+second. The tool never takes the skip for them.
+
+```text
+"I'd recommend we finish your CV before anything else — the more I know, the better the jobs I can match. We can stop here and look at real jobs with what I have, but the list will be rougher. Shall we carry on?"
+```
+
 ## Stop rule
 
 Every role in the supplied document is represented, or — with no document — the current or last role plus at least two earlier ones, or the candidate says that is enough. **Hard cap: 12 questions** — a CV parses in seconds and a career sketches in a handful of exchanges; past that this stops feeling like help.
