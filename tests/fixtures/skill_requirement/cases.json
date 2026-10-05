@@ -10,8 +10,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 44,
-     "end": 46,
+     "start": 61,
+     "end": 63,
      "quote": "Go"
     }
    }
@@ -28,8 +28,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 36,
-     "end": 38,
+     "start": 53,
+     "end": 55,
      "quote": "Go"
     }
    }
@@ -46,8 +46,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 14,
-     "end": 16,
+     "start": 31,
+     "end": 33,
      "quote": "Go"
     }
    }
@@ -64,8 +64,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 17,
-     "end": 19,
+     "start": 34,
+     "end": 36,
      "quote": "Go"
     }
    }
@@ -82,8 +82,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 40,
-     "end": 42,
+     "start": 57,
+     "end": 59,
      "quote": "Go"
     }
    }
@@ -100,8 +100,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 39,
-     "end": 41,
+     "start": 56,
+     "end": 58,
      "quote": "Go"
     }
    }
@@ -126,8 +126,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 21,
-     "end": 23,
+     "start": 38,
+     "end": 40,
      "quote": "Go"
     }
    }
@@ -144,8 +144,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 16,
-     "end": 18,
+     "start": 33,
+     "end": 35,
      "quote": "Go"
     }
    }
@@ -162,8 +162,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 0,
-     "end": 2,
+     "start": 17,
+     "end": 19,
      "quote": "Go"
     }
    }
@@ -180,8 +180,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 42,
-     "end": 44,
+     "start": 59,
+     "end": 61,
      "quote": "Go"
     }
    }
@@ -198,8 +198,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 28,
-     "end": 30,
+     "start": 45,
+     "end": 47,
      "quote": "Go"
     }
    }
@@ -216,8 +216,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 14,
-     "end": 16,
+     "start": 31,
+     "end": 33,
      "quote": "Go"
     }
    }
@@ -234,8 +234,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 15,
-     "end": 17,
+     "start": 32,
+     "end": 34,
      "quote": "Go"
     }
    }
@@ -257,8 +257,7 @@
      "quote": "Golang"
     }
    }
-  ],
-  "cited_in": "title"
+  ]
  },
  {
   "id": "E16",
@@ -271,8 +270,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 9,
-     "end": 11,
+     "start": 26,
+     "end": 28,
      "quote": "Go"
     }
    }
@@ -289,8 +288,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 35,
-     "end": 37,
+     "start": 52,
+     "end": 54,
      "quote": "Go"
     }
    }
@@ -307,8 +306,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 37,
-     "end": 39,
+     "start": 54,
+     "end": 56,
      "quote": "Go"
     }
    }
@@ -325,8 +324,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 59,
-     "end": 61,
+     "start": 76,
+     "end": 78,
      "quote": "Go"
     }
    }
@@ -359,8 +358,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 17,
-     "end": 19,
+     "start": 34,
+     "end": 36,
      "quote": "Go"
     }
    }
@@ -377,8 +376,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 20,
-     "end": 22,
+     "start": 37,
+     "end": 39,
      "quote": "Go"
     }
    }
@@ -395,8 +394,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 23,
-     "end": 25,
+     "start": 40,
+     "end": 42,
      "quote": "Go"
     }
    }
@@ -413,8 +412,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 21,
-     "end": 23,
+     "start": 38,
+     "end": 40,
      "quote": "Go"
     }
    }
@@ -431,8 +430,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 59,
-     "end": 61,
+     "start": 76,
+     "end": 78,
      "quote": "Go"
     }
    }
@@ -449,8 +448,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 0,
-     "end": 2,
+     "start": 17,
+     "end": 19,
      "quote": "Go"
     }
    }
@@ -467,8 +466,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 32,
-     "end": 34,
+     "start": 49,
+     "end": 51,
      "quote": "Go"
     }
    }
@@ -501,8 +500,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 14,
-     "end": 16,
+     "start": 31,
+     "end": 33,
      "quote": "Go"
     }
    }
@@ -519,8 +518,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 0,
-     "end": 2,
+     "start": 17,
+     "end": 19,
      "quote": "Go"
     }
    }
@@ -537,8 +536,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 0,
-     "end": 2,
+     "start": 17,
+     "end": 19,
      "quote": "Go"
     }
    }
@@ -555,8 +554,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 8,
-     "end": 10,
+     "start": 25,
+     "end": 27,
      "quote": "Go"
     }
    }
@@ -573,8 +572,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 13,
-     "end": 19,
+     "start": 30,
+     "end": 36,
      "quote": "Golang"
     }
    }
@@ -591,8 +590,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 8,
-     "end": 10,
+     "start": 25,
+     "end": 27,
      "quote": "Go"
     }
    }
@@ -609,8 +608,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 16,
-     "end": 18,
+     "start": 33,
+     "end": 35,
      "quote": "Go"
     }
    }
@@ -627,8 +626,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 22,
-     "end": 24,
+     "start": 39,
+     "end": 41,
      "quote": "Go"
     }
    }
@@ -645,8 +644,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 24,
-     "end": 26,
+     "start": 41,
+     "end": 43,
      "quote": "Go"
     }
    }
@@ -663,8 +662,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 8,
-     "end": 10,
+     "start": 25,
+     "end": 27,
      "quote": "Go"
     }
    }
@@ -681,8 +680,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 0,
-     "end": 2,
+     "start": 17,
+     "end": 19,
      "quote": "Go"
     }
    }
@@ -699,8 +698,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 16,
-     "end": 18,
+     "start": 33,
+     "end": 35,
      "quote": "Go"
     }
    }
@@ -717,8 +716,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 14,
-     "end": 16,
+     "start": 31,
+     "end": 33,
      "quote": "Go"
     }
    }
@@ -735,8 +734,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 14,
-     "end": 16,
+     "start": 31,
+     "end": 33,
      "quote": "Go"
     }
    }
@@ -753,8 +752,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 26,
-     "end": 28,
+     "start": 43,
+     "end": 45,
      "quote": "Go"
     }
    }
@@ -771,8 +770,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 0,
-     "end": 2,
+     "start": 17,
+     "end": 19,
      "quote": "Go"
     }
    }
@@ -789,8 +788,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 24,
-     "end": 26,
+     "start": 41,
+     "end": 43,
      "quote": "Go"
     }
    }
@@ -807,8 +806,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 8,
-     "end": 10,
+     "start": 25,
+     "end": 27,
      "quote": "Go"
     }
    }
@@ -825,8 +824,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 30,
-     "end": 32,
+     "start": 47,
+     "end": 49,
      "quote": "Go"
     }
    }
@@ -843,8 +842,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 30,
-     "end": 32,
+     "start": 47,
+     "end": 49,
      "quote": "Go"
     }
    }
@@ -861,8 +860,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 30,
-     "end": 32,
+     "start": 52,
+     "end": 54,
      "quote": "Go"
     }
    }
@@ -879,8 +878,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 25,
-     "end": 27,
+     "start": 47,
+     "end": 49,
      "quote": "Go"
     }
    }
@@ -897,8 +896,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 11,
-     "end": 13,
+     "start": 33,
+     "end": 35,
      "quote": "Go"
     }
    }
@@ -915,8 +914,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 27,
-     "end": 29,
+     "start": 49,
+     "end": 51,
      "quote": "Go"
     }
    }
@@ -933,8 +932,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 21,
-     "end": 23,
+     "start": 43,
+     "end": 45,
      "quote": "Go"
     }
    }
@@ -951,8 +950,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 16,
-     "end": 22,
+     "start": 38,
+     "end": 44,
      "quote": "Golang"
     }
    }
@@ -969,8 +968,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 22,
-     "end": 24,
+     "start": 44,
+     "end": 46,
      "quote": "Go"
     }
    }
@@ -987,8 +986,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 46,
-     "end": 48,
+     "start": 68,
+     "end": 70,
      "quote": "Go"
     }
    }
@@ -1005,8 +1004,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 23,
-     "end": 25,
+     "start": 45,
+     "end": 47,
      "quote": "Go"
     }
    }
@@ -1023,8 +1022,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 34,
-     "end": 36,
+     "start": 56,
+     "end": 58,
      "quote": "Go"
     }
    }
@@ -1041,8 +1040,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 21,
-     "end": 23,
+     "start": 43,
+     "end": 45,
      "quote": "Go"
     }
    }
@@ -1059,8 +1058,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 16,
-     "end": 18,
+     "start": 38,
+     "end": 40,
      "quote": "Go"
     }
    }
@@ -1077,8 +1076,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 15,
-     "end": 17,
+     "start": 37,
+     "end": 39,
      "quote": "Go"
     }
    }
@@ -1095,8 +1094,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 17,
-     "end": 19,
+     "start": 39,
+     "end": 41,
      "quote": "Go"
     }
    }
@@ -1113,8 +1112,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 37,
-     "end": 39,
+     "start": 59,
+     "end": 61,
      "quote": "Go"
     }
    }
@@ -1131,8 +1130,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 20,
-     "end": 22,
+     "start": 42,
+     "end": 44,
      "quote": "Go"
     }
    }
@@ -1149,8 +1148,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 26,
-     "end": 28,
+     "start": 48,
+     "end": 50,
      "quote": "Go"
     }
    }
@@ -1167,8 +1166,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 15,
-     "end": 17,
+     "start": 37,
+     "end": 39,
      "quote": "Go"
     }
    }
@@ -1185,8 +1184,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 12,
-     "end": 14,
+     "start": 34,
+     "end": 36,
      "quote": "Go"
     }
    }
@@ -1203,8 +1202,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 30,
-     "end": 32,
+     "start": 52,
+     "end": 54,
      "quote": "Go"
     }
    }
@@ -1221,8 +1220,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 14,
-     "end": 16,
+     "start": 36,
+     "end": 38,
      "quote": "Go"
     }
    }
@@ -1239,8 +1238,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 12,
-     "end": 14,
+     "start": 34,
+     "end": 36,
      "quote": "Go"
     }
    }
@@ -1257,8 +1256,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 17,
-     "end": 19,
+     "start": 39,
+     "end": 41,
      "quote": "Go"
     }
    }
@@ -1275,8 +1274,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 50,
-     "end": 52,
+     "start": 72,
+     "end": 74,
      "quote": "Go"
     }
    }
@@ -1293,8 +1292,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 36,
-     "end": 38,
+     "start": 58,
+     "end": 60,
      "quote": "Go"
     }
    }
@@ -1311,8 +1310,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 29,
-     "end": 31,
+     "start": 51,
+     "end": 53,
      "quote": "Go"
     }
    }
@@ -1329,8 +1328,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 34,
-     "end": 36,
+     "start": 56,
+     "end": 58,
      "quote": "Go"
     }
    }
@@ -1347,8 +1346,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 57,
-     "end": 59,
+     "start": 79,
+     "end": 81,
      "quote": "Go"
     }
    }
@@ -1365,8 +1364,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 55,
-     "end": 57,
+     "start": 77,
+     "end": 79,
      "quote": "Go"
     }
    }
@@ -1383,8 +1382,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 15,
-     "end": 17,
+     "start": 37,
+     "end": 39,
      "quote": "Go"
     }
    }
@@ -1401,8 +1400,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 11,
-     "end": 13,
+     "start": 33,
+     "end": 35,
      "quote": "Go"
     }
    }
@@ -1419,8 +1418,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 39,
-     "end": 41,
+     "start": 61,
+     "end": 63,
      "quote": "Go"
     }
    }
@@ -1437,8 +1436,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 39,
-     "end": 41,
+     "start": 61,
+     "end": 63,
      "quote": "Go"
     }
    }
@@ -1455,8 +1454,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 15,
-     "end": 17,
+     "start": 37,
+     "end": 39,
      "quote": "Go"
     }
    }
@@ -1473,8 +1472,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 16,
-     "end": 18,
+     "start": 38,
+     "end": 40,
      "quote": "Go"
     }
    }
@@ -1491,8 +1490,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 12,
-     "end": 14,
+     "start": 27,
+     "end": 29,
      "quote": "Go"
     }
    }
@@ -1509,8 +1508,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 13,
-     "end": 15,
+     "start": 28,
+     "end": 30,
      "quote": "Go"
     }
    }
@@ -1527,8 +1526,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 35,
-     "end": 37,
+     "start": 50,
+     "end": 52,
      "quote": "Go"
     }
    }
@@ -1545,8 +1544,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 27,
-     "end": 29,
+     "start": 42,
+     "end": 44,
      "quote": "Go"
     }
    }
@@ -1563,8 +1562,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 16,
-     "end": 22,
+     "start": 33,
+     "end": 39,
      "quote": "golang"
     }
    }
@@ -1581,8 +1580,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 19,
-     "end": 21,
+     "start": 36,
+     "end": 38,
      "quote": "Go"
     }
    }
@@ -1599,8 +1598,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 19,
-     "end": 21,
+     "start": 36,
+     "end": 38,
      "quote": "Go"
     }
    }
@@ -1617,8 +1616,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 15,
-     "end": 17,
+     "start": 32,
+     "end": 34,
      "quote": "Go"
     }
    }
@@ -1635,8 +1634,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 16,
-     "end": 18,
+     "start": 33,
+     "end": 35,
      "quote": "Go"
     }
    }
@@ -1653,8 +1652,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 14,
-     "end": 16,
+     "start": 31,
+     "end": 33,
      "quote": "Go"
     }
    }
@@ -1671,8 +1670,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 9,
-     "end": 11,
+     "start": 26,
+     "end": 28,
      "quote": "Go"
     }
    }
@@ -1689,8 +1688,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 36,
-     "end": 38,
+     "start": 53,
+     "end": 55,
      "quote": "Go"
     }
    }
@@ -1707,8 +1706,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 45,
-     "end": 47,
+     "start": 62,
+     "end": 64,
      "quote": "Go"
     }
    }
@@ -1725,8 +1724,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 16,
-     "end": 18,
+     "start": 33,
+     "end": 35,
      "quote": "Go"
     }
    }
@@ -1743,8 +1742,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 10,
-     "end": 12,
+     "start": 27,
+     "end": 29,
      "quote": "Go"
     }
    }
@@ -1761,8 +1760,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 28,
-     "end": 30,
+     "start": 45,
+     "end": 47,
      "quote": "Go"
     }
    }
@@ -1779,8 +1778,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 27,
-     "end": 29,
+     "start": 44,
+     "end": 46,
      "quote": "Go"
     }
    }
@@ -1797,8 +1796,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 40,
-     "end": 42,
+     "start": 57,
+     "end": 59,
      "quote": "Go"
     }
    }
@@ -1815,8 +1814,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 53,
-     "end": 55,
+     "start": 70,
+     "end": 72,
      "quote": "Go"
     }
    }
@@ -1833,8 +1832,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 1157,
-     "end": 1159,
+     "start": 1174,
+     "end": 1176,
      "quote": "Go"
     }
    }
@@ -1851,8 +1850,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 58,
-     "end": 60,
+     "start": 75,
+     "end": 77,
      "quote": "Go"
     }
    }
@@ -1869,8 +1868,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 63,
-     "end": 65,
+     "start": 80,
+     "end": 82,
      "quote": "Go"
     }
    }
@@ -1887,8 +1886,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 53,
-     "end": 55,
+     "start": 70,
+     "end": 72,
      "quote": "Go"
     }
    }
@@ -1905,8 +1904,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 61,
-     "end": 63,
+     "start": 78,
+     "end": 80,
      "quote": "Go"
     }
    }
@@ -1923,8 +1922,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 36,
-     "end": 38,
+     "start": 53,
+     "end": 55,
      "quote": "Go"
     }
    }
@@ -1941,8 +1940,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 68,
-     "end": 70,
+     "start": 85,
+     "end": 87,
      "quote": "Go"
     }
    }
@@ -1959,8 +1958,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 44,
-     "end": 46,
+     "start": 61,
+     "end": 63,
      "quote": "Go"
     }
    }
@@ -1977,8 +1976,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 54,
-     "end": 56,
+     "start": 71,
+     "end": 73,
      "quote": "Go"
     }
    }
@@ -1995,8 +1994,8 @@
     "skill": "Go",
     "role": "optional",
     "span": {
-     "start": 0,
-     "end": 2,
+     "start": 17,
+     "end": 19,
      "quote": "Go"
     }
    }
@@ -2034,8 +2033,7 @@
      "quote": "Go"
     }
    }
-  ],
-  "cited_in": "title"
+  ]
  },
  {
   "id": "R19",
@@ -2053,8 +2051,7 @@
      "quote": "Go"
     }
    }
-  ],
-  "cited_in": "title"
+  ]
  },
  {
   "id": "R20",
@@ -2072,8 +2069,7 @@
      "quote": "Go"
     }
    }
-  ],
-  "cited_in": "title"
+  ]
  },
  {
   "id": "R21",
@@ -2091,8 +2087,7 @@
      "quote": "Go"
     }
    }
-  ],
-  "cited_in": "title"
+  ]
  },
  {
   "id": "R22",
@@ -2105,8 +2100,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 29,
-     "end": 31,
+     "start": 46,
+     "end": 48,
      "quote": "Go"
     }
    }
@@ -2123,8 +2118,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 33,
-     "end": 35,
+     "start": 50,
+     "end": 52,
      "quote": "Go"
     }
    }
@@ -2141,8 +2136,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 33,
-     "end": 35,
+     "start": 50,
+     "end": 52,
      "quote": "Go"
     }
    }
@@ -2159,8 +2154,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 24,
-     "end": 26,
+     "start": 41,
+     "end": 43,
      "quote": "Go"
     }
    }
@@ -2177,8 +2172,8 @@
     "skill": "Go",
     "role": "plus",
     "span": {
-     "start": 37,
-     "end": 39,
+     "start": 54,
+     "end": 56,
      "quote": "Go"
     }
    }
@@ -2195,8 +2190,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 37,
-     "end": 39,
+     "start": 54,
+     "end": 56,
      "quote": "Go"
     }
    }
@@ -2213,8 +2208,8 @@
     "skill": "Go",
     "role": "alternative",
     "span": {
-     "start": 37,
-     "end": 39,
+     "start": 54,
+     "end": 56,
      "quote": "Go"
     }
    }
@@ -2231,8 +2226,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 34,
-     "end": 36,
+     "start": 51,
+     "end": 53,
      "quote": "Go"
     }
    }
@@ -2249,8 +2244,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 31,
-     "end": 33,
+     "start": 48,
+     "end": 50,
      "quote": "Go"
     }
    }
@@ -2267,8 +2262,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 20,
-     "end": 22,
+     "start": 37,
+     "end": 39,
      "quote": "Go"
     }
    }
@@ -2285,8 +2280,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 25,
-     "end": 27,
+     "start": 42,
+     "end": 44,
      "quote": "Go"
     }
    }
@@ -2303,8 +2298,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 25,
-     "end": 27,
+     "start": 35,
+     "end": 37,
      "quote": "Go"
     }
    }
@@ -2321,8 +2316,8 @@
     "skill": "Go",
     "role": "required",
     "span": {
-     "start": 36,
-     "end": 38,
+     "start": 53,
+     "end": 55,
      "quote": "Go"
     }
    }

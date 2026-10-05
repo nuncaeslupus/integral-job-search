@@ -108,28 +108,61 @@ def target_of(value: str, terms: Iterable[str] = ()) -> Target:
     return Target(frozenset(technologies), frozenset(literals))
 
 
-def names(skill: str, target: Target) -> bool:
-    """Does the extraction's `skill` name what the exclusion rules out?
+#: The characters that belong to a literal skill's one word: `C#`, `C++`, `Objective-C`
+#: are words of their own, so `skill:c` is not `C#`.
+_WORD = r"[\w#+\-]"
+_ONE_LITERAL_WORD = re.compile(r"[\w#+.\-]+")
 
-    The model is told to write the vocabulary name, but "Go (Golang)", "Go 1.21",
-    "Go language" and "Golang/Go" are what a model writes anyway, so a skill that
-    is not an exact vocabulary name is read the way an advert is
-    (`stack_fit.named`, label mode): any technology it names counts. A literal
-    target is matched as a whole folded word inside the folded skill.
+
+def identity(skill: str) -> str | None:
+    """The one technology `skill` names, or `None` when it names none or several.
+
+    `Go`, `Golang`, `Go (Golang)`, `Go 1.21`, `Go language` and `Golang/Go` are all
+    `go`: a skill is resolved the way an advert is (`stack_fit.named`, label mode)
+    and must yield exactly one technology. `Java/Go`, `Go, Python o Java`,
+    `Kotlin or Java` and `Java Script` name two (or the wrong one) and are refused.
+    A word outside the vocabulary is its own identity (`lit:<folded word>`) only
+    when it is one word; a phrase of several is refused.
     """
     skill = skill.strip()
     try:
-        if stack_fit.resolve_technology(skill) in target.technologies:
-            return True
+        return stack_fit.resolve_technology(skill)
     except stack_fit.StackFitError:
         pass
-    if target.technologies & set(stack_fit.named(skill, label=True)):
-        return True
+    found = set(stack_fit.named(skill, label=True))
+    if len(found) == 1:
+        return next(iter(found))
+    if found:
+        return None
     folded = _fold(skill)
-    return any(re.search(rf"(?<!\w){re.escape(word)}(?!\w)", folded) for word in target.literals)
+    return f"lit:{folded}" if _ONE_LITERAL_WORD.fullmatch(folded) else None
 
 
-def valid_readings(payload: Any, text: str) -> list[Any] | None:
+def quote_names(quote: str, ident: str) -> bool:
+    """Does the span's `quote` name the technology `ident` (from `identity`)?"""
+    if ident.startswith("lit:"):
+        word = re.escape(ident[4:])
+        return bool(re.search(rf"(?<!{_WORD}){word}(?!{_WORD})", _fold(quote)))
+    return ident in stack_fit.named(quote, label=True)
+
+
+def names(skill: str, target: Target) -> bool:
+    """Does the extraction's `skill` name what the exclusion rules out?
+
+    Only by identity: the skill resolves to exactly one technology and it is one
+    the exclusion names, or it is the same single literal word. A skill that
+    resolves to none or several is not a match (and never validates, see
+    `valid_readings`).
+    """
+    ident = identity(skill)
+    if ident is None:
+        return False
+    if ident.startswith("lit:"):
+        return ident[4:] in target.literals
+    return ident in target.technologies
+
+
+def valid_readings(payload: Any, text: str, title: str | None = None) -> list[Any] | None:
     """The payload's skill readings, validated against the advert; `None` = pending.
 
     The same rule `extraction.accept_skill_readings` applies at write time is
@@ -153,36 +186,40 @@ def valid_readings(payload: Any, text: str) -> list[Any] | None:
     advert = unicodedata.normalize("NFC", text)
     if not advert:
         return None
+    title = unicodedata.normalize("NFC", title or "")
     try:
         readings = [SkillReading.model_validate(r) for r in payload["skills"]]
         return accept_skill_readings(
-            NormalisedAd(offer_id="validate", language="es", text=advert), readings
+            NormalisedAd(offer_id="validate", language="es", text=advert, title=title),
+            readings,
         )
     except (ValidationError, ExtractionError):
         return None
 
 
-def required_skills(payload: Any, text: str) -> tuple[str, ...] | None:
+def required_skills(payload: Any, text: str, title: str | None = None) -> tuple[str, ...] | None:
     """The skills an extraction's JSON lists as `required`; `None` when pending.
 
     `None` is *pending*: no `skills` key, a `null` one, or any reading that does
     not validate against the advert's `text` (`valid_readings`). Pending is
     shown, never held.
     """
-    readings = valid_readings(payload, text)
+    readings = valid_readings(payload, text, title)
     if readings is None:
         return None
     return tuple(r.skill for r in readings if r.role == REQUIRED)
 
 
-def required_skills_in(store: Any, offer_id: str, text: str) -> tuple[str, ...] | None:
+def required_skills_in(
+    store: Any, offer_id: str, text: str, title: str | None = None
+) -> tuple[str, ...] | None:
     """`required_skills` of `extractions/<offer_id>.json`; `None` when absent or unreadable."""
     path = Path(store.path("extractions", f"{offer_id}.json"))
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return required_skills(payload, text)
+    return required_skills(payload, text, title)
 
 
 def holds(required: Sequence[str] | None, target: Target) -> bool:
@@ -238,7 +275,7 @@ def _store_main(argv: list[str]) -> int:
     import argparse
 
     from integral.extraction import ExtractionError
-    from integral.identity import ProfileStore, default_profiles_root
+    from integral.identity import IdentityError, ProfileStore, default_profiles_root
 
     parser = argparse.ArgumentParser(prog="integral.skill_requirement store")
     parser.add_argument("--handle", required=True)
@@ -246,13 +283,13 @@ def _store_main(argv: list[str]) -> int:
     parser.add_argument("--readings", type=Path, required=True, help="JSON list of readings")
     parser.add_argument("--root", type=Path, default=None)
     args = parser.parse_args(argv)
-    store = ProfileStore(args.root or default_profiles_root(), args.handle)
     try:
+        store = ProfileStore(args.root or default_profiles_root(), args.handle)
         readings = json.loads(args.readings.read_text(encoding="utf-8"))
         if not isinstance(readings, list):
             raise ExtractionError("the readings file must hold a JSON list")
         path = store_readings(store, args.offer, readings)
-    except (ExtractionError, OSError, ValueError) as exc:
+    except (ExtractionError, IdentityError, OSError, ValueError) as exc:
         print(f"store: {exc}", file=sys.stderr)
         return 2
     print(f"stored {len(readings)} skill reading(s) -> {path}")
@@ -264,10 +301,10 @@ def _store_main(argv: list[str]) -> int:
 
 
 def advert_of(case: dict[str, Any]) -> str:
-    """The text a case's readings cite: its text, or title + text when `cited_in` is `title`."""
-    if case.get("cited_in") == "title":
-        return f"{case['title']}\n{case['text']}"
-    return str(case["text"])
+    """The text a case's readings cite: the title, a newline, the text (`citable_text`)."""
+    from integral.extraction import citable_text
+
+    return citable_text(case.get("title"), str(case["text"]))
 
 
 def _verdicts(cases: Sequence[dict[str, Any]]) -> dict[str, int]:
@@ -277,13 +314,16 @@ def _verdicts(cases: Sequence[dict[str, Any]]) -> dict[str, int]:
 
     def held(case: dict[str, Any], *, extracted: bool) -> bool:
         readings = case["extracted"] if extracted else None
-        advert = advert_of(case)
-        skills = None if readings is None else required_skills({"skills": readings}, advert)
+        skills = (
+            None
+            if readings is None
+            else required_skills({"skills": readings}, str(case["text"]), case.get("title"))
+        )
         return matches(
             Candidate(
                 offer_id=str(case["id"]),
                 title=case.get("title"),
-                text=advert,
+                text=str(case["text"]),
                 required_skills=skills,
             ),
             exclusion,

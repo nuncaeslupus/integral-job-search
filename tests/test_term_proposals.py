@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from integral.candidate import Aim
+from integral.extraction import citable_text
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import save_lifecycle_offer, track_new_offer
 from integral.offers import Offer, compute_offer_id, load_offer
@@ -238,8 +239,8 @@ def test_adverts_whose_extraction_requires_a_ruled_out_skill_propose_nothing(
     ]
     assert _terms(store) == ["applied ai engineer"]  # unread: shown, so still proposed
     for offer_id in ids:
-        text = load_offer(store, offer_id).text
-        start = text.index("Go")
+        offer = load_offer(store, offer_id)
+        start = citable_text(offer.title, offer.text).index("Go")
         span = {"start": start, "end": start + 2, "quote": "Go"}
         store_readings(store, offer_id, [{"skill": "Go", "role": "required", "span": span}])
     assert _terms(store) == []

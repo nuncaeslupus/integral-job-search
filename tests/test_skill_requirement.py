@@ -17,6 +17,7 @@ each advert should be, taken from the second reader's verdicts.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -66,7 +67,7 @@ def candidate(readings: list[dict[str, Any]] | None, text: str = TEXT) -> se.Can
 
 def reading(skill: str, role: str, quote: str | None = None) -> dict[str, Any]:
     """A reading citing `quote` (default: the skill's own spelling) in `TEXT`."""
-    quote = quote or skill
+    quote = quote or ("Go" if skill == "go" else skill)
     start = TEXT.index(quote)
     return {
         "skill": skill,
@@ -125,7 +126,8 @@ def test_a_term_names_the_same_skill_in_another_spelling() -> None:
 def test_a_skill_outside_the_vocabulary_matches_as_a_whole_folded_word() -> None:
     elixir = Exclusion(about="skill:Elixir", stated_at_cycle=1, words="w")
     assert se.matches(candidate([reading("elixír", "required")]), elixir)
-    assert se.matches(candidate([reading("Elixir-ish tooling", "required")]), elixir)
+    # a phrase of several words is not one literal word: the record is pending, never held
+    assert candidate([reading("Elixir-ish tooling", "required")]).required_skills is None
     assert not se.matches(candidate([reading("cobol", "required")]), elixir)
 
 
@@ -196,8 +198,11 @@ def test_the_span_is_checked_on_the_advert_as_the_extraction_saw_it() -> None:
     assert sr.required_skills(payload, unicodedata.normalize("NFD", text)) == ("Go",)
 
 
-def reading_of(text: str, quote: str, role: str, skill: str = "Go") -> dict[str, Any]:
-    start = text.index(quote)
+def reading_of(
+    text: str, quote: str, role: str, skill: str = "Go", title: str = ""
+) -> dict[str, Any]:
+    """A reading citing `quote` in the advert as extraction sees it (title, newline, text)."""
+    start = ex.citable_text(title, text).index(quote)
     return {
         "skill": skill,
         "role": role,
@@ -315,15 +320,99 @@ def test_a_reading_must_cite_the_advert() -> None:
         ex.accept_skill_readings(ad, [invented])
 
 
-def test_a_skill_read_in_two_roles_is_refused_and_the_same_role_twice_is_not() -> None:
-    ad = _ad("Requirements: Go. Go a plus.")
-    required = ex.SkillReading(skill="Go", role="required", span=_span(ad.text, "Requirements: Go"))
-    plus = ex.SkillReading(skill="golang", role="plus", span=_span(ad.text, "Go a plus"))
+def test_a_technology_read_in_two_roles_is_refused_whatever_its_spelling() -> None:
+    ad = _ad("Requirements: Go. Golang a plus.")
+    required = ex.SkillReading(skill="Go", role="required", span=_span(ad.text, "Go."[:2]))
+    plus = ex.SkillReading(skill="Golang", role="plus", span=_span(ad.text, "Golang"))
     assert ex.accept_skill_readings(ad, [required, required]) == [required, required]
-    ex.accept_skill_readings(ad, [required, plus])  # different spelling is a different key
-    clash = plus.model_copy(update={"skill": "GO"})
-    with pytest.raises(ex.ExtractionError, match="both"):
-        ex.accept_skill_readings(ad, [required, clash])
+    for other in ("Golang", "GOLANG", "Go (Golang)", "go"):
+        clash = plus.model_copy(update={"skill": other})
+        with pytest.raises(ex.ExtractionError, match="both"):
+            ex.accept_skill_readings(ad, [required, clash])
+        with pytest.raises(ex.ExtractionError, match="both"):
+            ex.accept_skill_readings(ad, [clash, required])
+
+
+@pytest.mark.parametrize(
+    "skill",
+    ["Java/Go", "Go, Python o Java", "Kotlin or Java", "Python and Go", "", "a b"],
+)
+def test_a_reading_names_exactly_one_technology(skill: str) -> None:
+    ad = _ad("Java/Go, Python and Go, Kotlin or Java, Java Script. a b")
+    quote = "Go" if "Go" in skill else "Java"
+    reading_ = ex.SkillReading.model_construct(
+        skill=skill, role="required", span=_span(ad.text, quote)
+    )
+    with pytest.raises(ex.ExtractionError, match="exactly one technology"):
+        ex.accept_skill_readings(ad, [reading_])
+
+
+def test_java_script_is_javascript_not_java() -> None:
+    """F4."""
+    assert sr.identity("Java Script") == "javascript"
+    assert not sr.names("Java Script", sr.target_of("java"))
+    assert sr.names("Java Script", sr.target_of("javascript"))
+
+
+@pytest.mark.parametrize("skill", ["Go (Golang)", "Go 1.21", "Go language", "Golang/Go", "Java"])
+def test_a_variant_that_resolves_to_one_technology_is_accepted(skill: str) -> None:
+    text = "Go (Golang) Go 1.21 Go language Golang/Go Java"
+    ad = _ad(text)
+    quote = "Java" if skill == "Java" else skill
+    ex.accept_skill_readings(
+        ad, [ex.SkillReading(skill=skill, role="required", span=_span(text, quote))]
+    )
+
+
+def test_the_span_must_name_the_readings_own_technology() -> None:
+    """F1: a real quote about another skill does not ground this reading."""
+    text = "Requirements: 5 years of Python required. Go is a plus."
+    ad = _ad(text)
+    about_python = ex.SkillReading(skill="Go", role="required", span=_span(text, "Python required"))
+    with pytest.raises(ex.ExtractionError, match="does not name it"):
+        ex.accept_skill_readings(ad, [about_python])
+    ok = ex.SkillReading(skill="Go", role="plus", span=_span(text, "Go is a plus"))
+    assert ex.accept_skill_readings(ad, [ok]) == [ok]
+    payload = {"skills": [about_python.model_dump()]}
+    assert sr.required_skills(payload, text) is None
+
+
+def test_a_literal_skill_is_one_word_and_c_is_not_c_sharp() -> None:
+    """F5: `#`, `+` and a `-` suffix/prefix belong to the word."""
+    exclusion = Exclusion(about="skill:Zed", stated_at_cycle=1, words="w")
+    for other in ("Zed#", "Zed++", "Objective-Zed", "Zedd", "Zed-lang"):
+        text = f"We write {other}"
+        payload = {"skills": [reading_of(text, other, "required", skill=other)]}
+        cand = se.Candidate(
+            offer_id="x", text=text, required_skills=sr.required_skills(payload, text)
+        )
+        assert not se.matches(cand, exclusion), other
+    # and the quote of a plain `Zed` skill may not be `Zed++`: it names a different word
+    text = "We write Zed++"
+    payload = {"skills": [reading_of(text, "Zed++", "required", skill="Zed")]}
+    assert sr.required_skills(payload, text) is None
+    ok_text = "We write Zed daily"
+    payload = {"skills": [reading_of(ok_text, "Zed", "required", skill="Zed")]}
+    cand = se.Candidate(
+        offer_id="x", text=ok_text, required_skills=sr.required_skills(payload, ok_text)
+    )
+    assert se.matches(cand, exclusion)
+    # the reviewer's literal-`c` case, whichever way `C` resolves
+    c_text = "We write C# and C++ and Objective-C"
+    for other in ("C#", "C++", "Objective-C"):
+        payload = {"skills": [reading_of(c_text, other, "required", skill=other)]}
+        cand = se.Candidate(
+            offer_id="x", text=c_text, required_skills=sr.required_skills(payload, c_text)
+        )
+        assert not se.matches(cand, Exclusion(about="skill:c", stated_at_cycle=1, words="w"))
+
+
+def test_a_title_cited_reading_validates_the_same_in_production() -> None:
+    """F6: the fixtures' text is production's: title, newline, text."""
+    title, text = "Golang Developer", "You will build microservices."
+    payload = {"skills": [reading_of(text, "Golang", "required", title=title)]}
+    assert sr.required_skills(payload, text, title) == ("Go",)
+    assert sr.required_skills(payload, text) is None  # no title passed: not the advert it cites
 
 
 def _offer(text: str, title: str = "Backend") -> Offer:
@@ -334,7 +423,11 @@ def test_extract_leaves_skills_pending_until_the_model_reads_them() -> None:
     offer = _offer("Requirements: Go and Python.")
     assert ex.extract(offer, []).skills is None
     assert ex.extract(offer, [], model_skills=[]).skills == []
-    read = ex.SkillReading(skill="Go", role="required", span=_span(offer.text, "Go and"))
+    read = ex.SkillReading(
+        skill="Go",
+        role="required",
+        span=_span(ex.citable_text(offer.title, offer.text), "Go and"),
+    )
     assert ex.extract(offer, [], model_skills=[read]).skills == [read]
 
 
@@ -416,8 +509,8 @@ def test_partition_holds_back_only_the_adverts_that_the_extraction_says_require_
     assert len(partition(store, ids)[0]) == 4
     _rule_out_go(store)
     option_text = "Experiencia con Java, Go o Python."
-    _read(store, requires, [reading_of(requires_text, "Go", "required")])
-    _read(store, option, [reading_of(option_text, "Go", "alternative")])
+    _read(store, requires, [reading_of(requires_text, "Go", "required", title="Backend A")])
+    _read(store, option, [reading_of(option_text, "Go", "alternative", title="Backend B")])
     _read(store, bare, [])
     show, hold = partition(store, ids)
     assert [h.offer_id for h in hold] == [requires]
@@ -488,26 +581,34 @@ def test_source_applies_a_required_reading_and_shows_what_is_unread(
     baseline = _stored_ids(base)
     assert len(baseline) >= 2
     victim = sorted(baseline)[0]
+    offer = load_offer(base, victim)
+    advert = ex.citable_text(offer.title, offer.text)
+    word = next(w for w in re.findall(r"[A-Za-z]{4,}", advert) if w.lower() != "python")
+    start = advert.index(word)
+    cited = {
+        "skill": word,
+        "role": "required",
+        "span": {"start": start, "end": start + len(word), "quote": word},
+    }
+    rule = Exclusion(about=f"skill:{word}", stated_at_cycle=1, words="w")
 
-    _rule_out_go(store)
+    record_exclusion(store, rule)
     # Nothing read yet: every advert is shown, none is held on a guess.
     _source_round(store, tmp_path)
     assert _stored_ids(store) == baseline
 
-    # Once step 8 has read one advert as requiring Go, a fresh round leaves it out and says so.
+    # Once step 8 has read one advert as requiring it, a fresh round leaves it out and says so.
     other = tmp_path / "second"
     other.mkdir()
     create_profile(other, "Test", handle="test", language="es", fiction=True)
     second = ProfileStore(other, "test")
-    _rule_out_go(second)
-    advert = load_offer(base, victim).text
-    cited = {"skill": "Go", "role": "required", "span": _span_of(advert, advert[:2])}
+    record_exclusion(second, rule)
     _read(second, victim, [cited])
     run = _source_round(second, other)
     assert _stored_ids(second) == baseline - {victim}
     (outcome,) = run.outcomes  # type: ignore[attr-defined]
     assert outcome.excluded == 1
-    assert "skill:go" in outcome.excluded_because[0]
+    assert f"skill:{word}" in outcome.excluded_because[0]
 
 
 def test_a_stored_reading_with_a_span_not_in_the_advert_is_shown_with_a_note(
@@ -536,7 +637,7 @@ def test_step_9_emits_the_pending_note_next_to_the_other_notes(store: ProfileSto
     _rule_out_go(store)
     notes = [n for n in shown_notes(store, [offer_id]) if "skill:go" in n]
     assert len(notes) == 1
-    _read(store, offer_id, [reading_of("Requisitos:\n- Go", "Go", "required")])
+    _read(store, offer_id, [reading_of("Requisitos:\n- Go", "Go", "required", title="Backend")])
     assert not [n for n in shown_notes(store, [offer_id]) if "skill:go" in n]
 
 
@@ -593,7 +694,7 @@ def test_the_step_8_write_path_stores_validated_readings(store: ProfileStore) ->
     text = "Requisitos:\n- Go\n- SQL"
     offer_id = _store_offer(store, text, "Backend")
     _rule_out_go(store)
-    path = sr.store_readings(store, offer_id, [reading_of(text, "Go", "required")])
+    path = sr.store_readings(store, offer_id, [reading_of(text, "Go", "required", title="Backend")])
     stored = json.loads(path.read_text(encoding="utf-8"))
     assert stored["skills"][0]["role"] == "required" and stored["offer_id"] == offer_id
     assert partition(store, [offer_id])[1][0].offer_id == offer_id
@@ -648,7 +749,9 @@ def test_the_command_line_stores_and_exits_two_on_a_refusal(
     text = "Requisitos:\n- Go"
     offer_id = _store_offer(store, text, "Backend")
     good = tmp_path / "good.json"
-    good.write_text(json.dumps([reading_of(text, "Go", "required")]), encoding="utf-8")
+    good.write_text(
+        json.dumps([reading_of(text, "Go", "required", title="Backend")]), encoding="utf-8"
+    )
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps([{"skill": "Go", "role": "required"}]), encoding="utf-8")
     base = ["--handle", store.home.name, "--offer", offer_id, "--root", str(store.home.parent)]
@@ -656,6 +759,24 @@ def test_the_command_line_stores_and_exits_two_on_a_refusal(
     assert not store.path("extractions", f"{offer_id}.json").exists()
     assert sr._store_main([*base, "--readings", str(good)]) == 0
     assert store.path("extractions", f"{offer_id}.json").exists()
+
+
+def test_the_command_line_exits_two_on_an_invalid_handle(tmp_path: Path) -> None:
+    readings = tmp_path / "r.json"
+    readings.write_text("[]", encoding="utf-8")
+    code = sr._store_main(
+        [
+            "--handle",
+            "../x",
+            "--offer",
+            "sha256:a",
+            "--readings",
+            str(readings),
+            "--root",
+            str(tmp_path),
+        ]
+    )
+    assert code == 2
 
 
 def test_the_step_8_skill_names_the_command_the_code_provides() -> None:

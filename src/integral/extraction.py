@@ -527,29 +527,59 @@ def accept_model_scores(
     return accepted
 
 
+def citable_text(title: str | None, text: str) -> str:
+    """The advert as a skill reading cites it: the title, a newline, then the text.
+
+    One definition for the write path and the read path, so a span that validates
+    when it is stored validates when it is read. With no title it is the text.
+    """
+    body = unicodedata.normalize("NFC", text)
+    head = unicodedata.normalize("NFC", title or "").strip()
+    return f"{head}\n{body}" if head else body
+
+
 def accept_skill_readings(ad: NormalisedAd, proposed: list[SkillReading]) -> list[SkillReading]:
     """Validate the model's skill readings before they become an extraction (T229).
 
-    Two refusals a schema cannot make: a span that is not what the advert says
-    at those offsets (an invented quote would put fabricated text in front of
-    the candidate as the employer's own words), and the same skill read in two
-    roles at once — "required" and "plus" for one skill leaves the extraction's
-    meaning to whichever copy a reader takes, and a hold must not depend on it.
+    Closed rules, none of them a list of cases:
+
+    * **one reading, one technology** — `skill_requirement.identity` resolves the
+      skill to exactly one technology (a vocabulary one, or a single literal
+      word); zero or several refuses it ("Java/Go", "Go, Python o Java");
+    * **the span names that technology** — `skill_requirement.quote_names`: the
+      quote is the advert's own words *for this skill*, so a real quote about
+      another one is refused;
+    * **the span is what the advert says there** (`citable_text`), since an
+      invented quote would put fabricated text in front of the candidate;
+    * **one technology, one role** — keyed by the resolved technology, so `Go` and
+      `Golang` cannot be read in two roles.
     """
+    from integral import skill_requirement
+
+    advert = citable_text(ad.title, ad.text)
     seen: dict[str, str] = {}
     for reading in proposed:
-        if ad.slice(reading.span.start, reading.span.end) != reading.span.quote:
+        ident = skill_requirement.identity(reading.skill)
+        if ident is None:
+            raise ExtractionError(
+                f"{ad.offer_id}: skill {reading.skill!r} does not name exactly one technology"
+            )
+        if not skill_requirement.quote_names(reading.span.quote, ident):
+            raise ExtractionError(
+                f"{ad.offer_id}: skill {reading.skill!r} cites {reading.span.quote!r}, "
+                "which does not name it"
+            )
+        if advert[reading.span.start : reading.span.end] != reading.span.quote:
             raise ExtractionError(
                 f"{ad.offer_id}: skill {reading.skill!r} cites {reading.span.quote!r}, "
                 "which is not what the advert says at those offsets"
             )
-        key = reading.skill.casefold()
-        if key in seen and seen[key] != reading.role:
+        if ident in seen and seen[ident] != reading.role:
             raise ExtractionError(
-                f"{ad.offer_id}: skill {reading.skill!r} is read as both {seen[key]!r} "
+                f"{ad.offer_id}: skill {reading.skill!r} is read as both {seen[ident]!r} "
                 f"and {reading.role!r}"
             )
-        seen[key] = reading.role
+        seen[ident] = reading.role
     return list(proposed)
 
 
