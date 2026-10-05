@@ -418,6 +418,47 @@ BULLETS = [
     "rest; never treat an unlisted offer as one with nothing to reuse.",
     "- No generated documents yet is a normal first run: say nothing about it and draft.",
 ]
+SECTION_BODY = (
+    "\n"
+    "Run the digest **before drafting any CV or letter**, so work the candidate has "
+    "already polished for another offer is weighed rather than rebuilt from zero:\n"
+    "\n"
+    "```bash\n"
+    "python -m integral.prior_documents --id <handle> [--input-dir <profiles-root>]\n"
+    "```\n"
+    "\n"
+    "It walks every `cv/generated/<offer_id>/v<N>/manifest.json` and the document "
+    "text beside it, for **all** of the candidate's offers, and prints per offer: "
+    "company and title, how many versions exist, which documents each holds and any "
+    'other file it did not read, the **sections beyond the standard set** (a "How I '
+    'work" block, say), and the **story-bank episodes cited**. A script does this so '
+    "the session does not re-read N full documents.\n"
+    "\n"
+    "The reuse rule, stated once and pinned by its own test, so change it only by "
+    "changing the rule:\n"
+    "\n"
+    "```text\n"
+    "Propose reuse; never apply it silently.\n"
+    "A story-bank episode carried over from another offer's documents needs a fresh "
+    "per-use approval for this posting and company; the earlier approval does not "
+    "travel.\n"
+    "An episode count the digest marks UNDETERMINED is not zero: read the named "
+    "documents.\n"
+    "```\n"
+    "\n"
+    "- Where an earlier offer's framing, section or phrasing looks good, say which "
+    "one and why, and propose carrying it over **adapted to this posting and this "
+    "company** — never pasted. The candidate decides. Every claim in the new "
+    "document still traces to a store entry, and the letter is still the candidate's "
+    'own words (see "The letter is an edit").\n'
+    "- The digest ends with a `SKIPPED` list and **exit 1** when any manifest, "
+    "document, offer record or story row could not be read. Say which items, by "
+    "name, before relying on the rest; never treat an unlisted offer as one with "
+    "nothing to reuse.\n"
+    "- No generated documents yet is a normal first run: say nothing about it and "
+    "draft.\n"
+    ""
+)
 NEVER_BULLET = (
     "- Never include a story-bank episode without per-use approval — recounting a failure "
     "to the tool was never consent to send it to a company."
@@ -438,6 +479,63 @@ def test_the_original_never_bullet_still_sits_in_the_never_list() -> None:
     found = re.search(r"\*\*Never:\*\*\n\n(.*?)\n\n## ", _skill(), re.S)
     assert found, "the skill has no Never list"
     assert NEVER_BULLET in found.group(1).splitlines()
+
+
+def test_the_whole_digest_section_is_pinned_verbatim() -> None:
+    """Not only its fence and bullets: a paragraph appended to the section is pinned too."""
+    assert _section() == SECTION_BODY
+
+
+# --- documents the manifest does not trace ---------------------------------------
+
+
+def test_a_real_generated_version_with_one_untraced_line_is_undetermined(
+    store: ProfileStore,
+) -> None:
+    master = CVMaster.model_validate_json(MASTER.read_text(encoding="utf-8"))
+    offer(store, GRAFANA, "Grafana", "Backend")
+    generate(store, master, offer_id=GRAFANA, advert="python postgres")
+    assert by_id(pd.digest(store))[GRAFANA].undetermined == ()  # fully traced as written
+    letter = store.path("cv", "generated", GRAFANA, "v1", "letter.md")
+    letter.write_text(letter.read_text(encoding="utf-8") + "One more thing I care about.\n")
+    assert by_id(pd.digest(store))[GRAFANA].undetermined == (
+        f"cv/generated/{GRAFANA}/v1/letter.md",
+    )
+
+
+def test_a_line_traced_only_by_a_claim_for_another_document_is_undetermined(
+    store: ProfileStore,
+) -> None:
+    offer(store, GRAFANA, "Grafana", "Backend")
+    where = version(store, GRAFANA, 1, letter="Dear hiring team,\n" + STORY_A + "\n")
+    claim = Claim(document="cv.md", text=STORY_A, section="episodes", entry_index=0)
+    body = Manifest(offer_id=GRAFANA, version=1, claims=(claim,)).model_dump_json()
+    (where / "manifest.json").write_text(body, encoding="utf-8")
+    found = by_id(pd.digest(store))[GRAFANA]
+    assert found.undetermined == (f"cv/generated/{GRAFANA}/v1/letter.md",)
+    assert "UNDETERMINED" in pd.render(pd.digest(store))
+
+
+def test_an_approvals_file_naming_another_version_skips_it_by_name(store: ProfileStore) -> None:
+    offer(store, GRAFANA, "Grafana", "Backend")
+    where = version(store, GRAFANA, 1)
+    other = {"offer_id": GRAFANA, "version": 2, "episodes": []}
+    (where / "approvals.json").write_text(json.dumps(other), encoding="utf-8")
+    result = pd.digest(store)
+    assert result.offers == ()
+    assert [s.where for s in result.skipped] == [f"cv/generated/{GRAFANA}/v1"]
+    assert "v2" in result.skipped[0].reason
+
+
+def test_files_that_are_not_read_are_named_not_hidden(store: ProfileStore) -> None:
+    offer(store, GRAFANA, "Grafana", "Backend")
+    where = version(store, GRAFANA, 1)
+    for name in ("carta.txt", "cv.MD", "cv.html"):
+        (where / name).write_text("x", encoding="utf-8")
+    (where / "payload.json").write_text("{}", encoding="utf-8")  # a machine file, not a document
+    found = by_id(pd.digest(store))[GRAFANA]
+    assert found.unread_files == ((1, ("carta.txt", "cv.MD", "cv.html")),)
+    assert "v1 also holds, not read: carta.txt, cv.MD, cv.html" in pd.render(pd.digest(store))
 
 
 # --- what the digest must survive and say -----------------------------------------

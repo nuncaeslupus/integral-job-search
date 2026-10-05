@@ -23,9 +23,12 @@ anyone remembering to list it:
   where ``cv/generated`` should be. Nothing is dropped silently, and any skip makes
   the CLI exit 1.
 * **A version's documents are every ``*.md`` in it except the trace file**
-  (``application_authorship.TRACE_FILE``) — the glob ``approval.prepare`` uses, not
-  a list of names. The digest names them, so a letter's framing is discoverable
-  even though it has no headings.
+  (``application_authorship.TRACE_FILE``). ``approval.prepare`` globs ``*.md`` and so
+  includes the trace file; the digest uses that glob minus the trace, not a list of
+  names. The digest names the documents, so a letter's framing is discoverable even
+  though it has no headings, and names every other regular file that is neither a
+  ``*.md`` nor a ``*.json`` (``carta.txt``, ``cv.MD``, rendered HTML) as *not read*,
+  so nothing sits in a version unmentioned.
 * **A cited episode is any manifest claim with ``section == "episodes"`` and any
   text in the version's ``approvals.json``.** A manifest claim is rendered from
   ``cv/master.json``, not from ``profile/stories.jsonl``, and no code makes the two
@@ -90,6 +93,7 @@ class OfferDigest:
     title: str | None
     versions: tuple[int, ...]
     documents: tuple[tuple[int, tuple[str, ...]], ...]
+    unread_files: tuple[tuple[int, tuple[str, ...]], ...]
     sections: tuple[str, ...]
     cited_episodes: tuple[CitedEpisode, ...]
     undetermined: tuple[str, ...]  # documents carrying lines no manifest claim traces
@@ -106,6 +110,7 @@ class Digest:
 class _Acc:
     versions: list[int] = field(default_factory=list)
     documents: dict[int, tuple[str, ...]] = field(default_factory=dict)
+    unread_files: dict[int, tuple[str, ...]] = field(default_factory=dict)
     sections: set[str] = field(default_factory=set)
     episode_texts: set[str] = field(default_factory=set)
     undetermined: set[str] = field(default_factory=set)
@@ -175,6 +180,11 @@ def _read_version(
                 raise ValueError(f"names offer {approvals.offer_id!r} v{approvals.version}")
             approved = [a.text for a in approvals.episodes]
         names = sorted(p.name for p in store.path(*parts).glob("*.md") if p.name != TRACE_FILE)
+        unread = sorted(
+            p.name
+            for p in store.path(*parts).iterdir()
+            if p.is_file() and not p.name.endswith(".md") and p.suffix.lower() != ".json"
+        )
         texts = {name: store.read_text(*parts, name) for name in names}
     except _READ_ERRORS as exc:
         skipped.append(Skipped(where, f"{type(exc).__name__}: {exc}"))
@@ -189,6 +199,8 @@ def _read_version(
         acc.sections.update(h for h in headings(text) if h not in STANDARD_SECTIONS)
     acc.versions.append(number)
     acc.documents[number] = tuple(names)
+    if unread:
+        acc.unread_files[number] = tuple(unread)
     acc.episode_texts |= {c.text.strip() for c in manifest.claims if c.section == "episodes"}
     acc.episode_texts |= {t.strip() for t in approved}
 
@@ -246,6 +258,7 @@ def digest(store: ProfileStore) -> Digest:
                 title=title,
                 versions=tuple(sorted(acc.versions)),
                 documents=tuple(sorted(acc.documents.items())),
+                unread_files=tuple(sorted(acc.unread_files.items())),
                 sections=tuple(sorted(acc.sections)),
                 cited_episodes=cited,
                 undetermined=tuple(sorted(acc.undetermined)),
@@ -268,6 +281,9 @@ def render(result: Digest) -> str:
         lines.append(f"{offer.offer_id} | {name}")
         lines.append(f"  versions: {len(offer.versions)} (latest v{offer.versions[-1]})")
         lines.extend(f"    v{n}: {', '.join(names)}" for n, names in offer.documents)
+        lines.extend(
+            f"    v{n} also holds, not read: {', '.join(names)}" for n, names in offer.unread_files
+        )
         lines.append(f"  sections beyond the standard set: {', '.join(offer.sections) or 'none'}")
         count = len(offer.cited_episodes)
         if offer.undetermined:
@@ -296,6 +312,7 @@ def as_json(result: Digest) -> dict[str, Any]:
                 "title": o.title,
                 "versions": list(o.versions),
                 "documents": {f"v{n}": list(names) for n, names in o.documents},
+                "unread_files": {f"v{n}": list(names) for n, names in o.unread_files},
                 "sections": list(o.sections),
                 "cited_episodes": [
                     {"text": e.text, "story_id": e.story_id} for e in o.cited_episodes

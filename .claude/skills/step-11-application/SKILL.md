@@ -46,7 +46,7 @@ Run the digest **before drafting any CV or letter**, so work the candidate has a
 python -m integral.prior_documents --id <handle> [--input-dir <profiles-root>]
 ```
 
-It walks every `cv/generated/<offer_id>/v<N>/manifest.json` and the document text beside it, for **all** of the candidate's offers, and prints per offer: company and title, how many versions exist and which documents each holds, the **sections beyond the standard set** (a "How I work" block, say), and the **story-bank episodes cited**. A script does this so the session does not re-read N full documents.
+It walks every `cv/generated/<offer_id>/v<N>/manifest.json` and the document text beside it, for **all** of the candidate's offers, and prints per offer: company and title, how many versions exist, which documents each holds and any other file it did not read, the **sections beyond the standard set** (a "How I work" block, say), and the **story-bank episodes cited**. A script does this so the session does not re-read N full documents.
 
 The reuse rule, stated once and pinned by its own test, so change it only by changing the rule:
 
