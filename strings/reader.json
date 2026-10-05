@@ -1,0 +1,162 @@
+{
+  "_comment": [
+    "Every string the annotatable document reader (T141) shows the candidate.",
+    "",
+    "The reader's language is the candidate's; the document's is the employer's.",
+    "Same entry shape and the same completeness and staleness checks as",
+    "`catalogue.json`; kept apart so the results page and the reader do not share a",
+    "diff. Stamp after translating with `integral.strings.stamp`, never to make",
+    "a red gate green."
+  ],
+  "source_language": "en",
+  "languages": [
+    "en",
+    "es",
+    "ca"
+  ],
+  "entries": {
+    "reader_intro": {
+      "en": "Write a note beside any paragraph. Notes save in this browser. Export gives you a file to send back.",
+      "es": {
+        "text": "Escribe una nota junto a cualquier párrafo. Las notas se guardan en este navegador. Exportar te da un archivo para devolver.",
+        "of": "16f061b25ea568a434e4ba05e60dd874b9de43c4ed277ba44fede6f84427102e"
+      },
+      "ca": {
+        "text": "Escriu una nota al costat de qualsevol paràgraf. Les notes es desen en aquest navegador. Exportar et dona un fitxer per tornar.",
+        "of": "16f061b25ea568a434e4ba05e60dd874b9de43c4ed277ba44fede6f84427102e"
+      }
+    },
+    "reader_note_label": {
+      "en": "Note",
+      "es": {
+        "text": "Nota",
+        "of": "d8da2c49df39d91df7ecd199b92da7bf264f026242ccc69b08daeadfe587c45b"
+      },
+      "ca": {
+        "text": "Nota",
+        "of": "d8da2c49df39d91df7ecd199b92da7bf264f026242ccc69b08daeadfe587c45b"
+      }
+    },
+    "reader_note_placeholder": {
+      "en": "Your note on this passage",
+      "es": {
+        "text": "Tu nota sobre este pasaje",
+        "of": "f45edfc5ed62f150d3f4a60dfaa0e6f00cfe90a32a6bfca41d9d8b227033191c"
+      },
+      "ca": {
+        "text": "La teva nota sobre aquest fragment",
+        "of": "f45edfc5ed62f150d3f4a60dfaa0e6f00cfe90a32a6bfca41d9d8b227033191c"
+      }
+    },
+    "reader_export": {
+      "en": "Export notes",
+      "es": {
+        "text": "Exportar notas",
+        "of": "7672569979ce084aa80c13d33b7638e361ab779078fc6489703fb2bdb9d0bf60"
+      },
+      "ca": {
+        "text": "Exportar notes",
+        "of": "7672569979ce084aa80c13d33b7638e361ab779078fc6489703fb2bdb9d0bf60"
+      }
+    },
+    "reader_import": {
+      "en": "Import notes",
+      "es": {
+        "text": "Importar notas",
+        "of": "f5544a89b22d3ea43e79f7b51c5506e9aeb2ab3557cc10e5da5e6d9c05d5454f"
+      },
+      "ca": {
+        "text": "Importar notes",
+        "of": "f5544a89b22d3ea43e79f7b51c5506e9aeb2ab3557cc10e5da5e6d9c05d5454f"
+      }
+    },
+    "reader_saved": {
+      "en": "Saved in this browser",
+      "es": {
+        "text": "Guardado en este navegador",
+        "of": "75010cd58573766ddc7ba923eb9dc8af18159ac3cfbaabf092eb1b40dc69642c"
+      },
+      "ca": {
+        "text": "Desat en aquest navegador",
+        "of": "75010cd58573766ddc7ba923eb9dc8af18159ac3cfbaabf092eb1b40dc69642c"
+      }
+    },
+    "reader_exported": {
+      "en": "Exported {n} notes",
+      "es": {
+        "text": "Exportadas {n} notas",
+        "of": "29644ab9b198c79f2d8b1637ce0f616ea7a18f738384a6c979a7084c4cd1634f"
+      },
+      "ca": {
+        "text": "Exportades {n} notes",
+        "of": "29644ab9b198c79f2d8b1637ce0f616ea7a18f738384a6c979a7084c4cd1634f"
+      }
+    },
+    "reader_imported": {
+      "en": "Imported {n} notes",
+      "es": {
+        "text": "Importadas {n} notas",
+        "of": "e49a22680c90d5fa032ef78b37effbff66b05dcf3ca7090110ec0879194d4ae0"
+      },
+      "ca": {
+        "text": "Importades {n} notes",
+        "of": "e49a22680c90d5fa032ef78b37effbff66b05dcf3ca7090110ec0879194d4ae0"
+      }
+    },
+    "reader_import_failed": {
+      "en": "That file is not an export from this reader",
+      "es": {
+        "text": "Ese archivo no es una exportación de este lector",
+        "of": "597fd3173f5875db874133c037743f5d55c9284579ed4436594c49215a160a2a"
+      },
+      "ca": {
+        "text": "Aquest fitxer no és una exportació d'aquest lector",
+        "of": "597fd3173f5875db874133c037743f5d55c9284579ed4436594c49215a160a2a"
+      }
+    },
+    "reader_no_notes": {
+      "en": "No notes yet, so there is nothing to export",
+      "es": {
+        "text": "Aún no hay notas, así que no hay nada que exportar",
+        "of": "ae4b5e6cd87bfaf9618c0efaa76d219fde0d0fa367ef51d62aad2117a83ec192"
+      },
+      "ca": {
+        "text": "Encara no hi ha notes, així que no hi ha res per exportar",
+        "of": "ae4b5e6cd87bfaf9618c0efaa76d219fde0d0fa367ef51d62aad2117a83ec192"
+      }
+    },
+    "reader_storage_unavailable": {
+      "en": "This browser cannot save notes. Export before you close the page",
+      "es": {
+        "text": "Este navegador no puede guardar notas. Exporta antes de cerrar la página",
+        "of": "d79d2259b18fc5311cb72d2cd58906c9bdacf7a7da703fbab1a73d6d73ce0f9f"
+      },
+      "ca": {
+        "text": "Aquest navegador no pot desar notes. Exporta abans de tancar la pàgina",
+        "of": "d79d2259b18fc5311cb72d2cd58906c9bdacf7a7da703fbab1a73d6d73ce0f9f"
+      }
+    },
+    "reader_text_changed": {
+      "en": "The text changed since this note was written",
+      "es": {
+        "text": "El texto ha cambiado desde que se escribió esta nota",
+        "of": "53023da46ca39ede5e8dde93d7e65f67f46dbd01c828e4f495a4c63dfc60283f"
+      },
+      "ca": {
+        "text": "El text ha canviat des que es va escriure aquesta nota",
+        "of": "53023da46ca39ede5e8dde93d7e65f67f46dbd01c828e4f495a4c63dfc60283f"
+      }
+    },
+    "reader_export_heading": {
+      "en": "Notes on {title}",
+      "es": {
+        "text": "Notas sobre {title}",
+        "of": "ab4bc33587e58509ad8eaca3cb0ba1f89e9bdcb55d4b60ded7b54d9a50b4ded1"
+      },
+      "ca": {
+        "text": "Notes sobre {title}",
+        "of": "ab4bc33587e58509ad8eaca3cb0ba1f89e9bdcb55d4b60ded7b54d9a50b4ded1"
+      }
+    }
+  }
+}
