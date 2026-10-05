@@ -1,0 +1,1529 @@
+[
+  {
+    "id": "h-title",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Backend Engineer, fintech payments",
+    "employer": null,
+    "text": "Build services.",
+    "held": true,
+    "why": "title names the topic: the job is in it (spec: 'about the employer or the job')"
+  },
+  {
+    "id": "h-employer-name",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": "Banco Sabadell",
+    "text": "Build services.",
+    "held": true,
+    "why": "employer named is a bank (Banco Sabadell is a bank, the original reason for reading the employer)"
+  },
+  {
+    "id": "h-self-description",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are a fintech building payroll for small companies. Join us.",
+    "held": true,
+    "why": "the employer describes itself: 'We are a fintech' is the employer being on the topic"
+  },
+  {
+    "id": "h-self-description-ecommerce",
+    "about": "sector:e-commerce",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Somos una empresa de ecommerce con sede en Barcelona.",
+    "held": true,
+    "why": "self description in Spanish: 'Somos una empresa de e-commerce'"
+  },
+  {
+    "id": "h-self-description-with-cue",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Our company has ten years of experience in fintech payments.",
+    "held": true,
+    "why": "'Our company has N years of experience in fintech' is the employer's own history, not a demand on the candidate"
+  },
+  {
+    "id": "h-duties",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits:\n- Gym membership\n\nAbout the role:\nYou will build the fintech ledger for our clients.",
+    "held": true,
+    "why": "what the role does ('You will build the fintech ledger') is the job being on the topic"
+  },
+  {
+    "id": "h-purpose-clause",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Buscamos un Java Developer siendo valorable que aporte React para formar parte del equipo de nuestro cliente del sector bancario.",
+    "held": true,
+    "why": "'... para formar parte del equipo de nuestro cliente del sector bancario' states who the job is for; a cue in the clause before it does not strip it"
+  },
+  {
+    "id": "h-advertising-platform",
+    "about": "sector:advertising",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Join the team building our advertising platform for publishers.",
+    "held": true,
+    "why": "the product is advertising: 'our advertising platform' is the employer's business"
+  },
+  {
+    "id": "h-catalan",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Som una empresa del sector bancari.",
+    "held": true,
+    "why": "Catalan self description: 'Som una empresa del sector bancari'"
+  },
+  {
+    "id": "h-other-language-term",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "A leading banking group hires engineers.",
+    "held": true,
+    "why": "a term recorded beside the value reaches the advert in another language"
+  },
+  {
+    "id": "h-about-us-section",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "About us\nWe are a fintech serving freelancers.\n\nRequirements:\n- Python",
+    "held": true,
+    "why": "a section about the company is read; the Requirements section after it is not what holds it"
+  },
+  {
+    "id": "h-employer-bullet-self",
+    "about": "sector:salud",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "- Our product connects salud clinics with patients.",
+    "held": true,
+    "why": "a plain description bullet with no cue: 'Our product connects salud clinics' (our product is the employer)"
+  },
+  {
+    "id": "s-background-in",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We build payroll software for SMEs.\n\nRequirements:\n- Background in FinTech\n- Python",
+    "held": false,
+    "why": "the reported case: a payroll startup that values 'Background in FinTech' is not a fintech"
+  },
+  {
+    "id": "s-ticket-restaurant-section",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Beneficios:\n- Ticket restaurant\n- Seguro médico",
+    "held": false,
+    "why": "a perk: 'ticket restaurant' among the benefits is not a restaurant job (58 adverts in the session)"
+  },
+  {
+    "id": "s-ticket-restaurant-inline",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Software for logistics. Ticket restaurante y seguro médico para todo el equipo.",
+    "held": false,
+    "why": "the same perk with no heading in front of it"
+  },
+  {
+    "id": "s-meal-vouchers",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We offer restaurant vouchers, a gym allowance and 25 holiday days.",
+    "held": false,
+    "why": "English wording of the perk"
+  },
+  {
+    "id": "s-nice-to-have-section",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We make embedded firmware.\n\nNice to have:\n- fintech exposure",
+    "held": false,
+    "why": "a nice-to-have section names the topic only as something that would be welcome"
+  },
+  {
+    "id": "s-plus",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Firmware for industrial sensors. Experience with banking systems is a plus.",
+    "held": false,
+    "why": "'Experience with banking systems is a plus'"
+  },
+  {
+    "id": "s-requisitos-section",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Desarrollamos firmware.\n\nRequisitos:\n- Experiencia en el sector bancario",
+    "held": false,
+    "why": "Spanish requirements section: 'Experiencia en el sector bancario'"
+  },
+  {
+    "id": "s-se-valora",
+    "about": "sector:publicidad",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ingeniero de firmware. Se valora experiencia en publicidad digital.",
+    "held": false,
+    "why": "'Se valora experiencia en publicidad digital' is a preference"
+  },
+  {
+    "id": "s-posting-boilerplate",
+    "about": "sector:advertising",
+    "terms": [
+      "advertised"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Firmware engineer for sensors. This role was advertised on several job boards.",
+    "held": false,
+    "why": "a firmware engineer held as advertising: 'this role was advertised' says how it was posted, not what it does"
+  },
+  {
+    "id": "s-perk-with-topic",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "What we offer:\n- Flexible hours\n- Discounts at fintech partners",
+    "held": false,
+    "why": "a perk that names the topic: 'discounts at fintech partners'"
+  },
+  {
+    "id": "s-you-have",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Embedded systems role. You have a background in banking software.",
+    "held": false,
+    "why": "a statement about the candidate: 'You have a background in banking'"
+  },
+  {
+    "id": "s-conocimientos",
+    "about": "sector:e-commerce",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Equipo de plataforma de datos.\nConocimientos de e-commerce valorables.",
+    "held": false,
+    "why": "'Conocimientos de e-commerce valorables'"
+  },
+  {
+    "id": "s-looking-for",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are looking for an engineer with a background in fintech.",
+    "held": false,
+    "why": "'We are looking for someone with a background in fintech' addresses the candidate, so the employer-description rescue does not apply"
+  },
+  {
+    "id": "s-cue-before-purpose",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Must have experience in banking to join our team of firmware engineers.",
+    "held": false,
+    "why": "the topic sits in the cue clause before the purpose connector: 'experience in banking to join our team'"
+  },
+  {
+    "id": "s-must-have-years",
+    "about": "sector:e-commerce",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Cloud infrastructure role. 3 years of experience in e-commerce platforms.",
+    "held": false,
+    "why": "'3 years of experience in e-commerce platforms' is a requirement"
+  },
+  {
+    "id": "h-healthcare",
+    "about": "sector:healthcare",
+    "terms": [
+      "health care"
+    ],
+    "title": "Data Engineer",
+    "employer": null,
+    "text": "We are a health care company hiring a data engineer.",
+    "held": true,
+    "why": "'health care' is a sector; the perk list says 'health insurance' only, so a company that is health care is not stripped as a perk"
+  },
+  {
+    "id": "s-self-description-then-seeking",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are a growing company seeking an engineer with a background in fintech.",
+    "held": false,
+    "why": "the sentence opens like a self description but asks for a candidate with a fintech background: a requirement, so the rescue must not apply"
+  },
+  {
+    "id": "r-A1",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "About us\nWe operate online casinos…\n\nRequirements\n- 5 years Python",
+    "held": true,
+    "why": "reviewer A1, spec (task text): the topic is about the employer or the job: an About-us section describing the employer is read"
+  },
+  {
+    "id": "r-A3",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits:\n- Ticket restaurant\n- Gym\n\nAbout the company\nWe are a restaurant group…",
+    "held": true,
+    "why": "reviewer A3, spec (task text): the topic is about the employer or the job: the perk is stripped, the company section kept"
+  },
+  {
+    "id": "r-A4",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Quiénes somos\nSomos una cadena de restaurantes.\n\nOfrecemos\n- Ticket restaurante",
+    "held": true,
+    "why": "reviewer A4, spec (task text): the topic is about the employer or the job (Spanish): 'Somos una cadena' describes the employer"
+  },
+  {
+    "id": "r-A5",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are a fintech offering a competitive salary and great benefits.",
+    "held": true,
+    "why": "reviewer A5, spec (task text): the topic is about the employer or the job: 'We are a fintech' is the employer describing itself"
+  },
+  {
+    "id": "r-A6",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are a gambling company, plus we have offices in Malta.",
+    "held": true,
+    "why": "reviewer A6, spec (task text): the topic is about the employer or the job: 'plus' here is not a nice-to-have"
+  },
+  {
+    "id": "r-A7",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Nice to have: Kubernetes. Benefits: gym. About us: We are an online gambling operator.",
+    "held": true,
+    "why": "reviewer A7, spec (task text): the topic is about the employer or the job: one line, the employer sentence is its own sentence"
+  },
+  {
+    "id": "r-A8",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "WHAT WE OFFER\nGym, lunch.\nABOUT US\nWe run a sports betting exchange.",
+    "held": true,
+    "why": "reviewer A8, spec (task text): the topic is about the employer or the job: ALL-CAPS About-us heading ends the offer section"
+  },
+  {
+    "id": "r-A9",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "## Nice to have\n- Go\n\n## The company\nWe are a casino operator.",
+    "held": true,
+    "why": "reviewer A9, spec (task text): the topic is about the employer or the job: 'The company' is not an off-topic heading"
+  },
+  {
+    "id": "r-A10",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Responsibilities\n- Build the odds engine for our betting product",
+    "held": true,
+    "why": "reviewer A10, spec (task text): the topic is about the employer or the job: the job's responsibilities"
+  },
+  {
+    "id": "r-A11",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Trabajarás en nuestra plataforma de apuestas deportivas, donde se valora la autonomía.",
+    "held": true,
+    "why": "reviewer A11, spec (task text): the topic is about the employer or the job (Spanish): the job is on a betting platform"
+  },
+  {
+    "id": "r-A13",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Casino Floor Systems Engineer",
+    "employer": null,
+    "text": "We build firmware.",
+    "held": true,
+    "why": "reviewer A13, spec (task text): the topic is about the employer or the job: the title names the job"
+  },
+  {
+    "id": "r-B1",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We build firmware.\nBenefits: ticket restaurant, private health insurance.",
+    "held": false,
+    "why": "reviewer B1, spec (task text): not a perk / nice-to-have / what is asked of the candidate: a perk"
+  },
+  {
+    "id": "r-B2",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": "PayrollCo",
+    "text": "We build payroll software.\nNice to have: Background in FinTech.",
+    "held": false,
+    "why": "reviewer B2, spec (task text): not a perk / nice-to-have / what is asked of the candidate: the task's own example"
+  },
+  {
+    "id": "r-B3",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Desarrollarás APIs.\nSe valorará: experiencia en banca.",
+    "held": false,
+    "why": "reviewer B3, spec (task text): not a perk / nice-to-have / what is asked of the candidate: nice-to-have (Spanish)"
+  },
+  {
+    "id": "r-B4",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Desarrollarás APIs.\nOfrecemos: tickets restaurante y seguro médico.",
+    "held": false,
+    "why": "reviewer B4, spec (task text): not a perk / nice-to-have / what is asked of the candidate: a perk (Spanish)"
+  },
+  {
+    "id": "r-B5",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\n- Gym\n- Health\n- Ticket Restaurant card\n- Remote",
+    "held": false,
+    "why": "reviewer B5, spec (task text): not a perk / nice-to-have / what is asked of the candidate: a perks list"
+  },
+  {
+    "id": "r-B6",
+    "about": "sector:advertising",
+    "terms": [
+      "ads"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Bonus points if you have worked in advertising.",
+    "held": false,
+    "why": "reviewer B6, spec (task text): not a perk / nice-to-have / what is asked of the candidate: nice-to-have"
+  },
+  {
+    "id": "r-B7",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Experience in the gambling industry is a plus.",
+    "held": false,
+    "why": "reviewer B7, spec (task text): not a perk / nice-to-have / what is asked of the candidate: nice-to-have"
+  },
+  {
+    "id": "r-B8",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We build firmware. We offer ticket restaurant and a gym.",
+    "held": false,
+    "why": "reviewer B8, spec (task text): not a perk / nice-to-have / what is asked of the candidate: a perk"
+  },
+  {
+    "id": "r-B9",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Desarrollarás firmware. Beneficios: ticket restaurante, seguro médico.",
+    "held": false,
+    "why": "reviewer B9, spec (task text): not a perk / nice-to-have / what is asked of the candidate: a perk (Spanish)"
+  },
+  {
+    "id": "r-B10",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Requirements:\n- 3+ years in fintech",
+    "held": false,
+    "why": "reviewer B10, spec (task text): not a perk / nice-to-have / what is asked of the candidate: what is asked of the candidate"
+  },
+  {
+    "id": "r-B11",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Deseable: experiencia en banca.",
+    "held": false,
+    "why": "reviewer B11, spec (task text): not a perk / nice-to-have / what is asked of the candidate: nice-to-have (Spanish)"
+  },
+  {
+    "id": "r-S1",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We run a sports betting exchange. Kubernetes is a plus.",
+    "held": true,
+    "why": "reviewer S1, spec (task text): the topic is about the employer or the job: two sentences on one line, the employer one is read (pins sentence splitting)"
+  },
+  {
+    "id": "r-C1",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Company profile:\nWe are an online casino operator.\n\nThe role\nBuild APIs.",
+    "held": true,
+    "why": "reviewer C1, spec (task text): the topic is about the employer or the job: 'Company profile' is the employer, not a profile asked of the candidate (heading rule: every word off-topic)"
+  },
+  {
+    "id": "r-C2",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perfil de la empresa:\nSomos un operador de apuestas online.\n\nEl puesto\nDesarrollar APIs.",
+    "held": true,
+    "why": "reviewer C2, spec (task text): the topic is about the employer or the job (Spanish): 'Perfil de la empresa' is the employer"
+  },
+  {
+    "id": "r-C3",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "About us and what we offer:\nWe are an online casino.",
+    "held": true,
+    "why": "reviewer C3, spec (task text): the topic is about the employer or the job: 'About us' is in the heading, so it is not only a perk heading"
+  },
+  {
+    "id": "r-C4",
+    "about": "sector:insurance",
+    "terms": [
+      "seguros",
+      "seguro",
+      "aseguradora"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We sell private health insurance online to families in Spain.",
+    "held": true,
+    "why": "reviewer C4, spec (task text): the topic is about the employer or the job: the employer describing itself is read even when a perk pattern matches"
+  },
+  {
+    "id": "r-C9",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We make games.\n\nPlayer Experience\nOur casino lobby serves 2M players.",
+    "held": true,
+    "why": "reviewer C9, spec (task text): the topic is about the employer or the job: 'Player Experience' is not a requirements heading"
+  },
+  {
+    "id": "r-C10",
+    "about": "sector:advertising",
+    "terms": [
+      "ads",
+      "advertisements"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We run the largest marketplace for job advertisements in Europe.",
+    "held": true,
+    "why": "reviewer C10, spec (task text): the topic is about the employer or the job: the employer describing itself is read even when boilerplate matches"
+  },
+  {
+    "id": "r-C11",
+    "about": "sector:trading",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build the engine behind our platform for trading stock options.",
+    "held": true,
+    "why": "reviewer C11, spec (task text): the topic is about the employer or the job: 'our platform' is the employer, even with a perk pattern ('stock options')"
+  },
+  {
+    "id": "r-F3",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\n- Gym\n- Lunch\nAbout Acme\nAcme operates online casinos in six countries.\n\nRequirements\n- Python",
+    "held": true,
+    "why": "reviewer finding 3 (corpus: wwr-azumo-data-engineer, Benefits then About <employer> with no blank line), spec (task text): the topic is about the employer or the job: a section boundary does not depend on a blank line"
+  },
+  {
+    "id": "r2-list-benefits",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nBenefits\nGym\nRestaurant discounts\nRemote work",
+    "held": false,
+    "why": "round-2 finding 1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a perks list of plain short lines is a list, not headings"
+  },
+  {
+    "id": "r2-list-nice",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nNice to have\nKubernetes\nBanking domain\nGo",
+    "held": false,
+    "why": "round-2 finding 1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a nice-to-have list of plain short lines"
+  },
+  {
+    "id": "r2-list-ofrecemos",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Desarrollar APIs.\n\nOfrecemos\nComida en restaurante\nTeletrabajo",
+    "held": false,
+    "why": "round-2 finding 1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert (Spanish)"
+  },
+  {
+    "id": "r2-broken-link",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\n\nWe value you.\nSoFi is committed to an inclusive culture. As part of this commitment,\nSoFi\noffers reasonable accommodations.\nDue to insurance coverage issues, we are unable to accommodate remote work from Hawaii.",
+    "held": false,
+    "why": "round-2 finding 1 (corpus wwr-sofi-director): a one-word line the next line continues in lower case is a broken sentence, and 'insurance coverage issues' is posting boilerplate, not the employer's business"
+  },
+  {
+    "id": "r2-heading-emoji",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nPerks 🎁\nRestaurant discounts\nGym",
+    "held": false,
+    "why": "round-2 finding 2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: emoji does not make a perks heading something else"
+  },
+  {
+    "id": "r2-heading-brackets",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nRequirements (must have)\nBanking domain\nGo",
+    "held": false,
+    "why": "round-2 finding 2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: brackets do not make a requirements heading something else"
+  },
+  {
+    "id": "r2-provide-perk",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We provide ticket restaurant and private health insurance.",
+    "held": true,
+    "why": "round-2 finding 3, accepted trade pinned: 'We provide' is the employer describing itself and is read (an insurer says 'we provide health insurance'); the cost is a perk in that wording holding the advert"
+  },
+  {
+    "id": "r2-equipo-ofrece",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Somos un equipo que ofrece ticket restaurante.",
+    "held": true,
+    "why": "round-2 finding 3, accepted trade pinned: 'Somos un' is the employer describing itself and is read, the same trade in Spanish"
+  },
+  {
+    "id": "r2-operamos",
+    "about": "sector:insurance",
+    "terms": [
+      "seguros",
+      "seguro",
+      "aseguradora"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Operamos una aseguradora de seguro médico en toda España.",
+    "held": true,
+    "why": "spec (task text): the employer describing itself ('Operamos una aseguradora') is on the topic"
+  },
+  {
+    "id": "r2-medical-insurance-perk",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Health care: Private medical insurance for you and your family.",
+    "held": false,
+    "why": "round-2 (corpus manfred-8419), spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: private medical insurance is a perk"
+  },
+  {
+    "id": "r2-the-experience",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "The Experience\nOur restaurants serve 2M guests a year.",
+    "held": true,
+    "why": "round-2 finding 4, spec (task text): 'The Experience' is a story about the employer, not a requirements heading"
+  },
+  {
+    "id": "r3-m1",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Nice to have:\nKnowledge of Go and Rust for systems programming work\nFintech\nAWS certifications at associate level or higher",
+    "held": false,
+    "why": "round-3 m1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a short item between longer items of an unbulleted list does not end the section"
+  },
+  {
+    "id": "r3-m2",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nPrivate cover for you and your family from day one\nPartner restaurants\nTwenty five days of holiday every single year",
+    "held": false,
+    "why": "round-3 m2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r3-h1",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nRemote\nAbout us\nWe run casinos in six countries.",
+    "held": true,
+    "why": "round-3 h1, spec (task text): the topic is about the employer or the job: 'About us' after an unbulleted list is the employer"
+  },
+  {
+    "id": "r3-h2",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nPaid time off\nWho we are\nWe are an online casino operator.",
+    "held": true,
+    "why": "round-3 h2, spec (task text): the topic is about the employer or the job: 'Who we are'"
+  },
+  {
+    "id": "r3-h3",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ofrecemos\nTeletrabajo\nFormación\nQuiénes somos\nSomos un operador de apuestas.",
+    "held": true,
+    "why": "round-3 h3, spec (task text): the topic is about the employer or the job (Spanish): 'Quiénes somos'"
+  },
+  {
+    "id": "r3-h4",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": "Acme Inc.",
+    "text": "Benefits\nPaid Time Off\n100% Remote\nAbout Acme\nAcme runs casinos in six countries.",
+    "held": true,
+    "why": "round-3 h4 (the real Azumo shape), spec (task text): the topic is about the employer or the job: 'About <employer>' with no blank line"
+  },
+  {
+    "id": "r3-h5",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nPaid Time Off\n100% Remote\nAbout us:\nAcme runs casinos in six countries.",
+    "held": true,
+    "why": "round-3 h5, spec (task text): the topic is about the employer or the job: a colon heading ends the section"
+  },
+  {
+    "id": "r3-employer-line",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": "Acme Inc.",
+    "text": "Benefits\nPaid Time Off\nAcme\nAcme operates in six countries as a casino group.",
+    "held": true,
+    "why": "round-3 finding 2 closed rule, spec (task text): the topic is about the employer or the job: a heading line that is the employer name ends the section"
+  },
+  {
+    "id": "tradeoff-subheading-with-strong-word-a",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nHealth benefits:\nPrivate cover\nFood perks:\nPartner restaurants",
+    "held": false,
+    "why": "declared trade-off (not a second-reader case): round-3 u5, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a sub-heading that still holds an off-topic word continues the section"
+  },
+  {
+    "id": "tradeoff-subheading-with-strong-word-b",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Compensation and Benefits\n**Food perks**\nPartner restaurants\nGym",
+    "held": false,
+    "why": "declared trade-off (not a second-reader case): round-3 u6, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a bold sub-heading holding an off-topic word continues the section"
+  },
+  {
+    "id": "r3-u7",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nLo que te ofrecemos\nComida en restaurantes\nTeletrabajo",
+    "held": false,
+    "why": "round-3 u7, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert (Spanish): 'Lo que te ofrecemos' is a perks heading"
+  },
+  {
+    "id": "r3-u8",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nLo que ofrecemos:\nComida en restaurantes\nTeletrabajo",
+    "held": false,
+    "why": "round-3 u8, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert (Spanish)"
+  },
+  {
+    "id": "r3-v1",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "The Essentials\nWe run 40 casinos worldwide.",
+    "held": true,
+    "why": "round-3 v1, spec (task text): the topic is about the employer or the job: 'The Essentials' is a weak word alone, not a requirements heading"
+  },
+  {
+    "id": "r3-opens-without-blank",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\nBenefits\nGym\nPartner restaurants",
+    "held": false,
+    "why": "round-3 finding 3, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: an off-topic heading opens a skip with no blank line before it"
+  },
+  {
+    "id": "r3-benefits-at-employer",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Compensation and Benefits\nHealth\nBenefits at SoFi\nDue to insurance coverage issues, we are unable to accommodate remote work.",
+    "held": false,
+    "why": "round-3 finding 4 (corpus wwr-sofi-director), spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: 'Benefits at <employer>' holds an off-topic word and continues the section; the insurance sentence is posting boilerplate"
+  },
+  {
+    "id": "r2-v-pension",
+    "about": "sector:pension",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We develop pension plan software for European employers.",
+    "held": true,
+    "why": "round-2 B1, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-customers",
+    "about": "sector:insurance",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Our customers buy health insurance through our app.",
+    "held": true,
+    "why": "round-2 B1, spec (task text): the topic is about the employer or the job: 'Our customers' is the employer describing itself"
+  },
+  {
+    "id": "r2-v-who",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Who we are and what we do:\nWe operate sports betting shops.",
+    "held": true,
+    "why": "round-2 B2, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-story",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Our Story & Experience\nTwenty years running casinos.",
+    "held": true,
+    "why": "round-2 B2, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-nolines",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits:\n- Gym\n- Remote\nWho we are\nWe operate online casinos.",
+    "held": true,
+    "why": "round-2 B3, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-caps",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "WHAT WE OFFER\n- Gym\nOUR COMPANY\nWe run sports betting shops.",
+    "held": true,
+    "why": "round-2 B3, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-u1",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nLunch at partner restaurants\nRemote work",
+    "held": false,
+    "why": "round-2 u1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r2-u2",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nLunch at partner restaurants\nRemote work\nWe build firmware.",
+    "held": false,
+    "why": "round-2 u2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r2-u3",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nLunch at partner restaurants\n\nThe role is to build APIs.",
+    "held": false,
+    "why": "round-2 u3, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r2-u4",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\n- Gym\n- Lunch at partner restaurants\n- Remote work",
+    "held": false,
+    "why": "round-2 u4, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r3-eeo-insurance-coverage",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": "SoFi",
+    "text": "SoFi\nDue to insurance coverage issues, we are unable to accommodate remote work from Hawaii or Alaska at this time.",
+    "held": false,
+    "why": "round-3 finding 4 (corpus wwr-sofi-director), spec (task text): a remote-work notice is posting boilerplate, not what the employer or the job is"
+  },
+  {
+    "id": "r4-company-profile",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nRemote\nCompany profile:\nWe are an online casino operator.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going"
+  },
+  {
+    "id": "r4-perfil-empresa",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ofrecemos\nTeletrabajo\nPerfil de la empresa:\nSomos un operador de apuestas online.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going (Spanish)"
+  },
+  {
+    "id": "r4-our-experience",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nOUR EXPERIENCE\nTwenty years running casinos.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going"
+  },
+  {
+    "id": "r4-player-experience",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "## Benefits\n- Gym\n## Player Experience\nOur casino lobby serves 2M players.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going"
+  },
+  {
+    "id": "r4-company-overview",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nCompany overview:\nWe run casinos.",
+    "held": true,
+    "why": "round-4 control, spec (task text): the topic is about the employer or the job: a heading with no off-topic word ends the skip"
+  },
+  {
+    "id": "r4-employer-sentence",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": "Acme Ltd",
+    "text": "Perks\nAcme pays for lunch at partner restaurants",
+    "held": false,
+    "why": "round-4 finding 3, spec (task text): a perk. The employer's name ends a skip only on a heading, not on a sentence that mentions it"
+  },
+  {
+    "id": "r5-who-we-are-dot",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nWho we are.\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r5-story-mission",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nOur Story & Mission\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r5-about-long-name",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout Acme Gaming Group International Ltd\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r5-quienes-somos",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ofrecemos\nTeletrabajo\n¿Quiénes somos?\nSomos un operador de apuestas.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip (Spanish)"
+  },
+  {
+    "id": "r5-company-overview",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nCompany Overview\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r6-who-we-are-what-we-do",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nWho We Are & What We Do!\nWe run casinos.",
+    "held": true,
+    "why": "round-6 blocker, spec (task text): the topic is about the employer or the job: a connective may be followed by several words"
+  },
+  {
+    "id": "r6-story-our-mission",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nOur Story & Our Mission\nWe run casinos.",
+    "held": true,
+    "why": "round-6 blocker, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r6-about-our-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout our benefits:\nFree casino nights.",
+    "held": false,
+    "why": "round-6, spec (task text): a perk; a section wording followed by a perks word is still the perks section"
+  },
+  {
+    "id": "r6-duties-and-perks",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nDuties & perks\nFree casino nights.",
+    "held": false,
+    "why": "round-6, spec (task text): a perk; the tail names perks"
+  },
+  {
+    "id": "r6-perks-and-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nPerks & Benefits\nFree casino nights.",
+    "held": false,
+    "why": "round-6, spec (task text): a perk"
+  },
+  {
+    "id": "r7-about-us-our-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout us & our benefits\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; a heading joining an employer section to a perks word still ends the skip"
+  },
+  {
+    "id": "r7-about-us-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout us & benefits\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above"
+  },
+  {
+    "id": "r7-who-we-are-what-we-offer",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nWho we are & what we offer\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above"
+  },
+  {
+    "id": "r7-company-perks",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nThe company & perks\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above"
+  },
+  {
+    "id": "r7-sobre-nosotros-beneficios",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nSobre nosotros y beneficios\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above (Spanish)"
+  },
+  {
+    "id": "r7-about-employer-with-perk-word",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": "Benefit Cosmetics",
+    "text": "Perks\nGym\nAbout Benefit Cosmetics\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; the employer's name ends the skip even when it holds a perk word"
+  },
+  {
+    "id": "r7-about-us-our-benefits-blank",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\n\nAbout us & our benefits\n\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as the first, with blank lines around the heading"
+  }
+]

@@ -65,17 +65,17 @@
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_EXCLUDED_SERVED",
-      "line": 83
+      "line": 86
     },
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_EXCLUSIONS_TRIPPED",
-      "line": 95
+      "line": 98
     },
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_UNEXCLUDED_SERVED",
-      "line": 88
+      "line": 91
     },
     {
       "module": "extraction",
@@ -248,6 +248,16 @@
       "line": 425
     },
     {
+      "module": "topic_scope_gate",
+      "name": "FEWEST_HELD_CASES",
+      "line": 34
+    },
+    {
+      "module": "topic_scope_gate",
+      "name": "FEWEST_SHOWN_CASES",
+      "line": 40
+    },
+    {
       "module": "trait_sufficiency",
       "name": "MINIMUM_CHECKS",
       "line": 590
@@ -317,20 +327,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3495,
+      "line": 3497,
       "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3522,
+      "line": 3524,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3387,
-      "population": 93
+      "line": 3389,
+      "population": 95
     },
     {
       "module": "freshness",
@@ -570,12 +580,13 @@
     "task_gate.MINIMUM_RECORD_KEYS_COMPARED",
     "task_gate.MINIMUM_STATUS_KEY_GATES",
     "test_mode.PASTE_CHARS",
+    "topic_scope._HEADING_LIMIT",
     "trait_sufficiency.MINIMUM_TRAITS",
     "verified_gate.MINIMUM_CONTRACTS",
     "voice._EXCERPT",
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 93,
+  "floors_swept_at_least": 95,
   "floors_arithmetically_checked_at_least": 36
 }

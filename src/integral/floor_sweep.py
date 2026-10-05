@@ -3384,7 +3384,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: (`MINIMUM_TRIPLES`, `MINIMUM_CONTESTED_TRIPLES`). Still zero slack.
 #: **93 with T229**, whose `skill_requirement` declares two floors
 #: (`FEWEST_REQUIRING_CASES`, `FEWEST_NOT_REQUIRING_CASES`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 93
+#: **95 with T227**, whose `topic_scope_gate` declares two floors
+#: (`FEWEST_HELD_CASES`, `FEWEST_SHOWN_CASES`). Still zero slack.
+MINIMUM_FLOORS_SWEPT = 95
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3829,7 +3831,9 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: between them, as measured by `measure_prose_clearance()`. Still zero slack.
 #: **90 with T229**: `skill_requirement`'s two floors each carry their own
 #: comment block and marker, so each is one scenario more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 90
+#: **92 with T227**: `topic_scope_gate`'s two floors each carry their own
+#: comment block and marker, so each is one scenario more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 92
 
 
 def measure_prose_clearance() -> dict[str, Any]:

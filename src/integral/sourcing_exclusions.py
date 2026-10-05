@@ -46,7 +46,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from integral import skill_requirement
+from integral import skill_requirement, topic_scope
 from integral.candidate import CONSTRAINT_FIELD_NAMES, FIELD_MODELS
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer, names_an_employer
@@ -625,19 +625,66 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
             candidate.required_skills,
             skill_requirement.target_of(exclusion.value, exclusion.terms),
         )
-    raw = f"{candidate.title or ''} {candidate.employer or ''} {candidate.text}"
-    for join in ("", " "):
-        haystack = _fold(raw, join)
-        for surface in (exclusion.value, *exclusion.terms):
-            needle = _fold(surface, join).strip()
-            if not needle:
-                continue
-            stems, endings = _stems(needle)
-            body = "|".join(re.escape(x) for x in stems)
-            tail = "|".join(re.escape(x) for x in endings)
-            if re.search(rf"(?<![0-9a-z])(?:{body})(?:{tail})(?![0-9a-z])", haystack):
-                return True
-    return False
+    return bool(topic_hits(candidate, exclusion))
+
+
+#: Where a topic was found, as the candidate is told it.
+_PLACES = {"title": "el título", "employer": "la empresa", "text": "el texto del anuncio"}
+
+
+def topic_hits(candidate: Candidate, exclusion: Exclusion) -> tuple[tuple[str, str], ...]:
+    """Every `(place, words)` where a topic exclusion's surface forms are found.
+
+    `place` is `title`, `employer` or `text`; `words` is the folded form of what
+    matched (lowercase, accents and separators folded), the same words the match
+    was decided on. The text is `topic_scope.topic_text`, not the whole advert:
+    a perk, a requirement or a nice-to-have that mentions the topic is not the
+    employer or the job being on it (T227).
+    """
+    regions = (
+        ("title", candidate.title or ""),
+        ("employer", candidate.employer or ""),
+        ("text", topic_scope.topic_text(candidate.text, candidate.employer)),
+    )
+    found: list[tuple[str, str]] = []
+    for place, region in regions:
+        for join in ("", " "):
+            haystack = _fold(region, join)
+            for surface in (exclusion.value, *exclusion.terms):
+                needle = _fold(surface, join).strip()
+                if not needle:
+                    continue
+                stems, endings = _stems(needle)
+                body = "|".join(re.escape(x) for x in stems)
+                tail = "|".join(re.escape(x) for x in endings)
+                hit = re.search(rf"(?<![0-9a-z])(?:{body})(?:{tail})(?![0-9a-z])", haystack)
+                if hit and (place, hit.group(0)) not in found:
+                    found.append((place, hit.group(0)))
+    return tuple(found)
+
+
+def _is_topic(exclusion: Exclusion) -> bool:
+    return exclusion.facet.strip().lower() not in {"employer", skill_requirement.FACET}
+
+
+def held_in_words(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple[str, ...]:
+    """T227. What `ruled_out_by` says, plus the words that matched and where.
+
+    "sector:fintech — «fintech» en el título". The candidate is told which words
+    held an advert, so a wrong hold is one they can see and dispute rather than
+    a topic they must take on trust. Employer and skill holds name no words: an
+    employer is matched on its normalised name, a skill on a step-8 reading.
+    """
+    held = [e for e in exclusions if matches(candidate, e)]
+    out: list[str] = []
+    for exclusion, about in zip(held, ruled_out_by(candidate, held), strict=True):
+        hits = topic_hits(candidate, exclusion) if _is_topic(exclusion) else ()
+        if hits:
+            said = "; ".join(f"«{words}» en {_PLACES[place]}" for place, words in hits)
+            out.append(f"{about} — {said}")
+        else:
+            out.append(about)
+    return tuple(out)
 
 
 def load_exclusions(store: ProfileStore) -> tuple[Exclusion, ...]:

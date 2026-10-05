@@ -16,6 +16,7 @@ from integral import exclusion_live_round as live
 from integral import sourcing_exclusions as se
 from integral.candidate import Aim, CandidateConstraints, Location, Reach
 from integral.connectors import ListRequest
+from integral.corpus_scope import DEFAULT_LABELLED_ADS
 from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.offers import load_offer
 from integral.robots import Robots
@@ -127,6 +128,8 @@ def test_a_stated_exclusion_removes_the_matching_offers_and_reports_them(
     (outcome,) = run.outcomes  # type: ignore[attr-defined]
     assert outcome.excluded == 2
     assert all("role:platform" in why for why in outcome.excluded_because)
+    # T227: and the words that held each one are named, not only the topic.
+    assert all("«platform»" in why for why in outcome.excluded_because), outcome.excluded_because
     summary = run.summary()  # type: ignore[attr-defined]
     assert "EXCLUDED flood_en: 2 of" in summary and "role:platform" in summary
 
@@ -146,14 +149,34 @@ def test_the_live_round_gate_measures_zero_over_real_adverts() -> None:
 def test_the_live_round_removes_and_keeps_named_real_adverts() -> None:
     """Literal ids, chosen by reading the corpus, not by asking `matches`.
 
-    manfred-8383 says e-commerce, manfred-8456 says fintech and the tecnoempleo
-    one says "bancaria" — an *entidad bancaria* is a bank, so `banca` reaches it
-    (the candidate's word, not the advert's). It is the ending, not the letters,
-    that decides: none of the adverts served here says "bancarrota".
+    manfred-8383 says e-commerce and the tecnoempleo one says "bancario" — a
+    *cliente del sector bancario* is a bank's work, so `banca` reaches it (the
+    candidate's word, not the advert's). It is the ending, not the letters, that
+    decides: none of the adverts served here says "bancarrota".
+
+    manfred-8456 mentions fintech only as "Previous experience in iGaming,
+    fintech or banking", a nice-to-have, so since T227 it is **kept** (checked
+    directly: the live round no longer serves it, because no corpus advert is
+    on fintech): what the
+    candidate asked of is the employer's business, not a line of the requirements.
     """
     observed = live.measure_live_round()["_observed"]
     stored = {url.rsplit("/", 1)[1] for url in observed["stored_urls"]}
-    assert {"manfred-8383", "manfred-8456", "tecnoempleo-17da1920025ad37df94f"}.isdisjoint(stored)
+    assert {"manfred-8383", "tecnoempleo-17da1920025ad37df94f"}.isdisjoint(stored)
+    ads = {
+        a["id"]: a
+        for a in map(json.loads, DEFAULT_LABELLED_ADS.read_text(encoding="utf-8").splitlines())
+    }
+    manfred = ads["manfred-8456"]
+    fintech = Exclusion(about="sector:fintech", stated_at_cycle=1, words="fintech no")
+    candidate = se.Candidate(
+        offer_id=manfred["id"],
+        title=manfred.get("title"),
+        text=manfred["text"],
+        employer=manfred.get("company"),
+    )
+    assert "fintech" in manfred["text"].lower()
+    assert not se.matches(candidate, fintech)
     assert observed["excluded_served"] >= live.MINIMUM_EXCLUDED_SERVED
     assert observed["stored"] == observed["unexcluded_served"]
 
@@ -199,6 +222,7 @@ def test_offers_stored_in_round_one_are_not_presented_after_the_topic_is_ruled_o
     shown_text = [load_offer(store, i).text for i in show]
     assert shown_text and not any("platform" in t for t in shown_text)
     assert len(held) == 2 and "role:platform" in held[0].reason
+    assert all("«platform»" in h.reason for h in held), [h.reason for h in held]  # T227
     assert "descartada" in withheld_line(held)  # and the candidate is told
 
 
@@ -292,7 +316,7 @@ def test_a_continuation_outside_the_declared_endings_is_not_the_topic(
         ("banca", "Cliente del sector bancario"),
         ("banca", "una entidad bancaria líder"),
         ("banca", "Banco Santander busca"),
-        ("banca", "Experiència en el sector bancari"),
+        ("banca", "Treballem en el sector bancari"),  # T227: carrier text is not a requirement
         ("bancos", "trabajamos para la banca"),  # the candidate's own plural
         ("fintechs", "a FinTech startup"),
         ("fintech", "one of Europe's fastest-growing fintechs"),
