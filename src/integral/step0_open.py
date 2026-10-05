@@ -40,7 +40,7 @@ import tempfile
 import time
 import unicodedata
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -184,6 +184,45 @@ def _broken_profiles(root: Path) -> list[str]:
     return broken
 
 
+def _day(stamp: str) -> str | None:
+    """The calendar day of an ISO timestamp, or `None` when it does not parse."""
+    try:
+        return datetime.fromisoformat(stamp.strip().replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        return None
+
+
+def _started_on(hit: Identity, identities: list[Identity]) -> str | Opened:
+    """The one rule for what tells a `--handle` arrival's profile apart, shared by the
+    question call and the `--confirmed` call so the two cannot diverge.
+
+    On this path the display name is the shared one by definition, so it cannot tell
+    two people apart; the creation day, from the same roster file, can. It must be
+    (a) a parseable ISO date and (b) different from the creation day of every other
+    profile with the same display name (NFC, caseless). (a) failing is `unreadable`;
+    (b) failing refuses to open by handle at all. Only the day is ever shown, and no
+    other profile is ever listed.
+    """
+    day = _day(hit.created_at)
+    if day is None:
+        return Opened(
+            outcome="unreadable",
+            say="A saved profile could not be read, so I can't tell who this is yet.",
+        )
+    for other in identities:
+        if other.handle == hit.handle or not _same_name(other.display_name, hit.display_name):
+            continue
+        if _day(other.created_at) in (None, day):
+            return Opened(
+                outcome="ambiguous",
+                say=(
+                    "This profile can't be told apart from another one automatically, "
+                    "so it needs manual help before I can open it."
+                ),
+            )
+    return day
+
+
 def _unreadable(wanted: str, root: Path, include_fiction: bool) -> Opened | None:
     """`unreadable` only when this arrival could be the profile that cannot be read.
 
@@ -281,11 +320,10 @@ def run(
             return _unreadable(wanted, root, include_fiction) or _unresolved(
                 Resolution(outcome="create", reason="no profile has that handle")
             )
+        started = _started_on(hit, identities)
+        if isinstance(started, Opened):
+            return started
         if not confirmed:
-            # On this path the display name is the shared one by definition, so it
-            # cannot tell two people apart. The creation date, read from the same
-            # roster file, can, and reveals nothing about the candidate's position.
-            started = hit.created_at[:10]
             return Opened(
                 outcome="confirm",
                 say=f"Is this {hit.display_name}, whose profile was started on {started}?",
@@ -382,8 +420,15 @@ def probe_calls() -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="integral-t207-") as tmp:
         for label, (roster, first, answers, expected) in arrivals.items():
             root = Path(tmp) / label / "profiles"
-            for handle, display in roster:
-                create_profile(root, display, language="en", handle=handle)
+            for index, (handle, display) in enumerate(roster):
+                # Twins started on different days: the day is what tells them apart.
+                create_profile(
+                    root,
+                    display,
+                    language="en",
+                    handle=handle,
+                    now=now - timedelta(days=30 + index),
+                )
                 SessionStore(ProfileStore(root, handle)).record(
                     at="2026-09-13T09:00:00+00:00", current_step="history"
                 )

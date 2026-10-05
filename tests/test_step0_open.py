@@ -150,8 +150,9 @@ def test_the_second_of_two_same_named_people_typing_the_first_handle_opens_nothi
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "profiles"
-    first = _profile(root, "marcos", "Marcos")
-    second = _profile(root, "marcos-b", "Marcos")
+    first, second = _twins(
+        root, datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 9, 20, tzinfo=UTC)
+    )
     before = (_state(first), _state(second))
     by_name = run(root, name="marcos", now=NOW)
     assert by_name.outcome == "choose" and by_name.handle is None
@@ -187,8 +188,7 @@ def test_two_profiles_with_one_display_name_ask_for_a_handle_and_list_none(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "profiles"
-    _profile(root, "marcos", "Marcos")
-    _profile(root, "marcos-b", "Marcos")
+    _twins(root, datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 9, 20, tzinfo=UTC))
     for said in (run(root, now=NOW).say, run(root, name="Marcos", now=NOW).say):
         assert "give me your handle" in said
         assert "marcos-b" not in said
@@ -198,8 +198,7 @@ def test_two_profiles_with_one_display_name_ask_for_a_handle_and_list_none(
 def test_either_of_two_same_named_profiles_opens_by_its_own_handle(tmp_path: Path) -> None:
     """The first handle is the one derived from the shared name — it must resolve too."""
     root = tmp_path / "profiles"
-    _profile(root, "marcos", "Marcos")
-    _profile(root, "marcos-b", "Marcos")
+    _twins(root, datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 9, 20, tzinfo=UTC))
     for handle in ("marcos", "marcos-b"):
         answers: list[dict[str, Any]] = [{"handle": handle}, {"handle": handle, **YES}]
         assert drive(root, answers, NOW)[1].handle == handle
@@ -394,7 +393,84 @@ def test_the_skill_does_not_ask_for_a_second_call_to_build_the_opening() -> None
 def test_the_skill_keeps_names_and_handles_apart() -> None:
     text = SKILL.read_text(encoding="utf-8")
     assert "never opened directly" in text
+    assert "An `ambiguous` outcome" in text
     assert "Keep what they say apart" in text
     assert "`--name`" in text and "`--handle`" in text
     assert "used only after" in text and "giving their handle" in text
     assert "never lists handles" in text
+
+
+def _twins(root: Path, first: datetime, second: datetime) -> tuple[ProfileStore, ProfileStore]:
+    create_profile(root, "Marcos", language="en", handle="marcos", now=first)
+    create_profile(root, "Marcos", language="en", handle="marcos-b", now=second)
+    stores = (ProfileStore(root, "marcos"), ProfileStore(root, "marcos-b"))
+    for store in stores:
+        SessionStore(store).record(at=STAMP, current_step="history")
+    return stores
+
+
+@pytest.mark.parametrize("junk", ["", "   ", "not a date at all", "01/09/2026 08:00"])
+def test_an_unparseable_start_date_is_unreadable_on_both_calls(tmp_path: Path, junk: str) -> None:
+    root = tmp_path / "profiles"
+    first, second = _twins(
+        root, datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 9, 20, tzinfo=UTC)
+    )
+    path = first.path("identity.json")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["created_at"] = junk
+    path.write_text(json.dumps(record), encoding="utf-8")
+    before = (_state(first), _state(second))
+    both: list[dict[str, Any]] = [{}, YES]
+    for kwargs in both:
+        result = run(root, handle="marcos", now=NOW, **kwargs)
+        assert result.outcome != "opened" and "started on" not in result.say
+    assert (_state(first), _state(second)) == before
+
+
+def test_same_day_twins_cannot_be_opened_by_handle_even_after_a_yes(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    day = datetime(2026, 9, 1, 8, tzinfo=UTC)
+    first, second = _twins(root, day, datetime(2026, 9, 1, 17, tzinfo=UTC))
+    before = (_state(first), _state(second))
+    both: list[dict[str, Any]] = [{}, YES]
+    for handle in ("marcos", "marcos-b"):
+        for kwargs in both:
+            result = run(root, handle=handle, now=NOW, **kwargs)
+            assert result.outcome == "ambiguous" and "started on" not in result.say
+            assert "marcos" not in result.say.lower() and "17:00" not in result.say
+    assert (_state(first), _state(second)) == before
+
+
+def test_twins_started_on_different_days_still_open_after_a_yes(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _twins(root, datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 9, 20, tzinfo=UTC))
+    for handle in ("marcos", "marcos-b"):
+        answers: list[dict[str, Any]] = [{"handle": handle}, {"handle": handle, **YES}]
+        calls, opened = drive(root, answers, NOW)
+        assert calls == 3 and opened.handle == handle
+
+
+def test_a_unique_name_is_not_held_to_the_day_rule(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    _profile(root, "nuria", "Núria")  # both created today
+    assert run(root, handle="marcos", confirmed=True, now=NOW).outcome == "opened"
+
+
+def test_a_twin_whose_own_date_cannot_be_read_blocks_the_other_from_opening(
+    tmp_path: Path,
+) -> None:
+    """The other profile's day is unknown, so it cannot be shown to differ: fail closed."""
+    root = tmp_path / "profiles"
+    first, second = _twins(
+        root, datetime(2026, 9, 1, tzinfo=UTC), datetime(2026, 9, 20, tzinfo=UTC)
+    )
+    path = second.path("identity.json")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["created_at"] = "junk"
+    path.write_text(json.dumps(record), encoding="utf-8")
+    before = (_state(first), _state(second))
+    both: list[dict[str, Any]] = [{}, YES]
+    for kwargs in both:
+        assert run(root, handle="marcos", now=NOW, **kwargs).outcome != "opened"
+    assert (_state(first), _state(second)) == before
