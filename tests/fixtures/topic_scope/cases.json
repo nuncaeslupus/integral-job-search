@@ -960,12 +960,12 @@
     ],
     "title": "Software Engineer",
     "employer": "Acme Inc.",
-    "text": "Benefits\nPaid Time Off\nAcme operates in six countries as a casino group.",
+    "text": "Benefits\nPaid Time Off\nAcme\nAcme operates in six countries as a casino group.",
     "held": true,
-    "why": "round-3 finding 2 closed rule, spec (task text): the topic is about the employer or the job: a line that names the employer ends the section"
+    "why": "round-3 finding 2 closed rule, spec (task text): the topic is about the employer or the job: a heading line that is the employer name ends the section"
   },
   {
-    "id": "r3-u5",
+    "id": "tradeoff-subheading-with-strong-word-a",
     "about": "sector:restaurante",
     "terms": [
       "restaurant",
@@ -976,10 +976,10 @@
     "employer": null,
     "text": "Benefits\nHealth benefits:\nPrivate cover\nFood perks:\nPartner restaurants",
     "held": false,
-    "why": "round-3 u5, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a sub-heading that still holds an off-topic word continues the section"
+    "why": "declared trade-off (not a second-reader case): round-3 u5, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a sub-heading that still holds an off-topic word continues the section"
   },
   {
-    "id": "r3-u6",
+    "id": "tradeoff-subheading-with-strong-word-b",
     "about": "sector:restaurante",
     "terms": [
       "restaurant",
@@ -990,7 +990,7 @@
     "employer": null,
     "text": "Compensation and Benefits\n**Food perks**\nPartner restaurants\nGym",
     "held": false,
-    "why": "round-3 u6, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a bold sub-heading holding an off-topic word continues the section"
+    "why": "declared trade-off (not a second-reader case): round-3 u6, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a bold sub-heading holding an off-topic word continues the section"
   },
   {
     "id": "r3-u7",
@@ -1203,5 +1203,89 @@
     "text": "SoFi\nDue to insurance coverage issues, we are unable to accommodate remote work from Hawaii or Alaska at this time.",
     "held": false,
     "why": "round-3 finding 4 (corpus wwr-sofi-director), spec (task text): a remote-work notice is posting boilerplate, not what the employer or the job is"
+  },
+  {
+    "id": "r4-company-profile",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nRemote\nCompany profile:\nWe are an online casino operator.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going"
+  },
+  {
+    "id": "r4-perfil-empresa",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ofrecemos\nTeletrabajo\nPerfil de la empresa:\nSomos un operador de apuestas online.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going (Spanish)"
+  },
+  {
+    "id": "r4-our-experience",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nOUR EXPERIENCE\nTwenty years running casinos.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going"
+  },
+  {
+    "id": "r4-player-experience",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "## Benefits\n- Gym\n## Player Experience\nOur casino lobby serves 2M players.",
+    "held": true,
+    "why": "round-4 finding 1, spec (task text): the topic is about the employer or the job: a weak word ('profile', 'experience') does not keep a perks skip going"
+  },
+  {
+    "id": "r4-company-overview",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nCompany overview:\nWe run casinos.",
+    "held": true,
+    "why": "round-4 control, spec (task text): the topic is about the employer or the job: a heading with no off-topic word ends the skip"
+  },
+  {
+    "id": "r4-employer-sentence",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": "Acme Ltd",
+    "text": "Perks\nAcme pays for lunch at partner restaurants",
+    "held": false,
+    "why": "round-4 finding 3, spec (task text): a perk. The employer's name ends a skip only on a heading, not on a sentence that mentions it"
   }
 ]

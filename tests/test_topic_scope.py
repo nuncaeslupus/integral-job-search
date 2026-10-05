@@ -210,7 +210,7 @@ def test_a_plain_short_line_never_ends_a_skip() -> None:
 
 
 def test_a_line_naming_the_employer_ends_a_skip_and_a_legal_suffix_is_ignored() -> None:
-    text = "Benefits\nGym\nAcme operates casinos."
+    text = "Benefits\nGym\nAcme\nAcme operates casinos."
     assert "casinos" in ts.topic_text(text, "Acme S.L.")
     assert "casinos" not in ts.topic_text(text, None)
     assert "casinos" not in ts.topic_text(text, "Other Corp")
@@ -219,3 +219,12 @@ def test_a_line_naming_the_employer_ends_a_skip_and_a_legal_suffix_is_ignored() 
 @pytest.mark.parametrize("heading", ["Experience", "Profile:", "The Essentials", "Essentials"])
 def test_a_weak_word_alone_never_makes_a_heading_off_topic(heading: str) -> None:
     assert not ts._off_topic_heading(ts._heading_text(heading))
+
+
+def test_a_sentence_that_names_the_employer_does_not_end_a_skip() -> None:
+    assert ts.topic_text("Perks\nAcme pays for lunch at partner restaurants", "Acme Ltd") == ""
+    assert "casinos" in ts.topic_text("Perks\nGym\nAcme\nWe run casinos.", "Acme Ltd")
+
+
+def test_a_line_that_only_starts_like_a_section_does_not_end_a_skip() -> None:
+    assert ts.topic_text("Perks\nGym\nTasks are flexible\nCasino discounts") == ""

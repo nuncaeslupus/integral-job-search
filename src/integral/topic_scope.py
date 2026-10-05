@@ -26,6 +26,12 @@ platform for fintech teams") is read even when it also contains a cue, a perk or
 boilerplate, unless it addresses the candidate (`_ADDRESSES_CANDIDATE`): "We are looking for someone
 with a background in FinTech" is a requirement and stays out.
 
+Deliberate asymmetry, second kind: inside a skipped perks section a plain
+sub-heading with no off-topic word ("Benefits\nHealth:\nPrivate cover\nFood:\nLunch at
+partner restaurants", or `**Food**`, or `FOOD`) looks exactly like "Tech stack:",
+which must end the skip, so it ends it and the perk under it is read. That is a
+fail-closed trade-off: no rule on shape alone separates the two.
+
 Deliberate asymmetry: a topic mentioned only in a stripped region is **shown**,
 which is fail-open for an advert that really is on the topic but says so only in
 a requirements bullet. The candidate was told which words held every advert that
@@ -100,16 +106,21 @@ def _off_topic_heading(plain_heading: str) -> bool:
 
 
 def _mentions_off_topic_word(plain_heading: str) -> bool:
-    """Does the heading hold any off-topic vocabulary (a sub-heading of a perks section)?"""
-    return bool(_HEADING_VOCAB_ONLY.search(plain_heading))
+    """Does the heading hold strong off-topic vocabulary (a sub-heading of a perks section)?
+
+    Weak words ("profile", "experience") do not: "Company profile:" is the
+    employer, and must not be swallowed by the perks above it.
+    """
+    return any(not _WEAK_VOCAB.fullmatch(v) for v in _HEADING_VOCAB_ONLY.findall(plain_heading))
 
 
 #: A line whose wording names the employer or the job: it ends a skipped section
 #: wherever it stands, whatever its shape.
 _SECTION_OF_THE_ADVERT = re.compile(
-    r"^(?:about|sobre|who we are|quienes somos|our company|our story|our mission|the company|"
-    r"the role|la empresa|nuestra empresa|el puesto|el rol|your role|tu rol|responsibilities|"
-    r"responsabilidades|duties|funciones|tasks|tareas|what you(?:'ll| will) do)\b"
+    r"(?:(?:about|sobre)(?:\s+\S+){0,4}|who we are(?: and what we do)?|quienes somos|"
+    r"our company|our story|our mission|the company|the role|la empresa|nuestra empresa|"
+    r"el puesto|el rol|your role|tu rol|responsibilities|responsabilidades|duties|funciones|"
+    r"tasks|tareas|what you(?:'ll| will) do)"
 )
 _LEGAL_SUFFIX = re.compile(r"\b(?:inc|llc|ltd|gmbh|sl|sa|corp|co|plc|bv)\b")
 
@@ -203,18 +214,23 @@ def _ends_skip(line: str, employer_key: str) -> bool:
     The shape of a plain short line never does: a perks list written without
     bullets is a run of short lines of any length. What ends it is markup, a
     trailing colon or ALL CAPS (unless the heading still holds an off-topic
-    word, as a sub-heading of the perks does), a line whose wording opens a
-    section about the employer or the job, or a line that names the employer.
+    strong word, as a sub-heading of the perks does), a heading whose wording
+    opens a section about the employer or the job, or a heading line that names
+    the employer.
     """
     plain = _heading_text(line)
-    if _SECTION_OF_THE_ADVERT.match(plain):
+    shaped = _is_heading(line, previous_blank=True)
+    if shaped and _SECTION_OF_THE_ADVERT.fullmatch(plain):
         return True
-    if _mentions_off_topic_word(plain) and _is_heading(line, previous_blank=True):
+    if shaped and _mentions_off_topic_word(plain):
         return False
     if _is_heading(line, previous_blank=False):
         return True
+    # The employer's name ends a skip only on a line that is itself a heading
+    # ("Acme"), never on a sentence that happens to mention it.
     return (
-        bool(employer_key)
+        shaped
+        and bool(employer_key)
         and re.search(rf"\b{re.escape(employer_key)}\b", _plain(line)) is not None
     )
 
