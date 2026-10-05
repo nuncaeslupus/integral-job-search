@@ -358,6 +358,10 @@ def test_a_technology_read_in_two_roles_is_refused_whatever_its_spelling() -> No
         "Go optional",
         "Go not required",
         "Go, preferably",
+        # the word boundary around `language`/`lang`: not a bare leftover of them
+        "Go languages",
+        "Go langlang",
+        "Go languagelang",
     ],
 )
 def test_a_reading_names_exactly_one_technology(skill: str) -> None:
