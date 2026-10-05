@@ -301,7 +301,9 @@ def collect(store: ProfileStore) -> Board:
             noted = _text(status_record.get("recorded_at"))
         elif store.path("applications", offer_id, "status.json").exists():
             notes.append("status.json could not be read")
-        if not sent and status == "drafted":
+        # "Never sent" means no send record exists at all, not that none parsed: an
+        # unreadable record is a send on disk, and the row says it could not be read.
+        if not sent and not broken and status == "drafted":
             left_out[offer_id] = "only drafted, never sent"
             continue
         if sent:

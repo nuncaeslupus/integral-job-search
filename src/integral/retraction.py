@@ -199,6 +199,8 @@ _AREAS: tuple[tuple[str, str], ...] = (
     ("rankings", "rankings"),
     ("applications", "applications"),
     ("interviews", "interviews"),
+    ("tracking", "tracking links"),
+    ("reports", "reports"),
 )
 
 

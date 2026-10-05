@@ -416,3 +416,30 @@ def test_the_command_writes_the_board_and_can_record_a_link_first(
     assert "https://track.example/c" in store.path(*board.BOARD_PARTS).read_text()
     assert board._main([*args, "--track", "c1", "javascript:1"]) == 2
     assert board._main([*args, "--track", "missing", "https://track.example/c"]) == 2
+
+
+@pytest.mark.parametrize(
+    "record", ["{not json", '{"offer_id": "u1", "version": 1}', '{"sent_at": 5}'], ids=str
+)
+def test_an_unreadable_send_record_under_a_drafted_status_is_still_a_sent_application(
+    store: ProfileStore, record: str
+) -> None:
+    _offer(store, "u1")
+    store.write_text(record, "applications", "u1", "v1.json")
+    record_application_status(store, "u1", status="drafted", at="2026-09-07T00:00:00Z")
+    result = board.collect(store)
+    assert [r.offer_id for r in result.rows] == ["u1"]
+    assert result.left_out == {}
+    assert any("send record could not be read" in n for n in result.rows[0].notes)
+    assert "never sent" not in board.render(result, generated_at=NOW)
+
+
+def test_the_planned_deletion_names_the_new_folders(store: ProfileStore) -> None:
+    from integral.retraction import plan_deletion
+
+    _offer(store, "x1")
+    _sent(store, "x1", "2026-09-01T00:00:00Z")
+    board.record_tracking(store, "x1", "https://track.example/x", reported_at=NOW)
+    board.write_board(store)
+    areas = plan_deletion(store.path().parent, "ada").areas
+    assert "tracking links" in areas and "reports" in areas
