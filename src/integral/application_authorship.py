@@ -28,6 +28,8 @@ from integral.identity import ProfileStore
 from integral.profile import EvidenceLog
 
 AUTHORS = ("candidate", "edited", "assistant")
+# The trace of a version's documents, not a document (prior_documents skips it by this name).
+TRACE_FILE = "trazabilidad.md"
 SECTION = "## Authorship"
 # A change cell must name a change. These say there is none, in the languages the
 # candidates write in; anything else with a word in it is taken as a name.
@@ -230,6 +232,6 @@ def check_package(version_dir: Path, store: ProfileStore) -> AuthorshipReport:
     """``check_authorship`` over one ``cv/generated/<offer_id>/v<N>/`` directory."""
     return check_authorship(
         (version_dir / "carta.md").read_text(encoding="utf-8"),
-        (version_dir / "trazabilidad.md").read_text(encoding="utf-8"),
+        (version_dir / TRACE_FILE).read_text(encoding="utf-8"),
         EvidenceLog(store),
     )
