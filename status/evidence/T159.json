@@ -3,6 +3,16 @@
   "findings": [],
   "unpinnable_floors": [
     {
+      "module": "alert_mailbox",
+      "name": "MINIMUM_PERMITTED_CASES",
+      "line": 123
+    },
+    {
+      "module": "alert_mailbox",
+      "name": "MINIMUM_REFUSING_CASES",
+      "line": 128
+    },
+    {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
       "line": 3643
@@ -327,20 +337,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3497,
+      "line": 3499,
       "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3524,
+      "line": 3526,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3389,
-      "population": 95
+      "line": 3391,
+      "population": 97
     },
     {
       "module": "freshness",
@@ -587,6 +597,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 95,
+  "floors_swept_at_least": 97,
   "floors_arithmetically_checked_at_least": 36
 }
