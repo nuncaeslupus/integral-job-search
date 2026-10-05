@@ -109,9 +109,9 @@ detail:
     # trabajo" in the `<span>` immediately before it, so the selector is the
     # bare tag `div` anchored by `after_text` (the grammar's one sibling anchor,
     # added for this). Measured 2026-10-05 on a live advert: exactly one `div`
-    # follows a sibling with that text and it holds the body. The wrapper one
-    # level out is the wrong node: it drags in the title, company and a
-    # trailing alert block.
+    # follows a sibling with that text and it holds the body. The enclosing
+    # `<article>` is the wrong node: it also holds the title, company, posting
+    # age and tags.
     text:
       css: "div"
       after_text: "Descripción del trabajo"

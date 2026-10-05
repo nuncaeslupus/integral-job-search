@@ -1327,6 +1327,18 @@ class FieldSelector(Strict):
             raise ValueError("build_hash_accepted must say why, not be blank")
         return reason
 
+    @field_validator("after_text")
+    @classmethod
+    def _the_label_is_in_normal_form(cls, label: str | None) -> str | None:
+        # `Node.text_content()` collapses whitespace, so a label that is blank
+        # or padded can never equal it: the connector would load and read nothing.
+        if label is not None and label != " ".join(label.split()):
+            raise ValueError(
+                "after_text must be non-blank with single spaces and no padding, "
+                "the form Node.text_content() gives"
+            )
+        return label
+
     @model_validator(mode="after")
     def _take_and_attr_are_compatible(self) -> FieldSelector:
         if self.take == "last_text_node" and self.attr is not None:
