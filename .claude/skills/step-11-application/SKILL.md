@@ -24,7 +24,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `application` f
 
 An offer with status `shortlisted`, and `cv/master.json` with enough in it to draw on. With a thin store, say what is missing and offer Intake or History rather than producing a padded document.
 
-**Reads:** `cv/master.json`; the offer and its extraction; `profile/stories.jsonl`; previous versions in `cv/generated/<offer_id>/`.
+**Reads:** `cv/master.json`; the offer and its extraction; `profile/stories.jsonl`; previous versions in `cv/generated/<offer_id>/`; and the digest of the candidate's other generated documents (next section).
 
 ## Lead with the recommendation
 
@@ -37,6 +37,28 @@ options and a shrug.
 ```text
 "I'd recommend applying anyway — Kubernetes is the only gap and the rest of the advert is ground you hold. You can address the gap in your own letter. Or we can leave this one. Which?"
 ```
+
+## Before drafting — look at what already exists
+
+Run the digest **before drafting any CV or letter**, so work the candidate has already polished for another offer is weighed rather than rebuilt from zero:
+
+```bash
+python -m integral.prior_documents --id <handle> [--input-dir <profiles-root>]
+```
+
+It walks every `cv/generated/<offer_id>/v<N>/manifest.json` and the document text beside it, for **all** of the candidate's offers, and prints per offer: company and title, how many versions exist, which documents each holds and any other file it did not read, the **sections beyond the standard set** (a "How I work" block, say), and the **story-bank episodes cited**. A script does this so the session does not re-read N full documents.
+
+The reuse rule, stated once and pinned by its own test, so change it only by changing the rule:
+
+```text
+Propose reuse; never apply it silently.
+A story-bank episode carried over from another offer's documents needs a fresh per-use approval for this posting and company; the earlier approval does not travel.
+An episode count the digest marks UNDETERMINED is not zero: read the named documents.
+```
+
+- Where an earlier offer's framing, section or phrasing looks good, say which one and why, and propose carrying it over **adapted to this posting and this company** — never pasted. The candidate decides. Every claim in the new document still traces to a store entry, and the letter is still the candidate's own words (see "The letter is an edit").
+- The digest ends with a `SKIPPED` list and **exit 1** when any manifest, document, offer record or story row could not be read. Say which items, by name, before relying on the rest; never treat an unlisted offer as one with nothing to reuse.
+- No generated documents yet is a normal first run: say nothing about it and draft.
 
 ## Protocol — the manner, not the mechanism
 

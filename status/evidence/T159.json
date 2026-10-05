@@ -529,6 +529,7 @@
     "plan_v2.MINIMUM_MERGED_TASKS",
     "presentation.DEFAULT_LIMIT",
     "presentation_log.PASS_OVER_THRESHOLD",
+    "prior_documents._SNIPPET",
     "process_spec.MIN_ITEM_WORDS",
     "profile._ID_WIDTH",
     "profile_standing.MAX_ITEMS",
