@@ -172,3 +172,25 @@ def test_a_heading_made_only_of_off_topic_words_is_off_topic(heading: str) -> No
 def test_a_skipped_section_ends_at_a_heading_with_no_blank_line_before_it() -> None:
     kept = ts.topic_text("Benefits\n- Gym\nAbout Acme\nWe run casinos.")
     assert "casinos" in kept and "Gym" not in kept
+
+
+@pytest.mark.parametrize("heading", ["The", "Y la", "de los"])
+def test_a_heading_of_function_words_only_is_not_off_topic(heading: str) -> None:
+    assert not ts._off_topic_heading(ts._heading_text(heading))
+
+
+@pytest.mark.parametrize(
+    "heading", ["Perks 🎁", "Requirements (must have)", "Requisitos imprescindibles"]
+)
+def test_decoration_and_brackets_do_not_stop_a_heading_being_off_topic(heading: str) -> None:
+    assert ts._off_topic_heading(ts._heading_text(heading))
+
+
+def test_a_run_of_short_lines_under_a_perks_heading_is_a_list() -> None:
+    kept = ts.topic_text("Build APIs.\n\nBenefits\nGym\nRestaurant discounts\nRemote work")
+    assert "Restaurant" not in kept and "APIs" in kept
+
+
+@pytest.mark.parametrize("verb", ["Vendemos", "Operamos", "Gestionamos", "Desarrollamos"])
+def test_each_spanish_self_verb_rescues_a_sentence(verb: str) -> None:
+    assert "seguro" in ts.topic_text(f"{verb} seguro médico privado.")

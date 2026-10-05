@@ -64,27 +64,38 @@ def _plain(text: str) -> str:
 #: the plain (folded) heading, so "Requisitos" and "What we offer:" qualify and
 #: "Offering fintech payroll" does not.
 _HEADING_VOCAB = (
-    r"benefits?|perks?|what we offer|we offer|ofrecemos|que ofrecemos|"
-    r"te ofrecemos|beneficios|ventajas|retribucion|compensation|salary|salario|"
-    r"nice[- ]to[- ]haves?|bonus|bonus points|plus(?:es)?|deseables?|"
-    r"se valorara|valorables?|preferred|required|requeridos?|"
+    r"benefits?|perks?|what we offer|we offer|que ofrecemos|te ofrecemos|ofrecemos|"
+    r"beneficios|ventajas|retribucion|compensation|salary|salario|"
+    r"nice[- ]to[- ]haves?|bonus points|bonus|plus(?:es)?|deseables?|"
+    r"se valorara|valorables?|preferred|required|requeridos?|must haves?|"
+    r"imprescindibles?|essentials?|"
     r"requirements?|requisitos|requerimientos|qualifications?|cualificaciones|"
     r"your profile|tu perfil|perfil|profile|who you are|about you|sobre ti|"
     r"what you bring|what you(?:'ll| will) bring|what we(?:'re| are) looking for|"
     r"lo que buscamos|que buscamos|you have|tienes|skills|habilidades|conocimientos|"
     r"minimum|minimos|experience|experiencia"
 )
-_HEADING_FUNCTION = r"and|or|&|of|the|to|a|an|for|y|e|o|u|de|del|la|las|los|el|para|con|en"
-_HEADING_WORD = rf"(?:{_HEADING_VOCAB}|{_HEADING_FUNCTION})"
-_OFF_TOPIC_HEADING = re.compile(rf"{_HEADING_WORD}(?:[\s,/&+]+{_HEADING_WORD})*")
+_HEADING_FUNCTION = r"and|or|of|the|to|a|an|for|y|e|o|u|de|del|la|las|los|el|para|con|en|que"
+_HEADING_WORDS = re.compile(rf"\b(?:{_HEADING_VOCAB}|{_HEADING_FUNCTION})\b")
 _HEADING_VOCAB_ONLY = re.compile(rf"\b(?:{_HEADING_VOCAB})\b")
+#: Vocabulary that is also an ordinary noun of the employer's story ("The
+#: Experience", "Company profile"): with a determiner in front, alone it is not
+#: enough to call a heading off-topic.
+_WEAK_VOCAB = re.compile(r"\b(?:experience|experiencia|profile|perfil)\b")
+_DETERMINER = re.compile(r"^(?:the|el|la|las|los)\b")
 
 
 def _off_topic_heading(plain_heading: str) -> bool:
-    """Is every word of this heading off-topic vocabulary or a function word?"""
-    return bool(
-        _OFF_TOPIC_HEADING.fullmatch(plain_heading) and _HEADING_VOCAB_ONLY.search(plain_heading)
-    )
+    """Is every word of this heading off-topic vocabulary or a function word?
+
+    Delete every vocabulary phrase and function word; the heading is off-topic
+    when at least one was deleted and no letter is left, so emoji, brackets and
+    punctuation never matter.
+    """
+    vocab = _HEADING_VOCAB_ONLY.findall(plain_heading)
+    if not vocab or any(c.isalpha() for c in _HEADING_WORDS.sub(" ", plain_heading)):
+        return False
+    return not (_DETERMINER.match(plain_heading) and all(_WEAK_VOCAB.fullmatch(v) for v in vocab))
 
 
 #: What makes a line a heading: markup, a trailing colon, ALL CAPS, or a short
@@ -127,7 +138,7 @@ _PERK = re.compile(
     r"\b(?:tickets?\s+restaurantes?|tickets?\s+restaurants?|cheques?\s+(?:restaurante|guarderia|"
     r"comida)|vales?\s+(?:de\s+)?(?:comida|restaurante)|(?:meal|restaurant|lunch|food)\s+"
     r"(?:vouchers?|allowance|cards?|tickets?|subsid\w+)|"
-    r"seguro\s+(?:medico|de\s+salud|privado)|(?:private\s+)?health\s+insurance|"
+    r"seguro\s+(?:medico|de\s+salud|privado)|(?:private\s+)?(?:health|medical)\s+insurance|"
     r"gympass|gym\s+(?:membership|allowance)|cuota\s+de\s+gimnasio|stock\s+options|flexible\s+(?:hours|schedule|working)|"
     r"horario\s+flexible|(?:paid\s+)?(?:vacation|holiday)s?\s+days?|dias\s+de\s+vacaciones|"
     r"plan\s+de\s+pensiones|pension\s+plan|retribucion\s+flexible|flexible\s+compensation|"
@@ -164,26 +175,53 @@ def _heading_text(line: str) -> str:
     return _plain(re.sub(r"[#*_:]+", " ", line)).strip()
 
 
+def _heading_shaped(lines: list[str], index: int) -> bool:
+    """Would line `index` be a heading wherever it stood? A line the next one
+    continues in lower case is a broken sentence, not a heading."""
+    if index >= len(lines) or not _is_heading(lines[index], previous_blank=True):
+        return False
+    following = lines[index + 1].lstrip() if index + 1 < len(lines) else ""
+    return not following[:1].islower()
+
+
+def _ends_skip(lines: list[str], index: int, previous_blank: bool) -> bool:
+    """Does line `index` end the off-topic section being skipped?
+
+    After a blank line, any heading does. With no blank line only a plain short
+    line is doubtful, because a list of perks written without bullets is a run
+    of short lines: it ends the section only when the next line is not also
+    heading-shaped and the one before it was not (a heading is followed by
+    prose; a run of short lines is a list). Markup, a colon or ALL CAPS decide
+    on their own.
+    """
+    line = lines[index]
+    if not _is_heading(line, previous_blank=True):
+        return False
+    if previous_blank or _is_heading(line, previous_blank=False):
+        return True
+    return (
+        _heading_shaped(lines, index)
+        and not _heading_shaped(lines, index + 1)
+        and not (index > 0 and _heading_shaped(lines, index - 1))
+    )
+
+
 def _drop_sections(text: str) -> list[str]:
     """The lines of `text` outside any off-topic section."""
+    lines = text.splitlines()
     kept: list[str] = []
     skipping = False
     previous_blank = True
-    for line in text.splitlines():
+    for index, line in enumerate(lines):
         blank = not line.strip()
-        # A skipped section ends at any heading-shaped line, blank line or not:
-        # a scraper that dropped the blank after "Benefits" must not take
-        # "About <employer>" with it.
-        if _is_heading(line, previous_blank=previous_blank or skipping):
+        if skipping:
+            if _ends_skip(lines, index, previous_blank):
+                skipping = _off_topic_heading(_heading_text(line))
+        elif _is_heading(line, previous_blank=previous_blank):
             skipping = _off_topic_heading(_heading_text(line))
-            if skipping:
-                previous_blank = blank
-                continue
-        elif skipping:
-            previous_blank = blank
-            continue
-        kept.append(line)
         previous_blank = blank
+        if not skipping:
+            kept.append(line)
     return kept
 
 

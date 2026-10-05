@@ -713,5 +713,147 @@
     "text": "Benefits\n- Gym\n- Lunch\nAbout Acme\nAcme operates online casinos in six countries.\n\nRequirements\n- Python",
     "held": true,
     "why": "reviewer finding 3 (corpus: wwr-azumo-data-engineer, Benefits then About <employer> with no blank line), spec (task text): the topic is about the employer or the job: a section boundary does not depend on a blank line"
+  },
+  {
+    "id": "r2-list-benefits",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nBenefits\nGym\nRestaurant discounts\nRemote work",
+    "held": false,
+    "why": "round-2 finding 1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a perks list of plain short lines is a list, not headings"
+  },
+  {
+    "id": "r2-list-nice",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nNice to have\nKubernetes\nBanking domain\nGo",
+    "held": false,
+    "why": "round-2 finding 1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a nice-to-have list of plain short lines"
+  },
+  {
+    "id": "r2-list-ofrecemos",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Desarrollar APIs.\n\nOfrecemos\nComida en restaurante\nTeletrabajo",
+    "held": false,
+    "why": "round-2 finding 1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert (Spanish)"
+  },
+  {
+    "id": "r2-broken-link",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\n\nWe value you.\nSoFi is committed to an inclusive culture. As part of this commitment,\nSoFi\noffers reasonable accommodations.\nDue to insurance coverage issues, we are unable to accommodate remote work from Hawaii.",
+    "held": false,
+    "why": "round-2 finding 1 (corpus wwr-sofi-director): a one-word line the next line continues in lower case is a broken sentence, and 'insurance coverage issues' is posting boilerplate, not the employer's business"
+  },
+  {
+    "id": "r2-heading-emoji",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nPerks 🎁\nRestaurant discounts\nGym",
+    "held": false,
+    "why": "round-2 finding 2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: emoji does not make a perks heading something else"
+  },
+  {
+    "id": "r2-heading-brackets",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nRequirements (must have)\nBanking domain\nGo",
+    "held": false,
+    "why": "round-2 finding 2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: brackets do not make a requirements heading something else"
+  },
+  {
+    "id": "r2-provide-perk",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We provide ticket restaurant and private health insurance.",
+    "held": true,
+    "why": "round-2 finding 3, accepted trade pinned: 'We provide' is the employer describing itself and is read (an insurer says 'we provide health insurance'); the cost is a perk in that wording holding the advert"
+  },
+  {
+    "id": "r2-equipo-ofrece",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Somos un equipo que ofrece ticket restaurante.",
+    "held": true,
+    "why": "round-2 finding 3, accepted trade pinned: 'Somos un' is the employer describing itself and is read, the same trade in Spanish"
+  },
+  {
+    "id": "r2-operamos",
+    "about": "sector:insurance",
+    "terms": [
+      "seguros",
+      "seguro",
+      "aseguradora"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Operamos una aseguradora de seguro médico en toda España.",
+    "held": true,
+    "why": "spec (task text): the employer describing itself ('Operamos una aseguradora') is on the topic"
+  },
+  {
+    "id": "r2-medical-insurance-perk",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Health care: Private medical insurance for you and your family.",
+    "held": false,
+    "why": "round-2 (corpus manfred-8419), spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: private medical insurance is a perk"
+  },
+  {
+    "id": "r2-the-experience",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "The Experience\nOur restaurants serve 2M guests a year.",
+    "held": true,
+    "why": "round-2 finding 4, spec (task text): 'The Experience' is a story about the employer, not a requirements heading"
   }
 ]

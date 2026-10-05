@@ -27,14 +27,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CASES_PATH = _REPO_ROOT / "tests" / "fixtures" / "topic_scope" / "cases.json"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T227.json"
 
-#: A zero over a handful of cases is not a pass. The fixture holds 13 adverts the
-#: topic is really on today, a margin of 3, so a case or two may be retired before
-#: the claim lapses and not the whole side.
+#: A zero over a handful of cases is not a pass. The fixture holds 37 adverts the
+#: topic is really on today; the floor is deliberately well below that, so cases
+#: may be retired without the claim lapsing, but not the whole side.
 #: arsenal-floor-margin: FEWEST_HELD_CASES value=10
 FEWEST_HELD_CASES = 10
 
-#: The adverts that only mention the topic: 16 today, a margin of 4, because the
-#: metric counts only over this side and a fixture of mostly on-topic adverts
+#: The adverts that only mention the topic: 34 today, well above the floor, because
+#: the metric counts only over this side and a fixture of mostly on-topic adverts
 #: would leave it a clean zero over nothing.
 #: arsenal-floor-margin: FEWEST_SHOWN_CASES value=12
 FEWEST_SHOWN_CASES = 12
