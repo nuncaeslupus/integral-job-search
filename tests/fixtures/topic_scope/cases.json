@@ -1287,5 +1287,75 @@
     "text": "Perks\nAcme pays for lunch at partner restaurants",
     "held": false,
     "why": "round-4 finding 3, spec (task text): a perk. The employer's name ends a skip only on a heading, not on a sentence that mentions it"
+  },
+  {
+    "id": "r5-who-we-are-dot",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nWho we are.\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r5-story-mission",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nOur Story & Mission\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r5-about-long-name",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout Acme Gaming Group International Ltd\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r5-quienes-somos",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ofrecemos\nTeletrabajo\n¿Quiénes somos?\nSomos un operador de apuestas.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip (Spanish)"
+  },
+  {
+    "id": "r5-company-overview",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nCompany Overview\nWe are a casino operator.",
+    "held": true,
+    "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
   }
 ]

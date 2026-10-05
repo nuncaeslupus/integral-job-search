@@ -26,6 +26,13 @@ platform for fintech teams") is read even when it also contains a cue, a perk or
 boilerplate, unless it addresses the candidate (`_ADDRESSES_CANDIDATE`): "We are looking for someone
 with a background in FinTech" is a requirement and stays out.
 
+Deliberate asymmetry, third kind: an employer *sentence* straight after a perks
+list, with no heading ("Benefits\nPaid Time Off\nAcme operates in six countries as
+a casino group.", employer "Acme Inc.") is swallowed, because it cannot be told
+from "Acme pays for lunch" without listing verbs. The reverse, a perk item that is
+the employer's name plus a word or two ("Acme Card"), ends the skip. Both are
+declared trade-offs.
+
 Deliberate asymmetry, second kind: inside a skipped perks section a plain
 sub-heading with no off-topic word ("Benefits\nHealth:\nPrivate cover\nFood:\nLunch at
 partner restaurants", or `**Food**`, or `FOOD`) looks exactly like "Tech stack:",
@@ -116,12 +123,16 @@ def _mentions_off_topic_word(plain_heading: str) -> bool:
 
 #: A line whose wording names the employer or the job: it ends a skipped section
 #: wherever it stands, whatever its shape.
-_SECTION_OF_THE_ADVERT = re.compile(
-    r"(?:(?:about|sobre)(?:\s+\S+){0,4}|who we are(?: and what we do)?|quienes somos|"
-    r"our company|our story|our mission|the company|the role|la empresa|nuestra empresa|"
-    r"el puesto|el rol|your role|tu rol|responsibilities|responsabilidades|duties|funciones|"
-    r"tasks|tareas|what you(?:'ll| will) do)"
+_SECTION_WORDING = (
+    r"(?:(?:about|sobre)(?:\s+.*)?|who we are(?: and what we do)?|quienes somos|"
+    r"our company|our story|our mission|the company|company overview|overview|the role|"
+    r"la empresa|nuestra empresa|el puesto|el rol|your role|tu rol|responsibilities|"
+    r"responsabilidades|duties|funciones|tasks|tareas|what you(?:'ll| will) do)"
 )
+#: A wording, optionally joined to further words by a connective ("Our Story &
+#: Mission", "Tasks and responsibilities"): "Tasks are flexible" is not one.
+_SECTION_OF_THE_ADVERT = re.compile(rf"{_SECTION_WORDING}(?:\s*(?:&|and|y|,)\s*\S+)*")
+_EDGE_PUNCTUATION = "\u00bf\u00a1.?!\u2026 \t"
 _LEGAL_SUFFIX = re.compile(r"\b(?:inc|llc|ltd|gmbh|sl|sa|corp|co|plc|bv)\b")
 
 
@@ -192,9 +203,13 @@ _BOILERPLATE = re.compile(
 )
 
 
+#: The longest line that can be a heading.
+_HEADING_LIMIT = 70
+
+
 def _is_heading(line: str, *, previous_blank: bool) -> bool:
     stripped = _BULLET.sub("", line).strip()
-    if not stripped or len(stripped) > 70 or _BULLET.match(line):
+    if not stripped or len(stripped) > _HEADING_LIMIT or _BULLET.match(line):
         return False
     if _MARKUP.match(line) or stripped.endswith(":"):
         return True
@@ -218,9 +233,13 @@ def _ends_skip(line: str, employer_key: str) -> bool:
     opens a section about the employer or the job, or a heading line that names
     the employer.
     """
-    plain = _heading_text(line)
-    shaped = _is_heading(line, previous_blank=True)
-    if shaped and _SECTION_OF_THE_ADVERT.fullmatch(plain):
+    # "Who we are." and "¿Quiénes somos?" are headings once the edge punctuation goes.
+    line_clean = line.strip().strip(_EDGE_PUNCTUATION)
+    plain = _heading_text(line_clean)
+    shaped = _is_heading(line_clean, previous_blank=True)
+    # A wording needs no more shape than the heading length limit: "About <long
+    # company name>" has more than five words.
+    if 0 < len(line_clean) <= _HEADING_LIMIT and _SECTION_OF_THE_ADVERT.fullmatch(plain):
         return True
     if shaped and _mentions_off_topic_word(plain):
         return False

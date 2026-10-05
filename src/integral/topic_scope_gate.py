@@ -27,7 +27,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CASES_PATH = _REPO_ROOT / "tests" / "fixtures" / "topic_scope" / "cases.json"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T227.json"
 
-#: A zero over a handful of cases is not a pass. The fixture holds 55 adverts the
+#: A zero over a handful of cases is not a pass. The fixture holds 60 adverts the
 #: topic is really on today; the floor is deliberately well below that, so cases
 #: may be retired without the claim lapsing, but not the whole side.
 #: arsenal-floor-margin: FEWEST_HELD_CASES value=10

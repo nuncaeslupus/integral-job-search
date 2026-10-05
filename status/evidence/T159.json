@@ -580,6 +580,7 @@
     "task_gate.MINIMUM_RECORD_KEYS_COMPARED",
     "task_gate.MINIMUM_STATUS_KEY_GATES",
     "test_mode.PASTE_CHARS",
+    "topic_scope._HEADING_LIMIT",
     "trait_sufficiency.MINIMUM_TRAITS",
     "verified_gate.MINIMUM_CONTRACTS",
     "voice._EXCERPT",
