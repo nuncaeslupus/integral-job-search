@@ -474,3 +474,27 @@ def test_a_twin_whose_own_date_cannot_be_read_blocks_the_other_from_opening(
     for kwargs in both:
         assert run(root, handle="marcos", now=NOW, **kwargs).outcome != "opened"
     assert (_state(first), _state(second)) == before
+
+
+@pytest.mark.parametrize(
+    ("one", "other"),
+    [("Núria", "Núria"), ("Marcos", "MARCOS")],
+    ids=["nfc-vs-nfd", "case"],
+)
+def test_same_day_twins_differing_only_by_nfc_or_case_are_still_ambiguous(
+    tmp_path: Path, one: str, other: str
+) -> None:
+    root = tmp_path / "profiles"
+    day = datetime(2026, 9, 1, 8, tzinfo=UTC)
+    create_profile(root, one, language="en", handle="twin-a", now=day)
+    create_profile(root, other, language="en", handle="twin-b", now=day)
+    stores = (ProfileStore(root, "twin-a"), ProfileStore(root, "twin-b"))
+    for store in stores:
+        SessionStore(store).record(at=STAMP, current_step="history")
+    before = tuple(_state(store) for store in stores)
+    both: list[dict[str, Any]] = [{}, YES]
+    for handle in ("twin-a", "twin-b"):
+        for kwargs in both:
+            result = run(root, handle=handle, now=NOW, **kwargs)
+            assert result.outcome == "ambiguous" and "started on" not in result.say
+    assert tuple(_state(store) for store in stores) == before
