@@ -2,7 +2,7 @@ site: es.talent.com
 country: ES
 language: es
 maintainer: "@nuncaeslupus"
-last_verified: "2026-09-21"
+last_verified: "2026-10-05"
 
 policy:
   listings: public
@@ -21,9 +21,9 @@ policy:
 
 fixture:
   provenance: sampled
-  recorded: "2026-09-21"
+  recorded: "2026-10-05"
   # The advert body in `fixture/detail.html` is truncated by
-  # `tools/excerpt_fixture.py` — 3,351 characters down to 609, ending in the
+  # `tools/excerpt_fixture.py` — the live advert's body down to 920 characters, ending in the
   # tool's own marker — so what is committed is enough markup to prove the
   # selector finds the body and not enough to be a copy of somebody's advert.
   # The listing fixture is untouched by it and needs to be: this connector maps
