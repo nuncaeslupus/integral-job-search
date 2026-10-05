@@ -22,9 +22,19 @@ If the runtime (`integral.step_runtime.offered`) is not offering `traits` for th
 
 ## Preconditions and inputs
 
-Trait evidence exists, which History normally supplies. With no evidence at all, say so and offer History instead of asking a person to rate themselves out of ten.
+Trait evidence exists, which History normally supplies. With no evidence at all, say so and recommend History first — it is where the evidence comes from — instead of asking a person to rate themselves out of ten.
 
 **Reads:** `profile/evidence.jsonl` rows bearing on trait dimensions; `profile/stories.jsonl`; `traits.json` from a previous scoring run.
+
+## Lead with the recommendation
+
+The tool knows which evidence is missing; the candidate does not. When a trait is short of
+evidence, recommend the one next move — another story from a past role, or the History step —
+with the reason in a clause, and name the alternative second. Never a neutral menu.
+
+```text
+"I'd recommend one more story from your last role before I score this — nothing so far shows how you handle disagreement, and that's the trait the adverts lean on most. Or we can go on with what I have."
+```
 
 ## Protocol — the manner, not the mechanism
 

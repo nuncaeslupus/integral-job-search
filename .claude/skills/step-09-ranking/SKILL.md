@@ -55,22 +55,29 @@ what in their profile is carrying the list and what would widen it — from the 
 the cards used, never from a question and never invented:
 
 ```python
-from integral.profile_standing import standing
+from integral.profile_standing import standing_for_store
 
-lines = standing(stack)            # `stack` is the dict already passed to `rank`
+# `show` is the page `partition` returned — the offers on screen, never the whole ranking.
+# The denominator counts every one of them, including adverts that name no technology.
+lines = standing_for_store(store, stack, show)
+present(store, show, at=now, phrase=phrase, standing=lines)   # the checkpoint reads this row
 say(lines.strengths)               # "Lo que juega a tu favor: Python (en 4 de las 5 mostradas)."
 say(lines.widen)                   # "Lo que ampliaría el encaje: Kubernetes (en 2 de las 5 mostradas)."
 ```
 
-Both lines are always said. A strength is a technology the shown adverts name and the candidate
+Both lines are always said, and `present(..., standing=lines)` records that they were: the checkpoint
+reports `unstated_standing` and withholds coverage when the newest presentation carries none. A strength is a technology the shown adverts name and the candidate
 holds at working level or above; a widening item is one they name that the CV lacks or holds
-low. An aversion the candidate stated is a preference, never listed as something to improve. When
-the adverts name no technology the lines say so rather than praising or faulting nothing.
+low. Anything the candidate ruled out — an aversion, a `skill:` exclusion, a constraint naming it — is
+never listed as something to improve. The widen line ends by asking whether any of it is of
+interest; it is never assigned. When the adverts name no technology the lines say so, and when no
+fit was carried at all they say it was not assessed — never praising or faulting nothing.
 
 ## Lead with the recommendation
 
 Where the candidate has a choice here — which of the shown offers to react to first, whether to
-pursue an offer that needs something they lack — recommend one and say why, then name the others.
+pursue an offer that needs something they lack, whether to read the adverts for skills (step 8) before
+trusting the order — recommend one and say why, then name the others.
 
 ```text
 "I'd recommend reacting to the Girona one first — it's first because of the no-on-call line, and your reaction to it moves the order most. Or take any of the others you prefer."
@@ -196,7 +203,7 @@ present(store, show, at=now, phrase=phrase)
 
 `partition` also withholds any stored offer on a topic the candidate ruled out (`search/exclusions.json`), including offers stored before they said it.
 
-**Say what was not checked, every time (T229).** `shown_notes(store, show)` returns the notes that go with the list: `unchecked_line` (no employer) and `pending_skill_line` — *"sin leer todavía para saber si lo exigen: skill:go en 3"* — for adverts shown while a `skill:<tech>` exclusion could not be applied because step 8 has not read them. Say each line you get. An advert step 8 read and found requiring the skill is already withheld by `partition`; one it has not read is shown **with this note**, never silently. If a note is non-empty, offer to run step 8 on those adverts first.
+**Say what was not checked, every time (T229).** `shown_notes(store, show)` returns the notes that go with the list: `unchecked_line` (no employer) and `pending_skill_line` — *"sin leer todavía para saber si lo exigen: skill:go en 3"* — for adverts shown while a `skill:<tech>` exclusion could not be applied because step 8 has not read them. Say each line you get. An advert step 8 read and found requiring the skill is already withheld by `partition`; one it has not read is shown **with this note**, never silently. If a note is non-empty, recommend running step 8 on those adverts first.
 
 **Say the withheld count and the reason, every time.** `withheld_line(held)`
 puts it in the shape the owner asked for — *"4 descartadas porque «son de

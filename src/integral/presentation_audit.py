@@ -94,6 +94,23 @@ def unpresented_ranking(store: ProfileStore) -> list[dict[str, Any]]:
     return [{"ranking": name, "problem": "no present() row", "offers": sorted(offers)}]
 
 
+def unstated_standing(store: ProfileStore) -> list[dict[str, Any]]:
+    """T209: the newest batch shown carries no strengths / widen-the-fit lines.
+
+    Step 9 says both lines every time (`profile_standing`); the only trace that
+    it did is the `standing` on the `present()` row. No rows is `unpresented_ranking`'s
+    finding, not this one's.
+    """
+    rows = [(when, row) for row in _rows(store) if (when := _when(row.get("at"))) is not None]
+    if not rows:
+        return []
+    when, newest = max(rows, key=lambda entry: entry[0])
+    said = newest.get("standing")
+    if isinstance(said, dict) and said.get("strengths") and said.get("widen"):
+        return []
+    return [{"at": newest.get("at"), "problem": "no standing lines on the newest presentation"}]
+
+
 def unrecorded_discards(store: ProfileStore) -> list[dict[str, str]]:
     """Step-10 decision rows whose words no lifecycle event carries (counted, not set-matched)."""
     carried: Counter[tuple[str, str]] = Counter()

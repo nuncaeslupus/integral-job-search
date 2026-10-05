@@ -61,6 +61,7 @@ from integral.lifecycle import (
     stored_posting_keys,
 )
 from integral.offers import Offer, names_an_employer
+from integral.profile_standing import Standing
 from integral.same_vacancy import employer_key, same_vacancy
 from integral.sourcing_exclusions import (
     EMPLOYER_UNKNOWN,
@@ -116,13 +117,22 @@ class Withheld:
 
 
 def present(
-    store: ProfileStore, offer_ids: list[str], *, at: str, phrase: str | None = None
+    store: ProfileStore,
+    offer_ids: list[str],
+    *,
+    at: str,
+    phrase: str | None = None,
+    standing: Standing | None = None,
 ) -> Path:
-    """Record that these adverts were shown together."""
-    return store.append_jsonl(
-        {"at": at, "phrase": phrase, "offer_ids": list(offer_ids), "chosen": []},
-        *PRESENTATIONS,
-    )
+    """Record that these adverts were shown together.
+
+    T209: `standing` is the strengths / widen-the-fit pair said with the batch;
+    its presence in the row is what the step-9 checkpoint reads.
+    """
+    row: dict[str, Any] = {"at": at, "phrase": phrase, "offer_ids": list(offer_ids), "chosen": []}
+    if standing is not None:
+        row["standing"] = {"strengths": standing.strengths, "widen": standing.widen}
+    return store.append_jsonl(row, *PRESENTATIONS)
 
 
 def choose(

@@ -463,14 +463,14 @@
       }
     },
     "standing_no_strengths": {
-      "en": "None of the technologies the shown adverts name is one your CV or your words put at working level yet.",
+      "en": "None of the technologies the shown adverts name is one your CV or your words put at working level.",
       "es": {
-        "text": "Ninguna de las tecnologías que nombran los anuncios mostrados consta aún en tu CV o en lo que dijiste como nivel de trabajo.",
-        "of": "51108fcd3b8682939e06ee3444e3944a23db32ed1afbfff2479496f3780dd45b"
+        "text": "Ninguna de las tecnologías que nombran los anuncios mostrados consta en tu CV o en lo que dijiste como nivel de trabajo.",
+        "of": "fc019944a14a54044322c03c828671ebba3a295b8974d702fdd93c25c7af7370"
       },
       "ca": {
-        "text": "Cap de les tecnologies que anomenen els anuncis mostrats consta encara al teu CV o a allò que vas dir com a nivell de treball.",
-        "of": "51108fcd3b8682939e06ee3444e3944a23db32ed1afbfff2479496f3780dd45b"
+        "text": "Cap de les tecnologies que anomenen els anuncis mostrats consta al teu CV o a allò que vas dir com a nivell de treball.",
+        "of": "fc019944a14a54044322c03c828671ebba3a295b8974d702fdd93c25c7af7370"
       }
     },
     "standing_no_widen": {
@@ -493,6 +493,28 @@
       "ca": {
         "text": "Els anuncis mostrats no anomenen tecnologies, així que no hi ha res a dir del teu stack a partir d'ells.",
         "of": "cfa4d4e02292ce107f3cca85b4b43d0c68f0eab5a959a619f29740cd8016b8fa"
+      }
+    },
+    "standing_more": {
+      "en": " and {n} more",
+      "es": {
+        "text": " y {n} más",
+        "of": "4406d1aee9a4abaa79a1dc0a42355245d2658aaa445a189a4b047c41d529010b"
+      },
+      "ca": {
+        "text": " i {n} més",
+        "of": "4406d1aee9a4abaa79a1dc0a42355245d2658aaa445a189a4b047c41d529010b"
+      }
+    },
+    "standing_ask": {
+      "en": "Is any of that of interest to you?",
+      "es": {
+        "text": "¿Te interesa alguna de esas?",
+        "of": "a22b178777b0e6031c2c3db5dacb6ef0f04ddece19f2de22d9a7c1519a350e7c"
+      },
+      "ca": {
+        "text": "T'interessa alguna d'aquestes?",
+        "of": "a22b178777b0e6031c2c3db5dacb6ef0f04ddece19f2de22d9a7c1519a350e7c"
       }
     }
   }

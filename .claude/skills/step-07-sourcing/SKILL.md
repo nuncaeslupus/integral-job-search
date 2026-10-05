@@ -68,6 +68,18 @@ In this step that sounds like:
 - Never store a credential in a connector file — authenticated sources use the candidate's own browser session.
 - Never send anything but constraints (role, place, band) to a job source — no profile, episode, trait or CV content.
 
+## Lead with the recommendation
+
+Where the candidate has a choice here — the two ways round a market no connector covers — lead
+with the one that serves the search and say why, then name the other. A connector for a board
+they will keep using outlasts one run; their own browser session gets this search moving today.
+Recommend by their situation (one board they will use again: the connector; a one-off: the
+browser session), never as a neutral pair.
+
+```text
+"I'd recommend building a connector for the board you'll check most — it covers every later search too. If you only need today's run, the other way is your own browser session. Which suits you?"
+```
+
 ## Coverage — say when nothing here covers this market
 
 Before presenting a single offer, ask what covers the candidate's market:
