@@ -53,6 +53,11 @@
       "line": 302
     },
     {
+      "module": "document_reader",
+      "name": "MINIMUM_CONTRACTS_EVALUATED",
+      "line": 86
+    },
+    {
       "module": "elicit_extract",
       "name": "MINIMUM_CHECKS",
       "line": 739
@@ -327,20 +332,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3497,
+      "line": 3499,
       "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3524,
+      "line": 3526,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3389,
-      "population": 95
+      "line": 3391,
+      "population": 96
     },
     {
       "module": "freshness",
@@ -501,6 +506,7 @@
     "decline.DECLINES_BEFORE_STEP_SILENCE",
     "decline.DECLINES_BEFORE_TOTAL_SILENCE",
     "dedup.SHINGLE_SIZE",
+    "document_reader.EXPORT_VERSION",
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
@@ -587,6 +593,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 95,
+  "floors_swept_at_least": 96,
   "floors_arithmetically_checked_at_least": 36
 }

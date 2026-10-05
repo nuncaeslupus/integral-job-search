@@ -1,0 +1,25 @@
+{
+  "reader_fragment_defects": 0,
+  "contracts_evaluated_at_least": 40,
+  "readers_generated": 9,
+  "reader_languages": [
+    "en",
+    "es",
+    "ca"
+  ],
+  "documents_evaluated": [
+    "letter",
+    "cv",
+    "awkward"
+  ],
+  "reading_widths": [
+    360,
+    480,
+    768,
+    1024,
+    1280,
+    1920
+  ],
+  "gate_status": "measured",
+  "defects": []
+}
