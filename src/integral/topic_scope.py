@@ -22,8 +22,8 @@ read in full:
   "equal opportunity employer").
 
 A sentence in which the **employer describes itself** ("We are a payroll
-platform for fintech teams") is read even when it also contains a cue, unless it
-addresses the candidate (`_ADDRESSES_CANDIDATE`): "We are looking for someone
+platform for fintech teams") is read even when it also contains a cue, a perk or
+boilerplate, unless it addresses the candidate (`_ADDRESSES_CANDIDATE`): "We are looking for someone
 with a background in FinTech" is a requirement and stays out.
 
 Deliberate asymmetry: a topic mentioned only in a stripped region is **shown**,
@@ -57,20 +57,35 @@ def _plain(text: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
-#: A heading names a region the topic is not read in. Matched on the plain
-#: (folded) heading, as a word, so "Requisitos" and "What we offer:" qualify and
+#: Words and phrases that name an off-topic region. A heading is off-topic only
+#: when EVERY word in it is one of these or a function word (`_HEADING_FUNCTION`):
+#: "Company profile", "About us and what we offer" and "Player Experience" each
+#: carry one such word and are still the employer describing itself. Matched on
+#: the plain (folded) heading, so "Requisitos" and "What we offer:" qualify and
 #: "Offering fintech payroll" does not.
-_OFF_TOPIC_HEADING = re.compile(
-    r"\b(?:benefits?|perks?|what we offer|we offer|ofrecemos|que ofrecemos|"
+_HEADING_VOCAB = (
+    r"benefits?|perks?|what we offer|we offer|ofrecemos|que ofrecemos|"
     r"te ofrecemos|beneficios|ventajas|retribucion|compensation|salary|salario|"
-    r"nice[- ]to[- ]have|nice to haves?|bonus|bonus points|plus(?:es)?|deseable|deseables|"
-    r"se valorara|valorable|valorables|preferred|"
+    r"nice[- ]to[- ]haves?|bonus|bonus points|plus(?:es)?|deseables?|"
+    r"se valorara|valorables?|preferred|required|requeridos?|"
     r"requirements?|requisitos|requerimientos|qualifications?|cualificaciones|"
     r"your profile|tu perfil|perfil|profile|who you are|about you|sobre ti|"
     r"what you bring|what you(?:'ll| will) bring|what we(?:'re| are) looking for|"
     r"lo que buscamos|que buscamos|you have|tienes|skills|habilidades|conocimientos|"
-    r"minimum|minimos|experience|experiencia)\b"
+    r"minimum|minimos|experience|experiencia"
 )
+_HEADING_FUNCTION = r"and|or|&|of|the|to|a|an|for|y|e|o|u|de|del|la|las|los|el|para|con|en"
+_HEADING_WORD = rf"(?:{_HEADING_VOCAB}|{_HEADING_FUNCTION})"
+_OFF_TOPIC_HEADING = re.compile(rf"{_HEADING_WORD}(?:[\s,/&+]+{_HEADING_WORD})*")
+_HEADING_VOCAB_ONLY = re.compile(rf"\b(?:{_HEADING_VOCAB})\b")
+
+
+def _off_topic_heading(plain_heading: str) -> bool:
+    """Is every word of this heading off-topic vocabulary or a function word?"""
+    return bool(
+        _OFF_TOPIC_HEADING.fullmatch(plain_heading) and _HEADING_VOCAB_ONLY.search(plain_heading)
+    )
+
 
 #: What makes a line a heading: markup, a trailing colon, ALL CAPS, or a short
 #: unpunctuated line (checked in `_is_heading`).
@@ -95,9 +110,11 @@ _CANDIDATE_CUE = re.compile(
 #: `_CANDIDATE_CUE` ("we have 10 years of experience in payments") but never one
 #: that addresses or seeks the candidate (`_ADDRESSES_CANDIDATE`).
 _EMPLOYER_SELF = re.compile(
-    r"\b(?:we are an?|we are the|we're an?|we're the|we build|we provide|we offer? (?:a|an) "
+    r"\b(?:we are an?|we are the|we're an?|we're the|we build|we provide|"
+    r"we (?:sell|run|operate|make|create|develop)|we offer? (?:a|an) "
     r"(?:platform|product|service)|our (?:company|platform|product|products|mission|clients|"
-    r"customers|business)|somos (?:una?|el|la)|nuestra (?:empresa|plataforma|mision|compania)|"
+    r"customers|business)|somos (?:una?|el|la)|(?:vendemos|operamos|gestionamos|desarrollamos)|"
+    r"nuestra (?:empresa|plataforma|mision|compania)|"
     r"nuestros? (?:producto|productos|clientes)|about us|sobre nosotros)\b"
 )
 _ADDRESSES_CANDIDATE = re.compile(
@@ -154,8 +171,11 @@ def _drop_sections(text: str) -> list[str]:
     previous_blank = True
     for line in text.splitlines():
         blank = not line.strip()
-        if _is_heading(line, previous_blank=previous_blank):
-            skipping = bool(_OFF_TOPIC_HEADING.search(_heading_text(line)))
+        # A skipped section ends at any heading-shaped line, blank line or not:
+        # a scraper that dropped the blank after "Benefits" must not take
+        # "About <employer>" with it.
+        if _is_heading(line, previous_blank=previous_blank or skipping):
+            skipping = _off_topic_heading(_heading_text(line))
             if skipping:
                 previous_blank = blank
                 continue
@@ -170,12 +190,11 @@ def _drop_sections(text: str) -> list[str]:
 def _stripped(sentence: str) -> bool:
     """Is this sentence one a topic is not read in?"""
     plain = _plain(sentence)
-    if _PERK.search(plain) or _BOILERPLATE.search(plain):
-        return True
-    if _CANDIDATE_CUE.search(plain):
-        rescued = _EMPLOYER_SELF.search(plain) and not _ADDRESSES_CANDIDATE.search(plain)
-        return not rescued
-    return False
+    # One rescue for every reason to strip: the employer describing itself, to
+    # nobody in particular, is read whichever pattern would have removed it.
+    if _EMPLOYER_SELF.search(plain) and not _ADDRESSES_CANDIDATE.search(plain):
+        return False
+    return bool(_PERK.search(plain) or _BOILERPLATE.search(plain) or _CANDIDATE_CUE.search(plain))
 
 
 def topic_text(text: str) -> str:

@@ -129,3 +129,46 @@ def test_a_matcher_that_reads_no_text_turns_the_gate_red(monkeypatch: pytest.Mon
 
 def test_main_exits_zero_on_the_committed_cases(tmp_path: Path) -> None:
     assert gate._main(["x", str(tmp_path / "T227.json")]) == 0
+
+
+def test_the_gate_counts_a_hold_that_names_no_words(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`held_without_the_words` must be able to fire, not only read zero."""
+    monkeypatch.setattr(se, "held_in_words", lambda candidate, exclusions: ("sector:x",))
+    assert gate.measure()["held_without_the_words"] >= 1
+
+
+def test_a_line_of_two_sentences_is_read_sentence_by_sentence() -> None:
+    kept = ts.topic_text("We run a sports betting exchange. Kubernetes is a plus.")
+    assert "betting" in kept and "Kubernetes" not in kept
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Company profile:",
+        "Perfil de la empresa:",
+        "About us and what we offer:",
+        "Player Experience",
+        "Strong communication and collaboration skills",
+    ],
+)
+def test_a_heading_with_one_off_topic_word_is_not_off_topic(heading: str) -> None:
+    assert not ts._off_topic_heading(ts._heading_text(heading))
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Required Skills & Experience",
+        "Nice-to-Have Skills",
+        "Minimum requirements",
+        "Perks and benefits",
+    ],
+)
+def test_a_heading_made_only_of_off_topic_words_is_off_topic(heading: str) -> None:
+    assert ts._off_topic_heading(ts._heading_text(heading))
+
+
+def test_a_skipped_section_ends_at_a_heading_with_no_blank_line_before_it() -> None:
+    kept = ts.topic_text("Benefits\n- Gym\nAbout Acme\nWe run casinos.")
+    assert "casinos" in kept and "Gym" not in kept
