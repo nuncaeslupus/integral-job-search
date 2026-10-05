@@ -1427,5 +1427,103 @@
     "text": "Perks\nGym\nPerks & Benefits\nFree casino nights.",
     "held": false,
     "why": "round-6, spec (task text): a perk"
+  },
+  {
+    "id": "r7-about-us-our-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout us & our benefits\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; a heading joining an employer section to a perks word still ends the skip"
+  },
+  {
+    "id": "r7-about-us-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout us & benefits\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above"
+  },
+  {
+    "id": "r7-who-we-are-what-we-offer",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nWho we are & what we offer\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above"
+  },
+  {
+    "id": "r7-company-perks",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nThe company & perks\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above"
+  },
+  {
+    "id": "r7-sobre-nosotros-beneficios",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nSobre nosotros y beneficios\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as above (Spanish)"
+  },
+  {
+    "id": "r7-about-employer-with-perk-word",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": "Benefit Cosmetics",
+    "text": "Perks\nGym\nAbout Benefit Cosmetics\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; the employer's name ends the skip even when it holds a perk word"
+  },
+  {
+    "id": "r7-about-us-our-benefits-blank",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\n\nAbout us & our benefits\n\nWe run casinos.",
+    "held": true,
+    "why": "round-7 blocker, spec (task text): the topic is about the employer; as the first, with blank lines around the heading"
   }
 ]

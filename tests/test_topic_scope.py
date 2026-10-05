@@ -236,3 +236,8 @@ def test_a_bulleted_item_that_starts_with_about_does_not_end_a_skip() -> None:
 
 def test_a_connective_without_spaces_or_boundaries_is_not_one() -> None:
     assert ts.topic_text("Perks\nGym\nTasks yearly\nCasino discounts") == ""
+
+
+def test_a_wording_that_is_a_perks_sections_own_name_does_not_end_a_skip() -> None:
+    for heading in ("About our benefits:", "Duties & perks", "Overview, perks"):
+        assert ts.topic_text(f"Perks\nGym\n{heading}\nFree casino nights.") == "", heading
