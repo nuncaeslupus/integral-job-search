@@ -116,14 +116,14 @@ def test_a_matcher_that_reads_the_whole_advert_turns_the_gate_red(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The old behaviour, restored, must be caught by the gate and not only the cases."""
-    monkeypatch.setattr(ts, "topic_text", lambda text: text)
+    monkeypatch.setattr(ts, "topic_text", lambda text, employer=None: text)
     measured = gate.measure()
     assert measured["adverts_excluded_on_a_perk_or_nice_to_have"] >= 10
 
 
 def test_a_matcher_that_reads_no_text_turns_the_gate_red(monkeypatch: pytest.MonkeyPatch) -> None:
     """The opposite failure: strip everything and the on-topic adverts are shown."""
-    monkeypatch.setattr(ts, "topic_text", lambda text: "")
+    monkeypatch.setattr(ts, "topic_text", lambda text, employer=None: "")
     assert gate.measure()["adverts_on_the_topic_shown"] >= 5
 
 
@@ -194,3 +194,28 @@ def test_a_run_of_short_lines_under_a_perks_heading_is_a_list() -> None:
 @pytest.mark.parametrize("verb", ["Vendemos", "Operamos", "Gestionamos", "Desarrollamos"])
 def test_each_spanish_self_verb_rescues_a_sentence(verb: str) -> None:
     assert "seguro" in ts.topic_text(f"{verb} seguro médico privado.")
+
+
+@pytest.mark.parametrize(
+    "heading", ["Tech stack:", "## Tech stack", "**Tech stack**", "TECH STACK"]
+)
+def test_markup_a_colon_or_caps_ends_a_skip_by_itself(heading: str) -> None:
+    kept = ts.topic_text(f"Benefits\nGym\n{heading}\nWe build casino software.")
+    assert "casino" in kept and "Gym" not in kept
+
+
+def test_a_plain_short_line_never_ends_a_skip() -> None:
+    kept = ts.topic_text("Benefits\nGym\nTech stack\nCasino discounts\nRemote work")
+    assert kept == ""
+
+
+def test_a_line_naming_the_employer_ends_a_skip_and_a_legal_suffix_is_ignored() -> None:
+    text = "Benefits\nGym\nAcme operates casinos."
+    assert "casinos" in ts.topic_text(text, "Acme S.L.")
+    assert "casinos" not in ts.topic_text(text, None)
+    assert "casinos" not in ts.topic_text(text, "Other Corp")
+
+
+@pytest.mark.parametrize("heading", ["Experience", "Profile:", "The Essentials", "Essentials"])
+def test_a_weak_word_alone_never_makes_a_heading_off_topic(heading: str) -> None:
+    assert not ts._off_topic_heading(ts._heading_text(heading))

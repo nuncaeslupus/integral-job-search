@@ -855,5 +855,353 @@
     "text": "The Experience\nOur restaurants serve 2M guests a year.",
     "held": true,
     "why": "round-2 finding 4, spec (task text): 'The Experience' is a story about the employer, not a requirements heading"
+  },
+  {
+    "id": "r3-m1",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Nice to have:\nKnowledge of Go and Rust for systems programming work\nFintech\nAWS certifications at associate level or higher",
+    "held": false,
+    "why": "round-3 m1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a short item between longer items of an unbulleted list does not end the section"
+  },
+  {
+    "id": "r3-m2",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nPrivate cover for you and your family from day one\nPartner restaurants\nTwenty five days of holiday every single year",
+    "held": false,
+    "why": "round-3 m2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r3-h1",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nRemote\nAbout us\nWe run casinos in six countries.",
+    "held": true,
+    "why": "round-3 h1, spec (task text): the topic is about the employer or the job: 'About us' after an unbulleted list is the employer"
+  },
+  {
+    "id": "r3-h2",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nPaid time off\nWho we are\nWe are an online casino operator.",
+    "held": true,
+    "why": "round-3 h2, spec (task text): the topic is about the employer or the job: 'Who we are'"
+  },
+  {
+    "id": "r3-h3",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ofrecemos\nTeletrabajo\nFormación\nQuiénes somos\nSomos un operador de apuestas.",
+    "held": true,
+    "why": "round-3 h3, spec (task text): the topic is about the employer or the job (Spanish): 'Quiénes somos'"
+  },
+  {
+    "id": "r3-h4",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": "Acme Inc.",
+    "text": "Benefits\nPaid Time Off\n100% Remote\nAbout Acme\nAcme runs casinos in six countries.",
+    "held": true,
+    "why": "round-3 h4 (the real Azumo shape), spec (task text): the topic is about the employer or the job: 'About <employer>' with no blank line"
+  },
+  {
+    "id": "r3-h5",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nPaid Time Off\n100% Remote\nAbout us:\nAcme runs casinos in six countries.",
+    "held": true,
+    "why": "round-3 h5, spec (task text): the topic is about the employer or the job: a colon heading ends the section"
+  },
+  {
+    "id": "r3-employer-line",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": "Acme Inc.",
+    "text": "Benefits\nPaid Time Off\nAcme operates in six countries as a casino group.",
+    "held": true,
+    "why": "round-3 finding 2 closed rule, spec (task text): the topic is about the employer or the job: a line that names the employer ends the section"
+  },
+  {
+    "id": "r3-u5",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nHealth benefits:\nPrivate cover\nFood perks:\nPartner restaurants",
+    "held": false,
+    "why": "round-3 u5, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a sub-heading that still holds an off-topic word continues the section"
+  },
+  {
+    "id": "r3-u6",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Compensation and Benefits\n**Food perks**\nPartner restaurants\nGym",
+    "held": false,
+    "why": "round-3 u6, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: a bold sub-heading holding an off-topic word continues the section"
+  },
+  {
+    "id": "r3-u7",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nLo que te ofrecemos\nComida en restaurantes\nTeletrabajo",
+    "held": false,
+    "why": "round-3 u7, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert (Spanish): 'Lo que te ofrecemos' is a perks heading"
+  },
+  {
+    "id": "r3-u8",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\n\nLo que ofrecemos:\nComida en restaurantes\nTeletrabajo",
+    "held": false,
+    "why": "round-3 u8, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert (Spanish)"
+  },
+  {
+    "id": "r3-v1",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "The Essentials\nWe run 40 casinos worldwide.",
+    "held": true,
+    "why": "round-3 v1, spec (task text): the topic is about the employer or the job: 'The Essentials' is a weak word alone, not a requirements heading"
+  },
+  {
+    "id": "r3-opens-without-blank",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Build APIs.\nBenefits\nGym\nPartner restaurants",
+    "held": false,
+    "why": "round-3 finding 3, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: an off-topic heading opens a skip with no blank line before it"
+  },
+  {
+    "id": "r3-benefits-at-employer",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Compensation and Benefits\nHealth\nBenefits at SoFi\nDue to insurance coverage issues, we are unable to accommodate remote work.",
+    "held": false,
+    "why": "round-3 finding 4 (corpus wwr-sofi-director), spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert: 'Benefits at <employer>' holds an off-topic word and continues the section; the insurance sentence is posting boilerplate"
+  },
+  {
+    "id": "r2-v-pension",
+    "about": "sector:pension",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We develop pension plan software for European employers.",
+    "held": true,
+    "why": "round-2 B1, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-customers",
+    "about": "sector:insurance",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Our customers buy health insurance through our app.",
+    "held": true,
+    "why": "round-2 B1, spec (task text): the topic is about the employer or the job: 'Our customers' is the employer describing itself"
+  },
+  {
+    "id": "r2-v-who",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Who we are and what we do:\nWe operate sports betting shops.",
+    "held": true,
+    "why": "round-2 B2, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-story",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Our Story & Experience\nTwenty years running casinos.",
+    "held": true,
+    "why": "round-2 B2, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-nolines",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits:\n- Gym\n- Remote\nWho we are\nWe operate online casinos.",
+    "held": true,
+    "why": "round-2 B3, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-v-caps",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "WHAT WE OFFER\n- Gym\nOUR COMPANY\nWe run sports betting shops.",
+    "held": true,
+    "why": "round-2 B3, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r2-u1",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nLunch at partner restaurants\nRemote work",
+    "held": false,
+    "why": "round-2 u1, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r2-u2",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\nLunch at partner restaurants\nRemote work\nWe build firmware.",
+    "held": false,
+    "why": "round-2 u2, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r2-u3",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nLunch at partner restaurants\n\nThe role is to build APIs.",
+    "held": false,
+    "why": "round-2 u3, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r2-u4",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant",
+      "restaurants",
+      "restaurantes"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\n- Gym\n- Lunch at partner restaurants\n- Remote work",
+    "held": false,
+    "why": "round-2 u4, spec (task text): a perk / nice-to-have that mentions the topic must not hold the advert"
+  },
+  {
+    "id": "r3-eeo-insurance-coverage",
+    "about": "sector:seguros",
+    "terms": [
+      "insurance"
+    ],
+    "title": "Software Engineer",
+    "employer": "SoFi",
+    "text": "SoFi\nDue to insurance coverage issues, we are unable to accommodate remote work from Hawaii or Alaska at this time.",
+    "held": false,
+    "why": "round-3 finding 4 (corpus wwr-sofi-director), spec (task text): a remote-work notice is posting boilerplate, not what the employer or the job is"
   }
 ]

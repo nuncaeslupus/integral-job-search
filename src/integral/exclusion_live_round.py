@@ -54,7 +54,10 @@ EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T203.json"
 #: so a row a broken matcher can no longer find turns the gate red.
 LIVE_ROUND_EXCLUSIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("sector:banca", "no me interesa la banca", ("banking", "bank", "bancari")),
-    ("sector:fintech", "ya tuve bastante de fintechs", ()),
+    # Was `sector:fintech`. T227: the corpus's only fintech mentions are a bonus
+    # point, an EEO notice and a "Preferred Experience" list, none of them the
+    # employer or the job, so that row can no longer trip honestly.
+    ("sector:telecomunicaciones", "no me interesa telecom", ("telecom", "telecomunicaciones")),
     (
         "sector:e-commerce",
         "no me gusta el e-commerce",

@@ -75,27 +75,49 @@ _HEADING_VOCAB = (
     r"lo que buscamos|que buscamos|you have|tienes|skills|habilidades|conocimientos|"
     r"minimum|minimos|experience|experiencia"
 )
-_HEADING_FUNCTION = r"and|or|of|the|to|a|an|for|y|e|o|u|de|del|la|las|los|el|para|con|en|que"
+_HEADING_FUNCTION = r"and|or|of|the|to|a|an|for|y|e|o|u|de|del|la|las|los|el|para|con|en|que|lo"
 _HEADING_WORDS = re.compile(rf"\b(?:{_HEADING_VOCAB}|{_HEADING_FUNCTION})\b")
 _HEADING_VOCAB_ONLY = re.compile(rf"\b(?:{_HEADING_VOCAB})\b")
-#: Vocabulary that is also an ordinary noun of the employer's story ("The
-#: Experience", "Company profile"): with a determiner in front, alone it is not
-#: enough to call a heading off-topic.
-_WEAK_VOCAB = re.compile(r"\b(?:experience|experiencia|profile|perfil)\b")
-_DETERMINER = re.compile(r"^(?:the|el|la|las|los)\b")
+#: Vocabulary that is also an ordinary noun of the employer's story ("Player
+#: Experience", "Company profile", "The Essentials"). Alone it never makes a
+#: heading off-topic; it needs a strong word beside it.
+_WEAK_VOCAB = re.compile(
+    r"(?:experience|experiencia|profile|perfil|essentials?|required|requeridos?|plus(?:es)?|bonus)"
+)
 
 
 def _off_topic_heading(plain_heading: str) -> bool:
     """Is every word of this heading off-topic vocabulary or a function word?
 
     Delete every vocabulary phrase and function word; the heading is off-topic
-    when at least one was deleted and no letter is left, so emoji, brackets and
+    when a strong one was deleted and no letter is left, so emoji, brackets and
     punctuation never matter.
     """
     vocab = _HEADING_VOCAB_ONLY.findall(plain_heading)
-    if not vocab or any(c.isalpha() for c in _HEADING_WORDS.sub(" ", plain_heading)):
+    if any(c.isalpha() for c in _HEADING_WORDS.sub(" ", plain_heading)):
         return False
-    return not (_DETERMINER.match(plain_heading) and all(_WEAK_VOCAB.fullmatch(v) for v in vocab))
+    return any(not _WEAK_VOCAB.fullmatch(v) for v in vocab)
+
+
+def _mentions_off_topic_word(plain_heading: str) -> bool:
+    """Does the heading hold any off-topic vocabulary (a sub-heading of a perks section)?"""
+    return bool(_HEADING_VOCAB_ONLY.search(plain_heading))
+
+
+#: A line whose wording names the employer or the job: it ends a skipped section
+#: wherever it stands, whatever its shape.
+_SECTION_OF_THE_ADVERT = re.compile(
+    r"^(?:about|sobre|who we are|quienes somos|our company|our story|our mission|the company|"
+    r"the role|la empresa|nuestra empresa|el puesto|el rol|your role|tu rol|responsibilities|"
+    r"responsabilidades|duties|funciones|tasks|tareas|what you(?:'ll| will) do)\b"
+)
+_LEGAL_SUFFIX = re.compile(r"\b(?:inc|llc|ltd|gmbh|sl|sa|corp|co|plc|bv)\b")
+
+
+def _employer_key(employer: str | None) -> str:
+    """The employer's name as it is likely to be repeated in the advert."""
+    plain = _LEGAL_SUFFIX.sub(" ", re.sub(r"[^\w\s]", "", _plain(employer or "")))
+    return " ".join(plain.split())
 
 
 #: What makes a line a heading: markup, a trailing colon, ALL CAPS, or a short
@@ -155,7 +177,7 @@ _BOILERPLATE = re.compile(
     r"equal\s+opportunit(?:y|ies)|igualdad\s+de\s+oportunidades|"
     r"publicad[oa]\s+(?:en|por)|oferta\s+publicada|privacy\s+(?:policy|notice)|"
     r"politica\s+de\s+privacidad|data\s+protection|proteccion\s+de\s+datos|"
-    r"apply\s+(?:now|here)|how\s+to\s+apply|aplica\s+ahora|inscribete)\b"
+    r"insurance\s+coverage\s+issues|apply\s+(?:now|here)|how\s+to\s+apply|aplica\s+ahora|inscribete)\b"
 )
 
 
@@ -175,51 +197,40 @@ def _heading_text(line: str) -> str:
     return _plain(re.sub(r"[#*_:]+", " ", line)).strip()
 
 
-def _heading_shaped(lines: list[str], index: int) -> bool:
-    """Would line `index` be a heading wherever it stood? A line the next one
-    continues in lower case is a broken sentence, not a heading."""
-    if index >= len(lines) or not _is_heading(lines[index], previous_blank=True):
-        return False
-    following = lines[index + 1].lstrip() if index + 1 < len(lines) else ""
-    return not following[:1].islower()
+def _ends_skip(line: str, employer_key: str) -> bool:
+    """Does `line` end the off-topic section being skipped?
 
-
-def _ends_skip(lines: list[str], index: int, previous_blank: bool) -> bool:
-    """Does line `index` end the off-topic section being skipped?
-
-    After a blank line, any heading does. With no blank line only a plain short
-    line is doubtful, because a list of perks written without bullets is a run
-    of short lines: it ends the section only when the next line is not also
-    heading-shaped and the one before it was not (a heading is followed by
-    prose; a run of short lines is a list). Markup, a colon or ALL CAPS decide
-    on their own.
+    The shape of a plain short line never does: a perks list written without
+    bullets is a run of short lines of any length. What ends it is markup, a
+    trailing colon or ALL CAPS (unless the heading still holds an off-topic
+    word, as a sub-heading of the perks does), a line whose wording opens a
+    section about the employer or the job, or a line that names the employer.
     """
-    line = lines[index]
-    if not _is_heading(line, previous_blank=True):
+    plain = _heading_text(line)
+    if _SECTION_OF_THE_ADVERT.match(plain):
+        return True
+    if _mentions_off_topic_word(plain) and _is_heading(line, previous_blank=True):
         return False
-    if previous_blank or _is_heading(line, previous_blank=False):
+    if _is_heading(line, previous_blank=False):
         return True
     return (
-        _heading_shaped(lines, index)
-        and not _heading_shaped(lines, index + 1)
-        and not (index > 0 and _heading_shaped(lines, index - 1))
+        bool(employer_key)
+        and re.search(rf"\b{re.escape(employer_key)}\b", _plain(line)) is not None
     )
 
 
-def _drop_sections(text: str) -> list[str]:
+def _drop_sections(text: str, employer: str | None = None) -> list[str]:
     """The lines of `text` outside any off-topic section."""
-    lines = text.splitlines()
+    employer_key = _employer_key(employer)
     kept: list[str] = []
     skipping = False
-    previous_blank = True
-    for index, line in enumerate(lines):
-        blank = not line.strip()
-        if skipping:
-            if _ends_skip(lines, index, previous_blank):
-                skipping = _off_topic_heading(_heading_text(line))
-        elif _is_heading(line, previous_blank=previous_blank):
+    for line in text.splitlines():
+        if skipping and line.strip() and _ends_skip(line, employer_key):
+            skipping = False
+        if not skipping and _is_heading(line, previous_blank=True):
+            # An off-topic heading opens a section whether or not a blank line
+            # precedes it; the strict all-words rule is what decides.
             skipping = _off_topic_heading(_heading_text(line))
-        previous_blank = blank
         if not skipping:
             kept.append(line)
     return kept
@@ -235,14 +246,14 @@ def _stripped(sentence: str) -> bool:
     return bool(_PERK.search(plain) or _BOILERPLATE.search(plain) or _CANDIDATE_CUE.search(plain))
 
 
-def topic_text(text: str) -> str:
+def topic_text(text: str, employer: str | None = None) -> str:
     """`text` with the regions a topic exclusion is not read in removed.
 
     Removed regions become line breaks, never nothing, so two kept fragments are
     not joined into a phrase neither said.
     """
     kept: list[str] = []
-    for line in _drop_sections(text):
+    for line in _drop_sections(text, employer):
         for sentence in _SEPARATED.split(line):
             # A purpose connector opens a new clause and is kept with it.
             clauses = re.split(f"(?={_PURPOSE.pattern})", sentence, flags=re.IGNORECASE)

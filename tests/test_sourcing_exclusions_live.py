@@ -16,6 +16,7 @@ from integral import exclusion_live_round as live
 from integral import sourcing_exclusions as se
 from integral.candidate import Aim, CandidateConstraints, Location, Reach
 from integral.connectors import ListRequest
+from integral.corpus_scope import DEFAULT_LABELLED_ADS
 from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.offers import load_offer
 from integral.robots import Robots
@@ -154,13 +155,28 @@ def test_the_live_round_removes_and_keeps_named_real_adverts() -> None:
     decides: none of the adverts served here says "bancarrota".
 
     manfred-8456 mentions fintech only as "Previous experience in iGaming,
-    fintech or banking", a nice-to-have, so since T227 it is **kept**: what the
+    fintech or banking", a nice-to-have, so since T227 it is **kept** (checked
+    directly: the live round no longer serves it, because no corpus advert is
+    on fintech): what the
     candidate asked of is the employer's business, not a line of the requirements.
     """
     observed = live.measure_live_round()["_observed"]
     stored = {url.rsplit("/", 1)[1] for url in observed["stored_urls"]}
     assert {"manfred-8383", "tecnoempleo-17da1920025ad37df94f"}.isdisjoint(stored)
-    assert "manfred-8456" in stored
+    ads = {
+        a["id"]: a
+        for a in map(json.loads, DEFAULT_LABELLED_ADS.read_text(encoding="utf-8").splitlines())
+    }
+    manfred = ads["manfred-8456"]
+    fintech = Exclusion(about="sector:fintech", stated_at_cycle=1, words="fintech no")
+    candidate = se.Candidate(
+        offer_id=manfred["id"],
+        title=manfred.get("title"),
+        text=manfred["text"],
+        employer=manfred.get("company"),
+    )
+    assert "fintech" in manfred["text"].lower()
+    assert not se.matches(candidate, fintech)
     assert observed["excluded_served"] >= live.MINIMUM_EXCLUDED_SERVED
     assert observed["stored"] == observed["unexcluded_served"]
 

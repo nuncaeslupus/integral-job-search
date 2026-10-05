@@ -644,7 +644,7 @@ def topic_hits(candidate: Candidate, exclusion: Exclusion) -> tuple[tuple[str, s
     regions = (
         ("title", candidate.title or ""),
         ("employer", candidate.employer or ""),
-        ("text", topic_scope.topic_text(candidate.text)),
+        ("text", topic_scope.topic_text(candidate.text, candidate.employer)),
     )
     found: list[tuple[str, str]] = []
     for place, region in regions:

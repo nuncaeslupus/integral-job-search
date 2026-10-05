@@ -68,17 +68,17 @@
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_EXCLUDED_SERVED",
-      "lineno": 83
+      "lineno": 86
     },
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_EXCLUSIONS_TRIPPED",
-      "lineno": 95
+      "lineno": 98
     },
     {
       "module": "exclusion_live_round",
       "name": "MINIMUM_UNEXCLUDED_SERVED",
-      "lineno": 88
+      "lineno": 91
     },
     {
       "module": "extraction",
