@@ -3388,7 +3388,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: (`FEWEST_HELD_CASES`, `FEWEST_SHOWN_CASES`). Still zero slack.
 #: **96 with T141**, whose `document_reader` declares one floor
 #: (`MINIMUM_CONTRACTS_EVALUATED`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 96
+#: **97 with T160**, whose `literal_pin.MINIMUM_PINS_SWEPT` joined the
+#: population. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 97
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3837,7 +3839,8 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: comment block and marker, so each is one scenario more. Still zero slack.
 #: **93 with T141**: `document_reader`'s one floor carries its own comment block
 #: and marker, so it is one scenario more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 93
+#: **94 with T160**: `literal_pin.MINIMUM_PINS_SWEPT` is one scenario more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 94
 
 
 def measure_prose_clearance() -> dict[str, Any]:
