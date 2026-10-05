@@ -3,6 +3,7 @@ id: t-4f28dd8c
 title: "T239: a lesson learned inside one candidate's session has no route into the process every candidate gets"
 label: "T239: candidate lessons reach process"
 priority: 5
+status: merged
 ---
 
 Filed from a candidate session (test-mode 658fcce2).
@@ -16,13 +17,6 @@ Give it a route: at the end of a candidate session, the corrections recorded dur
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/surface_probe_test.sh
-false
+uv run pytest tests/test_lesson_triage.py -q
 ```
