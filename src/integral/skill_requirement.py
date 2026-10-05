@@ -114,6 +114,29 @@ _WORD = r"[\w#+\-]"
 _ONE_LITERAL_WORD = re.compile(r"[\w#+.\-]+")
 
 
+_VERSION = re.compile(r"\d+(?:\.\d+)*")
+_LANGUAGE_WORD = re.compile(r"(?<!\w)(?:language|lang)(?!\w)", re.IGNORECASE)
+_PUNCTUATION_AND_SPACE = re.compile(r"[\s()\[\]/,.\-]*")
+
+
+def _only_aliases_and_noise(skill: str, technology: str) -> bool:
+    """Is `skill`, once the technology's own names are removed, nothing but noise?
+
+    The closed rule behind "one reading, one technology". Counting vocabulary hits
+    sees only names the vocabulary has, so `Go/Fortran`, `Go or Elixir`, `Go or
+    similar language` and `Go (nice to have)` each counted as plain `go`. Instead
+    every alias of the technology is stripped from the whole string and what is
+    left must be only a version, `language`/`lang`, brackets, `/`, `,`, `.`, `-`
+    and whitespace. Any other word (another technology, `or`, a role word)
+    refuses the reading.
+    """
+    rest = skill
+    for pattern, _ in stack_fit._PATTERNS[technology]:
+        rest = pattern.sub(" ", rest)
+    rest = _LANGUAGE_WORD.sub(" ", _VERSION.sub(" ", rest))
+    return _PUNCTUATION_AND_SPACE.fullmatch(rest) is not None
+
+
 def identity(skill: str) -> str | None:
     """The one technology `skill` names, or `None` when it names none or several.
 
@@ -131,7 +154,8 @@ def identity(skill: str) -> str | None:
         pass
     found = set(stack_fit.named(skill, label=True))
     if len(found) == 1:
-        return next(iter(found))
+        tech = next(iter(found))
+        return tech if _only_aliases_and_noise(skill, tech) else None
     if found:
         return None
     folded = _fold(skill)

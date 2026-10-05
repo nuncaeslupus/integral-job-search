@@ -335,16 +335,53 @@ def test_a_technology_read_in_two_roles_is_refused_whatever_its_spelling() -> No
 
 @pytest.mark.parametrize(
     "skill",
-    ["Java/Go", "Go, Python o Java", "Kotlin or Java", "Python and Go", "", "a b"],
+    [
+        "Java/Go",
+        "Go, Python o Java",
+        "Kotlin or Java",
+        "Python and Go",
+        "",
+        "a b",
+        # F1: a second half outside the vocabulary, or a role word, still counts
+        "Go/Fortran",
+        "Go or Elixir",
+        "Go o Zig",
+        "Go, Elixir",
+        "Go/COBOL",
+        "Go y/o Erlang",
+        "Go | OCaml",
+        "Golang + Haskell",
+        "Go or similar language",
+        "Go (or similar)",
+        "Go or another typed language",
+        "Go (nice to have)",
+        "Go optional",
+        "Go not required",
+        "Go, preferably",
+    ],
 )
 def test_a_reading_names_exactly_one_technology(skill: str) -> None:
     ad = _ad("Java/Go, Python and Go, Kotlin or Java, Java Script. a b")
     quote = "Go" if "Go" in skill else "Java"
+    assert sr.identity(skill) is None
     reading_ = ex.SkillReading.model_construct(
         skill=skill, role="required", span=_span(ad.text, quote)
     )
     with pytest.raises(ex.ExtractionError, match="exactly one technology"):
         ex.accept_skill_readings(ad, [reading_])
+
+
+@pytest.mark.parametrize(
+    "skill", ["Go/Fortran", "Go or Elixir", "Go (nice to have)", "Go optional"]
+)
+def test_a_stored_compound_or_role_worded_skill_is_pending_not_held(skill: str) -> None:
+    """F1 through the read path: the advert is shown, with the pending note."""
+    text = f"Stack: {skill}, either is fine"
+    payload = {"skills": [reading_of(text, "Go", "required", skill=skill)]}
+    assert sr.required_skills(payload, text) is None
+    cand = se.Candidate(offer_id="x", text=text, required_skills=None)
+    assert not se.matches(cand, GO)
+    assert se.pending_skill_checks(cand, [GO]) == ("skill:go",)
 
 
 def test_java_script_is_javascript_not_java() -> None:
@@ -354,9 +391,12 @@ def test_java_script_is_javascript_not_java() -> None:
     assert sr.names("Java Script", sr.target_of("javascript"))
 
 
-@pytest.mark.parametrize("skill", ["Go (Golang)", "Go 1.21", "Go language", "Golang/Go", "Java"])
+@pytest.mark.parametrize(
+    "skill",
+    ["Go (Golang)", "Go 1.21", "Go language", "Golang/Go", "Go lang", "Go 1.21.3 language", "Java"],
+)
 def test_a_variant_that_resolves_to_one_technology_is_accepted(skill: str) -> None:
-    text = "Go (Golang) Go 1.21 Go language Golang/Go Java"
+    text = "Go (Golang) Go 1.21 Go language Golang/Go Go lang Go 1.21.3 language Java"
     ad = _ad(text)
     quote = "Java" if skill == "Java" else skill
     ex.accept_skill_readings(
