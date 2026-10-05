@@ -157,6 +157,17 @@
         "text": "Notes sobre {title}",
         "of": "ab4bc33587e58509ad8eaca3cb0ba1f89e9bdcb55d4b60ded7b54d9a50b4ded1"
       }
+    },
+    "reader_imported_dropped": {
+      "en": "Imported {n} notes; {d} could not be placed because their fragment no longer exists",
+      "es": {
+        "text": "Importadas {n} notas; {d} no se pudieron colocar porque su fragmento ya no existe",
+        "of": "318832a785f2cf6842161807763b9529fefe857d113dd0a5612f745baa4af96e"
+      },
+      "ca": {
+        "text": "Importades {n} notes; {d} no s'han pogut col·locar perquè el seu fragment ja no existeix",
+        "of": "318832a785f2cf6842161807763b9529fefe857d113dd0a5612f745baa4af96e"
+      }
     }
   }
 }

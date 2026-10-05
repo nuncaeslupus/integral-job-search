@@ -163,7 +163,13 @@ def test_export_writes_a_file_and_a_keystroke_reaches_storage() -> None:
     assert dr.parse_export(out["download"]["text"]) == {
         "f3": {"quote": "Projects", "note": "mi nota"}
     }
-    stored = json.loads(next(v for k, v in out["stored"].items() if k.startswith("reader:")))
+    stored = json.loads(
+        next(
+            v
+            for k, v in out["stored"].items()
+            if k.startswith("reader:") and not k.endswith(":origin")
+        )
+    )
     assert stored == {"f3": "mi nota"}
 
 
@@ -176,7 +182,7 @@ def test_the_behaviour_contract_reports_an_inert_export_button() -> None:
 
 
 def test_the_behaviour_contract_reports_notes_that_never_reach_storage() -> None:
-    reader = _reader(CV).replace("if (saveNotes(storage, notes))", "if (false)", 1)
+    reader = _reader(CV).replace("saveMap(storage, KEY, notes) &&", "false &&", 1)
     defects = dr._contract_behaviour(reader, dr.fragment(CV.document), CV.title)
     assert any("storage" in d for d in defects)
 
@@ -443,3 +449,89 @@ def test_the_cli_builds_a_reader_and_refuses_a_file_that_is_not_an_export(tmp_pa
     bad = tmp_path / "bad.md"
     bad.write_text("nothing here", encoding="utf-8")
     assert dr._main([*args, "--notes", str(bad)]) == 2
+
+
+# -- second-reader findings on #766 ------------------------------------------
+
+
+def test_a_placeholder_typed_into_the_document_title_or_notes_is_data_not_code() -> None:
+    """B1: chained `str.replace` re-read its own output, so `__SEED__` in the title
+    broke a string literal open and a note's text ran as code."""
+    text = "__SEED__ __DOC__ __MARK__ __VERSION__ __STRINGS__"
+    reader = dr.build_reader(
+        f"<p>{text}</p>",
+        title="__SEED__",
+        reader_language="en",
+        notes=dr.HOSTILE_SEED,
+    )
+    out = dr.drive(reader, [{"type": "type", "id": "f1", "value": "n"}, {"type": "export"}])
+    parsed = dr.parse_export(out["download"]["text"])
+    assert parsed == {"f1": {"quote": text, "note": "n"}}
+    assert "# Notes on __SEED__" in out["download"]["text"]
+
+
+def test_the_gate_subject_spells_the_placeholders_and_the_data_contract_sees_a_misquote(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert "__SEED__" in AWKWARD.document and "__SEED__" in AWKWARD.title
+    parts = dr.fragment(AWKWARD.document)
+    assert dr._contract_script_data(AWKWARD.document, parts, AWKWARD.title, "es") == []
+
+    def chained(*args: Any) -> str:
+        table, quotes, order, doc, seed = args
+        meta = {**doc, "quotes": dict(quotes), "order": list(order)}
+        return (
+            dr._SCRIPT.replace("__STRINGS__", dr._json_for_script(dict(table)))
+            .replace("__DOC__", dr._json_for_script(meta))
+            .replace("__SEED__", dr._json_for_script({k: dict(v) for k, v in seed.items()}))
+            .replace("__MARK__", dr.EXPORT_MARK)
+            .replace("__VERSION__", str(dr.EXPORT_VERSION))
+        )
+
+    monkeypatch.setattr(dr, "render_script", chained)
+    assert dr._contract_script_data(AWKWARD.document, parts, AWKWARD.title, "es")
+
+
+def test_a_note_that_would_end_the_export_comment_is_escaped() -> None:
+    """R1: the `-` escape is what keeps `-->` out of the trailer."""
+    steps = [{"type": "type", "id": "f1", "value": "x} --> y"}, {"type": "export"}]
+    out = dr.drive(_reader(CV), steps)
+    trailer = out["download"]["text"].rsplit("<!--", 1)[1]
+    assert trailer.count("-->") == 1 and trailer.rstrip().endswith("-->")
+
+
+def test_the_changed_text_flag_survives_a_reload() -> None:
+    """R2: autosave stored the note without the quote it was written against."""
+    first = dr.drive(_reader(CV), [{"type": "type", "id": "f3", "value": "n"}, {"type": "export"}])
+    edited = dr.Subject("cv", CV.document.replace("<h2>Projects</h2>", "<h2>Work</h2>"), CV.title)
+    reader = _reader(edited)
+    imported = dr.drive(reader, [{"type": "import", "text": first["download"]["text"]}])
+    assert imported["moved"]["f3"] is True
+    reloaded = dr.drive(reader, [], storage=imported["stored"])
+    assert reloaded["values"]["f3"] == "n" and reloaded["moved"]["f3"] is True
+    clear = [{"type": "type", "id": "f3", "value": ""}]
+    cleared = dr.drive(reader, clear, storage=imported["stored"])
+    assert cleared["moved"]["f3"] is False
+
+
+def test_an_import_says_how_many_notes_it_could_not_place() -> None:
+    """R3: a note for a fragment that no longer exists was dropped in silence."""
+    data = {
+        "f1": {"quote": "Ana Pérez", "note": "kept"},
+        "f999": {"quote": "gone", "note": "lost"},
+        "f998": {"quote": "gone", "note": "lost"},
+    }
+    text = "x\n" + dr.encode_export_data(data)
+    out = dr.drive(_reader(CV, "en"), [{"type": "import", "text": text}])
+    assert out["status"] == (
+        "Imported 1 notes; 2 could not be placed because their fragment no longer exists"
+    )
+    assert out["values"]["f1"] == "kept"
+
+
+def test_an_imported_proto_key_cannot_pollute_object_prototype() -> None:
+    """R6: `byId["__proto__"]` was `Object.prototype`, which then took `.value`."""
+    text = '<!-- reader-notes {"v":1,"notes":{"__proto__":{"quote":"q","note":"x"}}} -->'
+    out = dr.drive(_reader(CV, "en"), [{"type": "import", "text": text}])
+    assert out["polluted"] is False
+    assert "1 could not be placed" in out["status"]

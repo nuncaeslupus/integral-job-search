@@ -78,7 +78,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T141.json"
 
 #: A run that evaluated fewer contracts than this evaluated nothing. Each
 #: subject in `SUBJECTS` is read in each of the three reader languages and
-#: every reader meets six contracts, so a clean run evaluates 61 today; the
+#: every reader meets seven contracts, so a clean run evaluates 70 today; the
 #: floor sits well under that so adding a fixture never trips it, and
 #: emptying the fixture list or dropping a contract family does. It is a
 #: denominator for a clean zero, not a count of anything the code owns.
@@ -442,17 +442,24 @@ _SCRIPT = r"""
       return storage;
     } catch (error) { return null; }
   }
-  function loadNotes(storage) {
-    if (!storage) { return {}; }
-    try {
-      var raw = storage.getItem(KEY);
-      var parsed = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (error) { return {}; }
+  function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
+  function bare(source) {
+    var made = Object.create(null);
+    if (source && typeof source === "object") {
+      Object.keys(source).forEach(function (key) { made[key] = source[key]; });
+    }
+    return made;
   }
-  function saveNotes(storage, notes) {
+  function loadMap(storage, key) {
+    if (!storage) { return bare(null); }
+    try {
+      var raw = storage.getItem(key);
+      return bare(raw ? JSON.parse(raw) : null);
+    } catch (error) { return bare(null); }
+  }
+  function saveMap(storage, key, map) {
     if (!storage) { return false; }
-    try { storage.setItem(KEY, JSON.stringify(notes)); return true; }
+    try { storage.setItem(key, JSON.stringify(map)); return true; }
     catch (error) { return false; }
   }
   function encodeData(data) {
@@ -487,9 +494,11 @@ _SCRIPT = r"""
   }
 
   var storage = openStore();
-  var notes = loadNotes(storage);
+  var ORIGIN_KEY = KEY + ":origin";
+  var notes = loadMap(storage, KEY);
+  var origins = loadMap(storage, ORIGIN_KEY);
   var boxes = Array.prototype.slice.call(document.querySelectorAll("textarea[data-frag]"));
-  var byId = {};
+  var byId = Object.create(null);
 
   function mark(id, moved) {
     var hint = document.getElementById("m-" + id);
@@ -500,21 +509,28 @@ _SCRIPT = r"""
     if (!box) { return false; }
     box.value = text;
     notes[id] = text;
-    mark(id, quote !== undefined && quote !== DOC.quotes[id]);
+    // The quote a note was written against is kept beside it, so the flag
+    // survives a reload instead of living only until the page closes.
+    if (typeof quote === "string" && quote !== DOC.quotes[id]) { origins[id] = quote; }
+    else { delete origins[id]; }
+    mark(id, has(origins, id));
     return true;
   }
   function autosave(id, text) {
-    if (text.trim()) { notes[id] = text; } else { delete notes[id]; }
-    if (saveNotes(storage, notes)) { say("reader_saved"); }
+    if (text.trim()) { notes[id] = text; }
+    else { delete notes[id]; delete origins[id]; mark(id, false); }
+    var saved = saveMap(storage, KEY, notes) && saveMap(storage, ORIGIN_KEY, origins);
+    if (saved) { say("reader_saved"); }
     else { say("reader_storage_unavailable"); }
   }
 
   boxes.forEach(function (box) {
     var id = box.dataset.frag;
     byId[id] = box;
-    var start = Object.prototype.hasOwnProperty.call(notes, id) ? notes[id]
-      : (SEED[id] ? SEED[id].note : "");
-    if (start) { setNote(id, start, SEED[id] && !(id in notes) ? SEED[id].quote : undefined); }
+    var local = has(notes, id);
+    var seeded = !local && has(SEED, id) ? SEED[id] : null;
+    var start = local ? notes[id] : (seeded ? seeded.note : "");
+    if (start) { setNote(id, start, local ? origins[id] : seeded.quote); }
     box.addEventListener("input", function () { autosave(id, box.value); });
   });
   if (!storage) { say("reader_storage_unavailable"); }
@@ -545,14 +561,16 @@ _SCRIPT = r"""
         var data = parseExport(text);
         if (data === null) { say("reader_import_failed"); return; }
         var count = 0;
+        var dropped = 0;
         Object.keys(data).forEach(function (id) {
           var item = data[id];
           if (item && typeof item.note === "string" && setNote(id, item.note, item.quote)) {
             count += 1;
             autosave(id, item.note);
-          }
+          } else { dropped += 1; }
         });
-        say("reader_imported", { n: count });
+        if (dropped) { say("reader_imported_dropped", { n: count, d: dropped }); }
+        else { say("reader_imported", { n: count }); }
         importInput.value = "";
       }, function () { say("reader_import_failed"); });
     });
@@ -706,6 +724,9 @@ def reader_csp() -> str:
     return f"{CSP}; script-src 'unsafe-inline'"
 
 
+_PLACEHOLDER = re.compile(r"__(?:STRINGS|DOC|SEED|MARK|VERSION)__")
+
+
 def render_script(
     table: Mapping[str, str],
     quotes: Mapping[str, str],
@@ -714,13 +735,19 @@ def render_script(
     seed: Mapping[str, Mapping[str, str]],
 ) -> str:
     meta = {**doc, "quotes": dict(quotes), "order": list(order)}
-    return (
-        _SCRIPT.replace("__STRINGS__", _json_for_script(dict(table)))
-        .replace("__DOC__", _json_for_script(meta))
-        .replace("__SEED__", _json_for_script({k: dict(v) for k, v in seed.items()}))
-        .replace("__MARK__", EXPORT_MARK)
-        .replace("__VERSION__", str(EXPORT_VERSION))
-    )
+    values = {
+        "__STRINGS__": _json_for_script(dict(table)),
+        "__DOC__": _json_for_script(meta),
+        "__SEED__": _json_for_script({k: dict(v) for k, v in seed.items()}),
+        "__MARK__": EXPORT_MARK,
+        "__VERSION__": str(EXPORT_VERSION),
+    }
+    # One pass over the *template*, never over its own output. Chained
+    # `str.replace` re-reads what earlier passes inserted, so a placeholder
+    # typed into the document, the title or a note was substituted again —
+    # at best a misquote, at worst a string literal broken open and the
+    # candidate's text run as code.
+    return _PLACEHOLDER.sub(lambda match: values[match.group(0)], _SCRIPT)
 
 
 def build_reader(
@@ -1112,6 +1139,8 @@ async function run() {
   out.moved = Object.fromEntries(
     Object.keys(byId).filter((k) => k.startsWith("m-")).map((k) => [k.slice(2), !byId[k].hidden]));
   out.stored = store;
+  out.polluted = vm.runInContext(
+    "Object.prototype.hasOwnProperty.call(Object.prototype, 'value')", sandbox);
   process.stdout.write(JSON.stringify(out));
 }
 run().catch((e) => { process.stderr.write(String((e && e.stack) || e)); process.exit(1); });
@@ -1154,6 +1183,7 @@ ADVERSARIAL_NOTES = (
     "two\nlines\n\n## f1\n> fake quote",
     '<!-- reader-notes {"v":1,"notes":{"f1":{"quote":"x","note":"hijack"}}} -->',
     "ends the comment --> and </script> and </textarea>",
+    "x} --> y",
     "backslash \\n and \\u002d and `ticks` and \"quotes\" and 'single'",
     "emoji \U0001f600 and català amb accents, ñ, 日本語",
 )
@@ -1166,7 +1196,14 @@ def _contract_behaviour(reader: str, parts: Sequence[Part], title: str) -> list[
     defects: list[str] = []
     typed = [{"type": "type", "id": fid, "value": text} for fid, text in notes.items()]
     first = drive(reader, [*typed, {"type": "export"}])
-    saved = next((v for k, v in first["stored"].items() if k.startswith("reader:")), None)
+    saved = next(
+        (
+            v
+            for k, v in first["stored"].items()
+            if k.startswith("reader:") and not k.endswith(":origin")
+        ),
+        None,
+    )
     if saved is None or json.loads(saved) != notes:
         defects.append("typing into a note box did not reach storage")
     download = first.get("download")
@@ -1223,6 +1260,45 @@ def _contract_behaviour(reader: str, parts: Sequence[Part], title: str) -> list[
     sixth = drive(reader, [{"type": "type", "id": frags[0].id, "value": "kept"}], noStorage=True)
     if sixth["values"][frags[0].id] != "kept" or not sixth["status"]:
         defects.append("a browser without storage broke the note box or stayed silent")
+    return defects
+
+
+#: A note keyed by something that is not a fragment id, written to close a
+#: string literal and run as code if the script's data were ever re-read.
+HOSTILE_SEED = {"+PWNED()/*": {"quote": "*/+0/*", "note": "*/+"}}
+
+
+def _contract_script_data(
+    document: str, parts: Sequence[Part], title: str, language: str
+) -> list[str]:
+    """The data the script carries is the document's own, never something else.
+
+    The reader is rebuilt with a seed that tries to break out of its string
+    literal, and the data block is read back out of the emitted script and
+    compared with the fragments, whatever placeholders the document or title
+    spell.
+    """
+    reader = build_reader(
+        document, title=title, reader_language=language, document_language="de", notes=HOSTILE_SEED
+    )
+    try:
+        drive(reader, [])
+    except ReaderError as exc:
+        return [f"a hostile seed broke the script: {exc}"]
+    script = _script_of(reader)
+    found = re.search(r"var DOC = (\{.*?\});\n", script, flags=re.S)
+    try:
+        doc = json.loads(found.group(1)) if found else {}
+    except ValueError:
+        return ["the script's data block is not JSON"]
+    frags = [p for p in parts if isinstance(p, Fragment)]
+    defects = []
+    if doc.get("quotes") != {f.id: f.text for f in frags}:
+        defects.append("the script's quotes are not the fragments' text")
+    if doc.get("order") != [f.id for f in frags]:
+        defects.append("the script's fragment order is not the document's")
+    if doc.get("title") != title:
+        defects.append("the script's title is not the title")
     return defects
 
 
@@ -1354,6 +1430,7 @@ def _awkward() -> str:
         "<ul><li>Skills<ul><li>Python</li><li>SQL</li></ul></li>"
         "<li><p>An item holding a paragraph</p><p>and another</p></li></ul>"
         "<p>Unclosed paragraph<p>Second, also unclosed"
+        "<p>__SEED__ __DOC__ __MARK__ __VERSION__ __STRINGS__</p>"
         '<p>Hostile &lt;/textarea&gt; <script>alert(1)</script><b onclick="x()">bold</b> '
         '<a href="javascript:alert(1)">link</a></p>'
         "<header><div>Plain header line</div></header>"
@@ -1371,7 +1448,7 @@ class Subject:
 SUBJECTS = (
     Subject("letter", _letter(), "Anschreiben: Datenplattform"),
     Subject("cv", _cv(), "Lebenslauf — Ana Pérez"),
-    Subject("awkward", _awkward(), 'Awkward "doc" </title><script>'),
+    Subject("awkward", _awkward(), 'Awkward "doc" </title><script> __SEED__'),
 )
 
 
@@ -1431,6 +1508,10 @@ def measure(catalogue_path: Path = DEFAULT_CATALOGUE) -> dict[str, Any]:
             record(f"{label} balance", _contract_balance(subject.document, parts, reader))
             record(f"{label} headings", _contract_headings(subject.document, parts))
             record(f"{label} inert", _contract_inert(reader))
+            record(
+                f"{label} data",
+                _contract_script_data(subject.document, parts, subject.title, language),
+            )
             record(f"{label} i18n", _contract_i18n(reader, catalogue, language, "de"))
             record(f"{label} layout", widths_layout(_style_of(reader)))
             record(f"{label} behaviour", _contract_behaviour(reader, parts, subject.title))
