@@ -26,12 +26,24 @@ An offer with status `shortlisted`, and `cv/master.json` with enough in it to dr
 
 **Reads:** `cv/master.json`; the offer and its extraction; `profile/stories.jsonl`; previous versions in `cv/generated/<offer_id>/`.
 
+## Lead with the recommendation
+
+A gap is a decision the tool is better placed to frame than the candidate. Recommend: when the
+gap is a skill the rest of the profile makes learnable, recommend applying and addressing it in
+the letter; when it is a hard requirement the store cannot meet (a permit, a language), recommend
+leaving this one. Give the reason in a clause and name the other option second — never two equal
+options and a shrug.
+
+```text
+"I'd recommend applying anyway — Kubernetes is the only gap and the rest of the advert is ground you hold. You can address the gap in your own letter. Or we can leave this one. Which?"
+```
+
 ## Protocol — the manner, not the mechanism
 
 - **Letter first, and it is theirs.** Before any letter exists, the first artefact is a prompt to the candidate, in their own language, asking for the letter in their own words, however rough — "write it as if you were telling a friend why you want this job". Not a form and not questions with slots. See "The letter is an edit" below.
 - Select the CV's content from the store against what the advert asks for, and show the candidate what was chosen and what was left out — omissions are as much a decision as inclusions. **Every claim traces to a store entry.**
 - Use the advert's own language, with restraint, only over ground the candidate actually holds — mirroring a phrase the candidate cannot back is a lie with good vocabulary.
-- Where the advert asks for something they lack, say so and offer the options honestly: apply anyway and address the gap in the letter, or leave this one.
+- Where the advert asks for something they lack, say so and offer the options honestly — but lead with the one you recommend and why (see "Lead with the recommendation"): apply anyway and address the gap in the letter, or leave this one.
 - **This is where personal details are collected** — the name to print, contact details, whatever this employer's form requires — asked for the document being produced, not gathered speculatively months earlier.
 
 **The candidate's voice is stored, not re-corrected.** When the candidate objects to how a draft sounds, that is a rule for every later document: record it at once with `python -m integral.voice record --id <handle> --statement "<the rule in their words>" [--forbid "<regex for the phrasing>"]` (no `--forbid` makes it advisory, listed but not checked). Generation applies every stored preference, and **every generated package is shown with the notice** — `integral.voice.notice(manifest.voice_applied, manifest.voice_unreadable)` or `python -m integral.voice notice --id <handle>`: "N stored, M applied, K unreadable", each preference listed, each unreadable row listed by id. Say plainly that an unreadable row is **not** being applied, offer to re-record it in readable form, and let the candidate retract any preference that is wrong. A preference that forbids a phrase leaves out any entry containing it — including a whole job — and the manifest's omissions say which; tell the candidate when that happens.

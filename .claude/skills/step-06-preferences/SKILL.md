@@ -22,7 +22,7 @@ If the runtime (`integral.step_runtime.offered`) is not offering `preferences` f
 
 ## Preconditions and inputs
 
-Reaction evidence, or enough constraint and history evidence to seed the choices. With neither, explain that it would be guessing and offer Reactions instead.
+Reaction evidence, or enough constraint and history evidence to seed the choices. With neither, explain that it would be guessing and recommend Reactions first, offering to carry on regardless only if they insist.
 
 **Reads:** Reaction evidence rows; `profile/constraints.json` for currency and pay floor; `weights.json` from a previous fit.
 
@@ -47,6 +47,18 @@ In this step that sounds like:
 
 - Never use a slider or a 1-to-10 rating — both measure self-belief, not revealed preference.
 - Never correct a candidate whose choice contradicts something they said earlier — record both.
+
+## Lead with the recommendation
+
+The tool knows what the weights need; the candidate does not. When more evidence would make the
+fit better — more reactions before the choices, one more contested pair, looking at real adverts
+before settling — say so as the recommendation and enforce it: lead with the one option that is
+better for the search, give the reason in a clause, and name the alternative second. Never open
+with a neutral menu of equal-looking choices.
+
+```text
+"I'd recommend two more choices before I fit this — the commute and the pay are still tied, and that's the pair that moves your list most. We can skip them, but the list will be less sharp. Ready?"
+```
 
 ## Stop rule
 
