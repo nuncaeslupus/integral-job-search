@@ -179,7 +179,7 @@ def test_an_unclosed_marker_is_counted_rather_than_swallowed() -> None:
 def test_detect_guard_names_which_guard_is_in_force() -> None:
     assert detect_guard("hola") == "none"
     assert detect_guard("/paste\nhola") == "explicit-paste"
-    assert detect_guard("x" * PASTE_CHARS) == "long-turn"
+    assert detect_guard("[x] " * PASTE_CHARS) == "long-turn"
 
 
 # ---------------------------------------------------------------------------
