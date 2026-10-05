@@ -129,9 +129,10 @@ _SECTION_WORDING = (
     r"la empresa|nuestra empresa|el puesto|el rol|your role|tu rol|responsibilities|"
     r"responsabilidades|duties|funciones|tasks|tareas|what you(?:'ll| will) do)"
 )
-#: A wording, optionally joined to further words by a connective ("Our Story &
-#: Mission", "Tasks and responsibilities"): "Tasks are flexible" is not one.
-_SECTION_OF_THE_ADVERT = re.compile(rf"{_SECTION_WORDING}(?:\s*(?:&|and|y|,)\s*\S+)*")
+#: A wording, optionally joined by a connective to anything else ("Our Story &
+#: Our Mission", "Who We Are & What We Do"; the heading length limit bounds it):
+#: "Tasks are flexible" is not one, there is no connective.
+_SECTION_OF_THE_ADVERT = re.compile(rf"{_SECTION_WORDING}(?:(?:\s*[&,]\s*|\s+(?:and|y)\s+)[^&,]+)*")
 _EDGE_PUNCTUATION = "\u00bf\u00a1.?!\u2026 \t"
 _LEGAL_SUFFIX = re.compile(r"\b(?:inc|llc|ltd|gmbh|sl|sa|corp|co|plc|bv)\b")
 
@@ -240,7 +241,9 @@ def _ends_skip(line: str, employer_key: str) -> bool:
     # A wording needs no more shape than the heading length limit: "About <long
     # company name>" has more than five words.
     if 0 < len(line_clean) <= _HEADING_LIMIT and _SECTION_OF_THE_ADVERT.fullmatch(plain):
-        return True
+        # ...unless what follows the wording is itself a perks word
+        # ("About our benefits:", "Duties & perks").
+        return not _mentions_off_topic_word(plain)
     if shaped and _mentions_off_topic_word(plain):
         return False
     if _is_heading(line, previous_blank=False):

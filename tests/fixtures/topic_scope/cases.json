@@ -1357,5 +1357,75 @@
     "text": "Perks\nGym\nCompany Overview\nWe are a casino operator.",
     "held": true,
     "why": "round-5 finding 1, spec (task text): the topic is about the employer; a section heading with edge punctuation, a connective or a long tail still ends a perks skip"
+  },
+  {
+    "id": "r6-who-we-are-what-we-do",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nWho We Are & What We Do!\nWe run casinos.",
+    "held": true,
+    "why": "round-6 blocker, spec (task text): the topic is about the employer or the job: a connective may be followed by several words"
+  },
+  {
+    "id": "r6-story-our-mission",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nOur Story & Our Mission\nWe run casinos.",
+    "held": true,
+    "why": "round-6 blocker, spec (task text): the topic is about the employer or the job"
+  },
+  {
+    "id": "r6-about-our-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout our benefits:\nFree casino nights.",
+    "held": false,
+    "why": "round-6, spec (task text): a perk; a section wording followed by a perks word is still the perks section"
+  },
+  {
+    "id": "r6-duties-and-perks",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nDuties & perks\nFree casino nights.",
+    "held": false,
+    "why": "round-6, spec (task text): a perk; the tail names perks"
+  },
+  {
+    "id": "r6-perks-and-benefits",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nPerks & Benefits\nFree casino nights.",
+    "held": false,
+    "why": "round-6, spec (task text): a perk"
   }
 ]

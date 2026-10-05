@@ -232,3 +232,7 @@ def test_a_line_that_only_starts_like_a_section_does_not_end_a_skip() -> None:
 
 def test_a_bulleted_item_that_starts_with_about_does_not_end_a_skip() -> None:
     assert ts.topic_text("Perks\n- About casino discounts\n- Gym") == ""
+
+
+def test_a_connective_without_spaces_or_boundaries_is_not_one() -> None:
+    assert ts.topic_text("Perks\nGym\nTasks yearly\nCasino discounts") == ""
