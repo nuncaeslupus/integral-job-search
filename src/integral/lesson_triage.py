@@ -8,26 +8,37 @@ test sessions.
 
 **The population is the evidence log, not the lessons somebody chose to
 record.** A route that only audits what a session volunteered still depends on
-the session remembering, one step later. So the session's *corrections* are
-read from `profile/evidence.jsonl`: every row of a correction-shaped kind
-(`CORRECTION_KINDS`) appended since the session identified the candidate
-(`identified_at` in the active-session record `identity.py` writes). Each such
-row must end the session with exactly one outcome:
+the session remembering, one step later. So the corrections are read from
+`profile/evidence.jsonl`: every row of a correction-shaped kind
+(`CORRECTION_KINDS`) recorded from `TRIAGE_FROM` on is open until it has exactly
+one outcome:
 
-* a **lesson** whose `evidence_id` points at it, and that lesson is decided —
-  seeded as a task, or kept as candidate-specific with a reason; or
+* a **lesson** whose `evidence_id` points at it (and every lesson, whatever its
+  row, must itself be decided: seeded as a task, or kept as candidate-specific
+  with a reason); or
 * a **dismissal** (`not_a_lesson`) with a reason.
 
-`check` exits 1 while any is open, and 2 when the session id is not the one the
-active-session record names — an unknown session has no window, and "no window"
-must never read as "nothing to triage". The kinds are the ones in which a
-candidate states or amends something about themselves or their own draft:
-`statement` (what they said, including amending an earlier answer),
-`constraint` (a restated residence, pay floor, permit), `retraction` ("forget
-that") and `candidate_statement` (an edit to their own application draft).
-`episode` (intake history), `reaction` (a view on one advert) and `outcome` are
-not corrections. A row of an in-scope kind that merely states a fact is
-dismissed, which is a recorded decision rather than silence.
+There is deliberately **no per-session window**. The active-session marker is
+rewritten whenever a session re-identifies (the profile guard prints that very
+restore line), so a bound taken from it moves and silently drops what came
+before. An open row simply stays open and is handed to the next session, which
+also covers a session that never ran `check`. The only bound is the committed
+`TRIAGE_FROM`, so profiles older than this task are not swept in. `check` exits 1
+while anything is open and 2 for a profile that does not exist. The reader
+enforces "one outcome per evidence row" over the ledger file, so no writer, this
+module's or a hand edit, can have a second lesson stand in for a first.
+
+The kinds are the ones in which a candidate states or amends something about
+themselves or their own draft: `statement` (what they said, including amending an
+earlier answer), `constraint` (a restated residence, pay floor, permit),
+`retraction` ("forget that") and `candidate_statement` (an edit to their own
+application draft). `episode` (intake history) and `outcome` are not
+corrections. `reaction` is left out as a view on one advert, though step 10's
+asides are recorded as reactions and can carry a correction; a reaction that does
+should also be written as a `statement`. A screening rule recorded through
+`sourcing_exclusions` lives in `search/exclusions.json`, which is not read here;
+a rule ruled out in conversation reaches the log only through the `statement`
+that step 10 writes with its reason. Both are known gaps, not guarantees.
 
 **Nothing personal leaves the profile.** A seeded task carries the rule and the
 step id and nothing else, and the rule is checked against the property — "does
@@ -69,7 +80,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from integral.identity import ACTIVE_FILE, ProfileStore, create_profile, write_active_handle
+from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog, EvidenceRow
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +102,12 @@ CORRECTION_KINDS = frozenset({"statement", "constraint", "retraction", "candidat
 # four is a sentence fragment someone said. Rules shorter than this compare whole.
 SHINGLE = 4
 MIN_RULE_WORDS = 3
+# A dismissal or a candidate-specific decision says why in at least this many words,
+# so a bulk "." is visible as what it is.
+MIN_REASON_WORDS = 3
+# Corrections made before T239 merged are not swept in; everything from this instant on
+# is owed an outcome, whichever session wrote it and however the session marker moves.
+TRIAGE_FROM = datetime(2026, 10, 5, tzinfo=UTC)
 
 LESSON_ID = re.compile(r"^ls-\d{4,}$")
 SESSION_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -246,27 +263,6 @@ def _parse(stamp: str) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-def session_start(store: ProfileStore, session_id: str) -> datetime:
-    """When this session identified the candidate, or refuse: the id must be the live one."""
-    if not SESSION_ID.match(session_id):
-        raise LessonError(f"{session_id!r} is not a session id")
-    marker = Path(store.root) / ACTIVE_FILE
-    try:
-        payload = json.loads(marker.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
-        raise LessonError("no active-session record: the session has no window") from exc
-    if (
-        not isinstance(payload, dict)
-        or payload.get("session_id") != session_id
-        or payload.get("handle") != store.handle
-    ):
-        raise LessonError(f"{session_id!r} is not the session that identified {store.handle!r}")
-    started = _parse(str(payload.get("identified_at", "")))
-    if started is None:
-        raise LessonError("the active-session record has no readable identified_at")
-    return started
-
-
 @dataclass(frozen=True)
 class TaskSpec:
     """The task a seeded lesson becomes — arguments, not an action."""
@@ -364,10 +360,9 @@ class LessonLedger:
         if len(decided) != len(set(decided)):
             raise LessonError("lessons.jsonl holds more than one decision for a lesson")
         dismissed = [row.evidence_id for row in rows if isinstance(row, Dismissed)]
-        if len(dismissed) != len(set(dismissed)):
-            raise LessonError("lessons.jsonl dismisses the same evidence row twice")
-        if set(dismissed) & {row.evidence_id for row in lessons if row.evidence_id}:
-            raise LessonError("an evidence row is both dismissed and made into a lesson")
+        outcomes = dismissed + [row.evidence_id for row in lessons if row.evidence_id]
+        if len(outcomes) != len(set(outcomes)):
+            raise LessonError("an evidence row has more than one outcome (lesson or dismissal)")
 
     def lessons(self, session_id: str | None = None) -> list[Lesson]:
         return [
@@ -382,37 +377,34 @@ class LessonLedger:
     def dismissals(self) -> dict[str, Dismissed]:
         return {row.evidence_id: row for row in self._rows() if isinstance(row, Dismissed)}
 
-    def corrections(self, session_id: str) -> list[EvidenceRow]:
-        """The correction-shaped evidence rows appended since this session identified."""
-        started = session_start(self.store, session_id)
-        log = EvidenceLog(self.store)
+    def corrections(self) -> list[EvidenceRow]:
+        """Every correction-shaped evidence row from `TRIAGE_FROM` on, whichever session wrote it.
+
+        No per-session window: the active-session marker is rewritten whenever a session
+        re-identifies, so any bound taken from it moves. An open row simply stays open and
+        is handed to the next session. A row whose timestamp cannot be read is kept in.
+        """
         found = []
-        for row in log.rows():
+        for row in EvidenceLog(self.store).rows():
             if row.kind not in CORRECTION_KINDS:
                 continue
             at = _parse(row.recorded_at)
-            if at is None or at >= started:  # an unreadable stamp is kept in: fail-closed
+            if at is None or at >= TRIAGE_FROM:
                 found.append(row)
         return found
 
-    def untriaged(self, session_id: str) -> list[Open]:
-        """Everything the session still owes a decision on."""
-        rows = self.corrections(session_id)
+    def untriaged(self) -> list[Open]:
+        """Everything still owed a decision: rows with no outcome, and every undecided lesson."""
         decided = self.decisions()
         dismissed = self.dismissals()
-        by_evidence = {row.evidence_id: row for row in self.lessons() if row.evidence_id}
-        covered = {row.id for row in rows}
+        has_lesson = {row.evidence_id for row in self.lessons() if row.evidence_id}
         left: list[Open] = []
-        for row in rows:
-            lesson = by_evidence.get(row.id)
-            if row.id in dismissed or (lesson is not None and lesson.id in decided):
-                continue
-            ref = lesson.id if lesson is not None else row.id
-            left.append(Open("correction", ref, f"{row.kind} {row.id}"))
-        for lesson in self.lessons(session_id):
-            if lesson.evidence_id in covered or lesson.id in decided:
-                continue
-            left.append(Open("lesson", lesson.id, lesson.rule))
+        for row in self.corrections():
+            if row.id not in dismissed and row.id not in has_lesson:
+                left.append(Open("correction", row.id, f"{row.kind} {row.id}"))
+        for lesson in self.lessons():
+            if lesson.id not in decided:
+                left.append(Open("lesson", lesson.id, lesson.rule))
         return left
 
     def _get(self, lesson_id: str) -> Lesson:
@@ -440,7 +432,8 @@ class LessonLedger:
         evidence_id: str | None = None,
     ) -> Lesson:
         """Note one correction, as a rule. Refused when it carries the candidate's words."""
-        session_start(self.store, session_id)
+        if not SESSION_ID.match(session_id):
+            raise LessonError(f"{session_id!r} is not a session id")
         if step not in self.steps():
             raise LessonError(f"{step!r} is not a process step id")
         rule = " ".join(rule.split())
@@ -454,6 +447,8 @@ class LessonLedger:
                 raise LessonError(f"no evidence row {evidence_id!r} in this profile")
             if evidence_id in self.dismissals():
                 raise LessonError(f"{evidence_id} was dismissed; it is not a lesson")
+            if any(row.evidence_id == evidence_id for row in self.lessons()):
+                raise LessonError(f"{evidence_id} already has a lesson")
         found = personal_span(rule, self.store, vocabulary=self.vocabulary())
         if found:
             raise LessonError(
@@ -478,8 +473,8 @@ class LessonLedger:
             raise LessonError(f"{evidence_id} is already dismissed")
         if any(lesson.evidence_id == evidence_id for lesson in self.lessons()):
             raise LessonError(f"{evidence_id} already has a lesson")
-        if not reason.strip():
-            raise LessonError("a dismissal says why")
+        if len(tokens(reason)) < MIN_REASON_WORDS:
+            raise LessonError(f"a dismissal says why, in at least {MIN_REASON_WORDS} words")
         row = Dismissed(evidence_id=evidence_id, reason=reason.strip(), at=at)
         self.store.append_jsonl(row.model_dump(exclude_none=True), *LEDGER_PARTS)
         return row
@@ -535,22 +530,23 @@ class LessonLedger:
                 )
             reason = None
         else:
-            if not reason or not reason.strip():
-                raise LessonError("a candidate-specific lesson says why it is")
+            if not reason or len(tokens(reason)) < MIN_REASON_WORDS:
+                raise LessonError(
+                    f"a candidate-specific lesson says why, in at least {MIN_REASON_WORDS} words"
+                )
             task_id = None
         row = Decided(lesson=lesson_id, decision=decision, at=at, task_id=task_id, reason=reason)
         self.store.append_jsonl(row.model_dump(exclude_none=True), *LEDGER_PARTS)
         return row
 
 
-def render_session(ledger: LessonLedger, session_id: str) -> str:
-    """The end-of-session list: every correction and lesson, with what was decided."""
+def render_session(ledger: LessonLedger) -> str:
+    """Every correction and lesson, with what was decided; open rows from earlier sessions too."""
     decided = ledger.decisions()
     dismissed = ledger.dismissals()
     by_evidence = {row.evidence_id: row for row in ledger.lessons() if row.evidence_id}
-    lines = []
-    corrections = ledger.corrections(session_id)
-    lines.append(f"corrections — {len(corrections)} in session {session_id}")
+    corrections = ledger.corrections()
+    lines = [f"corrections — {len(corrections)} since {TRIAGE_FROM.date()}"]
     for row in corrections:
         lesson = by_evidence.get(row.id)
         if row.id in dismissed:
@@ -562,16 +558,13 @@ def render_session(ledger: LessonLedger, session_id: str) -> str:
         lines.append(f"  {row.id} [{row.kind}] {state}")
     if not corrections:
         lines.append("  (none)")
-    unlinked = [
-        lesson
-        for lesson in ledger.lessons(session_id)
-        if lesson.evidence_id not in {row.id for row in corrections}
-    ]
-    for lesson in unlinked:
-        lines.append(
-            f"  {lesson.id} [{lesson.step}] {lesson.rule} — {_lesson_state(lesson, decided)}"
-        )
-    left = ledger.untriaged(session_id)
+    shown = {row.id for row in corrections}
+    for lesson in ledger.lessons():
+        if lesson.evidence_id not in shown:
+            lines.append(
+                f"  {lesson.id} [{lesson.step}] {lesson.rule} — {_lesson_state(lesson, decided)}"
+            )
+    left = ledger.untriaged()
     if left:
         lines.append(f"{len(left)} item(s) still need a decision.")
     return "\n".join(lines)
@@ -591,17 +584,17 @@ def _lesson_state(lesson: Lesson, decided: dict[str, Decided]) -> str:
 
 
 def probe(root: Path) -> dict[str, Any]:
-    """One constructed session, triaged by the same API a real session uses.
+    """One constructed profile, triaged by the same API a real session uses.
 
-    Four in-window corrections of four kinds, one earlier statement and one
-    in-window `episode` that are not corrections. Before anything is done all
-    four must read as open (the sensitivity witness: a counter that cannot see
-    them would read 0 here too); after each is routed, none may.
+    Five open corrections: one of each kind made "this session", and one left over
+    from an earlier session (the backlog a moving session marker used to drop). An
+    earlier statement and an `episode` are not corrections. Before anything is
+    done all five must read as open (the sensitivity witness: a counter that
+    cannot see them would read 0 here too); a second lesson on a row must be
+    refused; after each row is routed, none may remain open.
     """
     identity = create_profile(root, "Probe Candidate", handle="probe-candidate")
     store = ProfileStore(root, identity.handle)
-    started = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
-    write_active_handle(root, identity.handle, session_id="probe", now=started)
     log = EvidenceLog(store)
 
     def add(kind: Any, text: str, when: str, retracts: str | None = None) -> str:
@@ -614,21 +607,30 @@ def probe(root: Path) -> dict[str, Any]:
             retracts=retracts,
         ).id
 
-    earlier = add("statement", "before the session", "2026-10-04T09:00:00+00:00")
+    earlier = add("statement", "before triage began", "2026-10-04T09:00:00+00:00")
     add("episode", "history captured at intake", "2026-10-05T09:30:00+00:00")
+    backlog = add("statement", "left over from an earlier session", "2026-10-05T08:00:00+00:00")
     during = "2026-10-05T10:00:00+00:00"
     ids = [
         add(kind, f"probe {kind}", during, earlier if kind == "retraction" else None)
         for kind in sorted(CORRECTION_KINDS)
-    ]
+    ] + [backlog]
     tasks = root / "probe-tasks"
     tasks.mkdir()
     ledger = LessonLedger(store, tasks_dir=tasks)
-    before = len(ledger.untriaged("probe"))
+    before = len(ledger.untriaged())
     rule = "A letter states dates and never the reason a role ended"
     one = ledger.record(
         rule, session_id="probe", step="step-11-application", at=during, evidence_id=ids[0]
     )
+    try:
+        ledger.record(
+            "A pay floor is a constraint and not a preference",
+            session_id="probe", step="step-02-constraints", at=during, evidence_id=ids[0],
+        )  # fmt: skip
+        second_lesson_refused = False
+    except LessonError:
+        second_lesson_refused = True
     (tasks / "t-00000001.md").write_text(f"Rule: {rule}\n", encoding="utf-8")
     ledger.decide(one.id, "seeded", at=during, task_id="t-00000001")
     two = ledger.record(
@@ -636,12 +638,13 @@ def probe(root: Path) -> dict[str, Any]:
         session_id="probe", step="step-02-constraints", at=during, evidence_id=ids[1],
     )  # fmt: skip
     ledger.decide(two.id, "candidate_specific", at=during, reason="turned on one permit")
-    ledger.dismiss(ids[2], reason="a plain fact", at=during)
-    ledger.dismiss(ids[3], reason="a plain fact", at=during)
+    for row_id in ids[2:]:
+        ledger.dismiss(row_id, reason="a plain fact only", at=during)
     return {
         "corrections": len(ids),
         "open_before": before,
-        "open_after": len(ledger.untriaged("probe")),
+        "open_after": len(ledger.untriaged()),
+        "second_lesson_refused": second_lesson_refused,
     }
 
 
@@ -654,10 +657,13 @@ def measure() -> dict[str, Any]:
             f"{result['open_before']} of {result['corrections']} corrections read as open "
             "before any was routed"
         )
+    if not result["second_lesson_refused"]:
+        failures.append("a second lesson on one evidence row was accepted")
     return {
         "candidate_session_corrections_left_untriaged": result["open_after"],
         "corrections_in_probe": result["corrections"],
         "corrections_open_before_triage": result["open_before"],
+        "second_lesson_on_a_row_refused": result["second_lesson_refused"],
         "failures": failures,
     }
 
@@ -682,7 +688,7 @@ def _main(argv: list[str]) -> int:
 
     With no subcommand it is T239's gate (exit 3 when nothing was measured).
     `check` is the end-of-session gate: 1 while anything is open, 2 for an
-    unknown session or a refused write.
+    unknown profile or a refused write.
     """
     parser = argparse.ArgumentParser(description="Candidate lessons → the process (T239).")
     parser.add_argument("--root")
@@ -697,8 +703,8 @@ def _main(argv: list[str]) -> int:
     dis = sub.add_parser("dismiss")
     dis.add_argument("evidence_id")
     dis.add_argument("--reason", required=True)
-    for name in ("list", "check"):
-        sub.add_parser(name).add_argument("--session", required=True)
+    sub.add_parser("list")
+    sub.add_parser("check")
     seed = sub.add_parser("seed")
     seed.add_argument("lesson")
     dec = sub.add_parser("decide")
@@ -722,7 +728,13 @@ def _main(argv: list[str]) -> int:
     if not args.root or not args.handle:
         print("lesson_triage: --root and --handle are required", file=sys.stderr)
         return 2
-    ledger = LessonLedger(ProfileStore(Path(args.root), args.handle))
+    try:
+        store = ProfileStore(Path(args.root), args.handle)
+        store.identity()
+    except Exception as exc:  # no such profile: nothing to triage, never "nothing open"
+        print(f"lesson_triage: no such profile {args.handle!r}: {exc}", file=sys.stderr)
+        return 2
+    ledger = LessonLedger(store)
     try:
         if args.cmd == "record":
             lesson = ledger.record(
@@ -736,10 +748,10 @@ def _main(argv: list[str]) -> int:
         elif args.cmd == "dismiss":
             ledger.dismiss(args.evidence_id, reason=args.reason, at=_now())
         elif args.cmd == "list":
-            print(render_session(ledger, args.session))
+            print(render_session(ledger))
         elif args.cmd == "check":
-            print(render_session(ledger, args.session))
-            return 1 if ledger.untriaged(args.session) else 0
+            print(render_session(ledger))
+            return 1 if ledger.untriaged() else 0
         elif args.cmd == "seed":
             print(ledger.seed_spec(args.lesson).shell_line())
         else:

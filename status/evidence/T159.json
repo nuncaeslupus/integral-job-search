@@ -511,6 +511,7 @@
     "interview_log._ID_WIDTH",
     "language_set.MINIMUM_LANGUAGE_DECLARATIONS",
     "lesson_triage.MAX_TEXT_BYTES",
+    "lesson_triage.MIN_REASON_WORDS",
     "lesson_triage.MIN_RULE_WORDS",
     "lesson_triage.SHINGLE",
     "lifecycle.PURGE_HORIZON_DAYS",

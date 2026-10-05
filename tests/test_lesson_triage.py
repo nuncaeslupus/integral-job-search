@@ -28,6 +28,8 @@ from integral.lesson_triage import (
 from integral.profile import EvidenceLog
 
 T0 = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
+FROM = "2026-10-05T00:00:00+00:00"  # TRIAGE_FROM, stated here as a literal
+JUST_BEFORE = "2026-10-04T23:59:59+00:00"
 BEFORE = "2026-10-04T09:00:00+00:00"
 DURING = "2026-10-05T10:00:00+00:00"
 STEP = "step-11-application"
@@ -70,16 +72,25 @@ def _task(ledger: LessonLedger, task_id: str, rule: str, *, archived: bool = Fal
 
 def test_a_correction_nobody_recorded_is_open_and_fails_the_check(tmp_path: Path) -> None:
     ledger, store = _setup(tmp_path)
-    assert ledger.untriaged("s1") == []  # nothing corrected yet: a real zero
+    assert ledger.untriaged() == []  # nothing corrected yet: a real zero
     row = _correct(store)
-    left = ledger.untriaged("s1")
+    left = ledger.untriaged()
     assert [item.ref for item in left] == [row]
-    assert "NO LESSON AND NOT DISMISSED" in render_session(ledger, "s1")
+    assert "NO LESSON AND NOT DISMISSED" in render_session(ledger)
     base = ["x", "--root", str(tmp_path), "--handle", store.handle]
-    assert _main([*base, "check", "--session", "s1"]) == 1
+    assert _main([*base, "check"]) == 1
 
 
-@pytest.mark.parametrize("kind", sorted(CORRECTION_KINDS))
+# Literal, not derived from the constant under test: a kind dropped from the constant
+# must drop out of this list's coverage visibly, not silently with it.
+KINDS = ("statement", "constraint", "retraction", "candidate_statement")
+
+
+def test_the_correction_kinds_are_exactly_these() -> None:
+    assert frozenset(KINDS) == CORRECTION_KINDS
+
+
+@pytest.mark.parametrize("kind", KINDS)
 def test_every_correction_kind_is_in_the_population(tmp_path: Path, kind: str) -> None:
     ledger, store = _setup(tmp_path)
     target = _say(store, "an earlier answer") if kind == "retraction" else None
@@ -91,7 +102,7 @@ def test_every_correction_kind_is_in_the_population(tmp_path: Path, kind: str) -
         )
         .id
     )  # fmt: skip
-    assert [item.ref for item in ledger.untriaged("s1")] == [row]
+    assert [item.ref for item in ledger.untriaged()] == [row]
 
 
 def test_rows_outside_the_window_or_kind_are_not_corrections(tmp_path: Path) -> None:
@@ -99,7 +110,7 @@ def test_rows_outside_the_window_or_kind_are_not_corrections(tmp_path: Path) -> 
     _say(store, "said last week", at=BEFORE)
     _say(store, "history from intake", kind="episode", at=DURING)
     _say(store, "a view on one advert", kind="reaction", at=DURING)
-    assert ledger.untriaged("s1") == []
+    assert ledger.untriaged() == []
 
 
 def test_a_lesson_dismissal_or_candidate_specific_decision_each_close_a_row(
@@ -108,17 +119,17 @@ def test_a_lesson_dismissal_or_candidate_specific_decision_each_close_a_row(
     ledger, store = _setup(tmp_path)
     a, b, c = _correct(store, "one"), _correct(store, "two"), _correct(store, "three")
     one = ledger.record(RULE, session_id="s1", step=STEP, at=DURING, evidence_id=a)
-    assert {item.ref for item in ledger.untriaged("s1")} == {one.id, b, c}  # undecided lesson
+    assert {item.ref for item in ledger.untriaged()} == {one.id, b, c}  # undecided lesson
     _task(ledger, "t-0123abcd", RULE)
     ledger.decide(one.id, "seeded", at=DURING, task_id="t-0123abcd")
     two = ledger.record(OTHER, session_id="s1", step=STEP, at=DURING, evidence_id=b)
     ledger.decide(two.id, "candidate_specific", at=DURING, reason="turns on her own visa")
-    assert [item.ref for item in ledger.untriaged("s1")] == [c]
+    assert [item.ref for item in ledger.untriaged()] == [c]
     ledger.dismiss(c, reason="a plain fact", at=DURING)
-    assert ledger.untriaged("s1") == []
+    assert ledger.untriaged() == []
     again = LessonLedger(ProfileStore(store.root, store.handle), tasks_dir=ledger.tasks_dir)
-    assert again.untriaged("s1") == []
-    text = render_session(again, "s1")
+    assert again.untriaged() == []
+    text = render_session(again)
     assert "seeded as t-0123abcd" in text and "candidate-specific (turns on her own visa)" in text
     assert "not a lesson (a plain fact)" in text
 
@@ -126,31 +137,104 @@ def test_a_lesson_dismissal_or_candidate_specific_decision_each_close_a_row(
 def test_a_lesson_with_no_evidence_row_still_needs_a_decision(tmp_path: Path) -> None:
     ledger, _ = _setup(tmp_path)
     lesson = ledger.record(RULE, session_id="s1", step=STEP, at=DURING)
-    assert [item.ref for item in ledger.untriaged("s1")] == [lesson.id]
+    assert [item.ref for item in ledger.untriaged()] == [lesson.id]
     ledger.decide(lesson.id, "candidate_specific", at=DURING, reason="her own case")
-    assert ledger.untriaged("s1") == []
+    assert ledger.untriaged() == []
 
 
-def test_an_unknown_session_has_no_window_and_is_refused(
+def test_an_unknown_profile_exits_2_and_a_known_one_with_nothing_open_exits_0(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     ledger, store = _setup(tmp_path)
+    for bad in ("nobody", "../escape", ""):
+        assert _main(["x", "--root", str(tmp_path), "--handle", bad, "check"]) == 2
     base = ["x", "--root", str(tmp_path), "--handle", store.handle]
-    for bad in ("s2", "no such session!!", "S1"):
-        assert _main([*base, "check", "--session", bad]) == 2
-        assert _main([*base, "list", "--session", bad]) == 2
-        with pytest.raises(LessonError):
-            ledger.untriaged(bad)
+    assert _main([*base, "check"]) == 0
+    for bad in ("no such session!!", ""):
         with pytest.raises(LessonError):
             ledger.record(RULE, session_id=bad, step=STEP, at=DURING)
-    assert _main([*base, "check", "--session", "s1"]) == 0  # a known session with nothing open
-    # a marker for a different candidate is not this candidate's session
-    other = create_profile(tmp_path, "Someone Else")
-    write_active_handle(tmp_path, other.handle, session_id="s1", now=T0)
-    assert _main([*base, "check", "--session", "s1"]) == 2
-    (tmp_path / ".active.json").unlink()
-    assert _main([*base, "check", "--session", "s1"]) == 2
-    assert "session" in capsys.readouterr().err
+    assert "no such profile" in capsys.readouterr().err
+
+
+def test_the_population_does_not_move_when_the_session_marker_is_rewritten(
+    tmp_path: Path,
+) -> None:
+    ledger, store = _setup(tmp_path)
+    row = _correct(store)
+    # the session re-identifies (the guard's own restore line) after the correction
+    write_active_handle(
+        tmp_path, store.handle, session_id="s1", now=datetime(2026, 10, 5, 11, tzinfo=UTC)
+    )
+    write_active_handle(
+        tmp_path, store.handle, session_id="s2", now=datetime(2026, 10, 6, 9, tzinfo=UTC)
+    )
+    assert [item.ref for item in ledger.untriaged()] == [row]
+
+
+def test_an_open_row_carries_over_to_the_next_session(tmp_path: Path) -> None:
+    ledger, store = _setup(tmp_path)
+    row = _correct(store)
+    ledger.record(RULE, session_id="s2", step=STEP, at=DURING)  # another session works on
+    assert row in {item.ref for item in ledger.untriaged()}
+    assert row in render_session(ledger)
+
+
+def test_triage_from_is_the_only_bound_and_an_unreadable_stamp_is_open(tmp_path: Path) -> None:
+    ledger, store = _setup(tmp_path)
+    _say(store, "one second before", at=JUST_BEFORE)
+    on = _say(store, "exactly on the date", at=FROM)
+    garbled = _say(store, "stamp nobody can read", at="sometime last week")
+    assert {item.ref for item in ledger.untriaged()} == {on, garbled}
+
+
+# -- B4: exactly one outcome per evidence row ------------------------------------
+
+
+def test_a_second_lesson_on_one_row_is_refused_and_cannot_stand_in_for_the_first(
+    tmp_path: Path,
+) -> None:
+    ledger, store = _setup(tmp_path)
+    row = _correct(store)
+    first = ledger.record(RULE, session_id="s1", step=STEP, at=DURING, evidence_id=row)
+    with pytest.raises(LessonError, match="already has a lesson"):
+        ledger.record(OTHER, session_id="s1", step=STEP, at=DURING, evidence_id=row)
+    # the same state written by hand is refused by the reader, not tolerated
+    second = json.loads(ledger.path.read_text(encoding="utf-8").splitlines()[0])
+    second.update(id="ls-0002", rule=OTHER)
+    with ledger.path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(second) + "\n")
+    with pytest.raises(LessonError, match="more than one outcome"):
+        ledger.untriaged()
+    assert first.id
+
+
+def test_every_lesson_is_owed_a_decision_whatever_its_rows_coverage(tmp_path: Path) -> None:
+    ledger, store = _setup(tmp_path)
+    row = _correct(store)
+    lesson = ledger.record(RULE, session_id="s1", step=STEP, at=DURING, evidence_id=row)
+    other = ledger.record(OTHER, session_id="s1", step=STEP, at=DURING)
+    ledger.decide(other.id, "candidate_specific", at=DURING, reason="her own case here")
+    assert [item.ref for item in ledger.untriaged()] == [lesson.id]
+
+
+def test_a_dismissal_reason_is_not_a_full_stop(tmp_path: Path) -> None:
+    ledger, store = _setup(tmp_path)
+    row = _correct(store)
+    for bad in (".", "ok", "a b"):
+        with pytest.raises(LessonError, match="at least 3 words"):
+            ledger.dismiss(row, reason=bad, at=DURING)
+    ledger.dismiss(row, reason="a plain fact", at=DURING)
+    lesson = ledger.record(RULE, session_id="s1", step=STEP, at=DURING)
+    with pytest.raises(LessonError, match="at least 3 words"):
+        ledger.decide(lesson.id, "candidate_specific", at=DURING, reason="no")
+
+
+def test_short_name_tokens_are_guarded(tmp_path: Path) -> None:
+    ledger, _ = _setup(tmp_path, name="Ana Li Gil")
+    for rule in ("Ana wants gaps worded gently", "Li wants gaps worded gently",
+                 "Gil wants gaps worded gently"):  # fmt: skip
+        with pytest.raises(LessonError, match="name or handle"):
+            ledger.record(rule, session_id="s1", step=STEP, at=DURING)
 
 
 # -- the decision rules --------------------------------------------------------
@@ -178,7 +262,7 @@ def test_a_decision_needs_its_evidence(tmp_path: Path) -> None:
             ledger.decide(lesson.id, "candidate_specific", at=DURING, reason=reason)
     with pytest.raises(LessonError, match="no lesson"):
         ledger.decide("ls-9999", "candidate_specific", at=DURING, reason="x")
-    assert len(ledger.untriaged("s1")) == 1
+    assert len(ledger.untriaged()) == 1
 
 
 def test_seeded_must_name_a_real_task_that_carries_the_rule(tmp_path: Path) -> None:
@@ -226,7 +310,7 @@ def test_a_malformed_ledger_is_an_error_not_an_empty_list(tmp_path: Path) -> Non
     ledger.record(RULE, session_id="s1", step=STEP, at=DURING)
     store.path("session", "lessons.jsonl").write_text('{"row": "lesson"}\n', encoding="utf-8")
     with pytest.raises(LessonError, match="not a ledger row"):
-        ledger.untriaged("s1")
+        ledger.untriaged()
 
 
 def test_a_dismissal_and_a_lesson_are_one_route_each(tmp_path: Path) -> None:
@@ -396,9 +480,11 @@ def test_neutral_rules_in_the_processes_own_words_are_accepted(tmp_path: Path) -
 def test_the_gate_metric_is_measured_over_corrections_and_can_see_them() -> None:
     measured = measure()
     assert measured["candidate_session_corrections_left_untriaged"] == 0
-    assert measured["corrections_in_probe"] == len(CORRECTION_KINDS)
+    # one of each kind plus one left over from an earlier session
+    assert measured["corrections_in_probe"] == 5
     # the sensitivity witness: before routing, every correction read as open
-    assert measured["corrections_open_before_triage"] == len(CORRECTION_KINDS)
+    assert measured["corrections_open_before_triage"] == 5
+    assert measured["second_lesson_on_a_row_refused"] is True
     assert measured["failures"] == []
 
 
@@ -412,9 +498,9 @@ def test_the_cli_routes_a_correction_end_to_end(
     ledger, store = _setup(tmp_path)
     ev = _correct(store)
     base = ["x", "--root", str(tmp_path), "--handle", store.handle]
-    assert _main([*base, "check", "--session", "s1"]) == 1
+    assert _main([*base, "check"]) == 1
     assert _main([*base, "dismiss", ev, "--reason", "a plain fact"]) == 0
-    assert _main([*base, "check", "--session", "s1"]) == 0
+    assert _main([*base, "check"]) == 0
     ev2 = _correct(store, "again")
     assert _main([*base, "record", "--session", "s1", "--step", STEP, "--rule", RULE,
                   "--evidence-id", ev2]) == 0  # fmt: skip
