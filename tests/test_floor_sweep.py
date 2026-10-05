@@ -47,6 +47,16 @@ def _never_rewrite_the_live_prose_evidence(
 
     monkeypatch.setattr(floor_sweep, "write_prose_clearance_evidence", redirected)
 
+    # T165: `_main` also writes `status/evidence/T165.json` — the same file-the-key-hashes
+    # hazard, so the same redirect.
+    real_polarity = floor_sweep.write_polarity_evidence
+    polarity_scratch = tmp_path_factory.mktemp("polarity") / "T165.json"
+
+    def redirected_polarity(evidence: Path | None = None) -> dict[str, Any]:
+        return real_polarity(polarity_scratch if evidence is None else evidence)
+
+    monkeypatch.setattr(floor_sweep, "write_polarity_evidence", redirected_polarity)
+
 
 def _write(tmp_path: Path, source: str, name: str = "mod") -> Path:
     path = tmp_path / f"{name}.py"
@@ -4561,3 +4571,300 @@ def test_every_evidence_path_the_resolver_accepts_is_hashed_by_the_digest(
     # Denominators: the alphabet produced many candidates, and the hashed branch ran.
     assert len(candidates) > 1000
     assert resolved >= 1
+
+
+# ---------------------------------------------------------------------------
+# T165: which way a bound runs.
+# ---------------------------------------------------------------------------
+
+_NAMED_CEILINGS_THE_AST_FINDS = (
+    "approval._SHINGLE",
+    "generate.GENERATION_CAP",
+    "interview.MAX_EXTRA_EPISODE_ATTEMPTS",
+    "sourcing.DETAIL_FETCH_CEILING",
+)
+
+
+def _polarity_of(source: str, name: str = "C") -> str:
+    return floor_sweep._bound_polarity(ast.parse(source), name).verdict
+
+
+# What each comparison *means*, written out by hand rather than computed from the
+# rule: a guard that raises is the limit being crossed, so the side it raises on is
+# the side the constant forbids; a flag or a conditional expression is the limit
+# being met, so the side it is true on is the side the constant permits.
+_GUARD_RAISES = {
+    "n < C": "floor",
+    "n <= C": "floor",
+    "C > n": "floor",
+    "C >= n": "floor",
+    "n > C": "ceiling",
+    "n >= C": "ceiling",
+    "C < n": "ceiling",
+    "C <= n": "ceiling",
+}
+_FLAG_IS_TRUE_WHEN_MET = {
+    "n >= C": "floor",
+    "n > C": "floor",
+    "C <= n": "floor",
+    "C < n": "floor",
+    "n <= C": "ceiling",
+    "n < C": "ceiling",
+    "C >= n": "ceiling",
+    "C > n": "ceiling",
+}
+
+
+@pytest.mark.parametrize(("comparison", "expected"), sorted(_GUARD_RAISES.items()))
+def test_a_guard_that_raises_is_read_by_the_side_it_raises_on(
+    comparison: str, expected: str
+) -> None:
+    source = f"C = 3\ndef f(n):\n    if {comparison}:\n        raise ValueError\n"
+    assert _polarity_of(source) == expected
+
+
+@pytest.mark.parametrize(("comparison", "expected"), sorted(_FLAG_IS_TRUE_WHEN_MET.items()))
+def test_a_flag_is_read_by_the_side_it_is_true_on(comparison: str, expected: str) -> None:
+    source = f"C = 3\ndef f(n):\n    ok = {comparison}\n"
+    assert _polarity_of(source) == expected
+    ternary = f"C = 3\ndef f(n):\n    return 'a' if {comparison} else 'b'\n"
+    assert _polarity_of(ternary) == expected
+
+
+def test_one_operator_is_a_floor_as_a_flag_and_a_ceiling_as_a_guard() -> None:
+    """`n >= C` is a floor as a flag and a ceiling as a guard: the same operator, opposite
+    polarity. A rule that looked at the operator alone must get one of the two wrong."""
+    flag = "C = 3\ndef f(n):\n    ok = n >= C\n"
+    guard = "C = 3\ndef f(n):\n    if n >= C:\n        raise ValueError\n"
+    assert (_polarity_of(flag), _polarity_of(guard)) == ("floor", "ceiling")
+
+
+def test_every_oracle_case_is_judged_as_the_definition_says() -> None:
+    oracle = floor_sweep.measure_polarity_oracle()
+    assert oracle["polarity_cases_misjudged"] == []
+    assert oracle["polarity_cases_checked"] >= floor_sweep.MINIMUM_POLARITY_CASES
+
+
+def test_the_oracle_battery_is_not_one_polarity() -> None:
+    """A battery whose expected verdicts were all `floor` would pass a rule that always
+    answered `floor` — the census's own defect. All four verdicts appear, in number."""
+    verdicts = [expected for _label, _src, _name, expected in floor_sweep._POLARITY_CASES]
+    for verdict in ("floor", "ceiling", "neither", "undetermined"):
+        assert verdicts.count(verdict) >= 2, verdict
+
+
+def test_polarity_votes_are_per_site_and_an_abstaining_site_does_not_overrule() -> None:
+    source = (
+        "C = 3\ndef f(n, xs):\n    ys = [x for x in xs if x < C]\n"
+        "    if n < C:\n        raise ValueError\n"
+    )
+    assert _polarity_of(source) == "floor"
+
+
+def test_a_bound_with_both_a_floor_site_and_a_ceiling_site_is_undetermined_not_guessed() -> None:
+    source = (
+        "C = 3\ndef f(n):\n    if n < C:\n        raise ValueError\n"
+        "    if n > C:\n        raise ValueError\n"
+    )
+    assert _polarity_of(source) == "undetermined"
+
+
+def test_polarity_follows_a_floor_delegated_to_a_helper_in_the_live_tree() -> None:
+    """`review_reader`'s floors are compared inside `_floor(observed, minimum)`; their
+    polarity is read from there."""
+    modules = {m.stem: m.tree for m in floor_sweep._module_infos(floor_sweep._SRC_DIR)}
+    for name in ("MINIMUM_PRS_EVALUATED", "MINIMUM_REPORTS_FOUND", "MINIMUM_SCOPE_STATES"):
+        polarity = floor_sweep._bound_polarity(modules["review_reader"], name)
+        assert polarity.verdict == "floor", name
+        assert polarity.votes, name
+
+
+def test_the_ast_rule_alone_finds_each_named_ceiling_without_the_register() -> None:
+    """Not the committed adjudication: the rule over the comparison nodes. The
+    register could be wrong in the same direction as the person who wrote it."""
+    modules = {m.stem: m.tree for m in floor_sweep._module_infos(floor_sweep._SRC_DIR)}
+    for qualified in _NAMED_CEILINGS_THE_AST_FINDS:
+        stem, name = qualified.split(".", 1)
+        assert floor_sweep._bound_polarity(modules[stem], name).verdict == "ceiling", qualified
+
+
+def test_extraction_confirming_matches_is_a_floor_and_stays_in_the_census() -> None:
+    """The task named it as a fifth ceiling. `len(spans) < _CONFIRMING_MATCHES_FOR_BIPOLAR
+    and not negated_any` returns `None` — the dimension is refused below two matches — so
+    deleting a match breaches it, which is what a floor is."""
+    modules = {m.stem: m.tree for m in floor_sweep._module_infos(floor_sweep._SRC_DIR)}
+    name = "_CONFIRMING_MATCHES_FOR_BIPOLAR"
+    assert floor_sweep._bound_polarity(modules["extraction"], name).verdict == "floor"
+    census = floor_sweep.measure()
+    assert f"extraction.{name}" in census["floors_in_the_census"]
+    assert f"extraction.{name}" not in census["ceilings_excluded_from_the_floor_census"]
+
+
+def test_the_census_sets_the_named_ceilings_aside_and_counts_none_of_them() -> None:
+    census = floor_sweep.measure()
+    for qualified in _NAMED_CEILINGS_THE_AST_FINDS:
+        assert qualified in census["ceilings_excluded_from_the_floor_census"], qualified
+        assert qualified not in census["floors_in_the_census"], qualified
+        assert qualified not in census["bounds_read_and_out_of_scope"], qualified
+    assert census["floors_swept"] == len(census["floors_in_the_census"])
+
+
+def test_the_live_tree_counts_no_bound_with_the_wrong_polarity() -> None:
+    measured = floor_sweep.measure_polarity()
+    assert measured["gate_status"] == "measured"
+    assert measured["bounds_counted_with_the_wrong_polarity"] == 0
+    assert measured["wrong_polarity"] == []
+    assert measured["bounds_with_no_adjudication"] == []
+    assert measured["adjudications_without_a_bound"] == []
+    assert measured["bounds_read"] >= floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY
+    assert len(measured["ceilings_set_aside"]) >= floor_sweep.MINIMUM_CEILINGS_SET_ASIDE
+
+
+def test_the_gate_reads_the_census_output_so_a_ceiling_left_counted_is_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The defect as it was: the census carries the four ceilings as floors. Built by
+    taking the real census and moving them back, so the metric is measured against the
+    census's *wiring* and not against the oracle it shares with it."""
+    real = floor_sweep.measure()
+    broken = dict(real)
+    broken["floors_in_the_census"] = sorted(
+        [*real["floors_in_the_census"], *real["ceilings_excluded_from_the_floor_census"]]
+    )
+    broken["ceilings_excluded_from_the_floor_census"] = []
+    monkeypatch.setattr(floor_sweep, "measure", lambda src_dir=floor_sweep._SRC_DIR: broken)
+    measured = floor_sweep.measure_polarity()
+    assert measured["bounds_counted_with_the_wrong_polarity"] == len(_NAMED_CEILINGS_THE_AST_FINDS)
+    assert {row["bound"] for row in measured["wrong_polarity"]} == set(
+        _NAMED_CEILINGS_THE_AST_FINDS
+    )
+    assert {row["census"] for row in measured["wrong_polarity"]} == {"floor"}
+
+
+def test_a_floor_set_aside_as_a_ceiling_is_found_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The other half of the metric: a ceiling classification whose comparison
+    establishes a lower limit."""
+    real = floor_sweep.measure()
+    name = "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR"
+    broken = dict(real)
+    broken["floors_in_the_census"] = [n for n in real["floors_in_the_census"] if n != name]
+    broken["ceilings_excluded_from_the_floor_census"] = [
+        *real["ceilings_excluded_from_the_floor_census"],
+        name,
+    ]
+    monkeypatch.setattr(floor_sweep, "measure", lambda src_dir=floor_sweep._SRC_DIR: broken)
+    measured = floor_sweep.measure_polarity()
+    assert measured["bounds_counted_with_the_wrong_polarity"] == 1
+    assert measured["wrong_polarity"] == [{"bound": name, "census": "ceiling", "polarity": "floor"}]
+
+
+def test_a_ceiling_nobody_adjudicated_is_named_and_still_not_counted_as_a_floor(
+    tmp_path: Path,
+) -> None:
+    """A new ceiling: `CAP` compared to a length in a module the register has never seen.
+    The census sets it aside by the AST rule and says nobody adjudicated it."""
+    (tmp_path / "fresh.py").write_text(
+        "ITEMS = [1, 2, 3]\nCAP = 3\nMINIMUM_ITEMS = 3\n"
+        "def run():\n"
+        "    if len(ITEMS) > CAP:\n"
+        "        raise ValueError\n"
+        "    if len(ITEMS) < MINIMUM_ITEMS:\n"
+        "        raise ValueError\n",
+        encoding="utf-8",
+    )
+    census = floor_sweep.measure(tmp_path)
+    assert census["ceilings_excluded_from_the_floor_census"] == ["fresh.CAP"]
+    assert census["bounds_with_a_polarity_nobody_adjudicated"] == ["fresh.CAP"]
+    assert "fresh.CAP" not in census["floors_in_the_census"]
+    assert "fresh.MINIMUM_ITEMS" in census["floors_in_the_census"]
+
+
+def test_a_missing_adjudication_for_an_out_of_scope_bound_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept = dict(floor_sweep.ADJUDICATIONS)
+    victim = "weights.MAX_CHOICES"
+    del kept[victim]
+    monkeypatch.setattr(floor_sweep, "ADJUDICATIONS", kept)
+    measured = floor_sweep.measure_polarity()
+    assert measured["bounds_with_no_adjudication"] == [victim]
+
+
+def test_an_adjudication_naming_no_bound_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    extra = {**floor_sweep.ADJUDICATIONS, "weights.NO_SUCH_BOUND": ("floor", "never declared")}
+    monkeypatch.setattr(floor_sweep, "ADJUDICATIONS", extra)
+    measured = floor_sweep.measure_polarity()
+    assert measured["adjudications_without_a_bound"] == ["weights.NO_SUCH_BOUND"]
+
+
+def test_an_adjudication_that_overrules_the_ast_is_listed_by_name() -> None:
+    measured = floor_sweep.measure_polarity()
+    overruled = set(measured["adjudications_overruling_the_ast"])
+    assert "approval._RECORDED_SENDS" in overruled
+    assert "test_mode.PASTE_CHARS" in overruled
+    # ...and none of the four ceilings the AST decides is overruled.
+    assert not overruled & set(_NAMED_CEILINGS_THE_AST_FINDS)
+
+
+def test_every_adjudication_carries_a_verdict_and_a_reason_that_says_something() -> None:
+    for qualified, (verdict, reason) in floor_sweep.ADJUDICATIONS.items():
+        assert verdict in ("floor", "ceiling", "neither"), qualified
+        assert len(reason.split()) >= 8, qualified
+
+
+def test_every_out_of_scope_bound_has_an_adjudication_on_the_live_tree() -> None:
+    census = floor_sweep.measure()
+    assert len(census["bounds_read_and_out_of_scope"]) >= 100
+    missing = [
+        n for n in census["bounds_read_and_out_of_scope"] if n not in floor_sweep.ADJUDICATIONS
+    ]
+    assert missing == []
+
+
+def test_polarity_exit_code_is_one_unless_measured_and_clean() -> None:
+    clean = {
+        "gate_status": "measured",
+        "bounds_read": 100,
+        "polarity_cases_checked": 40,
+        "ceilings_set_aside": ["a.B"] * 4,
+        "wrong_polarity": [],
+        "polarity_cases_misjudged": [],
+        "bounds_with_no_adjudication": [],
+        "adjudications_without_a_bound": [],
+    }
+    assert floor_sweep._polarity_exit_code(clean) == 0
+    for key, value in (
+        ("gate_status", "unmeasured"),
+        ("wrong_polarity", [{"bound": "a.B", "census": "floor", "polarity": "ceiling"}]),
+        ("polarity_cases_misjudged", [{"case": "x", "expected": "floor", "got": "ceiling"}]),
+        ("bounds_with_no_adjudication", ["a.B"]),
+        ("adjudications_without_a_bound", ["a.B"]),
+    ):
+        assert floor_sweep._polarity_exit_code({**clean, key: value}) == 1, key
+
+
+def test_the_polarity_gate_is_unmeasured_when_it_read_too_little(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(floor_sweep, "MINIMUM_BOUNDS_READ_FOR_POLARITY", 10_000)
+    assert floor_sweep.measure_polarity()["gate_status"] == "unmeasured"
+
+
+def test_the_polarity_evidence_commits_floors_not_counts(tmp_path: Path) -> None:
+    target = tmp_path / "T165.json"
+    measured = floor_sweep.write_polarity_evidence(target)
+    committed = json.loads(target.read_text(encoding="utf-8"))
+    assert committed["bounds_counted_with_the_wrong_polarity"] == 0
+    assert committed["gate_status"] == "measured"
+    assert committed["bounds_read_at_least"] == floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY
+    assert "bounds_read" not in committed
+    assert measured["bounds_read"] >= committed["bounds_read_at_least"]
+
+
+def test_the_swept_floor_sites_the_prose_battery_mutates_exclude_the_ceilings() -> None:
+    mutated = {
+        f"{module.stem}.{name}"
+        for module, name, _lineno, _expr in floor_sweep._swept_floor_sites(floor_sweep._SRC_DIR)
+    }
+    assert not mutated & set(_NAMED_CEILINGS_THE_AST_FINDS)
+    assert "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR" in mutated

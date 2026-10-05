@@ -518,11 +518,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from integral.floor_polarity import ADJUDICATIONS as ADJUDICATIONS
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = Path(__file__).resolve().parent
 _THIS_FILE = Path(__file__).resolve()
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T159.json"
 DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T163.json"
+DEFAULT_POLARITY_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T165.json"
 
 #: Round 2's fix for the reader's first finding: this repository's module-constant
 #: convention (a name starting with a letter, all caps) — not a floor-specific
@@ -2137,28 +2140,37 @@ def _population_for(
     return False, None
 
 
-def _compare_sites(
+def _compare_nodes(
     tree: ast.Module, name: str
-) -> list[tuple[ast.expr, ast.FunctionDef | ast.AsyncFunctionDef | None, int]]:
+) -> list[tuple[ast.Compare, bool, ast.FunctionDef | ast.AsyncFunctionDef | None]]:
     """Every `Compare` in the module with exactly one operator where `name` is one
     side — directly, or (round 2) boxed into a dict a few lines above and read back
-    out through a subscript (`_resolves_to_name`). Returns `(other_side,
-    enclosing_function_or_None, lineno)` for each."""
-    sites: list[tuple[ast.expr, ast.FunctionDef | ast.AsyncFunctionDef | None, int]] = []
+    out through a subscript (`_resolves_to_name`). Returns `(node, name_is_on_the_
+    right, enclosing_function_or_None)` for each — the node itself, so the
+    operator is still there to be read (T165: `_compare_sites` used to keep only
+    the other operand and so threw away which way the comparison runs)."""
+    nodes: list[tuple[ast.Compare, bool, ast.FunctionDef | ast.AsyncFunctionDef | None]] = []
     functions = _all_function_defs(tree)
-
-    def enclosing(node: ast.AST) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
-        return _innermost_enclosing(node, functions)
-
     for node in ast.walk(tree):
         if isinstance(node, ast.Compare) and len(node.ops) == 1:
             left, right = node.left, node.comparators[0]
-            func = enclosing(node)
+            func = _innermost_enclosing(node, functions)
             if _resolves_to_name(left, name, tree, func, node.lineno):
-                sites.append((right, func, node.lineno))
+                nodes.append((node, False, func))
             elif _resolves_to_name(right, name, tree, func, node.lineno):
-                sites.append((left, func, node.lineno))
-    return sites
+                nodes.append((node, True, func))
+    return nodes
+
+
+def _compare_sites(
+    tree: ast.Module, name: str
+) -> list[tuple[ast.expr, ast.FunctionDef | ast.AsyncFunctionDef | None, int]]:
+    """`(other_side, enclosing_function_or_None, lineno)` for each comparison of
+    `name` (`_compare_nodes`)."""
+    return [
+        (node.left if on_right else node.comparators[0], func, node.lineno)
+        for node, on_right, func in _compare_nodes(tree, name)
+    ]
 
 
 def _bind_call_arguments(
@@ -2314,6 +2326,200 @@ def _delegated_other_operand(
         if other is not None:
             return other, enclosing(node), node.lineno
     return None
+
+
+# ---------------------------------------------------------------------------
+# T165: which way a bound runs.
+#
+# A floor and a ceiling fail in opposite directions — a floor is breached by
+# *deleting* a member of the population it guards, a ceiling by *adding* one — so
+# T159's "the first deletion must breach" test says nothing about a ceiling, and a
+# census that cannot tell the two apart asserts something about a population it
+# has not identified. The rule below reads polarity off the comparison node and
+# the way its truth is consumed; it never looks at the constant's *name*.
+#
+# One vote per comparison site:
+#
+#   region  — the half-line of the *measured* quantity the comparison is true on:
+#             `x < C`, `x <= C`, `C > x`, `C >= x` are "below"; the mirror images
+#             are "above"; `==`, `!=`, `in`, `is` bound neither way.
+#   role    — what that truth *means*: "breach" when the true branch is the limit
+#             being crossed (an `if x < MIN: fail`, an `if n > CAP: raise`),
+#             "satisfied" when it is the limit being met (`ok = x >= MIN`,
+#             `"measured" if x >= MIN else "unmeasured"`, `return a <= LIMIT`).
+#             Each `not` between the comparison and its consumer flips it.
+#
+#   breach + below  -> floor        satisfied + above -> floor
+#   breach + above  -> ceiling      satisfied + below -> ceiling
+#
+# A consumer this reading cannot place (a comprehension filter can collect either
+# the violators or the survivors) abstains rather than guessing: a guess in either
+# direction moves a constant between populations silently, which is this task's own
+# defect. A name whose deciding votes disagree, or that has none, is `undetermined`
+# — kept where it was and listed by name, never reclassified.
+# ---------------------------------------------------------------------------
+
+POLARITY_FLOOR = "floor"
+POLARITY_CEILING = "ceiling"
+POLARITY_NEITHER = "neither"
+POLARITY_UNDETERMINED = "undetermined"
+
+_REGION_BELOW = "below"
+_REGION_ABOVE = "above"
+_ROLE_BREACH = "breach"
+_ROLE_SATISFIED = "satisfied"
+
+
+@dataclass(frozen=True)
+class BoundPolarity:
+    """`verdict` is one of the four `POLARITY_*` values; `votes` holds one entry per
+    comparison site that voted (`floor`, `ceiling` or `neither`)."""
+
+    verdict: str
+    votes: tuple[str, ...]
+
+
+def _parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    parents: dict[ast.AST, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parents[child] = parent
+    return parents
+
+
+def _comparison_region(node: ast.Compare, bound_on_right: bool) -> str | None:
+    """Which half-line of the measured quantity `node` is true on, or `None` when it
+    bounds neither way (`==`, `!=`, `in`, `is`)."""
+    op = node.ops[0]
+    if isinstance(op, (ast.Lt, ast.LtE)):
+        return _REGION_BELOW if bound_on_right else _REGION_ABOVE
+    if isinstance(op, (ast.Gt, ast.GtE)):
+        return _REGION_ABOVE if bound_on_right else _REGION_BELOW
+    return None
+
+
+def _guard_body_is_a_boolean_result(body: list[ast.stmt]) -> bool:
+    """An `if <cmp>: return <boolean expression>` hands the comparison's truth
+    straight back to the caller as the answer — satisfied, not breached. Anything
+    else a guard's body does (raise, continue, assign an exit code, append a
+    finding, return a sentinel) is a response to the limit being crossed."""
+    if not body:
+        return False
+    last = body[-1]
+    return isinstance(last, ast.Return) and isinstance(last.value, (ast.Compare, ast.BoolOp))
+
+
+def _comparison_role(node: ast.Compare, parents: dict[ast.AST, ast.AST]) -> str | None:
+    """What the truth of `node` means to whatever consumes it — see the block above.
+    `None` when the consumer is not one this reading can place."""
+    flipped = False
+    child: ast.AST = node
+    parent = parents.get(child)
+    while isinstance(parent, (ast.BoolOp, ast.UnaryOp)):
+        if isinstance(parent, ast.UnaryOp):
+            if not isinstance(parent.op, ast.Not):
+                return None
+            flipped = not flipped
+        child, parent = parent, parents.get(parent)
+    role: str | None
+    if isinstance(parent, (ast.If, ast.While)) and child is parent.test:
+        role = _ROLE_SATISFIED if _guard_body_is_a_boolean_result(parent.body) else _ROLE_BREACH
+    elif (isinstance(parent, ast.IfExp) and child is parent.test) or isinstance(
+        parent,
+        (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Return, ast.Assert, ast.keyword, ast.Dict),
+    ):
+        role = _ROLE_SATISFIED
+    else:
+        return None
+    if flipped:
+        role = _ROLE_BREACH if role == _ROLE_SATISFIED else _ROLE_SATISFIED
+    return role
+
+
+def _site_vote(
+    node: ast.Compare, bound_on_right: bool, parents: dict[ast.AST, ast.AST]
+) -> str | None:
+    """One comparison site's vote: `floor`, `ceiling`, `neither`, or `None` to abstain."""
+    region = _comparison_region(node, bound_on_right)
+    if region is None:
+        return POLARITY_NEITHER
+    role = _comparison_role(node, parents)
+    if role is None:
+        return None
+    if (role, region) in ((_ROLE_BREACH, _REGION_BELOW), (_ROLE_SATISFIED, _REGION_ABOVE)):
+        return POLARITY_FLOOR
+    return POLARITY_CEILING
+
+
+def _delegated_compare_votes(
+    tree: ast.Module,
+    name: str,
+    parents: dict[ast.AST, ast.AST],
+    top_level_functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+) -> list[str | None]:
+    """The votes of a comparison made inside a same-module helper `name` is passed
+    to (`review_reader._floor(observed, minimum)` is the shape every delegated
+    floor here uses), followed through further same-module calls to the same bound
+    as `_trace_delegation` is."""
+    votes: list[str | None] = []
+
+    def walk(root: ast.AST, current: str, depth: int) -> None:
+        if depth > _MAX_DELEGATION_DEPTH:
+            return
+        for _call, callee, _mapping, param in _calls_passing(root, current, top_level_functions):
+            found = False
+            for inner in ast.walk(callee):
+                if not (isinstance(inner, ast.Compare) and len(inner.ops) == 1):
+                    continue
+                left, right = inner.left, inner.comparators[0]
+                if isinstance(left, ast.Name) and left.id == param and isinstance(right, ast.Name):
+                    votes.append(_site_vote(inner, False, parents))
+                    found = True
+                elif (
+                    isinstance(right, ast.Name) and right.id == param and isinstance(left, ast.Name)
+                ):
+                    votes.append(_site_vote(inner, True, parents))
+                    found = True
+            if not found and callee.name != getattr(root, "name", None):
+                walk(callee, param, depth + 1)
+
+    walk(tree, name, 0)
+    return votes
+
+
+def _bound_polarity(tree: ast.Module, name: str) -> BoundPolarity:
+    """Polarity of the module constant `name`, read from every comparison it takes
+    part in (direct, boxed, or delegated to a same-module helper)."""
+    parents = _parent_map(tree)
+    top_level_functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    raw: list[str | None] = [
+        _site_vote(node, on_right, parents) for node, on_right, _func in _compare_nodes(tree, name)
+    ]
+    if not raw:
+        raw = _delegated_compare_votes(tree, name, parents, top_level_functions)
+    votes = tuple(v for v in raw if v is not None)
+    deciding = {v for v in votes if v != POLARITY_NEITHER}
+    if len(deciding) > 1:
+        return BoundPolarity(POLARITY_UNDETERMINED, votes)
+    if len(deciding) == 1:
+        return BoundPolarity(next(iter(deciding)), votes)
+    if votes:
+        return BoundPolarity(POLARITY_NEITHER, votes)
+    return BoundPolarity(POLARITY_UNDETERMINED, votes)
+
+
+def _effective_polarity(stem: str, name: str, tree: ast.Module) -> str:
+    """The polarity a bound is *counted* under: the committed adjudication
+    (`floor_polarity.ADJUDICATIONS`) where one exists, else what the AST rule decides.
+    A name the AST cannot place and nobody has adjudicated is `undetermined`."""
+    adjudication = ADJUDICATIONS.get(f"{stem}.{name}")
+    if adjudication is not None:
+        return adjudication[0]
+    return _bound_polarity(tree, name).verdict
 
 
 def _evidence_dir() -> Path:
@@ -3095,6 +3301,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
     swept = 0
     arithmetically_checked = 0
     excluded: list[str] = []
+    swept_names: list[str] = []
+    ceilings: list[str] = []
+    polarity_unadjudicated: list[str] = []
     self_floor: tuple[_ModuleInfo, str, int] | None = None
     arithmetic_self_floor: tuple[_ModuleInfo, str, int] | None = None
     evidence_pinned_self_floor: tuple[_ModuleInfo, str, int] | None = None
@@ -3122,6 +3331,7 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
             if is_this_module and name == "MINIMUM_FLOORS_SWEPT":
                 self_floor = (module, name, lineno)
                 swept += 1
+                swept_names.append(f"{module.stem}.{name}")
                 arithmetically_checked += 1
                 continue
             if is_this_module and name == "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED":
@@ -3131,6 +3341,7 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
                 # run's own loop has not finished computing yet.
                 arithmetic_self_floor = (module, name, lineno)
                 swept += 1
+                swept_names.append(f"{module.stem}.{name}")
                 arithmetically_checked += 1
                 continue
             if is_this_module and name == "MINIMUM_FLOORS_EVIDENCE_PINNED":
@@ -3139,6 +3350,7 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
                 # siblings already are.
                 evidence_pinned_self_floor = (module, name, lineno)
                 swept += 1
+                swept_names.append(f"{module.stem}.{name}")
                 arithmetically_checked += 1
                 continue
             finding, unpinnable_record, pinned_record, in_scope, reached_arithmetic = (
@@ -3147,7 +3359,23 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
             if not in_scope:
                 excluded.append(f"{module.stem}.{name}")
                 continue
+            # T165: a bound that limits from above is not a floor. `_classify_floor`
+            # reads where a constant is compared against a size and never which way,
+            # so a ceiling arrived here looking exactly like a floor — and "the first
+            # deletion must breach" is meaningless for a thing breached by addition.
+            # Judged by the committed adjudication where there is one, else by the
+            # AST (`_effective_polarity`); a bound the AST says is not a floor and
+            # nobody has adjudicated is named, not guessed at.
+            qualified = f"{module.stem}.{name}"
+            adjudication = ADJUDICATIONS.get(qualified)
+            read = _bound_polarity(module.tree, name).verdict
+            if adjudication is None and read != POLARITY_FLOOR:
+                polarity_unadjudicated.append(qualified)
+            if (adjudication[0] if adjudication is not None else read) == POLARITY_CEILING:
+                ceilings.append(qualified)
+                continue
             swept += 1
+            swept_names.append(qualified)
             if reached_arithmetic:
                 arithmetically_checked += 1
             if finding is not None:
@@ -3262,6 +3490,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
             p.as_dict() for p in sorted(pinned, key=lambda p: (p.module, p.name))
         ],
         "bounds_read_and_out_of_scope": sorted(excluded),
+        "floors_in_the_census": sorted(swept_names),
+        "ceilings_excluded_from_the_floor_census": sorted(ceilings),
+        "bounds_with_a_polarity_nobody_adjudicated": sorted(polarity_unadjudicated),
         "gate_status": "measured",
     }
 
@@ -3386,7 +3617,16 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: (`FEWEST_REQUIRING_CASES`, `FEWEST_NOT_REQUIRING_CASES`). Still zero slack.
 #: **95 with T227**, whose `topic_scope_gate` declares two floors
 #: (`FEWEST_HELD_CASES`, `FEWEST_SHOWN_CASES`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 95
+#: **93 with T165**, which stops counting four ceilings as floors —
+#: `approval._SHINGLE`, `generate.GENERATION_CAP`, `interview.MAX_EXTRA_EPISODE_
+#: ATTEMPTS`, `sourcing.DETAIL_FETCH_CEILING` — because a bound breached by
+#: *adding* a member is not one a deletion can breach (`_bound_polarity`,
+#: `floor_polarity.ADJUDICATIONS`). A narrowed population, not new discovery, and
+#: the new count is exact: still zero slack. That is 95 - 4 = 91 plus the two
+#: floors the gate itself added (`MINIMUM_POLARITY_CASES`, `MINIMUM_CEILINGS_SET_ASIDE`;
+#: `MINIMUM_BOUNDS_READ_FOR_POLARITY` is compared against a count this sweep does not
+#: trace, so it is out of scope).
+MINIMUM_FLOORS_SWEPT = 93
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3493,7 +3733,7 @@ MINIMUM_FLOORS_SWEPT = 95
 #: over `reach._cases` — so it joins this count through that file. Measured
 #: with `uv run python -m integral.floor_sweep` against this branch. Still
 #: seven points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=43
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=44
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -3583,7 +3823,11 @@ def _swept_floor_sites(src_dir: Path) -> list[tuple[_ModuleInfo, str, int, ast.e
             ):
                 continue
             _, _, _, in_scope, _ = _classify_floor(module, name, lineno, value_expr)
-            if in_scope:
+            # T165: the census sets ceilings aside (`_analyse`), so a mutation battery
+            # built on "what the gate sweeps" must not lower one — it is not swept.
+            if in_scope and (
+                _effective_polarity(module.stem, name, module.tree) != POLARITY_CEILING
+            ):
                 sites.append((module, name, lineno, value_expr))
     return sites
 
@@ -3833,7 +4077,11 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: comment block and marker, so each is one scenario more. Still zero slack.
 #: **92 with T227**: `topic_scope_gate`'s two floors each carry their own
 #: comment block and marker, so each is one scenario more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 92
+#: **90 with T165**: four ceilings left the census (`_swept_floor_sites` no longer
+#: yields them; `MINIMUM_FLOORS_SWEPT` above), and the gate's own swept floors
+#: each carry a marker and so join the battery. Measured with
+#: `measure_prose_clearance()` against this branch. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 90
 
 
 def measure_prose_clearance() -> dict[str, Any]:
@@ -3967,6 +4215,352 @@ def write_prose_clearance_evidence(
     evidence.parent.mkdir(parents=True, exist_ok=True)
     evidence.write_text(
         json.dumps(record_prose_clearance(measured), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return measured
+
+
+# ---------------------------------------------------------------------------
+# T165's gate: `bounds_counted_with_the_wrong_polarity`.
+# ---------------------------------------------------------------------------
+
+#: The oracle's own battery: source snippets whose polarity follows from the
+#: definition (region of the measured quantity x what its truth means; see the block
+#: above `_bound_polarity`), not from running the rule. `(label, source, name,
+#: expected verdict)`. A rule that read operators alone passes the guard-form cases and
+#: fails the satisfied-form ones, and the other way round; both halves are here because
+#: either alone would leave the other re-opened.
+_POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "breach below, raise",
+        "MIN = 3\ndef f(n):\n    if n < MIN:\n        raise ValueError",
+        "MIN",
+        "floor",
+    ),
+    (
+        "breach below inclusive",
+        "MIN = 3\ndef f(n):\n    if n <= MIN:\n        raise ValueError",
+        "MIN",
+        "floor",
+    ),
+    (
+        "breach below, constant first",
+        "MIN = 3\ndef f(n):\n    if MIN > n:\n        raise ValueError",
+        "MIN",
+        "floor",
+    ),
+    (
+        "breach below, constant first inclusive",
+        "MIN = 3\ndef f(n):\n    if MIN >= n:\n        return None",
+        "MIN",
+        "floor",
+    ),
+    (
+        "breach below, one of several alternatives",
+        "MIN = 3\ndef f(n, ok):\n    if n < MIN or ok:\n        raise ValueError",
+        "MIN",
+        "floor",
+    ),
+    (
+        "breach below, measured key",
+        'MIN = 3\ndef f(m):\n    if m["k"] < MIN:\n        exit_code = 1',
+        "MIN",
+        "floor",
+    ),
+    ("satisfied above, assigned", "MIN = 3\ndef f(n):\n    ok = n >= MIN", "MIN", "floor"),
+    ("satisfied above, constant first", "MIN = 3\ndef f(n):\n    ok = MIN <= n", "MIN", "floor"),
+    (
+        "satisfied above, conditional expression",
+        'MIN = 3\ndef f(n):\n    return "m" if n >= MIN else "u"',
+        "MIN",
+        "floor",
+    ),
+    ("satisfied above, assert", "MIN = 3\ndef f(n):\n    assert n >= MIN", "MIN", "floor"),
+    ("satisfied above, returned", "MIN = 3\ndef f(n):\n    return n >= MIN", "MIN", "floor"),
+    (
+        "satisfied above, one conjunct of a flag",
+        "MIN = 3\nOTHER = 4\ndef f(a, b):\n    ok = a >= MIN and b >= OTHER",
+        "OTHER",
+        "floor",
+    ),
+    (
+        "negated satisfied above, guarded",
+        "MIN = 3\ndef f(n):\n    if not (n >= MIN):\n        raise ValueError",
+        "MIN",
+        "floor",
+    ),
+    (
+        "breach above, raise",
+        "CAP = 3\ndef f(n):\n    if n > CAP:\n        raise ValueError",
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "breach above inclusive, continue",
+        "CAP = 3\ndef f(xs):\n    for n in xs:\n        if n >= CAP:\n            continue",
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "breach above, constant first",
+        "CAP = 3\ndef f(n):\n    if CAP < n:\n        raise ValueError",
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "breach above, accumulating",
+        "CAP = 3\ndef f(n):\n    if n > CAP:\n        unopened += 1",
+        "CAP",
+        "ceiling",
+    ),
+    ("satisfied below, assigned", "CAP = 3\ndef f(n):\n    ok = n <= CAP", "CAP", "ceiling"),
+    (
+        "satisfied below, conditional expression",
+        "CAP = 3\ndef f(s):\n    return s if len(s) <= CAP else s[:CAP]",
+        "CAP",
+        "ceiling",
+    ),
+    ("satisfied below, assert", "CAP = 3\ndef f(n):\n    assert n < CAP", "CAP", "ceiling"),
+    ("satisfied below, returned", "CAP = 3\ndef f(n):\n    return len(n) <= CAP", "CAP", "ceiling"),
+    (
+        "satisfied below, guard that returns the boolean",
+        (
+            "CAP = 3\n"
+            "def f(ws, b):\n"
+            "    if len(ws) <= CAP:\n"
+            "        return ' '.join(ws) in b\n"
+            "    return False"
+        ),
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "negated satisfied below, guarded",
+        "CAP = 3\ndef f(n):\n    if not (n <= CAP):\n        raise ValueError",
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "not equality",
+        'V = 1\ndef f(r):\n    if r["v"] != V:\n        raise ValueError',
+        "V",
+        "neither",
+    ),
+    ("equality", "V = 1\ndef f(r):\n    return r == V", "V", "neither"),
+    ("membership", "V = 1\ndef f(r):\n    return V in r", "V", "neither"),
+    (
+        "equality beside a ceiling",
+        "CAP = 3\ndef f(n):\n    if n > CAP:\n        raise ValueError\n    full = n == CAP",
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "a floor and a ceiling at once",
+        (
+            "B = 3\n"
+            "def f(n):\n"
+            "    if n < B:\n"
+            "        raise ValueError\n"
+            "    if n > B:\n"
+            "        raise ValueError"
+        ),
+        "B",
+        "undetermined",
+    ),
+    (
+        "a comprehension filter abstains",
+        "B = 3\ndef f(xs):\n    return [x for x in xs if x < B]",
+        "B",
+        "undetermined",
+    ),
+    ("a call argument abstains", "B = 3\ndef f(n):\n    return g(n >= B)", "B", "undetermined"),
+    ("no comparison at all", "B = 3\ndef f(n=B):\n    return n", "B", "undetermined"),
+    (
+        "a floor beside an abstaining filter",
+        (
+            "B = 3\n"
+            "def f(n, xs):\n"
+            "    ys = [x for x in xs if x < B]\n"
+            "    if n < B:\n"
+            "        raise ValueError"
+        ),
+        "B",
+        "floor",
+    ),
+    (
+        "delegated floor",
+        (
+            "MIN = 3\n"
+            "def _floor(observed, minimum):\n"
+            "    return (minimum, False) if observed >= minimum else (observed, True)\n"
+            "def f(xs):\n"
+            "    return _floor(len(xs), MIN)"
+        ),
+        "MIN",
+        "floor",
+    ),
+    (
+        "delegated ceiling",
+        (
+            "CAP = 3\n"
+            "def _within(n, limit):\n"
+            "    return n <= limit\n"
+            "def f(xs):\n"
+            "    return _within(len(xs), CAP)"
+        ),
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "delegated through two helpers",
+        (
+            "MIN = 3\n"
+            "def _inner(a, b):\n"
+            "    return a >= b\n"
+            "def _outer(c, d):\n"
+            "    return _inner(c, d)\n"
+            "def f(xs):\n"
+            "    return _outer(len(xs), MIN)"
+        ),
+        "MIN",
+        "floor",
+    ),
+)
+
+#: A floor on the oracle's own battery, in `naming.MINIMUM_SCANNED`'s style (T100):
+#: the cases are a hand-maintained tuple, so a raw count would read as compliant
+#: merely because nobody deleted the last entry.
+#: arsenal-floor-margin: MINIMUM_POLARITY_CASES value=35
+MINIMUM_POLARITY_CASES = 35
+
+#: A floor on how many bounds the gate reads — the census's floors plus the ceilings
+#: it set aside — committed as a **literal** per T122: derived from the census's own
+#: result it would shrink with any bound the sweep stopped finding, which is this
+#: task's defect committed inside this task's gate. Measured 97 when T165 landed
+#: (93 floors in the census, four ceilings out of it), zero slack.
+#: arsenal-floor-margin: MINIMUM_BOUNDS_READ_FOR_POLARITY value=97
+MINIMUM_BOUNDS_READ_FOR_POLARITY = 97
+
+#: How many ceilings the census must have set aside. The task named five; the AST rule
+#: and the committed adjudications find four, because the fifth,
+#: `extraction._CONFIRMING_MATCHES_FOR_BIPOLAR`, is a floor: `len(spans) <
+#: _CONFIRMING_MATCHES_FOR_BIPOLAR and not negated_any` returns `None`, so a dimension
+#: with fewer than two confirming matches is refused and *deleting* a match breaches it.
+#: arsenal-floor-margin: MINIMUM_CEILINGS_SET_ASIDE value=4
+MINIMUM_CEILINGS_SET_ASIDE = 4
+
+
+def measure_polarity_oracle() -> dict[str, Any]:
+    """Run `_POLARITY_CASES` through `_bound_polarity`; return how many ran and the
+    ones it judged differently from the definition."""
+    misjudged: list[dict[str, str]] = []
+    for label, source, name, expected in _POLARITY_CASES:
+        got = _bound_polarity(ast.parse(source), name).verdict
+        if got != expected:
+            misjudged.append({"case": label, "expected": expected, "got": got})
+    return {"polarity_cases_checked": len(_POLARITY_CASES), "polarity_cases_misjudged": misjudged}
+
+
+def _decided_verdict(trees: dict[str, ast.Module], qualified: str) -> str | None:
+    """What the AST rule decides for `module.NAME`; `None` when it abstains."""
+    stem, _, name = qualified.partition(".")
+    tree = trees.get(stem)
+    if tree is None:
+        return None
+    verdict = _bound_polarity(tree, name).verdict
+    return None if verdict == POLARITY_UNDETERMINED else verdict
+
+
+def _bound_exists(trees: dict[str, ast.Module], qualified: str) -> bool:
+    stem, _, name = qualified.partition(".")
+    tree = trees.get(stem)
+    return tree is not None and name in {n for n, _l, _v in _module_constant_candidates(tree)}
+
+
+def measure_polarity(src_dir: Path | None = None) -> dict[str, Any]:
+    """T165's gate: committed bounds the census classifies as floors whose comparison
+    establishes an upper limit, plus any it set aside as ceilings whose comparison
+    establishes a lower one.
+
+    Reads the census's *output* (`measure()`: the floors it swept and the ceilings it
+    set aside) and re-judges each name with `_effective_polarity`, so it measures the
+    census's wiring — a ceiling the census forgot to set aside is counted here — and
+    not the oracle against itself; the oracle is pinned separately by `_POLARITY_CASES`.
+    """
+    directory = _SRC_DIR if src_dir is None else src_dir
+    census = measure(directory)
+    trees = {module.stem: module.tree for module in _module_infos(directory)}
+
+    counted_as_floors = {
+        (qualified.split(".", 1)[0], qualified.split(".", 1)[1])
+        for qualified in census["floors_in_the_census"]
+    }
+    set_aside = {
+        (qualified.split(".", 1)[0], qualified.split(".", 1)[1])
+        for qualified in census["ceilings_excluded_from_the_floor_census"]
+    }
+    wrong: list[dict[str, str]] = []
+    for (stem, name), census_class in sorted(
+        [(pair, POLARITY_FLOOR) for pair in counted_as_floors]
+        + [(pair, POLARITY_CEILING) for pair in set_aside]
+    ):
+        polarity = _effective_polarity(stem, name, trees[stem])
+        opposite = POLARITY_CEILING if census_class == POLARITY_FLOOR else POLARITY_FLOOR
+        if polarity == opposite:
+            wrong.append({"bound": f"{stem}.{name}", "census": census_class, "polarity": polarity})
+
+    # Where the AST decides and an adjudication says otherwise, the override is listed by
+    # name: a reader sees every place a human overruled the rule.
+    overrides = sorted(
+        qualified
+        for qualified, (verdict, _reason) in ADJUDICATIONS.items()
+        if _decided_verdict(trees, qualified) not in (None, verdict)
+    )
+    dangling = sorted(q for q in ADJUDICATIONS if not _bound_exists(trees, q))
+    oracle = measure_polarity_oracle()
+    bounds_read = len(counted_as_floors) + len(set_aside)
+    unadjudicated = sorted(set(census["bounds_read_and_out_of_scope"]) - set(ADJUDICATIONS)) + list(
+        census["bounds_with_a_polarity_nobody_adjudicated"]
+    )
+    measured = (
+        bounds_read >= MINIMUM_BOUNDS_READ_FOR_POLARITY
+        and oracle["polarity_cases_checked"] >= MINIMUM_POLARITY_CASES
+        and len(set_aside) >= MINIMUM_CEILINGS_SET_ASIDE
+    )
+    return {
+        "bounds_counted_with_the_wrong_polarity": len(wrong),
+        "wrong_polarity": wrong,
+        "bounds_read": bounds_read,
+        "ceilings_set_aside": sorted(f"{s}.{n}" for s, n in set_aside),
+        "bounds_with_no_adjudication": sorted(unadjudicated),
+        "adjudications_without_a_bound": dangling,
+        "adjudications_overruling_the_ast": overrides,
+        **oracle,
+        "gate_status": "measured" if measured else "unmeasured",
+    }
+
+
+def record_polarity(measured: dict[str, Any]) -> dict[str, Any]:
+    """What is committed, out of what `measure_polarity` returns — the denominators
+    swapped for their floors (T100/T122)."""
+    committed = {
+        key: value
+        for key, value in measured.items()
+        if key not in ("bounds_read", "polarity_cases_checked")
+    }
+    committed["bounds_read_at_least"] = MINIMUM_BOUNDS_READ_FOR_POLARITY
+    committed["polarity_cases_checked_at_least"] = MINIMUM_POLARITY_CASES
+    committed["ceilings_set_aside_at_least"] = MINIMUM_CEILINGS_SET_ASIDE
+    return committed
+
+
+def write_polarity_evidence(evidence: Path | None = None) -> dict[str, Any]:
+    """Measure and record `status/evidence/T165.json`; return what was measured."""
+    path = DEFAULT_POLARITY_EVIDENCE_PATH if evidence is None else evidence
+    measured = measure_polarity()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(record_polarity(measured), indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     return measured
@@ -4139,7 +4733,45 @@ def _main(argv: list[str] | None = None) -> int:
             )
         return 1
 
-    return exit_code
+    polarity = write_polarity_evidence()
+    print(json.dumps(polarity, ensure_ascii=False))
+    return exit_code or _polarity_exit_code(polarity)
+
+
+def _polarity_exit_code(polarity: dict[str, Any]) -> int:
+    """T165's verdict, as an exit status (1, never 3 — see `_main`)."""
+    if polarity["gate_status"] != "measured":
+        print(
+            f"polarity gate unmeasured: {polarity['bounds_read']} bound(s) read "
+            f"(floor {MINIMUM_BOUNDS_READ_FOR_POLARITY}), {polarity['polarity_cases_checked']} "
+            f"oracle case(s) (floor {MINIMUM_POLARITY_CASES}), "
+            f"{len(polarity['ceilings_set_aside'])} ceiling(s) set aside "
+            f"(floor {MINIMUM_CEILINGS_SET_ASIDE}) — a clean zero over a shrunken read is "
+            "not a measurement",
+            file=sys.stderr,
+        )
+        return 1
+    status = 0
+    for row in polarity["wrong_polarity"]:
+        print(
+            f"✗ {row['bound']} is counted as a {row['census']} but its comparison "
+            f"establishes a {row['polarity']}",
+            file=sys.stderr,
+        )
+        status = 1
+    for row in polarity["polarity_cases_misjudged"]:
+        print(
+            f"✗ polarity oracle case {row['case']!r}: expected {row['expected']}, got {row['got']}",
+            file=sys.stderr,
+        )
+        status = 1
+    for qualified in polarity["bounds_with_no_adjudication"]:
+        print(f"✗ {qualified} has no polarity adjudication", file=sys.stderr)
+        status = 1
+    for qualified in polarity["adjudications_without_a_bound"]:
+        print(f"✗ adjudication {qualified} names a bound that does not exist", file=sys.stderr)
+        status = 1
+    return status
 
 
 if __name__ == "__main__":  # pragma: no cover
