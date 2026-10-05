@@ -82,7 +82,7 @@ from integral.lifecycle import (
 from integral.offers import Offer, SourceKind, compute_offer_id, names_an_employer
 from integral.robots import Robots, RobotsError, RobotsUnreachable
 from integral.salary_recovery import applied, band_in_text, recover
-from integral.sourcing_exclusions import Exclusion, candidate_of, load_exclusions, ruled_out_by
+from integral.sourcing_exclusions import Exclusion, candidate_of, held_in_words, load_exclusions
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -1703,7 +1703,7 @@ def _one_board(
                 # it must not spend room a readable row could use.
                 out_of_reach += 1
                 continue
-            ruled_out = ruled_out_by(candidate_of(offer, store), exclusions)
+            ruled_out = held_in_words(candidate_of(offer, store), exclusions)
             if ruled_out:
                 # T203. Left out **and said**: the count and the reason ride
                 # on the outcome, so it is on the page the candidate reads.

@@ -248,6 +248,16 @@
       "line": 425
     },
     {
+      "module": "topic_scope_gate",
+      "name": "FEWEST_HELD_CASES",
+      "line": 34
+    },
+    {
+      "module": "topic_scope_gate",
+      "name": "FEWEST_SHOWN_CASES",
+      "line": 40
+    },
+    {
       "module": "trait_sufficiency",
       "name": "MINIMUM_CHECKS",
       "line": 590
@@ -317,20 +327,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3495,
+      "line": 3497,
       "population": 43
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3522,
+      "line": 3524,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3387,
-      "population": 93
+      "line": 3389,
+      "population": 95
     },
     {
       "module": "freshness",
@@ -576,6 +586,6 @@
     "weights.MAX_CHOICES"
   ],
   "gate_status": "measured",
-  "floors_swept_at_least": 93,
+  "floors_swept_at_least": 95,
   "floors_arithmetically_checked_at_least": 36
 }
