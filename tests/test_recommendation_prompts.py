@@ -40,7 +40,7 @@ SECTION = "## Lead with the recommendation"
 NO_BETTER_OPTION: dict[str, str] = {
     "step-08-understanding": "runs extraction unattended; the candidate is offered nothing",
     "step-10-feedback": "captures their opinion of the list; recommending one would bias it",
-    "step-12-interview-log": "records an interview; only which half runs is chosen, by the date",
+    "step-12-interview-log": "preparation can be declined; the spec wants no enforcement here",
 }
 
 #: Cross-check only: phrasings that offer a choice. A skill matching one must carry the section.
@@ -111,35 +111,58 @@ def test_every_step_skill_recommends_or_says_why_not() -> None:
     assert _unclassified_or_unrecommending(skills, NO_BETTER_OPTION) == []
 
 
-def _first_run_skills() -> set[str]:
-    return {skill_dir_name(step) for step in load_steps().steps if step.phase == "first_run"}
+def _first_run_skills() -> dict[str, bool]:
+    """First-run step skill dirs, each with whether the step is Required (from the spec)."""
+    return {
+        skill_dir_name(step): step.required
+        for step in load_steps().steps
+        if step.phase == "first_run"
+    }
 
 
-def _first_run_gaps(skills: dict[str, str], first_run: set[str]) -> list[str]:
-    """§3.3: every first-run step offers the skip, so every one recommends finishing."""
+def _first_run_gaps(skills: dict[str, str], first_run: dict[str, bool]) -> list[str]:
+    """§3.3: every first-run step recommends going on over the offered skip.
+
+    A Required step is never the one skipped (no candidate reaches a ranking without it), so
+    its example recommends the *next* step and offers the skip only after it.
+    """
     gaps = []
-    for name in sorted(first_run):
+    for name, required in sorted(first_run.items()):
         section = _section(skills.get(name, ""))
         block = re.search(r"```text\n(.*?)\n```", section, re.DOTALL)
         if not _prompt_leads_with_a_recommendation(section):
             gaps.append(f"{name}: no recommending example")
         elif block is None or "stop here and look at real jobs" not in block.group(1):
             gaps.append(f"{name}: the example never names the offered skip")
+        elif required and " next" not in block.group(1):
+            gaps.append(f"{name}: a Required step's example must recommend the next step")
     return gaps
 
 
 def test_every_first_run_step_recommends_finishing_over_the_skip() -> None:
     first_run = _first_run_skills()
     assert len(first_run) >= 7  # steps 0 to 6 when this landed
+    assert sum(first_run.values()) >= 2  # steps 0 and 2 are Required
     assert _first_run_gaps(_skills(), first_run) == []
-    assert not first_run & set(NO_BETTER_OPTION)
+    assert not set(first_run) & set(NO_BETTER_OPTION)
 
 
 def test_the_first_run_rule_refuses_a_step_that_names_no_skip() -> None:
     skills = {"step-01-x": f'{SECTION}\n\n```text\n"I\'d recommend we go on."\n```\n'}
     gap = "step-01-x: the example never names the offered skip"
-    assert _first_run_gaps(skills, {"step-01-x"}) == [gap]
-    assert _first_run_gaps({}, {"step-02-y"}) == ["step-02-y: no recommending example"]
+    assert _first_run_gaps(skills, {"step-01-x": False}) == [gap]
+    assert _first_run_gaps({}, {"step-02-y": True}) == ["step-02-y: no recommending example"]
+
+
+def test_a_required_step_may_not_offer_its_own_skip() -> None:
+    old_step_zero = (
+        "I'd recommend we finish this - it keeps your profile separate. We can stop here and "
+        "look at real jobs with what I have, but nothing would be kept for you."
+    )
+    skills = {"step-00-x": f'{SECTION}\n\n```text\n"{old_step_zero}"\n```\n'}
+    found = _first_run_gaps(skills, {"step-00-x": True})
+    assert found == ["step-00-x: a Required step's example must recommend the next step"]
+    assert _first_run_gaps(skills, {"step-00-x": False}) == []
 
 
 def test_the_sections_are_where_the_choices_are() -> None:
@@ -243,6 +266,17 @@ def _store(tmp_path: Path) -> ProfileStore:
 REFUSALS = [
     ("constraint", "Go, nunca.", {"go"}),
     ("constraint", "Go no, gracias", {"go"}),
+    ("constraint", "nada de go", {"go"}),
+    ("constraint", "go no", {"go"}),
+    ("constraint", "GO no", {"go"}),
+    ("constraint", "No Go.", {"go"}),
+    ("constraint", "Never Go.", {"go"}),
+    ("constraint", "Go? No.", {"go"}),
+    ("constraint", "\u00bfGo? No.", {"go"}),
+    ("constraint", "\u00abGo\u00bb no", {"go"}),
+    ("constraint", "Go/Rust no", {"go", "rust"}),
+    ("constraint", "Go \u2014 never", {"go"}),
+    ("constraint", "Prefiero no tocar Go.", {"go"}),
     ("constraint", "Quiero trabajar con Kubernetes", {"kubernetes"}),  # over-exclusion is accepted
     ("text", "golang", {"go"}),
     ("topic", "php", {"php"}),
@@ -250,6 +284,8 @@ REFUSALS = [
     ("skill", "Go o Python", {"go", "python"}),
     ("skill", "Go", {"go"}),
 ]
+
+CARVE_OUTS = ["I will not go to the office", "no go-to-market roles", "I might go ahead and stay"]
 
 
 @pytest.mark.parametrize(("facet", "value", "expected"), REFUSALS)
@@ -281,13 +317,14 @@ def test_an_exclusion_term_counts(tmp_path: Path) -> None:
     assert "php" in profile_standing.ruled_out(store)
 
 
-def test_prose_that_merely_says_go_is_not_a_mention(tmp_path: Path) -> None:
+@pytest.mark.parametrize("text", CARVE_OUTS)
+def test_prose_that_merely_says_go_is_not_a_mention(tmp_path: Path, text: str) -> None:
     store = _store(tmp_path)
     EvidenceLog(store).append(
         recorded_at="2026-10-05T10:00:00Z",
         step="constraints",
         kind="constraint",
-        text="I will not go to the office",
+        text=text,
         source="conversation",
     )
     assert profile_standing.ruled_out(store) == frozenset()
@@ -418,3 +455,16 @@ def test_the_checkpoint_refuses_lines_that_are_not_the_ones_for_those_offers(
     assert unstated_standing(store) == []
     present(store, ids, at="2026-10-05T11:00:00Z")  # a later batch said nothing
     assert unstated_standing(store)
+
+
+def test_the_checkpoint_recomputes_in_the_candidates_language_not_the_rows(tmp_path: Path) -> None:
+    store = _shown_store(tmp_path, ["a", "b", "c"])  # a Spanish candidate (the default)
+    ids = ["a", "b", "c"]
+    fits = fits_for_store(store, ids)
+    for language in ("en", "ca", "xx"):
+        lines = profile_standing.standing_for_store(store, fits, ids, language=language)
+        present(store, ids, at="2026-10-05T10:00:00Z", standing=lines)
+        assert unstated_standing(store), language
+    es = profile_standing.standing_for_store(store, fits, ids, language="es")
+    present(store, ids, at="2026-10-05T10:00:00Z", standing=es)
+    assert unstated_standing(store) == []

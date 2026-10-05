@@ -52,6 +52,11 @@ class Standing:
     language: str = "es"
 
 
+#: In refusal text `go` is read in any case ("nada de go", "GO no"): chat is lower-case and
+#: the advert writes "Go". Only the verb carve-outs of `stack_fit` ("go to", "go-to") stay out.
+_ANY_CASE_GO = re.compile(r"(?<![\w-])go(?!\w)", re.IGNORECASE)
+
+
 def _mentioned(text: str) -> set[str]:
     """Every technology `text` names, in label mode so a sentence-opening "Go" counts.
 
@@ -64,6 +69,10 @@ def _mentioned(text: str) -> set[str]:
     # a whole value that is a technology's name or alias: `go`, `golang`
     with contextlib.suppress(stack_fit.StackFitError):
         found.add(stack_fit.resolve_technology(text.strip()))
+    for match in _ANY_CASE_GO.finditer(text):
+        rest = text[match.end() :]
+        if not (rest.startswith("-") or stack_fit._GO_VERB_NEXT.match(rest)):
+            found.add("go")
     for word in re.findall(r"[\w.+#]+", text):
         folded = _squash(word)
         for technology in stack_fit.VOCABULARY_IDS:

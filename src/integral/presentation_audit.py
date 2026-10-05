@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from integral.feedback import _lifecycle_records
-from integral.identity import ProfileStore
+from integral.identity import Identity, IdentityError, ProfileStore
 from integral.lifecycle import current_tombstones
 from integral.presentation_log import _rows
 from integral.profile import EvidenceLog
@@ -104,6 +104,9 @@ def unstated_standing(store: ProfileStore) -> list[dict[str, Any]]:
     what the row recorded. Presence is not enough: a blank line, a "not assessed" pair
     recorded while fits exist, or lines computed for other offers all fail. The newest
     batch is the last row in the append-only file, by row identity, never by timestamp.
+    The language is the candidate's own (`identity.json`), never the row's: a recompute
+    parameterised by the record under test cannot disagree with it. The store is read as it
+    is now, so a later CV edit flags the batch — fail-closed, and presenting again clears it.
     No rows is `unpresented_ranking`'s finding, not this one's.
     """
     rows = _rows(store)
@@ -112,7 +115,10 @@ def unstated_standing(store: ProfileStore) -> list[dict[str, Any]]:
     newest = rows[-1]
     ids = [str(i) for i in newest.get("offer_ids", ())]
     said = newest.get("standing")
-    language = said.get("language", "es") if isinstance(said, dict) else "es"
+    try:
+        language: str = Identity.model_validate(store.read_json("identity.json")).language
+    except (IdentityError, ValueError, OSError):
+        return [{"at": newest.get("at"), "problem": "the candidate's language cannot be read"}]
     expected = standing_for_store(store, fits_for_store(store, ids), ids, language=language)
     if (
         isinstance(said, dict)

@@ -66,11 +66,12 @@ In this step that sounds like:
 
 §3.3 makes the shortcut the candidate's to take and the full run the default, and says why: the
 more the tool knows, the better the results. So at the end of this step the offered skip is
-never a neutral pair — recommend finishing, with the reason in a clause, then name the skip
-second. The tool never takes the skip for them.
+never a neutral pair — this step is Required, so it is never the one skipped: once it is done,
+recommend the next step, with the reason in a clause, then name the skip second. The tool never
+takes the skip for them.
 
 ```text
-"I'd recommend we finish this — it's what keeps your profile separate from anyone else's and lets everything after it be saved to you. We can stop here and look at real jobs with what I have, but nothing would be kept for you. Shall we finish?"
+"I'd recommend we go through your CV next, now you're set up — it's what lets me match real jobs to you. We can stop here and look at real jobs with what I have, but the list will be rough. Shall we?"
 ```
 
 ## Stop rule
