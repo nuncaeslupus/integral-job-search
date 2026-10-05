@@ -77,7 +77,7 @@ Recommend by their situation (one board they will use again: the connector; a on
 browser session), never as a neutral pair.
 
 ```text
-"I'd recommend building a connector for the board you'll check most — it covers every later search too. If you only need today's run, the other way is your own browser session. Which suits you?"
+"I'd recommend building a connector for the board you'll check most — it covers every later search too, but building one can use a lot of tokens, so I'm telling you before I start. If you only need today's run, the other way is your own browser session. Which suits you?"
 ```
 
 ## Coverage — say when nothing here covers this market

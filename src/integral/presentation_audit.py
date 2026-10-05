@@ -36,6 +36,8 @@ from integral.identity import ProfileStore
 from integral.lifecycle import current_tombstones
 from integral.presentation_log import _rows
 from integral.profile import EvidenceLog
+from integral.profile_standing import standing_for_store
+from integral.stack_fit import fits_for_store
 
 
 def _when(value: object) -> datetime | None:
@@ -95,20 +97,30 @@ def unpresented_ranking(store: ProfileStore) -> list[dict[str, Any]]:
 
 
 def unstated_standing(store: ProfileStore) -> list[dict[str, Any]]:
-    """T209: the newest batch shown carries no strengths / widen-the-fit lines.
+    """T209: the newest batch shown did not say the standing computed for *its* offers.
 
-    Step 9 says both lines every time (`profile_standing`); the only trace that
-    it did is the `standing` on the `present()` row. No rows is `unpresented_ranking`'s
-    finding, not this one's.
+    The lines are recomputed from the row's own `offer_ids` and the store
+    (`profile_standing.standing_for_store` over `stack_fit.fits_for_store`) and must equal
+    what the row recorded. Presence is not enough: a blank line, a "not assessed" pair
+    recorded while fits exist, or lines computed for other offers all fail. The newest
+    batch is the last row in the append-only file, by row identity, never by timestamp.
+    No rows is `unpresented_ranking`'s finding, not this one's.
     """
-    rows = [(when, row) for row in _rows(store) if (when := _when(row.get("at"))) is not None]
+    rows = _rows(store)
     if not rows:
         return []
-    when, newest = max(rows, key=lambda entry: entry[0])
+    newest = rows[-1]
+    ids = [str(i) for i in newest.get("offer_ids", ())]
     said = newest.get("standing")
-    if isinstance(said, dict) and said.get("strengths") and said.get("widen"):
+    language = said.get("language", "es") if isinstance(said, dict) else "es"
+    expected = standing_for_store(store, fits_for_store(store, ids), ids, language=language)
+    if (
+        isinstance(said, dict)
+        and said.get("strengths") == expected.strengths
+        and said.get("widen") == expected.widen
+    ):
         return []
-    return [{"at": newest.get("at"), "problem": "no standing lines on the newest presentation"}]
+    return [{"at": newest.get("at"), "problem": "no standing lines for this batch's offers"}]
 
 
 def unrecorded_discards(store: ProfileStore) -> list[dict[str, str]]:

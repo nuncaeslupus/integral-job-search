@@ -65,6 +65,17 @@ In this step that sounds like:
 
 - **Stimuli are never invented.** An imagined advert reads plausibly and represents nothing — this is how wrong cues once entered the dimension model with gold examples demonstrating their own error.
 
+## Lead with the recommendation
+
+§3.3 makes the shortcut the candidate's to take and the full run the default, and says why: the
+more the tool knows, the better the results. So at the end of this step the offered skip is
+never a neutral pair — recommend finishing, with the reason in a clause, then name the skip
+second. The tool never takes the skip for them.
+
+```text
+"I'd recommend you react to a few more adverts — what you say about real ones moves the list more than anything else. We can stop here and look at real jobs with what I have, but the order will be a guess. Shall we?"
+```
+
 ## Stop rule
 
 Fifteen stimuli reacted to, or the candidate stops. **Hard cap: 25 stimuli** — past that, reactions get shorter and less useful, which is worse than fewer of them.

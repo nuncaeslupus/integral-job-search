@@ -33,7 +33,7 @@ evidence, recommend the one next move — another story from a past role, or the
 with the reason in a clause, and name the alternative second. Never a neutral menu.
 
 ```text
-"I'd recommend one more story from your last role before I score this — nothing so far shows how you handle disagreement, and that's the trait the adverts lean on most. Or we can go on with what I have."
+"I'd recommend one more story from your last role before I score this — nothing so far shows how you handle disagreement, and that's the trait the adverts lean on most. Or we can stop here and look at real jobs with what I have."
 ```
 
 ## Protocol — the manner, not the mechanism

@@ -60,6 +60,17 @@ In this step that sounds like:
 - Never read the usual-suspects list out as a checklist — pick what fits what they already said, and ask it as curiosity.
 - Never offer *falso autónomo* as a mode the candidate might want: it is an illegal arrangement — being engaged as self-employed while working under an employer's direction and hours — and not one of the two recordable modes. It may be asked about as something happening to them now, and named when warning them off an advert; it is never put to them as a choice.
 
+## Lead with the recommendation
+
+§3.3 makes the shortcut the candidate's to take and the full run the default, and says why: the
+more the tool knows, the better the results. So at the end of this step the offered skip is
+never a neutral pair — recommend finishing, with the reason in a clause, then name the skip
+second. The tool never takes the skip for them.
+
+```text
+"I'd recommend we settle your pay floor and where you can work first — they rule jobs out, and the list is only as good as those lines. We can stop here and look at real jobs with what I have, but some of what I show may be out of reach. Shall we carry on?"
+```
+
 ## Stop rule
 
 Every constraint field is `stated`, `declined` or `unknown` — never blank. **Hard cap: 14 questions**, after which whatever is unresolved stays `unknown` and the step ends.

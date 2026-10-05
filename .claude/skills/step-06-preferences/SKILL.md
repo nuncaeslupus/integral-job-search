@@ -57,7 +57,7 @@ better for the search, give the reason in a clause, and name the alternative sec
 with a neutral menu of equal-looking choices.
 
 ```text
-"I'd recommend two more choices before I fit this — the commute and the pay are still tied, and that's the pair that moves your list most. We can skip them, but the list will be less sharp. Ready?"
+"I'd recommend two more choices before I fit this — the commute and the pay are still tied, and that's the pair that moves your list most. We can stop here and look at real jobs with what I have, but the list will be less sharp. Ready?"
 ```
 
 ## Stop rule

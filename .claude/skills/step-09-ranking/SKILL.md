@@ -57,7 +57,8 @@ the cards used, never from a question and never invented:
 ```python
 from integral.profile_standing import standing_for_store
 
-# `show` is the page `partition` returned — the offers on screen, never the whole ranking.
+# `show` is `page_ids` (the same slice `presentation.page` renders) after `partition` —
+# the offers on screen, never the whole ranking.
 # The denominator counts every one of them, including adverts that name no technology.
 lines = standing_for_store(store, stack, show)
 present(store, show, at=now, phrase=phrase, standing=lines)   # the checkpoint reads this row
@@ -193,9 +194,10 @@ Showing a batch is itself a fact, and it is the one that later turns into a
 question worth asking. Two calls, around the list:
 
 ```python
+from integral.presentation import page_ids
 from integral.presentation_log import partition, present, shown_notes, unchecked_line, withheld_line
 
-show, held = partition(store, ranked_ids)      # never `show` alone
+show, held = partition(store, page_ids(ranking, limit, offset))   # never `show` alone
 present(store, show, at=now, phrase=phrase)
 ```
 

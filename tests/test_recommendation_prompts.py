@@ -15,40 +15,32 @@ Half 2 runs `integral.profile_standing` over stack fits built by the real
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from integral import profile_standing, stack_fit, strings
 from integral.identity import ProfileStore, create_profile
+from integral.presentation import page_ids
 from integral.presentation_audit import unstated_standing
 from integral.presentation_log import present
+from integral.process_spec import load_steps
 from integral.profile import EvidenceLog
 from integral.sourcing_exclusions import Exclusion, record_exclusion
-from integral.stack_fit import Held
+from integral.stack_fit import Held, fits_for_store
+from integral.step_skills import skill_dir_name
 
 SKILLS = Path(__file__).resolve().parents[1] / ".claude" / "skills"
 SECTION = "## Lead with the recommendation"
 
-#: Steps with no choice where one option is better for the search — each with why.
+#: Non-first-run steps with no choice where one option is better for the search — each with why.
+#: First-run steps are never listed here: §3.3's offered skip is theirs, derived below.
 NO_BETTER_OPTION: dict[str, str] = {
-    "step-00-identify": (
-        "resolves who the candidate is; the only choice is which profile, theirs to name"
-    ),
-    "step-01-intake": "captures what the candidate hands over; nothing is offered in its place",
-    "step-02-constraints": (
-        "records the candidate's own limits; a recommendation would be pressure on them"
-    ),
-    "step-03-history": "elicits stories one at a time; there is no menu, only the next question",
-    "step-05-reactions": (
-        "learns preferences from reactions; steering the reaction would corrupt it"
-    ),
     "step-08-understanding": "runs extraction unattended; the candidate is offered nothing",
-    "step-10-feedback": (
-        "captures the candidate's opinion of the list; recommending one would bias it"
-    ),
-    "step-12-interview-log": (
-        "records an interview; the only choice is which half runs, and the date decides"
-    ),
+    "step-10-feedback": "captures their opinion of the list; recommending one would bias it",
+    "step-12-interview-log": "records an interview; only which half runs is chosen, by the date",
 }
 
 #: Cross-check only: phrasings that offer a choice. A skill matching one must carry the section.
@@ -117,6 +109,37 @@ def test_every_step_skill_recommends_or_says_why_not() -> None:
     skills = _skills()
     assert len(skills) >= 13
     assert _unclassified_or_unrecommending(skills, NO_BETTER_OPTION) == []
+
+
+def _first_run_skills() -> set[str]:
+    return {skill_dir_name(step) for step in load_steps().steps if step.phase == "first_run"}
+
+
+def _first_run_gaps(skills: dict[str, str], first_run: set[str]) -> list[str]:
+    """§3.3: every first-run step offers the skip, so every one recommends finishing."""
+    gaps = []
+    for name in sorted(first_run):
+        section = _section(skills.get(name, ""))
+        block = re.search(r"```text\n(.*?)\n```", section, re.DOTALL)
+        if not _prompt_leads_with_a_recommendation(section):
+            gaps.append(f"{name}: no recommending example")
+        elif block is None or "stop here and look at real jobs" not in block.group(1):
+            gaps.append(f"{name}: the example never names the offered skip")
+    return gaps
+
+
+def test_every_first_run_step_recommends_finishing_over_the_skip() -> None:
+    first_run = _first_run_skills()
+    assert len(first_run) >= 7  # steps 0 to 6 when this landed
+    assert _first_run_gaps(_skills(), first_run) == []
+    assert not first_run & set(NO_BETTER_OPTION)
+
+
+def test_the_first_run_rule_refuses_a_step_that_names_no_skip() -> None:
+    skills = {"step-01-x": f'{SECTION}\n\n```text\n"I\'d recommend we go on."\n```\n'}
+    gap = "step-01-x: the example never names the offered skip"
+    assert _first_run_gaps(skills, {"step-01-x"}) == [gap]
+    assert _first_run_gaps({}, {"step-02-y"}) == ["step-02-y: no recommending example"]
 
 
 def test_the_sections_are_where_the_choices_are() -> None:
@@ -217,22 +240,68 @@ def _store(tmp_path: Path) -> ProfileStore:
     return ProfileStore(tmp_path, identity.handle)
 
 
-def test_an_exclusion_or_a_constraint_row_reaches_the_ruled_out_set(tmp_path: Path) -> None:
+REFUSALS = [
+    ("constraint", "Go, nunca.", {"go"}),
+    ("constraint", "Go no, gracias", {"go"}),
+    ("constraint", "Quiero trabajar con Kubernetes", {"kubernetes"}),  # over-exclusion is accepted
+    ("text", "golang", {"go"}),
+    ("topic", "php", {"php"}),
+    ("skill", "node", {"nodejs"}),
+    ("skill", "Go o Python", {"go", "python"}),
+    ("skill", "Go", {"go"}),
+]
+
+
+@pytest.mark.parametrize(("facet", "value", "expected"), REFUSALS)
+def test_any_mention_in_a_refusal_reaches_the_ruled_out_set(
+    tmp_path: Path, facet: str, value: str, expected: set[str]
+) -> None:
+    store = _store(tmp_path)
+    if facet == "constraint":
+        EvidenceLog(store).append(
+            recorded_at="2026-10-05T10:00:00Z",
+            step="constraints",
+            kind="constraint",
+            text=value,
+            source="conversation",
+        )
+    else:
+        record_exclusion(
+            store, Exclusion(about=f"{facet}:{value}", stated_at_cycle=1, words=f"fuera {value}")
+        )
+    assert profile_standing.ruled_out(store) >= expected
+
+
+def test_an_exclusion_term_counts(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    record_exclusion(
+        store,
+        Exclusion(about="topic:backend", stated_at_cycle=1, words="ni backend", terms=("php",)),
+    )
+    assert "php" in profile_standing.ruled_out(store)
+
+
+def test_prose_that_merely_says_go_is_not_a_mention(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    EvidenceLog(store).append(
+        recorded_at="2026-10-05T10:00:00Z",
+        step="constraints",
+        kind="constraint",
+        text="I will not go to the office",
+        source="conversation",
+    )
+    assert profile_standing.ruled_out(store) == frozenset()
+
+
+def test_the_widen_line_honours_a_refusal_read_from_the_store(tmp_path: Path) -> None:
     store = _store(tmp_path)
     record_exclusion(
         store,
         Exclusion(about="skill:go", stated_at_cycle=1, words="Nunca he usado Go, así que fuera"),
     )
-    EvidenceLog(store).append(
-        recorded_at="2026-10-05T10:00:00Z",
-        step="constraints",
-        kind="constraint",
-        text="no PHP shops",
-        source="conversation",
-    )
-    assert {"go", "php"} <= profile_standing.ruled_out(store)
     lines = profile_standing.standing_for_store(store, _stack(), ["a", "b", "c"], language="en")
     assert "Go" not in lines.widen
+    assert "Kubernetes" in lines.widen
 
 
 def test_nothing_ruled_out_reads_as_the_empty_set(tmp_path: Path) -> None:
@@ -287,15 +356,65 @@ def test_step_nine_skill_passes_the_page_and_records_the_lines() -> None:
     text = _skills()["step-09-ranking"]
     assert "standing_for_store(store, stack, show)" in text
     assert "standing=lines" in text
+    assert "partition(store, page_ids(ranking, limit, offset))" in text
 
 
-def test_the_checkpoint_reads_whether_the_lines_were_said(tmp_path: Path) -> None:
+def test_the_connector_recommendation_states_its_cost_first() -> None:
+    section = _section(_skills()["step-07-sourcing"])
+    assert "connector" in section.split("tokens")[0]  # the cost is in the example itself
+    assert "tokens" in section and "before I start" in section
+
+
+def test_page_ids_is_the_slice_the_page_renders() -> None:
+    ranking = {"pareto": [f"o{i}" for i in range(12)]}
+    assert page_ids(ranking, 5, 0) == ["o0", "o1", "o2", "o3", "o4"]
+    assert page_ids(ranking, 5, 2) == ["o10", "o11"]
+
+
+def _shown_store(tmp_path: Path, ids: list[str]) -> ProfileStore:
     store = _store(tmp_path)
+    for offer_id, title in zip(
+        ids, ["Python engineer", "Python and Go engineer", "Clerk"], strict=False
+    ):
+        store.write_json({"id": offer_id, "title": title, "text": ""}, "offers", f"{offer_id}.json")
+    return store
+
+
+def _recorded(
+    store: ProfileStore, ids: list[str], lines: profile_standing.Standing, at: str
+) -> None:
+    present(store, ids, at=at, standing=lines)
+
+
+def test_the_checkpoint_recomputes_the_lines_for_the_rows_own_offers(tmp_path: Path) -> None:
+    store = _shown_store(tmp_path, ["a", "b", "c"])
     assert unstated_standing(store) == []  # nothing presented: unpresented_ranking's finding
-    present(store, ["a"], at="2026-10-05T10:00:00Z")
-    assert unstated_standing(store)[0]["problem"].startswith("no standing lines")
-    lines = profile_standing.standing(_stack(), ["a", "b", "c"], language="en")
-    present(store, ["a"], at="2026-10-05T11:00:00Z", standing=lines)
+    ids = ["a", "b", "c"]
+    right = profile_standing.standing_for_store(store, fits_for_store(store, ids), ids)
+    present(store, ids, at="2026-10-05T10:00:00Z")
+    assert unstated_standing(store)  # shown, never said
+    present(store, ids, at="2026-10-05T10:00:00Z", standing=right)  # same `at`, later row
     assert unstated_standing(store) == []
-    present(store, ["b"], at="2026-10-05T12:00:00Z")  # a later batch said nothing
+
+
+def test_the_checkpoint_refuses_lines_that_are_not_the_ones_for_those_offers(
+    tmp_path: Path,
+) -> None:
+    store = _shown_store(tmp_path, ["a", "b", "c"])
+    ids = ["a", "b", "c"]
+    fits = fits_for_store(store, ids)
+    right = profile_standing.standing_for_store(store, fits, ids)
+    wrong = {
+        "strengths altered": replace(right, strengths="Python, claro."),
+        "widen altered": replace(right, widen="Nada."),
+        "blank": profile_standing.Standing(" ", "x"),
+        "not assessed while fits exist": profile_standing.standing_for_store(store, None, ids),
+        "other offers": profile_standing.standing_for_store(store, fits, ["a"]),
+    }
+    for label, lines in wrong.items():
+        present(store, ids, at="2026-10-05T10:00:00Z", standing=lines)
+        assert unstated_standing(store), label
+    present(store, ids, at="2026-10-05T09:00:00Z", standing=right)  # earlier `at`, later row
+    assert unstated_standing(store) == []
+    present(store, ids, at="2026-10-05T11:00:00Z")  # a later batch said nothing
     assert unstated_standing(store)

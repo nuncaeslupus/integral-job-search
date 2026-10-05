@@ -23,12 +23,14 @@ fit carried, is still on the page and still counts.
 
 from __future__ import annotations
 
+import contextlib
+import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from integral import skill_requirement, stack_fit, strings
+from integral import stack_fit, strings
 from integral.identity import ProfileStore
 from integral.profile import EvidenceLog
 from integral.sourcing_exclusions import load_exclusions
@@ -46,24 +48,52 @@ MAX_ITEMS = 5
 class Standing:
     strengths: str
     widen: str
+    #: The language the lines were said in, so an audit can recompute them exactly.
+    language: str = "es"
+
+
+def _mentioned(text: str) -> set[str]:
+    """Every technology `text` names, in label mode so a sentence-opening "Go" counts.
+
+    `stack_fit.named(label=True)` reads each word the way an advert's label is read;
+    a bare word that is a technology's name without the `.js` (`node` for `nodejs`)
+    resolves to it, which `skill_requirement.identity` alone does not do. A bare `go` inside
+    a sentence is left to label mode, so prose "go to the office" is not a mention.
+    """
+    found = set(stack_fit.named(text, label=True))
+    # a whole value that is a technology's name or alias: `go`, `golang`
+    with contextlib.suppress(stack_fit.StackFitError):
+        found.add(stack_fit.resolve_technology(text.strip()))
+    for word in re.findall(r"[\w.+#]+", text):
+        folded = _squash(word)
+        for technology in stack_fit.VOCABULARY_IDS:
+            if folded and folded == _squash(technology) and word.lower() != technology:
+                found.add(technology)
+    return found
+
+
+def _squash(word: str) -> str:
+    folded = re.sub(r"[^a-z0-9]", "", word.lower())
+    return folded.removesuffix("js") or folded
 
 
 def ruled_out(store: ProfileStore) -> frozenset[str]:
-    """Technologies the candidate refused, read by the readers those features use.
+    """Technologies the candidate mentioned in a refusal, fail-closed.
 
-    `sourcing_exclusions.load_exclusions` for `skill:` exclusions, resolved the way
-    `skill_requirement` resolves them; `stack_fit.named` over the log's constraint
-    rows; `stack_fit`'s own `averse` stance is already its own bucket.
+    Any technology **named at all** in a constraint row, or in any exclusion's value or
+    terms (any facet: `skill`, `text`, `topic`, ...), is kept out of "what would widen the
+    fit" whatever the polarity. Reading polarity from free text is the mistake this avoids:
+    "Go, nunca." and "Go no, gracias" both name Go. The accepted cost is over-exclusion —
+    "Quiero trabajar con Kubernetes" keeps Kubernetes out of widen — which only silences a
+    suggestion. `stack_fit`'s own `averse` stance is already its own bucket.
     """
-    out: set[str] = set()
+    texts: list[str] = []
     for exclusion in load_exclusions(store):
-        if exclusion.facet.strip().lower() == skill_requirement.FACET:
-            ident = skill_requirement.identity(exclusion.value)
-            if ident is not None:
-                out.add(ident)
-    for row in EvidenceLog(store).effective_rows():
-        if row.kind == "constraint":
-            out.update(stack_fit.named(row.text))
+        texts += [exclusion.value, *exclusion.terms]
+    texts += [row.text for row in EvidenceLog(store).effective_rows() if row.kind == "constraint"]
+    out: set[str] = set()
+    for text in texts:
+        out |= _mentioned(text)
     return frozenset(out)
 
 
@@ -127,11 +157,11 @@ def standing(
     fits = [stack[i] for i in ids if stack is not None and i in stack]
     if not fits:
         not_assessed = _t("stack_not_assessed", language)
-        return Standing(strengths=not_assessed, widen=not_assessed)
+        return Standing(strengths=not_assessed, widen=not_assessed, language=language)
     informative = [f for f in fits if f.get("verdict") != "unknown"]
     if not informative:
         unknown = _t("standing_unknown", language)
-        return Standing(strengths=unknown, widen=unknown)
+        return Standing(strengths=unknown, widen=unknown, language=language)
     strong, strong_names = _tally(informative, STRENGTH_BUCKETS, frozenset())
     wide, wide_names = _tally(informative, WIDEN_BUCKETS, ruled_out)
     widen = _line(
@@ -154,6 +184,7 @@ def standing(
             language=language,
         ),
         widen=widen,
+        language=language,
     )
 
 

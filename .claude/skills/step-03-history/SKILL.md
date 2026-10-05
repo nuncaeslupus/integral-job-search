@@ -59,6 +59,17 @@ In this step that sounds like:
 - Never ask why a gap exists in a tone that requires an excuse — ask what they were doing then.
 - Never dig for a failure to hit a quota — the v1 floor requiring a third of episodes to be failures is **superseded** and must not be re-introduced (see Gotchas).
 
+## Lead with the recommendation
+
+§3.3 makes the shortcut the candidate's to take and the full run the default, and says why: the
+more the tool knows, the better the results. So at the end of this step the offered skip is
+never a neutral pair — recommend finishing, with the reason in a clause, then name the skip
+second. The tool never takes the skip for them.
+
+```text
+"I'd recommend one or two more stories from your past roles — they're what lets me tell what you're good at beyond the CV. We can stop here and look at real jobs with what I have, but I'd be matching on the CV alone. Shall we carry on?"
+```
+
 ## Stop rule
 
 The current or last role plus two earlier ones have an episode each, or the candidate says that is enough. **Hard cap: 8 episodes or 18 questions, whichever first.** Halfway to the cap, check in rather than pressing on.

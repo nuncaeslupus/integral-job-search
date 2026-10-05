@@ -131,7 +131,11 @@ def present(
     """
     row: dict[str, Any] = {"at": at, "phrase": phrase, "offer_ids": list(offer_ids), "chosen": []}
     if standing is not None:
-        row["standing"] = {"strengths": standing.strengths, "widen": standing.widen}
+        row["standing"] = {
+            "strengths": standing.strengths,
+            "widen": standing.widen,
+            "language": standing.language,
+        }
     return store.append_jsonl(row, *PRESENTATIONS)
 
 

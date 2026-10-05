@@ -149,6 +149,9 @@ _PATTERNS: dict[str, tuple[tuple[re.Pattern[str], bool], ...]] = {
     for technology, names in VOCABULARY.items()
 }
 
+#: The technology ids the vocabulary knows, for readers that resolve a bare word to one.
+VOCABULARY_IDS: tuple[str, ...] = tuple(_PATTERNS)
+
 
 def _opens_a_sentence(text: str, start: int) -> bool:
     prefix = text[:start]
