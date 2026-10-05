@@ -3,6 +3,7 @@ id: t-4ed4ea60
 title: "T192: step-11-application should check a candidate's other generated CVs/letters before drafting from zero"
 priority: 5
 tags: [step-11-application]
+status: merged
 ---
 
 Candidate note (2026-09-17, step `application`): "Todo lo que hayas aprendido
@@ -44,13 +45,6 @@ approval" rule intact for anything carried over from another offer's letter.
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/prior_cv_digest_test.sh
-false
+uv run pytest tests/test_prior_documents.py
 ```
