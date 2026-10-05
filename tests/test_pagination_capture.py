@@ -2768,20 +2768,21 @@ def test_the_committed_library_has_no_unenforced_provenance() -> None:
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
     # 18, plus T144's five ATS-host probes, which say `unrecorded` too, less
-    # the three recorded `live` with their responses committed: T166's
-    # `trabajos_es`, T171's `jobfluent_es` and T194's `talent_es`. Two branches
+    # the four recorded `live` with their responses committed: T166's
+    # `trabajos_es`, T152's `pythonorg_en`, T171's `jobfluent_es` and T194's
+    # `talent_es`. Two branches
     # once asserted one `live` each for their own package, in the same words, so
     # the merge kept a number neither side measured — `CLAUDE.md`'s census
     # collision, in a test rather than in evidence. That is also why this line
     # is re-measured rather than incremented whenever a package lands: the
     # arithmetic below says which packages the three are, so a fourth cannot
     # arrive anonymously.
-    assert measured["claims"] == {"live": 3, "transcribed": 1, "unrecorded": 22}
+    assert measured["claims"] == {"live": 4, "transcribed": 1, "unrecorded": 21}
     assert sorted(
         package.name
         for package in sorted(_LIBRARY.iterdir())
         if (record := cp.read_record(package)) is not None and record["provenance"] == pc.LIVE
-    ) == ["jobfluent_es", "talent_es", "trabajos_es"]
+    ) == ["jobfluent_es", "pythonorg_en", "talent_es", "trabajos_es"]
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 
@@ -2991,3 +2992,40 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
     claims = sorted(row["claim"] for row in before["findings"])
     assert claims == ["absent"] * (before["captures_scanned"] - 1) + [pc.TRANSCRIBED]
     assert after["captures_with_an_unenforced_provenance"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T152 — a package dropped for want of a capture is named, not silent
+
+
+def test_pythonorg_en_page_two_is_certified_by_a_capture() -> None:
+    """The restored key stands on a live, digest-bound record of `?page=2`, and
+    both the T113 scan and T153's provenance check accept it."""
+    package = _LIBRARY / "pythonorg_en"
+    capture = pc.read_capture(package)
+    assert capture.url == "https://www.python.org/jobs/?page=2"
+    assert capture.provenance == pc.LIVE
+    assert pc.check_package(package)[0] is None
+    assert cp.check_capture(package) is None
+    assert pc.measure_unrecordable_drops()["packages_dropped_for_an_unrecordable_capture"] == 0
+
+
+def test_a_package_dropped_for_a_missing_capture_is_named_not_silent(tmp_path: Path) -> None:
+    root = tmp_path / "connectors"
+    shutil.copytree(_LIBRARY / "pythonorg_en", root / "pythonorg_en")
+    assert pc.measure_unrecordable_drops(root)["packages_dropped_for_an_unrecordable_capture"] == 0
+    path = root / "pythonorg_en" / "connector.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document["list"]["pagination"] = {"mode": "none", "max_pages": 1}
+    document["list"]["url_pattern"] = "https://www.python.org/jobs/"
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    measured = pc.measure_unrecordable_drops(root)
+    assert measured["packages_dropped_for_an_unrecordable_capture"] == 1
+    assert measured["still_dropped"] == ["pythonorg_en"]
+
+
+def test_an_empty_drop_list_is_unmeasured_not_a_clean_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pc, "DROPPED_FOR_UNRECORDABLE_CAPTURE", ())
+    assert pc.measure_unrecordable_drops()["gate_status"] == "unmeasured"

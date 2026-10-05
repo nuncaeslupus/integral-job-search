@@ -1458,6 +1458,70 @@ def write_duplicate_page_keys_evidence(
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T152 — a package whose pagination T113 dropped because no capture could be made
+#
+# T113 refuses a page key no capture carried, and the cheap way to satisfy it is
+# to set `mode: none`. For a board that really has a second page that is a silent
+# loss of adverts: indistinguishable, in the YAML, from a board with no page 2.
+# So a package dropped *for want of a capture* is named here, and counted for as
+# long as it still sends no page key. `pythonorg_en` was the first (6 of 31
+# adverts); its page 2 was recorded live on 2026-10-05 and the key restored.
+# A package joins this tuple when its pagination is dropped for that reason, and
+# leaves it by being restored — never by being deleted from the tuple.
+DROPPED_FOR_UNRECORDABLE_CAPTURE: tuple[str, ...] = ("pythonorg_en",)
+
+#: Floor on the packages checked, so emptying the tuple reads `unmeasured`
+#: rather than the clean zero an empty list produces.
+MINIMUM_DROPPED_PACKAGES_CHECKED = 1
+
+DEFAULT_T152_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T152.json"
+
+
+def measure_unrecordable_drops(directory: Path | None = None) -> dict[str, Any]:
+    """Packages named in `DROPPED_FOR_UNRECORDABLE_CAPTURE` that still send no page key."""
+    directory = DEFAULT_CONNECTORS_DIR if directory is None else directory
+    still_dropped: list[str] = []
+    for name in DROPPED_FOR_UNRECORDABLE_CAPTURE:
+        try:
+            restored = load_connector(directory / name).list.pagination.mode != "none"
+        except ConnectorError:
+            restored = False
+        if not restored:
+            still_dropped.append(name)
+    measured: dict[str, Any] = {
+        "packages_dropped_for_an_unrecordable_capture": len(still_dropped),
+        "still_dropped": still_dropped,
+        "packages_checked": len(DROPPED_FOR_UNRECORDABLE_CAPTURE),
+        "gate_status": "measured",
+    }
+    if measured["packages_checked"] < MINIMUM_DROPPED_PACKAGES_CHECKED:
+        measured["gate_status"] = "unmeasured"
+        measured["unmeasured_reason"] = (
+            f"only {measured['packages_checked']} package(s) checked "
+            f"(floor {MINIMUM_DROPPED_PACKAGES_CHECKED}) — zero drops over an empty list is "
+            "not a pass"
+        )
+    return measured
+
+
+def write_unrecordable_drops_evidence(
+    evidence: Path | None = None, directory: Path | None = None
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T152.json`; nothing written when unmeasured."""
+    evidence = DEFAULT_T152_EVIDENCE_PATH if evidence is None else evidence
+    measured = measure_unrecordable_drops(directory)
+    if measured["gate_status"] == "unmeasured":
+        return measured
+    committed = {k: v for k, v in measured.items() if k != "packages_checked"}
+    committed["packages_checked_at_least"] = MINIMUM_DROPPED_PACKAGES_CHECKED
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.pagination_capture [evidence-path]` → T113's
     evidence and, in the same run, T154's — the fenced gate for both tasks
@@ -1514,7 +1578,17 @@ def _main(argv: list[str]) -> int:
         if duplicate_measured["duplicated_page_keys_certified"]:
             t154_code = 1
 
-    if t113_code == 1 or t154_code == 1:
+    t152_path = None if evidence_path is None else evidence_path.parent / "T152.json"
+    drops = write_unrecordable_drops_evidence(t152_path)
+    print(json.dumps(drops, ensure_ascii=False))
+    t152_code = 0
+    if drops["gate_status"] == "unmeasured":
+        print(drops["unmeasured_reason"], file=sys.stderr)
+        t152_code = 1
+    elif drops["packages_dropped_for_an_unrecordable_capture"]:
+        t152_code = 1
+
+    if t113_code == 1 or t154_code == 1 or t152_code == 1:
         return 1
     if t113_code == 3 or t154_code == 3:
         return 3

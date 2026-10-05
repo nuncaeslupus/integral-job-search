@@ -3386,7 +3386,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: (`FEWEST_REQUIRING_CASES`, `FEWEST_NOT_REQUIRING_CASES`). Still zero slack.
 #: **95 with T227**, whose `topic_scope_gate` declares two floors
 #: (`FEWEST_HELD_CASES`, `FEWEST_SHOWN_CASES`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 95
+#: **96 with T152**, whose `pagination_capture` declares one floor
+#: (`MINIMUM_DROPPED_PACKAGES_CHECKED`). Still zero slack.
+MINIMUM_FLOORS_SWEPT = 96
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3493,7 +3495,7 @@ MINIMUM_FLOORS_SWEPT = 95
 #: over `reach._cases` — so it joins this count through that file. Measured
 #: with `uv run python -m integral.floor_sweep` against this branch. Still
 #: seven points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=43
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=44
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -3833,7 +3835,9 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: comment block and marker, so each is one scenario more. Still zero slack.
 #: **92 with T227**: `topic_scope_gate`'s two floors each carry their own
 #: comment block and marker, so each is one scenario more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 92
+#: **93 with T152**: `pagination_capture`'s one floor is one scenario more. Still
+#: zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 93
 
 
 def measure_prose_clearance() -> dict[str, Any]:
