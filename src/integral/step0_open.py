@@ -282,7 +282,14 @@ def run(
                 Resolution(outcome="create", reason="no profile has that handle")
             )
         if not confirmed:
-            return Opened(outcome="confirm", say=f"Is this {hit.display_name}?")
+            # On this path the display name is the shared one by definition, so it
+            # cannot tell two people apart. The creation date, read from the same
+            # roster file, can, and reveals nothing about the candidate's position.
+            started = hit.created_at[:10]
+            return Opened(
+                outcome="confirm",
+                say=f"Is this {hit.display_name}, whose profile was started on {started}?",
+            )
         return _open(root, hit, moment)
 
     if name is not None and name.strip():

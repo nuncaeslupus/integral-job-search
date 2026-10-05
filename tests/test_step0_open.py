@@ -142,7 +142,7 @@ def test_a_mistyped_handle_is_confirmed_by_name_before_it_opens_anyone(tmp_path:
     bea = _profile(root, "ana", "Bea")
     before = _state(bea)
     result = run(root, handle="ana", now=NOW)
-    assert result.outcome == "confirm" and result.say == "Is this Bea?"
+    assert result.outcome == "confirm" and result.say.startswith("Is this Bea, whose profile")
     assert _state(bea) == before
 
 
@@ -158,7 +158,29 @@ def test_the_second_of_two_same_named_people_typing_the_first_handle_opens_nothi
     assert run(root, name="marcos", confirmed=True, now=NOW).outcome == "choose"
     by_handle = run(root, handle="marcos", now=NOW)
     assert by_handle.outcome == "confirm" and by_handle.handle is None
+    assert "started on" in by_handle.say
     assert (_state(first), _state(second)) == before
+
+
+def test_the_handle_question_carries_the_target_profiles_own_start_date(tmp_path: Path) -> None:
+    """Past the yes: the second Marcos guesses `marcos`, and the question shows him the
+    first Marcos's date, which is not his. The skill tells the agent to answer no then."""
+    root = tmp_path / "profiles"
+    first_day = datetime(2026, 9, 1, tzinfo=UTC)
+    second_day = datetime(2026, 9, 20, tzinfo=UTC)
+    create_profile(root, "Marcos", language="en", handle="marcos", now=first_day)
+    create_profile(root, "Marcos", language="en", handle="marcos-b", now=second_day)
+    for handle in ("marcos", "marcos-b"):
+        SessionStore(ProfileStore(root, handle)).record(at=STAMP, current_step="history")
+    asked = run(root, handle="marcos", now=NOW)
+    assert asked.outcome == "confirm" and asked.handle is None
+    assert asked.say == "Is this Marcos, whose profile was started on 2026-09-01?"
+    assert "2026-09-20" not in asked.say  # the other twin's date is not shown
+    assert "history" not in asked.say and STAMP[:10] not in asked.say
+    other = run(root, handle="marcos-b", now=NOW)
+    assert other.say == "Is this Marcos, whose profile was started on 2026-09-20?"
+    skill = SKILL.read_text(encoding="utf-8")
+    assert "if the date is not theirs the answer is no" in skill
 
 
 def test_two_profiles_with_one_display_name_ask_for_a_handle_and_list_none(
@@ -283,6 +305,18 @@ def test_a_corrupt_profile_named_by_its_display_name_is_matched_like_any_name(
     assert run(root, name="Ada", now=NOW).outcome == "create"
 
 
+def test_a_corrupt_profile_is_matched_through_the_handle_its_name_would_derive(
+    tmp_path: Path,
+) -> None:
+    """`Núria` derives `nuria`, which casefolding the name alone never produces."""
+    root = tmp_path / "profiles"
+    broken = _profile(root, "nuria", "Núria")
+    _profile(root, "marcos", "Marcos")
+    broken.path("identity.json").write_text("{not json", encoding="utf-8")
+    for spelled in ("Núria", "NÚRIA"):
+        assert run(root, name=spelled, now=NOW).outcome == "unreadable"
+
+
 def test_a_corrupt_state_file_is_reported_not_raised_and_left_alone(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     store = _profile(root, "marcos", "Marcos")
@@ -359,6 +393,7 @@ def test_the_skill_does_not_ask_for_a_second_call_to_build_the_opening() -> None
 
 def test_the_skill_keeps_names_and_handles_apart() -> None:
     text = SKILL.read_text(encoding="utf-8")
+    assert "never opened directly" in text
     assert "Keep what they say apart" in text
     assert "`--name`" in text and "`--handle`" in text
     assert "used only after" in text and "giving their handle" in text
