@@ -1,5 +1,35 @@
 # Session handover
 
+## 00018. Overnight cloud run: ~50 PRs merged; ending to split into one laptop and one cloud session
+
+- **Merged this run (task PRs):** D-29, T147, T180, T190, T192, T207, T208, T209, T224, T226, T229,
+  T231, T232, T235, T239 (#756), T240 (#758), T243, T244, T251, and T227 (#759, 8 review rounds; residuals #761).
+- **Follow-ups filed from second-reader residuals:** #743, #744, #747, #748, #750, #752, #755,
+  #757 (T239), #760 (T240), #761 (T227). None blocks anything; each names the review comment it came from.
+- **Needs the owner:** #707 and #723 (decisions). **Needs the laptop:** T152, T254; T131
+  (ai-jobs.net) most likely too — cloud egress to it was not reachable.
+- **Placeholder gates and the permission classifier.** In a cloud session the classifier refused
+  editing a task file's `false` placeholder gate (T227), for the implementer and the orchestrator
+  alike, even with the owner's approval in chat. The owner edited it on the branch by hand. T247
+  carries the same placeholder: expect the same, or do it on the laptop.
+- **How the run merged, so the next session does not re-derive it:**
+  - Second reader on Opus, implementer on Sonnet, named on every dispatch. Markers are posted by
+    the PR-author account, so `review_reader check` exits 2 on every PR here; merges went ahead
+    on the owner's rule (CLEAR on the PR + green CI + verified_gate block), and that limitation
+    is still open.
+  - `verified_gate.sh` only after CLEAR, and only on a head that includes `origin/main`
+    (`git merge-base --is-ancestor origin/main <sha>`); ~16 min of tests, ~25 min total.
+  - A merge of `main` into a CLEARed head was gated and merged without a new review when the
+    merge brought only `main`'s content; say so on the PR.
+  - Use Python 3.12 (`UV_PYTHON=3.12`) and `uv sync --extra dev --extra collect`, not `--all-extras`.
+  - `gh api --paginate` is broken through the proxy: loop `page=1..4` and merge with `jq -s add`.
+  - The merge API can 504; re-read the PR before retrying.
+  - Container restarts kill background agents; check the worktree, then resume the agent.
+  - `open_task_pr.sh` takes positional args (`<task-id> "<title>"`) and copies only **tracked**
+    files into the T197 scratch tree: `git add -A` new modules before running it, and stage any
+    census evidence (T85, T159) the gate regenerates, or it fails one test or on drift.
+  - No machine-wide `pkill`/`pgrep` — other sessions share the box.
+
 ## 00017. Candidate session 453a5c19 closed; T247–T252 seeded
 
 - **What it was.** A candidate session in test mode: checking a board's emailed recommendations,
