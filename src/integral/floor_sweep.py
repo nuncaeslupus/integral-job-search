@@ -2343,20 +2343,23 @@ def _delegated_other_operand(
 #   region  — the half-line of the *measured* quantity the comparison is true on:
 #             `x < C`, `x <= C`, `C > x`, `C >= x` are "below"; the mirror images
 #             are "above"; `==`, `!=`, `in`, `is` bound neither way.
-#   role    — what that truth *means*: "breach" when the true branch is the limit
-#             being crossed (an `if x < MIN: fail`, an `if n > CAP: raise`),
-#             "satisfied" when it is the limit being met (`ok = x >= MIN`,
-#             `"measured" if x >= MIN else "unmeasured"`, `return a <= LIMIT`).
-#             Each `not` between the comparison and its consumer flips it.
+#   role    — what that truth *means*, decided only where the consumer is
+#             refusal-shaped: "breach" when the true branch of an `if` ends in a
+#             `raise`/`continue`/`break`/non-boolean `return` or records a failure
+#             (`if x < MIN: exit_code = 1`, `if n > CAP: raise`), "satisfied" for an
+#             `assert`. Each `not` between the comparison and its consumer flips it.
 #
 #   breach + below  -> floor        satisfied + above -> floor
 #   breach + above  -> ceiling      satisfied + below -> ceiling
 #
-# A consumer this reading cannot place (a comprehension filter can collect either
-# the violators or the survivors) abstains rather than guessing: a guess in either
-# direction moves a constant between populations silently, which is this task's own
-# defect. A name whose deciding votes disagree, or that has none, is `undetermined`
-# — kept where it was and listed by name, never reclassified.
+# Every other consumer abstains: an `if` whose body is the normal work
+# (`if i < CAP: send(x)`), a `while`, a bare comparison assigned, returned or put in a
+# conditional expression (`too_many = n > CAP`, `return d > MAX_AGE`), a comprehension
+# filter. Deciding any of them is a guess, and a guess that says "floor" for a ceiling
+# moves a constant into the census silently, which is this task's own defect (second
+# reader, F1). A name with no deciding vote, or whose votes disagree, is
+# `undetermined` and needs an entry in `floor_polarity.ADJUDICATIONS`; until it has one
+# it is named, fails the gate, and is still swept for its margin (T159's findings stay).
 # ---------------------------------------------------------------------------
 
 POLARITY_FLOOR = "floor"
@@ -2398,15 +2401,61 @@ def _comparison_region(node: ast.Compare, bound_on_right: bool) -> str | None:
     return None
 
 
-def _guard_body_is_a_boolean_result(body: list[ast.stmt]) -> bool:
-    """An `if <cmp>: return <boolean expression>` hands the comparison's truth
-    straight back to the caller as the answer — satisfied, not breached. Anything
-    else a guard's body does (raise, continue, assign an exit code, append a
-    finding, return a sentinel) is a response to the limit being crossed."""
+_FAILURE_WORDS_RE = re.compile(
+    r"exit|status|fail|error|defect|violation|finding|breach|refus", re.IGNORECASE
+)
+
+
+def _target_name(target: ast.expr) -> str:
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Attribute):
+        return target.attr
+    if (
+        isinstance(target, ast.Subscript)
+        and isinstance(target.slice, ast.Constant)
+        and isinstance(target.slice.value, str)
+    ):
+        return target.slice.value  # `measured["gate_status"] = "unmeasured"`
+    return ""
+
+
+def _guard_body_refuses(body: list[ast.stmt]) -> bool:
+    """Is this guard body a *refusal* — the response to a limit being crossed?
+
+    T165 (second reader, F1): the first version read every `if` body as one, which is
+    wrong whenever the body is the normal work (`if i < CAP: send(x)`), so a ceiling
+    written that way was decided "floor" and needed no adjudication. A body refuses only
+    when it **ends** in `raise`, `continue`, `break` or a `return` of something other
+    than a bare boolean expression (which hands the comparison's own truth back as the
+    answer — not a refusal), or it **records a failure**: a `print`, an assignment or
+    `+=` to a name that says exit/status/fail/error/defect/violation/finding, or an
+    `.append` onto one. Anything else abstains."""
     if not body:
         return False
     last = body[-1]
-    return isinstance(last, ast.Return) and isinstance(last.value, (ast.Compare, ast.BoolOp))
+    if isinstance(last, (ast.Raise, ast.Continue, ast.Break)):
+        return True
+    if isinstance(last, ast.Return) and not isinstance(last.value, (ast.Compare, ast.BoolOp)):
+        return True
+    for stmt in body:
+        if isinstance(stmt, (ast.AugAssign, ast.AnnAssign)):
+            if _FAILURE_WORDS_RE.search(_target_name(stmt.target)):
+                return True
+        elif isinstance(stmt, ast.Assign):
+            if any(_FAILURE_WORDS_RE.search(_target_name(t)) for t in stmt.targets):
+                return True
+        elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            func = stmt.value.func
+            if isinstance(func, ast.Name) and func.id == "print":
+                return True
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "append"
+                and _FAILURE_WORDS_RE.search(_target_name(func.value))
+            ):
+                return True
+    return False
 
 
 def _comparison_role(node: ast.Compare, parents: dict[ast.AST, ast.AST]) -> str | None:
@@ -2422,14 +2471,17 @@ def _comparison_role(node: ast.Compare, parents: dict[ast.AST, ast.AST]) -> str 
             flipped = not flipped
         child, parent = parent, parents.get(parent)
     role: str | None
-    if isinstance(parent, (ast.If, ast.While)) and child is parent.test:
-        role = _ROLE_SATISFIED if _guard_body_is_a_boolean_result(parent.body) else _ROLE_BREACH
-    elif (isinstance(parent, ast.IfExp) and child is parent.test) or isinstance(
-        parent,
-        (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Return, ast.Assert, ast.keyword, ast.Dict),
-    ):
+    if isinstance(parent, ast.If) and child is parent.test:
+        if not _guard_body_refuses(parent.body):
+            return None
+        role = _ROLE_BREACH
+    elif isinstance(parent, ast.Assert) and child is parent.test:
         role = _ROLE_SATISFIED
     else:
+        # `while` loops to a limit (a ceiling as often as a floor), and a bare
+        # comparison assigned, returned or put in a conditional expression is a
+        # boolean whose reading depends on its name: none of them is a refusal, so none
+        # votes. The bound is `undetermined` and wants an adjudication.
         return None
     if flipped:
         role = _ROLE_BREACH if role == _ROLE_SATISFIED else _ROLE_SATISFIED
@@ -3371,7 +3423,8 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
             read = _bound_polarity(module.tree, name).verdict
             if adjudication is None and read != POLARITY_FLOOR:
                 polarity_unadjudicated.append(qualified)
-            if (adjudication[0] if adjudication is not None else read) == POLARITY_CEILING:
+            effective = adjudication[0] if adjudication is not None else read
+            if effective == POLARITY_CEILING:
                 ceilings.append(qualified)
                 continue
             swept += 1
@@ -3825,9 +3878,7 @@ def _swept_floor_sites(src_dir: Path) -> list[tuple[_ModuleInfo, str, int, ast.e
             _, _, _, in_scope, _ = _classify_floor(module, name, lineno, value_expr)
             # T165: the census sets ceilings aside (`_analyse`), so a mutation battery
             # built on "what the gate sweeps" must not lower one — it is not swept.
-            if in_scope and (
-                _effective_polarity(module.stem, name, module.tree) != POLARITY_CEILING
-            ):
+            if in_scope and (_effective_polarity(module.stem, name, module.tree) == POLARITY_FLOOR):
                 sites.append((module, name, lineno, value_expr))
     return sites
 
@@ -4225,105 +4276,200 @@ def write_prose_clearance_evidence(
 # ---------------------------------------------------------------------------
 
 #: The oracle's own battery: source snippets whose polarity follows from the
-#: definition (region of the measured quantity x what its truth means; see the block
-#: above `_bound_polarity`), not from running the rule. `(label, source, name,
-#: expected verdict)`. A rule that read operators alone passes the guard-form cases and
-#: fails the satisfied-form ones, and the other way round; both halves are here because
-#: either alone would leave the other re-opened.
+#: definition (region of the measured quantity x whether the consumer is a refusal;
+#: see the block above `_bound_polarity`), not from running the rule. `(label, source,
+#: name, expected verdict)`. Includes the second reader's fixtures 1-7 (PR #770): the
+#: shapes where the rule once *decided* floor for a ceiling and now abstains.
 _POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
     (
         "breach below, raise",
-        "MIN = 3\ndef f(n):\n    if n < MIN:\n        raise ValueError",
+        ("MIN = 3\ndef f(n):\n    if n < MIN:\n        raise ValueError"),
         "MIN",
         "floor",
     ),
     (
         "breach below inclusive",
-        "MIN = 3\ndef f(n):\n    if n <= MIN:\n        raise ValueError",
+        ("MIN = 3\ndef f(n):\n    if n <= MIN:\n        raise ValueError"),
         "MIN",
         "floor",
     ),
     (
         "breach below, constant first",
-        "MIN = 3\ndef f(n):\n    if MIN > n:\n        raise ValueError",
+        ("MIN = 3\ndef f(n):\n    if MIN > n:\n        raise ValueError"),
         "MIN",
         "floor",
     ),
     (
         "breach below, constant first inclusive",
-        "MIN = 3\ndef f(n):\n    if MIN >= n:\n        return None",
+        ("MIN = 3\ndef f(n):\n    if MIN >= n:\n        return None"),
         "MIN",
         "floor",
     ),
     (
         "breach below, one of several alternatives",
-        "MIN = 3\ndef f(n, ok):\n    if n < MIN or ok:\n        raise ValueError",
+        ("MIN = 3\ndef f(n, ok):\n    if n < MIN or ok:\n        raise ValueError"),
         "MIN",
         "floor",
     ),
     (
-        "breach below, measured key",
-        'MIN = 3\ndef f(m):\n    if m["k"] < MIN:\n        exit_code = 1',
+        "breach below, exit status recorded",
+        ('MIN = 3\ndef f(m):\n    if m["k"] < MIN:\n        exit_code = 1'),
         "MIN",
         "floor",
     ),
-    ("satisfied above, assigned", "MIN = 3\ndef f(n):\n    ok = n >= MIN", "MIN", "floor"),
-    ("satisfied above, constant first", "MIN = 3\ndef f(n):\n    ok = MIN <= n", "MIN", "floor"),
     (
-        "satisfied above, conditional expression",
-        'MIN = 3\ndef f(n):\n    return "m" if n >= MIN else "u"',
+        "breach below, status key recorded",
+        ('MIN = 3\ndef f(m, r):\n    if m < MIN:\n        r["gate_status"] = "unmeasured"'),
         "MIN",
         "floor",
     ),
-    ("satisfied above, assert", "MIN = 3\ndef f(n):\n    assert n >= MIN", "MIN", "floor"),
-    ("satisfied above, returned", "MIN = 3\ndef f(n):\n    return n >= MIN", "MIN", "floor"),
     (
-        "satisfied above, one conjunct of a flag",
-        "MIN = 3\nOTHER = 4\ndef f(a, b):\n    ok = a >= MIN and b >= OTHER",
-        "OTHER",
+        "breach below, failure counted",
+        ("MIN = 3\ndef f(n):\n    if n < MIN:\n        failures += 1"),
+        "MIN",
         "floor",
     ),
     (
-        "negated satisfied above, guarded",
-        "MIN = 3\ndef f(n):\n    if not (n >= MIN):\n        raise ValueError",
+        "breach below, finding appended",
+        ("MIN = 3\ndef f(n, findings):\n    if n < MIN:\n        findings.append(n)"),
+        "MIN",
+        "floor",
+    ),
+    (
+        "breach below, printed",
+        ("MIN = 3\ndef f(n):\n    if n < MIN:\n        print(n)"),
+        "MIN",
+        "floor",
+    ),
+    (
+        "negated guard, raise",
+        ("MIN = 3\ndef f(n):\n    if not (n >= MIN):\n        raise ValueError"),
+        "MIN",
+        "floor",
+    ),
+    (
+        "assert above",
+        ("MIN = 3\ndef f(n):\n    assert n >= MIN"),
         "MIN",
         "floor",
     ),
     (
         "breach above, raise",
-        "CAP = 3\ndef f(n):\n    if n > CAP:\n        raise ValueError",
+        ("CAP = 3\ndef f(n):\n    if n > CAP:\n        raise ValueError"),
         "CAP",
         "ceiling",
     ),
     (
         "breach above inclusive, continue",
-        "CAP = 3\ndef f(xs):\n    for n in xs:\n        if n >= CAP:\n            continue",
+        ("CAP = 3\ndef f(xs):\n    for n in xs:\n        if n >= CAP:\n            continue"),
         "CAP",
         "ceiling",
     ),
     (
         "breach above, constant first",
-        "CAP = 3\ndef f(n):\n    if CAP < n:\n        raise ValueError",
+        ("CAP = 3\ndef f(n):\n    if CAP < n:\n        raise ValueError"),
         "CAP",
         "ceiling",
     ),
     (
-        "breach above, accumulating",
-        "CAP = 3\ndef f(n):\n    if n > CAP:\n        unopened += 1",
+        "breach above, failure counted then break",
+        ("CAP = 3\ndef f(n):\n    if n > CAP:\n        unopened += 1\n        break"),
         "CAP",
         "ceiling",
     ),
-    ("satisfied below, assigned", "CAP = 3\ndef f(n):\n    ok = n <= CAP", "CAP", "ceiling"),
     (
-        "satisfied below, conditional expression",
-        "CAP = 3\ndef f(s):\n    return s if len(s) <= CAP else s[:CAP]",
+        "assert below",
+        ("CAP = 3\ndef f(n):\n    assert n < CAP"),
         "CAP",
         "ceiling",
     ),
-    ("satisfied below, assert", "CAP = 3\ndef f(n):\n    assert n < CAP", "CAP", "ceiling"),
-    ("satisfied below, returned", "CAP = 3\ndef f(n):\n    return len(n) <= CAP", "CAP", "ceiling"),
     (
-        "satisfied below, guard that returns the boolean",
+        "negated guard, raise",
+        ("CAP = 3\ndef f(n):\n    if not (n <= CAP):\n        raise ValueError"),
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "work guarded by a ceiling (second reader 1)",
+        (
+            "CAP = 3\n"
+            "def f(xs):\n"
+            "    for i, x in enumerate(xs):\n"
+            "        if i < CAP:\n"
+            "            send(x)"
+        ),
+        "CAP",
+        "undetermined",
+    ),
+    (
+        "while loops to a ceiling (second reader 2)",
+        (
+            "MAX_ATTEMPTS = 3\n"
+            "def f():\n"
+            "    n = 0\n"
+            "    while n < MAX_ATTEMPTS:\n"
+            "        n += 1\n"
+            "        try_once()"
+        ),
+        "MAX_ATTEMPTS",
+        "undetermined",
+    ),
+    (
+        "while loop whose body ends in break abstains",
+        ("MAX_ATTEMPTS = 3\ndef f(n):\n    while n < MAX_ATTEMPTS:\n        n += 1\n        break"),
+        "MAX_ATTEMPTS",
+        "undetermined",
+    ),
+    (
+        "bare comparison returned, ceiling reading (second reader 3)",
+        ("MAX_AGE = 3\ndef is_stale(d):\n    return d > MAX_AGE"),
+        "MAX_AGE",
+        "undetermined",
+    ),
+    (
+        "bare comparison assigned, ceiling reading (second reader 4)",
+        ("CAP = 3\ndef f(n):\n    too_many = n > CAP"),
+        "CAP",
+        "undetermined",
+    ),
+    (
+        "conditional expression, ceiling reading (second reader 5)",
+        ("CAP = 3\ndef f(n):\n    return 'over' if n > CAP else 'ok'"),
+        "CAP",
+        "undetermined",
+    ),
+    (
+        "pass on the floor side, raise on the other (second reader 6)",
+        ("MIN = 3\ndef f(n):\n    if n >= MIN:\n        pass\n    else:\n        raise ValueError"),
+        "MIN",
+        "undetermined",
+    ),
+    (
+        "floor-side work (second reader 7)",
+        ("MIN_LEN = 3\ndef f(v, s):\n    if len(v) >= MIN_LEN:\n        s.add(v)"),
+        "MIN_LEN",
+        "undetermined",
+    ),
+    (
+        "flag assigned, floor reading",
+        ("MIN = 3\ndef f(n):\n    ok = n >= MIN"),
+        "MIN",
+        "undetermined",
+    ),
+    (
+        "conditional expression, floor reading",
+        ('MIN = 3\ndef f(n):\n    return "m" if n >= MIN else "u"'),
+        "MIN",
+        "undetermined",
+    ),
+    (
+        "bare comparison returned, floor reading",
+        ("MIN = 3\ndef f(n):\n    return n >= MIN"),
+        "MIN",
+        "undetermined",
+    ),
+    (
+        "guard that returns the boolean",
         (
             "CAP = 3\n"
             "def f(ws, b):\n"
@@ -4332,27 +4478,25 @@ _POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
             "    return False"
         ),
         "CAP",
-        "ceiling",
+        "undetermined",
     ),
     (
-        "negated satisfied below, guarded",
-        "CAP = 3\ndef f(n):\n    if not (n <= CAP):\n        raise ValueError",
-        "CAP",
-        "ceiling",
+        "a comprehension filter abstains",
+        ("B = 3\ndef f(xs):\n    return [x for x in xs if x < B]"),
+        "B",
+        "undetermined",
     ),
     (
-        "not equality",
-        'V = 1\ndef f(r):\n    if r["v"] != V:\n        raise ValueError',
-        "V",
-        "neither",
+        "a call argument abstains",
+        ("B = 3\ndef f(n):\n    return g(n >= B)"),
+        "B",
+        "undetermined",
     ),
-    ("equality", "V = 1\ndef f(r):\n    return r == V", "V", "neither"),
-    ("membership", "V = 1\ndef f(r):\n    return V in r", "V", "neither"),
     (
-        "equality beside a ceiling",
-        "CAP = 3\ndef f(n):\n    if n > CAP:\n        raise ValueError\n    full = n == CAP",
-        "CAP",
-        "ceiling",
+        "no comparison at all",
+        ("B = 3\ndef f(n=B):\n    return n"),
+        "B",
+        "undetermined",
     ),
     (
         "a floor and a ceiling at once",
@@ -4368,14 +4512,6 @@ _POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
         "undetermined",
     ),
     (
-        "a comprehension filter abstains",
-        "B = 3\ndef f(xs):\n    return [x for x in xs if x < B]",
-        "B",
-        "undetermined",
-    ),
-    ("a call argument abstains", "B = 3\ndef f(n):\n    return g(n >= B)", "B", "undetermined"),
-    ("no comparison at all", "B = 3\ndef f(n=B):\n    return n", "B", "undetermined"),
-    (
         "a floor beside an abstaining filter",
         (
             "B = 3\n"
@@ -4388,25 +4524,51 @@ _POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
         "floor",
     ),
     (
-        "delegated floor",
+        "not equality",
+        ('V = 1\ndef f(r):\n    if r["v"] != V:\n        raise ValueError'),
+        "V",
+        "neither",
+    ),
+    (
+        "equality",
+        ("V = 1\ndef f(r):\n    return r == V"),
+        "V",
+        "neither",
+    ),
+    (
+        "membership",
+        ("V = 1\ndef f(r):\n    return V in r"),
+        "V",
+        "neither",
+    ),
+    (
+        "equality beside a ceiling",
+        ("CAP = 3\ndef f(n):\n    if n > CAP:\n        raise ValueError\n    full = n == CAP"),
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "delegated guard, floor",
         (
             "MIN = 3\n"
-            "def _floor(observed, minimum):\n"
-            "    return (minimum, False) if observed >= minimum else (observed, True)\n"
+            "def _need(observed, minimum):\n"
+            "    if observed < minimum:\n"
+            "        raise ValueError\n"
             "def f(xs):\n"
-            "    return _floor(len(xs), MIN)"
+            "    _need(len(xs), MIN)"
         ),
         "MIN",
         "floor",
     ),
     (
-        "delegated ceiling",
+        "delegated guard, ceiling",
         (
             "CAP = 3\n"
             "def _within(n, limit):\n"
-            "    return n <= limit\n"
+            "    if n > limit:\n"
+            "        raise ValueError\n"
             "def f(xs):\n"
-            "    return _within(len(xs), CAP)"
+            "    _within(len(xs), CAP)"
         ),
         "CAP",
         "ceiling",
@@ -4416,22 +4578,35 @@ _POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
         (
             "MIN = 3\n"
             "def _inner(a, b):\n"
-            "    return a >= b\n"
+            "    if a < b:\n"
+            "        raise ValueError\n"
             "def _outer(c, d):\n"
-            "    return _inner(c, d)\n"
+            "    _inner(c, d)\n"
             "def f(xs):\n"
-            "    return _outer(len(xs), MIN)"
+            "    _outer(len(xs), MIN)"
         ),
         "MIN",
         "floor",
+    ),
+    (
+        "delegated conditional expression abstains",
+        (
+            "MIN = 3\n"
+            "def _floor(observed, minimum):\n"
+            "    return (minimum, False) if observed >= minimum else (observed, True)\n"
+            "def f(xs):\n"
+            "    return _floor(len(xs), MIN)"
+        ),
+        "MIN",
+        "undetermined",
     ),
 )
 
 #: A floor on the oracle's own battery, in `naming.MINIMUM_SCANNED`'s style (T100):
 #: the cases are a hand-maintained tuple, so a raw count would read as compliant
 #: merely because nobody deleted the last entry.
-#: arsenal-floor-margin: MINIMUM_POLARITY_CASES value=35
-MINIMUM_POLARITY_CASES = 35
+#: arsenal-floor-margin: MINIMUM_POLARITY_CASES value=43
+MINIMUM_POLARITY_CASES = 43
 
 #: A floor on how many bounds the gate reads — the census's floors plus the ceilings
 #: it set aside — committed as a **literal** per T122: derived from the census's own
@@ -4509,6 +4684,14 @@ def measure_polarity(src_dir: Path | None = None) -> dict[str, Any]:
         if polarity == opposite:
             wrong.append({"bound": f"{stem}.{name}", "census": census_class, "polarity": polarity})
 
+    # F3: every member of the census is a floor — the self floors included, which the
+    # census loop does not route through the polarity check.
+    not_floor_members = sorted(
+        f"{stem}.{name}"
+        for stem, name in counted_as_floors
+        if _effective_polarity(stem, name, trees[stem]) != POLARITY_FLOOR
+    )
+
     # Where the AST decides and an adjudication says otherwise, the override is listed by
     # name: a reader sees every place a human overruled the rule.
     overrides = sorted(
@@ -4532,6 +4715,7 @@ def measure_polarity(src_dir: Path | None = None) -> dict[str, Any]:
         "wrong_polarity": wrong,
         "bounds_read": bounds_read,
         "ceilings_set_aside": sorted(f"{s}.{n}" for s, n in set_aside),
+        "census_members_that_are_not_floors": not_floor_members,
         "bounds_with_no_adjudication": sorted(unadjudicated),
         "adjudications_without_a_bound": dangling,
         "adjudications_overruling_the_ast": overrides,
@@ -4764,6 +4948,9 @@ def _polarity_exit_code(polarity: dict[str, Any]) -> int:
             f"✗ polarity oracle case {row['case']!r}: expected {row['expected']}, got {row['got']}",
             file=sys.stderr,
         )
+        status = 1
+    for qualified in polarity["census_members_that_are_not_floors"]:
+        print(f"✗ {qualified} is in the floor census but is not a floor", file=sys.stderr)
         status = 1
     for qualified in polarity["bounds_with_no_adjudication"]:
         print(f"✗ {qualified} has no polarity adjudication", file=sys.stderr)

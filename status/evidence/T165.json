@@ -7,19 +7,18 @@
     "interview.MAX_EXTRA_EPISODE_ATTEMPTS",
     "sourcing.DETAIL_FETCH_CEILING"
   ],
+  "census_members_that_are_not_floors": [],
   "bounds_with_no_adjudication": [],
   "adjudications_without_a_bound": [],
   "adjudications_overruling_the_ast": [
-    "annotation.MIN_IDENTIFYING_LENGTH",
-    "approval._RECORDED_SENDS",
     "connector_contract._RUN_WINDOW",
-    "pay.STALE_AFTER_DAYS",
+    "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED",
     "sourcing_exclusions._MIN_STEM",
     "test_mode.PASTE_CHARS"
   ],
   "polarity_cases_misjudged": [],
   "gate_status": "measured",
   "bounds_read_at_least": 97,
-  "polarity_cases_checked_at_least": 35,
+  "polarity_cases_checked_at_least": 42,
   "ceilings_set_aside_at_least": 4
 }

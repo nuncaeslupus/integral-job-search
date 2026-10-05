@@ -29,8 +29,8 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
         (
             "`len(value) >= MIN_IDENTIFYING_LENGTH` makes a value count as "
             "identifying only from that length up: a minimum length. The AST rule "
-            "votes it a ceiling because the guard's true branch does work; the "
-            "register overrules it."
+            "abstains on this form (the guard's body is the normal work, or the "
+            "comparison is a bare boolean), so the register decides."
         ),
     ),
     "approval.MINIMUM_DISCLOSURE_PROBES": (
@@ -122,8 +122,8 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "`position < _RECORDED_SENDS` takes only the first few prepared "
             "applications through the send boundary: a limit on how many are "
             "processed, breached by adding more, not by deleting. The AST rule "
-            "votes floor because the guard's true branch does work; the register "
-            "overrules it."
+            "abstains on this form (the guard's body is the normal work, or the "
+            "comparison is a bare boolean), so the register decides."
         ),
     ),
     "approval._SHINGLE": (
@@ -489,16 +489,6 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "compared against nothing."
         ),
     ),
-    "floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY": (
-        "floor",
-        (
-            "`bounds_read >= MINIMUM_BOUNDS_READ_FOR_POLARITY` is the polarity "
-            "gate's own `measured` flag: a lower bound on the bounds it read, "
-            "breached by the census losing one. Out of the T159 census only "
-            "because `bounds_read` is a sum of two lengths, which that sweep "
-            "does not combine."
-        ),
-    ),
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS": (
         "floor",
         (
@@ -627,9 +617,9 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
         (
             "`len(tokens(rule)) < MIN_RULE_WORDS` raises, and `size >= "
             "MIN_RULE_WORDS` gates the shingle comparison on a rule being at least "
-            "that long: a minimum word count both times. The AST rule votes the "
-            "second site as a ceiling because the guard's true branch does work; "
-            "the register overrules it."
+            "that long: a minimum word count both times. The AST rule abstains on "
+            "this form (the guard's body is the normal work, or the comparison is a "
+            "bare boolean), so the register decides."
         ),
     ),
     "lesson_triage.SHINGLE": (
@@ -719,8 +709,9 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
         (
             "`(as_of - checked).days > STALE_AFTER_DAYS` marks a rule set stale "
             "once it is older than this: a limit on age, breached by time passing, "
-            "not by deleting anything. The AST rule reads the `return <compare>` as "
-            "satisfied and votes floor; the register overrules it."
+            "not by deleting anything. The AST rule abstains on this form (the "
+            "guard's body is the normal work, or the comparison is a bare boolean), "
+            "so the register decides."
         ),
     ),
     "pay_normalise.MINIMUM_REFUSAL_STATES": (
@@ -1000,8 +991,10 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
         (
             "A stem is cut further only while it keeps at least this many "
             "characters (`len(base) - len(plural) >= _MIN_STEM`): a minimum "
-            "remaining length. The AST rule votes it a ceiling because the guard's "
-            "true branch does work; the register overrules it."
+            "remaining length. The AST rule reads the guard's closing "
+            "`return`/`continue` as a refusal and votes ceiling; the register "
+            "overrules it: the guarded branch is the case the constant admits (a "
+            "long-enough value), not one it refuses."
         ),
     ),
     "stack_fit.MINIMUM_CASES": (
@@ -1064,8 +1057,7 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
         "floor",
         (
             "`measured[...] < MINIMUM_RECORD_KEYS_COMPARED` fails the gate: a lower "
-            "bound on keys compared. The AST rule cannot agree between its two "
-            "sites, so it reads the name as undetermined."
+            "bound on keys compared."
         ),
     ),
     "task_gate.MINIMUM_STATUS_KEY_GATES": (
@@ -1081,8 +1073,9 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
         (
             "A turn is treated as a paste only from this length up (`len(text) >= "
             "PASTE_CHARS and _looks_pasted(text)`): a minimum length. The AST rule "
-            "votes it a ceiling because the guard's true branch does work; the "
-            "register overrules it."
+            "reads the guard's closing `return`/`continue` as a refusal and votes "
+            "ceiling; the register overrules it: the guarded branch is the case the "
+            "constant admits (a long-enough value), not one it refuses."
         ),
     ),
     "topic_scope._HEADING_LIMIT": (
@@ -1127,6 +1120,225 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "The most forced pairwise choices step 6 asks for; declared with no "
             "comparison in this module, but named and used as an upper limit on "
             "questions asked."
+        ),
+    ),
+    "connector_health.MINIMUM_PROBES_COMPARED": (
+        "floor",
+        (
+            'Read as `"measured" if <count> >= FLOOR else "unmeasured"`: the gate '
+            "reports measured only when the counted population reaches it, so "
+            "deleting a member of that population breaches it. A conditional "
+            "expression is not a refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
+    "connectors.MINIMUM_ARRAY_PATH_CONTRACTS": (
+        "floor",
+        (
+            'Read as `"measured" if <count> >= FLOOR else "unmeasured"`: the gate '
+            "reports measured only when the counted population reaches it, so "
+            "deleting a member of that population breaches it. A conditional "
+            "expression is not a refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
+    "connectors.MINIMUM_CHARSET_CONTRACTS": (
+        "floor",
+        (
+            'Read as `"measured" if <count> >= FLOOR else "unmeasured"`: the gate '
+            "reports measured only when the counted population reaches it, so "
+            "deleting a member of that population breaches it. A conditional "
+            "expression is not a refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
+    "markup_text.MINIMUM_FIXTURE_OFFERS": (
+        "floor",
+        (
+            '`gate_status` is `"measured"` only if `offers_checked >= ...`, '
+            "`values_compared >= ...` and `len(MARKUP_CONTRACTS) >= ...` all hold, "
+            'else `"unmeasured"`: a lower bound on a counted population, breached '
+            "by deleting a member of it."
+        ),
+    ),
+    "markup_text.MINIMUM_MARKUP_VALUES_COMPARED": (
+        "floor",
+        (
+            '`gate_status` is `"measured"` only if `offers_checked >= ...`, '
+            "`values_compared >= ...` and `len(MARKUP_CONTRACTS) >= ...` all hold, "
+            'else `"unmeasured"`: a lower bound on a counted population, breached '
+            "by deleting a member of it."
+        ),
+    ),
+    "markup_text.MINIMUM_MARKUP_CONTRACTS": (
+        "floor",
+        (
+            '`gate_status` is `"measured"` only if `offers_checked >= ...`, '
+            "`values_compared >= ...` and `len(MARKUP_CONTRACTS) >= ...` all hold, "
+            'else `"unmeasured"`: a lower bound on a counted population, breached '
+            "by deleting a member of it."
+        ),
+    ),
+    "matcher_readings.MINIMUM_TRIPLES": (
+        "floor",
+        (
+            "`floored = compared >= FLOOR and ...` is the measurement's own flag, "
+            'and the status is `"measured"` only when it holds: a lower bound on a '
+            "counted population, breached by deleting a member of it."
+        ),
+    ),
+    "matcher_readings.MINIMUM_CONTESTED_TRIPLES": (
+        "floor",
+        (
+            "`floored = compared >= FLOOR and ...` is the measurement's own flag, "
+            'and the status is `"measured"` only when it holds: a lower bound on a '
+            "counted population, breached by deleting a member of it."
+        ),
+    ),
+    "connector_policy.PACKAGES_AT_LEAST": (
+        "floor",
+        (
+            "`floored = compared >= FLOOR and ...` is the measurement's own flag, "
+            'and the status is `"measured"` only when it holds: a lower bound on a '
+            "counted population, breached by deleting a member of it."
+        ),
+    ),
+    "review_reader.MINIMUM_PRS_EVALUATED": (
+        "floor",
+        (
+            "Passed to `_floor(observed, minimum)`, which returns `(minimum, "
+            "False)` when `observed >= minimum` and `(observed, True)` otherwise, "
+            "naming the floor breached: a lower bound on the observed count. The "
+            "comparison sits in a conditional expression inside the helper, so the "
+            "AST rule abstains."
+        ),
+    ),
+    "review_reader.MINIMUM_REPORTS_FOUND": (
+        "floor",
+        (
+            "Passed to `_floor(observed, minimum)`, which returns `(minimum, "
+            "False)` when `observed >= minimum` and `(observed, True)` otherwise, "
+            "naming the floor breached: a lower bound on the observed count. The "
+            "comparison sits in a conditional expression inside the helper, so the "
+            "AST rule abstains."
+        ),
+    ),
+    "review_reader.MINIMUM_SCOPE_STATES": (
+        "floor",
+        (
+            "Passed to `_floor(observed, minimum)`, which returns `(minimum, "
+            "False)` when `observed >= minimum` and `(observed, True)` otherwise, "
+            "naming the floor breached: a lower bound on the observed count. The "
+            "comparison sits in a conditional expression inside the helper, so the "
+            "AST rule abstains."
+        ),
+    ),
+    "review_reader.MINIMUM_DISTINCT_SCOPE_STATES": (
+        "floor",
+        (
+            "Passed to `_floor(observed, minimum)`, which returns `(minimum, "
+            "False)` when `observed >= minimum` and `(observed, True)` otherwise, "
+            "naming the floor breached: a lower bound on the observed count. The "
+            "comparison sits in a conditional expression inside the helper, so the "
+            "AST rule abstains."
+        ),
+    ),
+    "second_reader.FIXTURES_AT_LEAST": (
+        "floor",
+        (
+            "`floored = len(spec_derived) >= FIXTURES_AT_LEAST and ...` is the "
+            "measurement's flag that the case table is populated: a lower bound on "
+            "the number of cases, breached by deleting a case."
+        ),
+    ),
+    "second_reader.REGRESSION_CASES_AT_LEAST": (
+        "floor",
+        (
+            "`floored = len(spec_derived) >= FIXTURES_AT_LEAST and ...` is the "
+            "measurement's flag that the case table is populated: a lower bound on "
+            "the number of cases, breached by deleting a case."
+        ),
+    ),
+    "second_reader.FAIL_OPEN_CASES_AT_LEAST": (
+        "floor",
+        (
+            "`floored = len(spec_derived) >= FIXTURES_AT_LEAST and ...` is the "
+            "measurement's flag that the case table is populated: a lower bound on "
+            "the number of cases, breached by deleting a case."
+        ),
+    ),
+    "second_reader.STDLIB_DISAGREEMENTS_AT_LEAST": (
+        "floor",
+        (
+            "`floored = len(spec_derived) >= FIXTURES_AT_LEAST and ...` is the "
+            "measurement's flag that the case table is populated: a lower bound on "
+            "the number of cases, breached by deleting a case."
+        ),
+    ),
+    "skill_requirement.FEWEST_REQUIRING_CASES": (
+        "floor",
+        (
+            '`populated = <count> >= FEWEST_... and ...` and `"status": "measured" '
+            'if populated else "unmeasured"`: a lower bound on the number of cases, '
+            "breached by deleting one."
+        ),
+    ),
+    "skill_requirement.FEWEST_NOT_REQUIRING_CASES": (
+        "floor",
+        (
+            '`populated = <count> >= FEWEST_... and ...` and `"status": "measured" '
+            'if populated else "unmeasured"`: a lower bound on the number of cases, '
+            "breached by deleting one."
+        ),
+    ),
+    "topic_scope_gate.FEWEST_HELD_CASES": (
+        "floor",
+        (
+            '`populated = <count> >= FEWEST_... and ...` and `"status": "measured" '
+            'if populated else "unmeasured"`: a lower bound on the number of cases, '
+            "breached by deleting one."
+        ),
+    ),
+    "topic_scope_gate.FEWEST_SHOWN_CASES": (
+        "floor",
+        (
+            '`populated = <count> >= FEWEST_... and ...` and `"status": "measured" '
+            'if populated else "unmeasured"`: a lower bound on the number of cases, '
+            "breached by deleting one."
+        ),
+    ),
+    "floor_sweep.MINIMUM_POLARITY_CASES": (
+        "floor",
+        (
+            "`measured = bounds_read >= ... and cases >= MINIMUM_POLARITY_CASES and "
+            "len(set_aside) >= MINIMUM_CEILINGS_SET_ASIDE` decides `gate_status` in "
+            "`measure_polarity`: a lower bound on the oracle battery / on ceilings "
+            "set aside, breached by deleting one."
+        ),
+    ),
+    "floor_sweep.MINIMUM_CEILINGS_SET_ASIDE": (
+        "floor",
+        (
+            "`measured = bounds_read >= ... and cases >= MINIMUM_POLARITY_CASES and "
+            "len(set_aside) >= MINIMUM_CEILINGS_SET_ASIDE` decides `gate_status` in "
+            "`measure_polarity`: a lower bound on the oracle battery / on ceilings "
+            "set aside, breached by deleting one."
+        ),
+    ),
+    "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED": (
+        "floor",
+        (
+            "Compared against `len(pinned) + 1` inside `_analyse` by "
+            "`_margin_finding` rather than in a statement of its own: the sweep's "
+            "deferred self floor on how many floors are evidence-pinned, breached "
+            "by losing a pin."
+        ),
+    ),
+    "floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY": (
+        "floor",
+        (
+            "`bounds_read >= MINIMUM_BOUNDS_READ_FOR_POLARITY` is the polarity "
+            "gate's own `measured` flag: a lower bound on the bounds it read, "
+            "breached by the census losing one. Out of the T159 census only because "
+            "`bounds_read` is a sum of two lengths, which that sweep does not "
+            "combine."
         ),
     ),
 }
