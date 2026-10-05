@@ -19,6 +19,6 @@
   "polarity_cases_misjudged": [],
   "gate_status": "measured",
   "bounds_read_at_least": 97,
-  "polarity_cases_checked_at_least": 42,
+  "polarity_cases_checked_at_least": 43,
   "ceilings_set_aside_at_least": 4
 }

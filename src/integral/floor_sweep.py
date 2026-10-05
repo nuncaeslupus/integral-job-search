@@ -3670,16 +3670,20 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: (`FEWEST_REQUIRING_CASES`, `FEWEST_NOT_REQUIRING_CASES`). Still zero slack.
 #: **95 with T227**, whose `topic_scope_gate` declares two floors
 #: (`FEWEST_HELD_CASES`, `FEWEST_SHOWN_CASES`). Still zero slack.
-#: **93 with T165**, which stops counting four ceilings as floors —
+#: **96 with T141**, whose `document_reader` declares one floor
+#: (`MINIMUM_CONTRACTS_EVALUATED`). Still zero slack.
+#: **97 with T160**, whose `literal_pin.MINIMUM_PINS_SWEPT` joined the
+#: population. Still zero slack.
+#: **95 with T165, merged over main's 97**: T165 stops counting four ceilings as floors —
 #: `approval._SHINGLE`, `generate.GENERATION_CAP`, `interview.MAX_EXTRA_EPISODE_
 #: ATTEMPTS`, `sourcing.DETAIL_FETCH_CEILING` — because a bound breached by
 #: *adding* a member is not one a deletion can breach (`_bound_polarity`,
 #: `floor_polarity.ADJUDICATIONS`). A narrowed population, not new discovery, and
-#: the new count is exact: still zero slack. That is 95 - 4 = 91 plus the two
+#: the new count is exact: still zero slack. That is main's 97 - 4 = 93 plus the two
 #: floors the gate itself added (`MINIMUM_POLARITY_CASES`, `MINIMUM_CEILINGS_SET_ASIDE`;
 #: `MINIMUM_BOUNDS_READ_FOR_POLARITY` is compared against a count this sweep does not
 #: trace, so it is out of scope).
-MINIMUM_FLOORS_SWEPT = 93
+MINIMUM_FLOORS_SWEPT = 95
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4128,11 +4132,15 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: comment block and marker, so each is one scenario more. Still zero slack.
 #: **92 with T227**: `topic_scope_gate`'s two floors each carry their own
 #: comment block and marker, so each is one scenario more. Still zero slack.
-#: **90 with T165**: four ceilings left the census (`_swept_floor_sites` no longer
+#: **93 with T141**: `document_reader`'s one floor carries its own comment block
+#: and marker, so it is one scenario more. Still zero slack.
+#: **94 with T160**: `literal_pin.MINIMUM_PINS_SWEPT` is one scenario more. Still zero slack.
+#: **92 with T165, merged over main's 94**: four ceilings left the census
+#: (`_swept_floor_sites` no longer
 #: yields them; `MINIMUM_FLOORS_SWEPT` above), and the gate's own swept floors
 #: each carry a marker and so join the battery. Measured with
 #: `measure_prose_clearance()` against this branch. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 90
+MINIMUM_PROSE_MUTATION_SCENARIOS = 92
 
 
 def measure_prose_clearance() -> dict[str, Any]:

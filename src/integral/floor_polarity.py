@@ -1341,4 +1341,21 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "combine."
         ),
     ),
+    "literal_pin.MINIMUM_PINS_SWEPT": (
+        "floor",
+        (
+            '`"gate_status": "measured" if swept >= MINIMUM_PINS_SWEPT else '
+            '"unmeasured"`: the gate reports measured only when the swept pins '
+            "reach it, so deleting a pin breaches it. A conditional expression "
+            "is not a refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
+    "document_reader.EXPORT_VERSION": (
+        "neither",
+        (
+            'A format version written into the export (`{"v": EXPORT_VERSION}`) '
+            'and compared for equality on import (`data.get("v") != '
+            "EXPORT_VERSION`): it identifies a format and bounds no count."
+        ),
+    ),
 }

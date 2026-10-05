@@ -48,6 +48,11 @@
       "line": 302
     },
     {
+      "module": "document_reader",
+      "name": "MINIMUM_CONTRACTS_EVALUATED",
+      "line": 86
+    },
+    {
       "module": "elicit_extract",
       "name": "MINIMUM_CHECKS",
       "line": 739
@@ -80,7 +85,7 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4619
+      "line": 4632
     },
     {
       "module": "gate_detector_states",
@@ -101,6 +106,11 @@
       "module": "interview",
       "name": "MINIMUM_CHECKS",
       "line": 946
+    },
+    {
+      "module": "literal_pin",
+      "name": "MINIMUM_PINS_SWEPT",
+      "line": 51
     },
     {
       "module": "markup_text",
@@ -312,20 +322,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3790,
+      "line": 3794,
       "population": 44
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3817,
+      "line": 3821,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3682,
-      "population": 93
+      "line": 3686,
+      "population": 95
     },
     {
       "module": "freshness",
@@ -486,6 +496,7 @@
     "decline.DECLINES_BEFORE_STEP_SILENCE",
     "decline.DECLINES_BEFORE_TOTAL_SILENCE",
     "dedup.SHINGLE_SIZE",
+    "document_reader.EXPORT_VERSION",
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
@@ -596,6 +607,7 @@
     "decline.MINIMUM_ASKS",
     "dedup.MINIMUM_CLUSTER_PAIRS",
     "dedup.MINIMUM_PAIRS",
+    "document_reader.MINIMUM_CONTRACTS_EVALUATED",
     "elicit_extract.MINIMUM_CHECKS",
     "employer_boards.MINIMUM_CONFORMING",
     "exclusion_live_round.MINIMUM_EXCLUDED_SERVED",
@@ -614,6 +626,7 @@
     "identity.MINIMUM_PROBES",
     "interview.MINIMUM_CHECKS",
     "lifecycle.MINIMUM_SCENARIOS",
+    "literal_pin.MINIMUM_PINS_SWEPT",
     "markup_text.MINIMUM_FIXTURE_OFFERS",
     "markup_text.MINIMUM_MARKUP_CONTRACTS",
     "markup_text.MINIMUM_MARKUP_VALUES_COMPARED",
@@ -675,6 +688,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 93,
+  "floors_swept_at_least": 95,
   "floors_arithmetically_checked_at_least": 36
 }
