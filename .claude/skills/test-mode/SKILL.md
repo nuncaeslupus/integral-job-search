@@ -45,7 +45,7 @@ The observation and the instruction-to-act are separate markers on purpose: the 
 
 This tool's main input is pasted job adverts, and adverts are full of brackets: `[Remote]`, `[Barcelona]`, `[sic]`, `[REF-2026-114]`, bracketed section headers. T11 keeps an advert's `text` **byte-for-byte verbatim** because extraction evidence spans are offsets into it.
 
-So meta parsing is suspended whenever the turn is a paste — a turn whose first line is `/paste`, or one long enough to be one. Inside a paste, `[[…]]` is advert text and stays in the advert.
+So meta parsing is suspended whenever the turn is a paste — a turn whose first line is `/paste`, or one that is both long enough to be one *and* shaped like a document (single-bracket tags, bullets or layout glyphs, many or heading-like lines, long unpunctuated runs). Inside a paste, `[[…]]` is advert text and stays in the advert.
 
 Do this through `integral.test_mode.parse_turn`, never by eye:
 
@@ -99,7 +99,7 @@ Required, not optional. A note captured and never surfaced is the failure this w
 - **Numbering resumes from the ledger.** Reopening a session continues where it left off rather than minting a second note 1 — which would make `--seed 1` ambiguous between two unrelated observations.
 - **`[[` with no `]]` is not a note.** It is counted as unclosed and reported, never silently swallowed along with the rest of the turn. If the owner's note seems to have vanished, this is the first thing to check.
 - **An empty `[[]]` is a slip, not an observation.** Counted, not stored — a blank triage row is one nobody can act on.
-- **A long typed turn trips the paste guard.** The threshold cannot tell a pasted advert from a long typed answer, which is why every marker it declines is counted and shown. If the owner writes at length and expects a note captured, `/paste` discipline is what keeps the two apart.
+- **A long typed turn can still trip the paste guard.** Plain sentence prose is read for notes however long it is; but a turn with advert-like structure (brackets, bullets, symbols, an `@`, several lines, a long unpunctuated run) is a paste, and so is anything the rule cannot rule out. A flattened advert of plain full sentences with none of those is indistinguishable from typing and would be read. Every marker the guard declines is counted and shown; `/paste` is what makes it certain.
 - **Entering test mode is in the record.** The ledger's first line says the session id, the time, and whether the candidate was invented — so nobody later mistakes a test session's artefacts for a real candidate's.
 
 ## Boundary

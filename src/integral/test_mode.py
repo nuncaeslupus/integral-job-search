@@ -44,8 +44,10 @@ So, option 3 of the payload:
   to act* is separated from the *observation* so the end-of-session pass can
   treat every silent note uniformly;
 * **no meta parsing inside a paste** — neither an explicit `/paste` turn nor a
-  turn long enough to be one (`PASTE_CHARS`). Adverts are pasted; nothing in a
-  paste is ever read as meta.
+  turn long enough *and shaped like* a document (`PASTE_CHARS`, `_looks_pasted`):
+  length makes a turn eligible, advert or CV structure makes it a paste, and
+  any doubt falls on the paste side. Adverts are pasted; nothing in a paste is
+  ever read as meta. A long typed answer with no such structure is read (T190).
 
 ## Where notes live, and why it is not the candidate's tree
 
@@ -102,6 +104,7 @@ import json
 import re
 import sys
 import tempfile
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -136,11 +139,12 @@ _NOTE = re.compile(r"\[\[(?P<body>[^\]\n]*(?:\](?!\])[^\]\n]*)*)\]\]")
 _OPEN_MARKER = "[["
 _ACT_NOW = "!"
 
-# A turn at least this long is treated as a paste whether or not it was
-# announced as one. Adverts and pasted CV text run to thousands of characters;
-# a typed conversational turn carrying a note is far shorter. The threshold is
-# a guard, not a classifier — which is why a marker it declines to parse is
-# reported instead of dropped.
+# A turn at least this long is *eligible* to be a paste whether or not it was
+# announced as one — length alone no longer decides (T190). A long turn is
+# read as typed, and its notes captured, only when it carries no advert or CV
+# structure at all (`_looks_pasted`); every other long turn is a paste. The
+# threshold is a guard, not a classifier — which is why a marker it declines
+# to parse is reported instead of dropped.
 PASTE_CHARS = 400
 
 PASTE_COMMAND = "/paste"
@@ -285,9 +289,67 @@ def detect_guard(text: str) -> Guard:
     first, _, _ = text.partition("\n")
     if first.strip() == PASTE_COMMAND:
         return "explicit-paste"
-    if len(text) >= PASTE_CHARS:
+    if len(text) >= PASTE_CHARS and _looks_pasted(text):
         return "long-turn"
     return "none"
+
+
+_SINGLE_BRACKET = re.compile(r"\[[^\[\]\n]*\]")
+_LIST_LEAD = re.compile(r"^\s*(?:\d+[.)]|[A-Za-z][.)])\s")
+_SENTENCE_END = re.compile(r"[.!?\u2026][\"'\u201d\u00bb)\]]*$")
+
+
+def _is_structure_char(char: str) -> bool:
+    """Symbols, bullets and `@`: glyphs an advert or CV uses to lay itself out.
+
+    Currency is exempt — a candidate states pay in prose — everything else in
+    the Unicode symbol categories (`|`, `+`, `=`, arrows, dingbats, emoji) and
+    anything named a bullet counts. Derived from Unicode, not listed.
+    """
+    category = unicodedata.category(char)
+    if category == "Sc":
+        return False
+    if category.startswith("S"):
+        return True
+    return char in "@\u00b7" or "BULLET" in unicodedata.name(char, "")
+
+
+def _looks_pasted(text: str) -> bool:
+    """Whether a long turn carries advert or CV structure — True on any doubt.
+
+    The rule is positive evidence of *typing*, never of pasting: the turn is
+    typed only if every test below fails to find structure, so whatever the
+    tests cannot see resolves to "paste" (marker declined, counted, shown).
+    Structure means any of: a single-bracket tag (`[Remote]`, `[sic]`); a
+    layout glyph or `@`; more than 3 non-empty lines; a line
+    that opens like a bullet, heading marker or enumerator; with several lines,
+    a line that does not end like a sentence (a heading); or a run of more than
+    40 words with no sentence terminator (a flattened list).
+    The turn's own `[[…]]` notes are removed first so they cannot hide
+    structure or manufacture it.
+    """
+    body = _NOTE.sub(" ", text)
+    if _SINGLE_BRACKET.search(body):
+        return True
+    if any(_is_structure_char(char) for char in body):
+        return True
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    # More than three non-empty lines is a document, not a typed turn.
+    if len(lines) > 3:
+        return True
+    for line in lines:
+        if not line[0].isalnum() or _LIST_LEAD.match(line):
+            return True
+        if len(lines) > 1 and not _SENTENCE_END.search(line):
+            return True
+    run = 0
+    for word in body.split():
+        run += 1
+        if _SENTENCE_END.search(word):
+            run = 0
+        elif run > 40:
+            return True
+    return run > 40
 
 
 def parse_turn(text: str, *, guard: Guard | None = None) -> ParsedTurn:
