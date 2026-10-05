@@ -149,26 +149,35 @@ def tracking_links(store: ProfileStore) -> dict[str, str]:
     return found
 
 
-def _sent_at(directory: Path) -> tuple[str, bool]:
-    """The earliest ``sent_at`` among this offer's send records, and whether any is unreadable."""
+_ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _sent_at(directory: Path) -> tuple[str, bool, bool]:
+    """(earliest valid ``sent_at``, whether any send record is unusable, whether any exists).
+
+    A record is unusable unless its ``sent_at`` is a string opening with an ISO day;
+    whether one *exists* is decided by the file alone, never by how it parses.
+    """
     stamps: list[str] = []
     broken = False
+    exists = False
     # `sent.json` is the older single-record spelling some candidates' trees hold.
     for record in [*sorted(directory.glob("v*.json")), directory / "sent.json"]:
         if record.name != "sent.json" and not _VERSION_RECORD.fullmatch(record.name):
             continue
         if record.name == "sent.json" and not record.exists():
             continue
+        exists = True
         try:
             stamp = json.loads(record.read_text(encoding="utf-8"))["sent_at"]
         except (OSError, ValueError, KeyError, TypeError):
             broken = True
             continue
-        if isinstance(stamp, str):
-            stamps.append(stamp)
+        if isinstance(stamp, str) and _ISO_DAY.match(stamp.strip()):
+            stamps.append(stamp.strip())
         else:
             broken = True
-    return (min(stamps) if stamps else ""), broken
+    return (min(stamps) if stamps else ""), broken, exists
 
 
 def _held_levels(store: ProfileStore) -> dict[str, str | None]:
@@ -290,7 +299,7 @@ def collect(store: ProfileStore) -> Board:
     for directory in directories:
         offer_id = directory.name
         notes: list[str] = []
-        sent, broken = _sent_at(directory)
+        sent, broken, record_exists = _sent_at(directory)
         if broken:
             notes.append("a send record could not be read")
         status_record = _json(store, "applications", offer_id, "status.json")
@@ -301,9 +310,9 @@ def collect(store: ProfileStore) -> Board:
             noted = _text(status_record.get("recorded_at"))
         elif store.path("applications", offer_id, "status.json").exists():
             notes.append("status.json could not be read")
-        # "Never sent" means no send record exists at all, not that none parsed: an
-        # unreadable record is a send on disk, and the row says it could not be read.
-        if not sent and not broken and status == "drafted":
+        # "Never sent" means no send record FILE exists, whatever it parses to: an
+        # unusable record is a send on disk, and the row says it could not be read.
+        if not record_exists and status == "drafted":
             left_out[offer_id] = "only drafted, never sent"
             continue
         if sent:

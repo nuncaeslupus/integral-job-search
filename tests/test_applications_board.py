@@ -419,7 +419,16 @@ def test_the_command_writes_the_board_and_can_record_a_link_first(
 
 
 @pytest.mark.parametrize(
-    "record", ["{not json", '{"offer_id": "u1", "version": 1}', '{"sent_at": 5}'], ids=str
+    "record",
+    [
+        "{not json",
+        '{"offer_id": "u1", "version": 1}',
+        '{"sent_at": 5}',
+        '{"sent_at": ""}',
+        '{"sent_at": "   "}',
+        '{"sent_at": "yesterday"}',
+    ],
+    ids=str,
 )
 def test_an_unreadable_send_record_under_a_drafted_status_is_still_a_sent_application(
     store: ProfileStore, record: str
@@ -432,6 +441,16 @@ def test_an_unreadable_send_record_under_a_drafted_status_is_still_a_sent_applic
     assert result.left_out == {}
     assert any("send record could not be read" in n for n in result.rows[0].notes)
     assert "never sent" not in board.render(result, generated_at=NOW)
+    assert result.rows[0].date != ""  # never a blank date
+
+
+def test_a_legacy_sent_json_with_no_stamp_under_drafted_is_still_a_sent_application(
+    store: ProfileStore,
+) -> None:
+    _offer(store, "u2")
+    store.write_text('{"sent_at": ""}', "applications", "u2", "sent.json")
+    record_application_status(store, "u2", status="drafted", at="2026-09-07T00:00:00Z")
+    assert [r.offer_id for r in board.collect(store).rows] == ["u2"]
 
 
 def test_the_planned_deletion_names_the_new_folders(store: ProfileStore) -> None:
