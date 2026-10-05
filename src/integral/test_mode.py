@@ -297,6 +297,20 @@ def detect_guard(text: str) -> Guard:
 _SINGLE_BRACKET = re.compile(r"\[[^\[\]\n]*\]")
 _LIST_LEAD = re.compile(r"^\s*(?:\d+[.)]|[A-Za-z][.)])\s")
 _SENTENCE_END = re.compile(r"[.!?\u2026][\"'\u201d\u00bb)\]]*$")
+# RFC 3986 `scheme "://" rest`: a link's `=`, `+`, `~`, `@` are URL syntax, not
+# layout, so a link is replaced by a plain word before any structure is read.
+_URL = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+")
+_OPENERS = "\u00bf\u00a1\"'"
+
+
+def _is_opener(char: str) -> bool:
+    """Opening punctuation a typed line may begin with: `(`, `«`, `“`, `¿`, `¡`, quotes."""
+    return unicodedata.category(char) in ("Ps", "Pi") or char in _OPENERS
+
+
+def _ends_clause(word: str) -> bool:
+    """A word whose last character is punctuation (any Unicode `P*`) ends a clause."""
+    return unicodedata.category(word[-1]).startswith("P")
 
 
 def _is_structure_char(char: str) -> bool:
@@ -324,11 +338,12 @@ def _looks_pasted(text: str) -> bool:
     layout glyph or `@`; more than 3 non-empty lines; a line
     that opens like a bullet, heading marker or enumerator; with several lines,
     a line that does not end like a sentence (a heading); or a run of more than
-    40 words with no sentence terminator (a flattened list).
+    40 words with no punctuation at all (a flattened list). Links are replaced by a
+    plain word first.
     The turn's own `[[…]]` notes are removed first so they cannot hide
     structure or manufacture it.
     """
-    body = _NOTE.sub(" ", text)
+    body = _URL.sub("url", _NOTE.sub(" ", text))
     if _SINGLE_BRACKET.search(body):
         return True
     if any(_is_structure_char(char) for char in body):
@@ -338,14 +353,15 @@ def _looks_pasted(text: str) -> bool:
     if len(lines) > 3:
         return True
     for line in lines:
-        if not line[0].isalnum() or _LIST_LEAD.match(line):
+        opening = line.lstrip("".join(c for c in line if _is_opener(c)))
+        if not opening or not opening[0].isalnum() or _LIST_LEAD.match(line):
             return True
         if len(lines) > 1 and not _SENTENCE_END.search(line):
             return True
     run = 0
     for word in body.split():
         run += 1
-        if _SENTENCE_END.search(word):
+        if _ends_clause(word):
             run = 0
         elif run > 40:
             return True

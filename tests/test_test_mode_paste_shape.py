@@ -8,6 +8,8 @@ and headings are what adverts are made of), never by running the code.
 
 from __future__ import annotations
 
+import sys
+import unicodedata
 from collections.abc import Callable
 
 import pytest
@@ -171,3 +173,93 @@ def test_currency_in_prose_is_not_structure() -> None:
 
 def test_a_typed_two_paragraph_answer_with_sentences_is_read() -> None:
     assert detect_guard(REPRO.replace(" Gracias", "\nGracias")) == "none"
+
+
+BOARD_URLS = (
+    "https://www.infojobs.net/barcelona/tecnico/of-i1234?applicationOrigin=search-new&utm_source=a+b"
+    " y https://medium.com/@autor/post~1?ref=x"
+)
+
+
+def test_board_urls_with_query_strings_are_not_structure() -> None:
+    turn = REPRO.replace(
+        "https://example.invalid/jobs/114",
+        "https://www.infojobs.net/of-i1?applicationOrigin=search-new&utm_source=a+b",
+    )
+    turn = turn.replace(
+        "https://example.invalid/jobs/220", "https://medium.com/@autor/post~1?ref=x"
+    )
+    assert "utm_source" in turn and "?" in turn
+    assert detect_guard(turn) == "none"
+    assert [n.text for n in parse_turn(turn).notes] == ["the question order felt wrong"]
+
+
+def test_a_url_does_not_hide_structure_around_it() -> None:
+    assert (
+        detect_guard(
+            REPRO.replace("https://example.invalid/jobs/114", "https://x.invalid/a [Remote]")
+        )
+        == "long-turn"
+    )
+    assert detect_guard(REPRO + " | Madrid") == "long-turn"
+
+
+def test_a_sentence_just_past_forty_words_is_still_typed() -> None:
+    assert detect_guard(REPRO.replace("queda más cerca", "queda bastante más cerca")) == "none"
+    assert (
+        detect_guard(
+            REPRO.replace("queda más cerca", "queda muchísimo bastante más cerca de verdad")
+        )
+        == "none"
+    )
+
+
+def test_a_clause_comma_resets_the_run_but_nothing_else_does() -> None:
+    words = " ".join(["palabra"] * 60)
+    assert detect_guard(REPRO + " " + words) == "long-turn"
+    assert (
+        detect_guard(REPRO + " " + words.replace("palabra palabra", "palabra, palabra", 30))
+        == "none"
+    )
+
+
+@pytest.mark.parametrize(
+    "opener", ["\u00bf", "\u00a1", "\u201c", "\u00ab", "(", '"', "\u00bf\u00a1"]
+)
+def test_a_line_opening_with_spanish_or_quote_punctuation_is_typed(opener: str) -> None:
+    closer = {"\u201c": "\u201d", "\u00ab": "\u00bb", "(": ")", '"': '"'}.get(
+        opener, "?" if "\u00bf" in opener else "!"
+    )
+    turn = REPRO.replace("Vale, he mirado", f"{opener}Vale, he mirado", 1).replace(
+        "Gracias por la ayuda,", f"Gracias por la ayuda{closer}", 1
+    )
+    assert detect_guard(turn) == "none"
+    spanish = f"{opener}Y si miramos también la de Tarragona?\n" + REPRO
+    assert detect_guard(spanish) == "none"
+
+
+def test_a_line_that_is_only_an_opener_is_a_paste() -> None:
+    assert detect_guard(REPRO + "\n\u00bf") == "long-turn"
+
+
+def _bullet_like() -> list[str]:
+    chars = ["\u00b7"]
+    for code in range(sys.maxunicode + 1):
+        if code > 0xFFFF:
+            break
+        char = chr(code)
+        if "BULLET" in unicodedata.name(char, ""):
+            chars.append(char)
+    return chars
+
+
+def test_the_bullet_population_is_derived_from_unicode_not_listed() -> None:
+    chars = _bullet_like()
+    assert "\u2022" in chars and "\u00b7" in chars
+    assert len(chars) >= 8
+
+
+@pytest.mark.parametrize("char", _bullet_like(), ids=lambda c: f"U+{ord(c):04X}")
+def test_every_bullet_glyph_alone_flips_prose_to_paste(char: str) -> None:
+    assert detect_guard(REPRO) == "none"
+    assert detect_guard(REPRO + " " + char + " Madrid.") == "long-turn"
