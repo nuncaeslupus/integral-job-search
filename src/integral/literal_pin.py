@@ -129,8 +129,10 @@ def binding_defects(source: str, name: str) -> list[str]:
     is a top-level `NAME = <int>` (or `NAME: int = <int>`). A parameter or local of
     the same name is flagged too: that false alarm is fail-closed, costing a
     rename, where a silent pass would restore the fail-open. Out of AST reach, and
-    so not caught here: dynamic rebinding (`globals()[...]`, `setattr` on the
-    module, `exec`).
+    so not caught here: `exec` and any rebinding whose name is built at run time.
+    `globals()["NAME"] = ...` and `setattr(module, "NAME", ...)` ARE caught when the
+    name is a literal string, because a string constant equal to the name is itself
+    a site (and a docstring consisting solely of the name would be one too).
     """
     tree = ast.parse(source)
     sites = _sites(tree, name)
