@@ -1,9 +1,17 @@
 {
   "floors_cleared_by_prose_alone": 0,
   "cleared": [],
-  "findings": [],
+  "findings": [
+    {
+      "module": "floor_sweep",
+      "name": "MINIMUM_PROSE_MUTATION_SCENARIOS",
+      "line": 3834,
+      "reason": "stale_margin_claim",
+      "detail": "MINIMUM_PROSE_MUTATION_SCENARIOS is 90, population is 92 (margin 2), but its comment claims 'zero slack' — a positive, computed margin already refutes that regardless of what marker sits beside it"
+    }
+  ],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 50,
+  "unpinnable_floors_cleared_by_marker_restatement": 52,
   "marker_restatement_cleared": [
     {
       "module": "approval",
@@ -251,12 +259,22 @@
       "lineno": 425
     },
     {
+      "module": "topic_scope_gate",
+      "name": "FEWEST_HELD_CASES",
+      "lineno": 34
+    },
+    {
+      "module": "topic_scope_gate",
+      "name": "FEWEST_SHOWN_CASES",
+      "lineno": 40
+    },
+    {
       "module": "trait_sufficiency",
       "name": "MINIMUM_CHECKS",
       "lineno": 590
     }
   ],
-  "marker_restatement_scenarios_checked": 50,
+  "marker_restatement_scenarios_checked": 52,
   "marker_restatement_gate_status": "measured",
   "scenarios_checked_at_least": 90
 }

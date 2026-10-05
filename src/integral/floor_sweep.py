@@ -3384,7 +3384,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: (`MINIMUM_TRIPLES`, `MINIMUM_CONTESTED_TRIPLES`). Still zero slack.
 #: **93 with T229**, whose `skill_requirement` declares two floors
 #: (`FEWEST_REQUIRING_CASES`, `FEWEST_NOT_REQUIRING_CASES`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 93
+#: **95 with T227**, whose `topic_scope_gate` declares two floors
+#: (`FEWEST_HELD_CASES`, `FEWEST_SHOWN_CASES`). Still zero slack.
+MINIMUM_FLOORS_SWEPT = 95
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach

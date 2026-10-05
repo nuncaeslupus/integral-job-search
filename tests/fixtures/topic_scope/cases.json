@@ -1,0 +1,310 @@
+[
+  {
+    "id": "h-title",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Backend Engineer, fintech payments",
+    "employer": null,
+    "text": "Build services.",
+    "held": true,
+    "why": "title names the topic: the job is in it (spec: 'about the employer or the job')"
+  },
+  {
+    "id": "h-employer-name",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": "Banco Sabadell",
+    "text": "Build services.",
+    "held": true,
+    "why": "employer named is a bank (Banco Sabadell is a bank, the original reason for reading the employer)"
+  },
+  {
+    "id": "h-self-description",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are a fintech building payroll for small companies. Join us.",
+    "held": true,
+    "why": "the employer describes itself: 'We are a fintech' is the employer being on the topic"
+  },
+  {
+    "id": "h-self-description-ecommerce",
+    "about": "sector:e-commerce",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Somos una empresa de ecommerce con sede en Barcelona.",
+    "held": true,
+    "why": "self description in Spanish: 'Somos una empresa de e-commerce'"
+  },
+  {
+    "id": "h-self-description-with-cue",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Our company has ten years of experience in fintech payments.",
+    "held": true,
+    "why": "'Our company has N years of experience in fintech' is the employer's own history, not a demand on the candidate"
+  },
+  {
+    "id": "h-duties",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits:\n- Gym membership\n\nAbout the role:\nYou will build the fintech ledger for our clients.",
+    "held": true,
+    "why": "what the role does ('You will build the fintech ledger') is the job being on the topic"
+  },
+  {
+    "id": "h-purpose-clause",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Buscamos un Java Developer siendo valorable que aporte React para formar parte del equipo de nuestro cliente del sector bancario.",
+    "held": true,
+    "why": "'... para formar parte del equipo de nuestro cliente del sector bancario' states who the job is for; a cue in the clause before it does not strip it"
+  },
+  {
+    "id": "h-advertising-platform",
+    "about": "sector:advertising",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Join the team building our advertising platform for publishers.",
+    "held": true,
+    "why": "the product is advertising: 'our advertising platform' is the employer's business"
+  },
+  {
+    "id": "h-catalan",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Som una empresa del sector bancari.",
+    "held": true,
+    "why": "Catalan self description: 'Som una empresa del sector bancari'"
+  },
+  {
+    "id": "h-other-language-term",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "A leading banking group hires engineers.",
+    "held": true,
+    "why": "a term recorded beside the value reaches the advert in another language"
+  },
+  {
+    "id": "h-about-us-section",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "About us\nWe are a fintech serving freelancers.\n\nRequirements:\n- Python",
+    "held": true,
+    "why": "a section about the company is read; the Requirements section after it is not what holds it"
+  },
+  {
+    "id": "h-employer-bullet-self",
+    "about": "sector:salud",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "- Our product connects salud clinics with patients.",
+    "held": true,
+    "why": "a plain description bullet with no cue: 'Our product connects salud clinics' (our product is the employer)"
+  },
+  {
+    "id": "s-background-in",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We build payroll software for SMEs.\n\nRequirements:\n- Background in FinTech\n- Python",
+    "held": false,
+    "why": "the reported case: a payroll startup that values 'Background in FinTech' is not a fintech"
+  },
+  {
+    "id": "s-ticket-restaurant-section",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Beneficios:\n- Ticket restaurant\n- Seguro médico",
+    "held": false,
+    "why": "a perk: 'ticket restaurant' among the benefits is not a restaurant job (58 adverts in the session)"
+  },
+  {
+    "id": "s-ticket-restaurant-inline",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Software for logistics. Ticket restaurante y seguro médico para todo el equipo.",
+    "held": false,
+    "why": "the same perk with no heading in front of it"
+  },
+  {
+    "id": "s-meal-vouchers",
+    "about": "sector:restaurante",
+    "terms": [
+      "restaurant"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We offer restaurant vouchers, a gym allowance and 25 holiday days.",
+    "held": false,
+    "why": "English wording of the perk"
+  },
+  {
+    "id": "s-nice-to-have-section",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We make embedded firmware.\n\nNice to have:\n- fintech exposure",
+    "held": false,
+    "why": "a nice-to-have section names the topic only as something that would be welcome"
+  },
+  {
+    "id": "s-plus",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Firmware for industrial sensors. Experience with banking systems is a plus.",
+    "held": false,
+    "why": "'Experience with banking systems is a plus'"
+  },
+  {
+    "id": "s-requisitos-section",
+    "about": "sector:banca",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Desarrollamos firmware.\n\nRequisitos:\n- Experiencia en el sector bancario",
+    "held": false,
+    "why": "Spanish requirements section: 'Experiencia en el sector bancario'"
+  },
+  {
+    "id": "s-se-valora",
+    "about": "sector:publicidad",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Ingeniero de firmware. Se valora experiencia en publicidad digital.",
+    "held": false,
+    "why": "'Se valora experiencia en publicidad digital' is a preference"
+  },
+  {
+    "id": "s-posting-boilerplate",
+    "about": "sector:advertising",
+    "terms": [
+      "advertised"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Firmware engineer for sensors. This role was advertised on several job boards.",
+    "held": false,
+    "why": "a firmware engineer held as advertising: 'this role was advertised' says how it was posted, not what it does"
+  },
+  {
+    "id": "s-perk-with-topic",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "What we offer:\n- Flexible hours\n- Discounts at fintech partners",
+    "held": false,
+    "why": "a perk that names the topic: 'discounts at fintech partners'"
+  },
+  {
+    "id": "s-you-have",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Embedded systems role. You have a background in banking software.",
+    "held": false,
+    "why": "a statement about the candidate: 'You have a background in banking'"
+  },
+  {
+    "id": "s-conocimientos",
+    "about": "sector:e-commerce",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Equipo de plataforma de datos.\nConocimientos de e-commerce valorables.",
+    "held": false,
+    "why": "'Conocimientos de e-commerce valorables'"
+  },
+  {
+    "id": "s-looking-for",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are looking for an engineer with a background in fintech.",
+    "held": false,
+    "why": "'We are looking for someone with a background in fintech' addresses the candidate, so the employer-description rescue does not apply"
+  },
+  {
+    "id": "s-cue-before-purpose",
+    "about": "sector:banca",
+    "terms": [
+      "banking"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Must have experience in banking to join our team of firmware engineers.",
+    "held": false,
+    "why": "the topic sits in the cue clause before the purpose connector: 'experience in banking to join our team'"
+  },
+  {
+    "id": "s-must-have-years",
+    "about": "sector:e-commerce",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Cloud infrastructure role. 3 years of experience in e-commerce platforms.",
+    "held": false,
+    "why": "'3 years of experience in e-commerce platforms' is a requirement"
+  },
+  {
+    "id": "h-healthcare",
+    "about": "sector:healthcare",
+    "terms": [
+      "health care"
+    ],
+    "title": "Data Engineer",
+    "employer": null,
+    "text": "We are a health care company hiring a data engineer.",
+    "held": true,
+    "why": "'health care' is a sector; the perk list says 'health insurance' only, so a company that is health care is not stripped as a perk"
+  },
+  {
+    "id": "s-self-description-then-seeking",
+    "about": "sector:fintech",
+    "terms": [],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "We are a growing company seeking an engineer with a background in fintech.",
+    "held": false,
+    "why": "the sentence opens like a self description but asks for a candidate with a fintech background: a requirement, so the rescue must not apply"
+  }
+]
