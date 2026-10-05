@@ -14,9 +14,10 @@ from pathlib import Path
 import pytest
 
 from integral.candidate import Aim
+from integral.extraction import citable_text
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import save_lifecycle_offer, track_new_offer
-from integral.offers import Offer, compute_offer_id
+from integral.offers import Offer, compute_offer_id, load_offer
 from integral.search_terms import AIM_FILE, save_aim
 from integral.sourcing import FETCH_LOG
 from integral.sourcing_exclusions import Exclusion, record_exclusion
@@ -218,6 +219,31 @@ def test_adverts_on_a_ruled_out_topic_propose_nothing(store: ProfileStore) -> No
     assert _terms(store) == []  # one surviving vacancy is below the threshold
     _advert(store, "Applied AI Engineer", "Umbrella")
     assert _terms(store) == ["applied ai engineer"]
+
+
+def test_adverts_whose_extraction_requires_a_ruled_out_skill_propose_nothing(
+    store: ProfileStore,
+) -> None:
+    """T229: `propose` reads the stored extraction, so a `skill:` exclusion holds there too."""
+    from integral.skill_requirement import store_readings
+
+    record_exclusion(
+        store,
+        Exclusion(
+            about="skill:go", stated_at_cycle=1, words="nunca he usado Go", terms=("golang",)
+        ),
+    )
+    ids = [
+        _advert(store, "Applied AI Engineer", company, extra="Go required")
+        for company in ("Acme", "Globex")
+    ]
+    assert _terms(store) == ["applied ai engineer"]  # unread: shown, so still proposed
+    for offer_id in ids:
+        offer = load_offer(store, offer_id)
+        start = citable_text(offer.title, offer.text).index("Go")
+        span = {"start": start, "end": start + 2, "quote": "Go"}
+        store_readings(store, offer_id, [{"skill": "Go", "role": "required", "span": span}])
+    assert _terms(store) == []
 
 
 def test_a_title_seen_across_boards_sorts_before_a_busier_single_board_one(

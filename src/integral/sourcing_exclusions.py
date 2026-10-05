@@ -46,6 +46,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from integral import skill_requirement
 from integral.candidate import CONSTRAINT_FIELD_NAMES, FIELD_MODELS
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer, names_an_employer
@@ -161,16 +162,33 @@ class Candidate(Strict):
     #: The employer's name is part of what an advert says: "Banco Sabadell"
     #: whose text never repeats the word is still a bank.
     employer: str | None = None
+    #: T229. The skills the advert's step-8 extraction lists as *required*.
+    #: `None` is **pending** — no extraction (or none with a skills reading)
+    #: yet — and is shown, never held; `()` is "read, and requires none".
+    required_skills: tuple[str, ...] | None = None
 
 
-def candidate_of(offer: Offer) -> Candidate:
+def candidate_of(offer: Offer, store: ProfileStore | None = None) -> Candidate:
     """The one place a stored `Offer` becomes what `matches` reads.
 
     Every path by which an offer reaches the candidate — a sourced row, a
     stored offer about to be presented, a reaction stimulus — goes through
     this and `ruled_out_by`, so a field added to the check is added once.
+
+    With a `store`, the advert's step-8 extraction is read for the skills it
+    requires (T229); without one every `skill:` exclusion is pending on it.
     """
-    return Candidate(offer_id=offer.id, title=offer.title, text=offer.text, employer=offer.company)
+    return Candidate(
+        offer_id=offer.id,
+        title=offer.title,
+        text=offer.text,
+        employer=offer.company,
+        required_skills=(
+            skill_requirement.required_skills_in(store, offer.id, offer.text, offer.title)
+            if store is not None
+            else None
+        ),
+    )
 
 
 class Presentation(Strict):
@@ -586,6 +604,11 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     answered by `employer_verdict` on the normalised company, never by text;
     an advert whose employer cannot be told is held (`UNDECIDED`), not passed.
 
+    The `skill:` facet (T229) is a third: the advert is held only where its
+    step-8 extraction lists the technology as *required* (`required_skills`);
+    a plus, an option among several, an example, or an advert with no reading
+    yet (pending, see `pending_skill_checks`) is shown.
+
     The stated value, and every `term` recorded beside it, is matched as a
     **word plus a closed set of endings** (`SUFFIXES`), never as free text:
     `banca` finds `bancario`, `bancos` and `bancari`, and `cloud` still does
@@ -597,6 +620,11 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
     """
     if exclusion.facet.strip().lower() == "employer":
         return employer_verdict(candidate, exclusion) != IN
+    if exclusion.facet.strip().lower() == skill_requirement.FACET:
+        return skill_requirement.holds(
+            candidate.required_skills,
+            skill_requirement.target_of(exclusion.value, exclusion.terms),
+        )
     raw = f"{candidate.title or ''} {candidate.employer or ''} {candidate.text}"
     for join in ("", " "):
         haystack = _fold(raw, join)
@@ -630,6 +658,18 @@ def load_exclusions(store: ProfileStore) -> tuple[Exclusion, ...]:
         raise IdentityError(
             f"{'/'.join(EXCLUSIONS_FILE)} holds a row that is not one: {exc}"
         ) from exc
+
+
+def pending_skill_checks(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple[str, ...]:
+    """The `skill:` exclusions that could not be applied to this advert yet (T229).
+
+    An advert with no step-8 skills reading is shown, and this names what that
+    showing could not check, so the page can say "not yet read for Go" rather
+    than let an unread advert pass for a cleared one.
+    """
+    if candidate.required_skills is not None:
+        return ()
+    return tuple(e.about for e in exclusions if e.facet.strip().lower() == skill_requirement.FACET)
 
 
 def record_exclusion(store: ProfileStore, exclusion: Exclusion) -> Path:

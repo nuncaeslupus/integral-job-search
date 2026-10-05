@@ -248,6 +248,12 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
         "never_tripped": never_tripped,
         "not_applied": not_applied,
         "unexcluded_removed": removed_unexcluded,
+        # T229. A `skill:` exclusion holds only on a step-8 reading, and a served
+        # corpus advert has none, so this round cannot apply it. Said, so a
+        # round carrying one never reads as having checked the skill.
+        "skill_exclusions_not_applied": [
+            e.about for e in exclusions if e.facet.strip().lower() == "skill"
+        ],
         "_observed": {
             "excluded_served": len(excluded_served),
             "unexcluded_served": len(unexcluded_served),

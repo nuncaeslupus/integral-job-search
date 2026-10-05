@@ -1703,7 +1703,7 @@ def _one_board(
                 # it must not spend room a readable row could use.
                 out_of_reach += 1
                 continue
-            ruled_out = ruled_out_by(candidate_of(offer), exclusions)
+            ruled_out = ruled_out_by(candidate_of(offer, store), exclusions)
             if ruled_out:
                 # T203. Left out **and said**: the count and the reason ride
                 # on the outcome, so it is on the page the candidate reads.

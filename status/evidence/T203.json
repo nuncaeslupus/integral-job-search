@@ -10,5 +10,6 @@
   "failures": [],
   "never_tripped": [],
   "not_applied": [],
-  "unexcluded_removed": []
+  "unexcluded_removed": [],
+  "skill_exclusions_not_applied": []
 }
