@@ -65,78 +65,101 @@ NESTED_REBINDINGS: dict[str, str] = {
     "import_alias": "if True:\n    from os import sep as {n}\n",
     "except_alias": "try:\n    pass\nexcept Exception as {n}:\n    pass\n",
     "nested_if": "if True:\n    if True:\n        {n} = len(PIN_POPULATION)\n",
+    "nested_literal": "if True:\n    {n} = 13\n",
+    "match_capture": "match len(PIN_POPULATION):\n    case {n}:\n        pass\n",
+    "match_as": "match 1:\n    case int() as {n}:\n        pass\n",
+    "match_star": "match [1]:\n    case [*{n}]:\n        pass\n",
+    "match_rest": "match {{}}:\n    case {{**{n}}}:\n        pass\n",
+    "type_alias": "if True:\n    type {n} = int\n",
+    "del": "if True:\n    del {n}\n",
+    "star_import": "if True:\n    from os import *\n",
 }
 
 
-def _stored(target: ast.AST) -> list[str]:
-    return [
-        s.id for s in ast.walk(target) if isinstance(s, ast.Name) and isinstance(s.ctx, ast.Store)
-    ]
+#: Identifier-valued fields that are not a binding: a call keyword, an attribute
+#: name, a module path, a class pattern's keyword attributes. Everything else
+#: that spells the name is a site, so grammar added later is refused by default.
+_NOT_BINDINGS = {
+    ("keyword", "arg"),
+    ("Attribute", "attr"),
+    ("ImportFrom", "module"),
+    ("MatchClass", "kwd_attrs"),
+}
 
 
-def _bound_names(node: ast.AST) -> list[tuple[str, ast.AST | None]]:
-    """Every (name, plain value or None) this one node binds."""
-    out: list[tuple[str, ast.AST | None]] = []
-    if isinstance(node, ast.Assign):
-        for target in node.targets:
-            plain = node.value if isinstance(target, ast.Name) else None
-            out.extend((n, plain) for n in _stored(target))
-    elif isinstance(node, ast.AnnAssign):
-        if isinstance(node.target, ast.Name):
-            out.append((node.target.id, node.value))
-    elif isinstance(node, ast.AugAssign):
-        out.extend((n, None) for n in _stored(node.target))
-    elif isinstance(node, ast.NamedExpr):
-        out.append((node.target.id, None))
-    elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
-        out.extend((n, None) for n in _stored(node.target))
-    elif isinstance(node, ast.withitem) and node.optional_vars is not None:
-        out.extend((n, None) for n in _stored(node.optional_vars))
-    elif isinstance(node, ast.ExceptHandler) and node.name:
-        out.append((node.name, None))
-    elif isinstance(node, (ast.Import, ast.ImportFrom)):
-        out.extend((a.asname or a.name.split(".")[0], None) for a in node.names)
-    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        out.append((node.name, None))
-    elif isinstance(node, (ast.Global, ast.Nonlocal)):
-        out.extend((n, None) for n in node.names)
-    elif isinstance(node, ast.arg):
-        out.append((node.arg, None))
+def _sites(tree: ast.AST, name: str) -> list[ast.AST]:
+    """Every node that spells `name` in an identifier-valued field, as a binding.
+
+    A closed rule, not a list of binding statements: any `str` (or list of `str`)
+    field equal to the name counts, `Name` only outside `Load`, with the four
+    exclusions above. So `match` captures (`case X`, `as X`, `*X`, `**X`), `type
+    X = ...`, `del X`, parameters, `global`, loop and `with` targets are all seen
+    without being named. A star import is a site for every name.
+    """
+    out: list[ast.AST] = []
+    for node in ast.walk(tree):
+        kind = type(node).__name__
+        if isinstance(node, ast.Name):
+            if node.id == name and not isinstance(node.ctx, ast.Load):
+                out.append(node)
+            continue
+        for field, value in ast.iter_fields(node):
+            if (kind, field) in _NOT_BINDINGS:
+                continue
+            if isinstance(node, ast.alias):
+                if (field == "asname" and value == name) or (
+                    field == "name"
+                    and node.asname is None
+                    and isinstance(value, str)
+                    and (value == "*" or value.split(".")[0] == name)
+                ):
+                    out.append(node)
+            elif isinstance(value, str):
+                if value == name:
+                    out.append(node)
+            elif isinstance(value, list) and name in [v for v in value if isinstance(v, str)]:
+                out.append(node)
     return out
 
 
 def binding_defects(source: str, name: str) -> list[str]:
     """Why `name` is not "one module-level integer literal"; empty when it is.
 
-    Walks every node at every depth, so a rebinding nested in any block counts.
-    An annotated literal (`NAME: int = 3`) is a literal. A parameter or local of
-    the same name is also flagged: that false alarm is fail-closed, costing a
-    rename, where a silent pass would restore the fail-open.
+    Counts every site (`_sites`) at every depth; a floor has exactly one, and it
+    is a top-level `NAME = <int>` (or `NAME: int = <int>`). A parameter or local of
+    the same name is flagged too: that false alarm is fail-closed, costing a
+    rename, where a silent pass would restore the fail-open. Out of AST reach, and
+    so not caught here: dynamic rebinding (`globals()[...]`, `setattr` on the
+    module, `exec`).
     """
     tree = ast.parse(source)
-    top_level = {id(n) for n in tree.body}
-    sites = [
-        (node, value)
-        for node in ast.walk(tree)
-        for bound, value in _bound_names(node)
-        if bound == name
-    ]
+    sites = _sites(tree, name)
     if not sites:
         return [f"{name} is never bound"]
     defects: list[str] = []
     if len(sites) != 1:
-        lines = sorted(getattr(n, "lineno", 0) for n, _ in sites)
+        lines = sorted(getattr(n, "lineno", 0) for n in sites)
         defects.append(f"{name} is bound {len(sites)} times (lines {lines}); a floor binds once")
-    for node, value in sites:
-        line = getattr(node, "lineno", 0)
-        if id(node) not in top_level:
-            defects.append(f"{name} is bound at line {line} below module level")
-        elif not (
-            isinstance(value, ast.Constant)
-            and isinstance(value.value, int)
-            and not isinstance(value.value, bool)
-        ):
-            defects.append(f"{name} at line {line} is not an integer literal")
+    clean = [
+        stmt
+        for stmt in tree.body
+        if (
+            (
+                isinstance(stmt, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == name for t in stmt.targets)
+            )
+            or (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+                and stmt.target.id == name
+            )
+        )
+        and isinstance(stmt.value, ast.Constant)
+        and isinstance(stmt.value.value, int)
+        and not isinstance(stmt.value.value, bool)
+    ]
+    if not clean:
+        defects.append(f"{name} is not bound by a module-level integer literal")
     return defects
 
 

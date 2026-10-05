@@ -56,10 +56,25 @@ def test_every_nested_form_beside_a_decoy_fails_the_pin(form: str) -> None:
         "def f():\n    global MINIMUM_X\n    MINIMUM_X = 1\nMINIMUM_X = 13\n",
         "MINIMUM_X = 13\nclass C:\n    def m(self, MINIMUM_X): ...\n",
         "POP = []\n",
+        "MINIMUM_X = 13\nmatch POP:\n    case MINIMUM_X:\n        pass\n",
+        "if True:\n    MINIMUM_X = 13\n",
     ],
 )
 def test_other_attack_forms_and_the_unbound_name_fail(mutated: str) -> None:
     assert binding_defects(mutated, "MINIMUM_X") != []
+
+
+@pytest.mark.parametrize(
+    "benign",
+    [
+        "MINIMUM_X = MINIMUM_Y = 13\n",
+        "MINIMUM_X: int = 13\nprint(MINIMUM_X)\nf(MINIMUM_X=1)\no.MINIMUM_X\n",
+        "MINIMUM_X = 13\nmatch POP:\n    case C(MINIMUM_X=1):\n        pass\n",
+        "MINIMUM_X = 13\nfrom m import MINIMUM_Y as Z\nfrom MINIMUM_X import w\n",
+    ],
+)
+def test_reads_and_attributes_are_not_bindings(benign: str) -> None:
+    assert binding_defects(benign, "MINIMUM_X") == []
 
 
 def test_the_metric_reads_all_pins_against_the_old_reader() -> None:
@@ -87,13 +102,22 @@ def test_the_floor_on_pins_swept_is_a_literal_and_equals_the_table() -> None:
 
 
 def test_every_committed_pin_test_uses_the_shared_rule() -> None:
-    """The pins are tests; each must call `binding_defects` for its constant."""
-    root = Path(__file__).parent
+    """Each pin test must CALL `binding_defects(source, "<NAME>")`, read from the AST."""
+    import ast
+
+    called: set[str] = set()
+    for path in Path(__file__).parent.glob("test_*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "binding_defects"
+                and len(node.args) == 2
+                and isinstance(node.args[1], ast.Constant)
+            ):
+                called.add(str(node.args[1].value))
     for _filename, name in PINS:
-        tests = "".join(p.read_text(encoding="utf-8") for p in root.glob("test_*.py"))
-        assert f'binding_defects(source, "{name}")' in tests, (
-            f"{name} has no pin reading it through binding_defects"
-        )
+        assert name in called, f"{name} has no pin reading it through binding_defects"
 
 
 def test_the_record_commits_the_floor_and_no_census() -> None:
