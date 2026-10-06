@@ -3741,7 +3741,10 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: trace, so it is out of scope).
 #: **96 with T152, over T165's 95**, whose `pagination_capture` declares one floor
 #: (`MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 96
+#: **98 with T247, over T152's 96**, whose `alert_mailbox` declares two floors
+#: (`MINIMUM_PERMITTED_CASES`, `MINIMUM_REFUSING_CASES`).
+#: Still zero slack.
+MINIMUM_FLOORS_SWEPT = 98
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4200,7 +4203,9 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: `measure_prose_clearance()` against this branch. Still zero slack.
 #: **93 with T152, over T165's 92**: `pagination_capture`'s one floor is one scenario more. Still
 #: zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 93
+#: **95 with T247, over T152's 93**: `alert_mailbox`'s two floors each carry
+#: their own comment block and marker, so each is one scenario more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 95
 
 
 def measure_prose_clearance() -> dict[str, Any]:
