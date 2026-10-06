@@ -288,7 +288,7 @@ def _voice_filter(
 def _trace_filter(
     store: ProfileStore, master: CVMaster, chosen: list[tuple[str, int]]
 ) -> tuple[list[tuple[str, int]], list[Omission]]:
-    """T146: leave out every entry carrying a denial or a number nothing the candidate said backs.
+    """T146: leave out every entry carrying a denial, or a number nothing the candidate said backs.
 
     Applied to every selected entry whatever its section, so a type added later is
     covered. Nothing is rewritten; the omission says why, so the candidate can say
@@ -303,9 +303,9 @@ def _trace_filter(
             kept.append((section, index))
             continue
         reasons = {
-            "denial_without_backing_row": (
-                "a denial with no backing row: nothing the candidate said states this "
-                "absence, so the document cannot say it about them"
+            "denial_outside_candidate_paragraph": (
+                "a denial: a generated entry may not state an absence about the candidate, "
+                "however much they said; only their own letter paragraph may"
             ),
             "hand_typed_count": (
                 "a number no source holds: it is not in the words behind this entry, "

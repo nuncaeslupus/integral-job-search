@@ -17,28 +17,21 @@ manifest can point at.** Both close the same way, and the rule is closed rather
 than enumerated.
 
 **Where the text is.** Two places carry sentences about the candidate. A CV or
-letter line the generator renders *is* a store entry, so the question there is
-whether the entry stands behind a denial (`entry_denials`). A letter paragraph
-that the candidate did not write word for word has no entry at all, only an
-author in `trazabilidad.md`, so the question there is what its author's cited
-words support (`paragraph_defects`, called by `application_authorship`). An
-`assistant` paragraph cites nothing, which is exactly why a denial or a number
-could pass through it: nothing was required of a paragraph that borrows no source.
+letter line the generator renders *is* a store entry (`entry_denials`). A letter
+paragraph has an author in `trazabilidad.md` (`paragraph_defects`, called by
+`application_authorship`).
 
-* **A denial is backed only by the candidate's own denial, repeated.** A sentence
-  carrying a negation cue is backed only if, once case, whitespace, apostrophes,
-  contractions and sentence-final punctuation are normalised (`+ # .` stay inside
-  a token, so C# is not C++), it equals a whole sentence of one live row the candidate
-  said; and a denial sentence that says nothing but grammar (pronouns, auxiliaries,
-  determiners, yes/no/not yet: "I have never used them", "No.") is backed only if
-  that row's whole text appears contiguously in the document, because its meaning
-  lives in the sentences beside it. The document may repeat their denial and may never
-  paraphrase, narrow, widen or compose one. Commas do not cut a sentence, so a list is
-  one sentence and is backed whole or not at all. Where the store is silent the honest
-  sentence is about the store ("nothing in what you told me covers X"), never about the
-  person. A denial that *does* have such a row passes, so the check is not satisfiable
-  by banning the word "not" — which would destroy the honest-gap paragraph that is one
-  of the letter's better features.
+* **A generated document may never contain a denial except inside a `candidate`-authored
+  paragraph** (which `application_authorship` already requires to be the candidate's
+  cited sentences verbatim). A denial cue in an `assistant` or `edited` paragraph, or in
+  any generated CV entry, episode or headline, is a defect: the paragraph is refused, the
+  entry is omitted with a reason, and `check_version` counts any that slips through. There
+  are no backing rows, no matching and no grammar classes: four review rounds each found a
+  new way a rule that decided when a denial was "backed" let a document state an absence
+  the candidate never stated, and a rule that never asks has no such way. `is_denial`
+  decides what is a denial and over-reading it is fail-closed. So the honest-gap sentence
+  ("nothing in what you told me covers X") must live in a candidate-authored paragraph, as
+  the candidate's own cited words; the generator never writes one.
 * **A count is computed or it is not written.** There is no computing channel in
   a letter, so a quantity in a paragraph the candidate did not write word for word
   passes only if the very same number is already in the words that paragraph
@@ -65,7 +58,6 @@ import json
 import re
 import sys
 import tempfile
-import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -79,7 +71,7 @@ from integral.profile import EvidenceLog
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T146.json"
 
-DefectKind = Literal["denial_without_backing_row", "hand_typed_count"]
+DefectKind = Literal["denial_outside_candidate_paragraph", "hand_typed_count"]
 
 # ---------------------------------------------------------------------------
 # denial: closed cue vocabulary, three languages
@@ -127,116 +119,23 @@ def _is_cue(word: str) -> bool:
 
 
 def is_denial(text: str) -> bool:
-    """Does `text` carry a negation cue? Over-reading is fail-closed: it demands a backing row."""
+    """Does `text` carry a negation cue? Over-reading only adds refusals."""
     return _PHRASE_CUES.search(text.lower()) is not None or any(
         _is_cue(word) for word in _words(text)
     )
 
 
 _SENTENCE_END = re.compile(r"[.;:!?\n]+(?=\s|$)")
-_IRREGULAR = (
-    (re.compile(r"\bwon't\b"), "will not"),
-    (re.compile(r"\b(?:can't|cannot)\b"), "can not"),
-    (re.compile(r"\bshan't\b"), "shall not"),
-    (re.compile(r"\bdont\b"), "do not"),
-    (re.compile(r"n't\b"), " not"),
-)
-# A token keeps `+ # .` and a leading dot inside it: C# is not C++, and .NET is not NET.
-_NORM_TOKEN = re.compile(r"(?:(?<![^\W_])\.(?=[^\W_]))?[^\W_]+(?:['.\-][^\W_]+)*[+#]*")
-
-# The closed grammatical classes of en/es/ca: what a sentence says when it says nothing
-# about any thing. Pronouns, auxiliaries, determiners, yes/no/not yet, and the verbs a
-# denial hangs on ("used", "worked", "know"). A sentence made only of these (cues
-# removed) gets its meaning from the sentences beside it, so it is no evidence alone.
-_PRONOUNS = (
-    "i me my mine myself you your yours he him his she her it its we us our they them their "
-    "this that these those one ones none anything something everything anyone someone "
-    "which what who whom there here "
-    "yo tú tu usted él ella nosotros ellos ellas me te se lo la los las le les nos os mi mis "
-    "su sus esto eso aquello algo "
-    "jo ell nosaltres vosaltres ells elles em et es ho el els li ens us hi meu seu això allò"
-)
-_AUXILIARIES = (
-    "am is are was were be been being have has had having do does did will would shall "
-    "should can could may might must "
-    "he has ha hemos han había habido soy eres es somos son estoy estás está estamos están "
-    "ser estar haber hacer hecho puedo "
-    "hem heu havia sóc ets és som sou són estic estàs està estem esteu estan haver puc"
-)
-_DETERMINERS = (
-    "a an the any some all both each every either another other such much many more most few "
-    "un una unos unas el la los las algún alguna algunos todo toda todos "
-    "uns unes algun tot tota"
-)
-_PARTICLES = "yes no not yet ever also too so at really sí si ya todavía aún también ja encara"
-_LIGHT_VERBS = (
-    "use used using uses work worked working know known knew knows done see seen tried try "
-    "touched need usado usar uso trabajado trabajar conocer conozco conocido tenido tener "
-    "tengo usat utilitzat utilitzar treballat treballar tingut tenir fet fer"
-)
-GRAMMAR: frozenset[str] = frozenset(
-    " ".join((_PRONOUNS, _AUXILIARIES, _DETERMINERS, _PARTICLES, _LIGHT_VERBS)).split()
-)
-
-
-def tokens(text: str) -> list[str]:
-    """Case, whitespace, apostrophes, contractions and sentence-final punctuation folded.
-
-    NFKC is kept (a fullwidth spelling is the same word); `+ # .` stay inside a token.
-    """
-    text = unicodedata.normalize("NFKC", text).lower().replace(chr(0x2019), "'")
-    for pattern, replacement in _IRREGULAR:
-        text = pattern.sub(replacement, text)
-    return _NORM_TOKEN.findall(text)
-
-
-def normalise(text: str) -> str:
-    return " ".join(tokens(text))
 
 
 def sentences(text: str) -> list[str]:
-    """`text` cut at every sentence boundary. Commas do not cut: a list is one sentence."""
+    """`text` cut at every sentence boundary."""
     return [piece.strip() for piece in _SENTENCE_END.split(text) if piece.strip()]
 
 
 def denial_sentences(text: str) -> list[str]:
     """Each sentence of `text` that carries a negation cue. A cue-less sentence is no denial."""
     return [sentence for sentence in sentences(text) if is_denial(sentence)]
-
-
-def is_context_dependent(sentence: str) -> bool:
-    """With its cues taken out, is nothing left but the closed grammatical classes?
-
-    "I have never used them." and "No." and "Not yet." point at something written beside
-    them, so the same words in another paragraph deny a different thing.
-    """
-    bare = _PHRASE_CUES.sub(" ", sentence.lower())
-    rest = [t for t in tokens(bare) if not _is_cue(t)]
-    return all(t in GRAMMAR for t in rest)
-
-
-def backs_sentence(sentence: str, said: Sequence[str], document: str) -> bool:
-    """Does one row the candidate said hold this denial sentence, whole, as a sentence of its own?
-
-    The sentence must equal, normalised, a whole sentence of one row. A context-dependent
-    sentence also needs that row's whole text to appear contiguously in `document`, so
-    its neighbours are the candidate's too.
-    """
-    wanted = normalise(sentence)
-    if not wanted:
-        return False
-    padded = f" {normalise(document)} "
-    for row in said:
-        if wanted not in {normalise(theirs) for theirs in sentences(row)}:
-            continue
-        if not is_context_dependent(sentence) or f" {normalise(row)} " in padded:
-            return True
-    return False
-
-
-def unbacked_clauses(text: str, said: Sequence[str]) -> list[str]:
-    """Every denial sentence of `text` that no row of `said` repeats, each judged on its own."""
-    return [s for s in denial_sentences(text) if not backs_sentence(s, said, text)]
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +226,12 @@ def quantities(text: str) -> list[Quantity]:
 # the two places a sentence about the candidate can come from
 
 
+DENIAL_KIND: DefectKind = "denial_outside_candidate_paragraph"
+_ENTRY_DENIAL_DETAIL = (
+    "a denial in a generated CV entry: only a candidate-authored letter paragraph may state one"
+)
+
+
 @dataclass(frozen=True)
 class Defect:
     kind: DefectKind
@@ -387,12 +292,13 @@ def _count_defect(text: str, value: Quantity, where: str) -> Defect:
 
 
 def inspect_entry(store: ProfileStore, entry: SourcedEntry) -> EntryReport:
-    """Every denial clause and every number in a store entry that nothing the candidate said backs.
+    """Every denial sentence and every number in a store entry that may not be there.
 
     All string fields are read, identifiers included: a denial typed into a skill name
-    is still a denial. A denial clause needs a denial of the candidate's own that holds
-    the same sentence, normalised; a number must be in the entry's live provenance texts,
-    spent once across the whole entry, the same rule a letter paragraph is held to.
+    is still a denial. A generated entry may carry no denial at all, however much the
+    candidate said (only a candidate-authored letter paragraph may); a number must be in
+    the entry's live provenance texts, spent once across the whole entry, the same rule a
+    letter paragraph is held to.
     """
     values = [
         v for v in entry.model_dump(exclude={"provenance"}).values() if isinstance(v, str) and v
@@ -401,15 +307,9 @@ def inspect_entry(store: ProfileStore, entry: SourcedEntry) -> EntryReport:
     defects: list[Defect] = []
     denials = 0
     for text in values:
-        denials += len(denial_sentences(text))
-        defects.extend(
-            Defect(
-                "denial_without_backing_row",
-                clause,
-                "no live provenance of the candidate's own denial of the same thing",
-            )
-            for clause in unbacked_clauses(text, said)
-        )
+        found = denial_sentences(text)
+        denials += len(found)
+        defects.extend(Defect(DENIAL_KIND, clause, _ENTRY_DENIAL_DETAIL) for clause in found)
     held = [q for text in said for q in quantities(text)]
     written = [(text, q) for text in values for q in quantities(text)]
     unspent = list(held)
@@ -427,26 +327,27 @@ def entry_defects(store: ProfileStore, entry: SourcedEntry) -> list[Defect]:
 
 def entry_denials(store: ProfileStore, entry: SourcedEntry) -> list[Defect]:
     """The denial half of `entry_defects`."""
-    return [d for d in entry_defects(store, entry) if d.kind == "denial_without_backing_row"]
+    return [d for d in entry_defects(store, entry) if d.kind == DENIAL_KIND]
 
 
 def paragraph_defects(author: str, body: str, cited: Sequence[str]) -> list[Defect]:
-    """What a letter paragraph asserts that the words it cites do not.
+    """What a letter paragraph asserts that it may not.
 
-    `candidate` is the candidate's own sentences untouched, so nothing here is
-    anyone's invention. For `edited` and `assistant` (which cites nothing, so
-    everything it carries is new) every denial clause needs a cited denial that holds
-    the same sentence, normalised, and each number must be one the cited words already contain.
+    `candidate` is the candidate's own sentences untouched, so nothing here is anyone's
+    invention and a denial in it is theirs. For `edited` and `assistant` (which cites
+    nothing) every denial sentence is a defect, whatever the cited words say, and each
+    number must be one the cited words already contain.
     """
     if author == "candidate":
         return []
     defects = [
         Defect(
-            "denial_without_backing_row",
+            DENIAL_KIND,
             clause,
-            "an absence about the candidate that none of the cited words states",
+            "a denial in a paragraph the candidate did not write word for word: "
+            "an absence may only be stated in a candidate paragraph",
         )
-        for clause in unbacked_clauses(body, cited)
+        for clause in denial_sentences(body)
     ]
     held = [value for text in cited for value in quantities(text)]
     defects.extend(
@@ -537,8 +438,6 @@ _TWO_DENIALS = (
     "I have not used Kubernetes in production, and I have never used observability tools."
 )
 HASKELL = "Haskell? I have never used them."
-LIST_TAIL = "I have not used Kafka, Spark or Flink."
-FRONTED = "Observability tools? I have never used them."
 _RAN4 = "Ran 4 services for the permits API."
 
 
@@ -552,7 +451,7 @@ def _letter_defects(author: str, paragraph: str, store: ProfileStore, cites: Seq
         f"| 1 | {author} | {cell} | reworded |\n"
     )
     report = check_authorship(paragraph, table, EvidenceLog(store))
-    return sum(1 for d in report.defects if "hand_typed_count" in d or "denial_without" in d)
+    return sum(1 for d in report.defects if "hand_typed_count" in d or DENIAL_KIND in d)
 
 
 def probe_cases() -> list[dict[str, Any]]:
@@ -573,24 +472,12 @@ def probe_cases() -> list[dict[str, Any]]:
             ).id  # fmt: skip
 
         denies = record("statement", _DENIAL)
-        used = record("statement", "I used Honeycomb at Flanks for years.")
         draft = record("candidate_statement", _DENIAL, "application_draft")
         ran4 = record("statement", "I ran 4 services for the permits API.")
         counted = record("candidate_statement", RUNS3, "application_draft")
-        gapped = record(
-            "candidate_statement", "I have never deployed Kafka to production.", "application_draft"
-        )
-        gcp = record("candidate_statement", "I have never used GCP.", "application_draft")
-        nope = record("candidate_statement", "No, I have not.", "application_draft")
         haskell = record("candidate_statement", HASKELL, "application_draft")
-        kafka = record("candidate_statement", "I have not used Kafka.", "application_draft")
-        kubed = record("candidate_statement", _KUBE, "application_draft")
-        dec = record("candidate_statement", "It took 2.5 seconds.", "application_draft")
-
-        kube = record("statement", _KUBE)
-        both = record("statement", _TWO_DENIALS)
         ran3 = record("statement", "I run 3 services for the permits API.")
-        gap = record("statement", "I have never deployed Kafka to production.")
+        dec = record("candidate_statement", "It took 2.5 seconds.", "application_draft")
 
         def stored(body: str, backing: str | None) -> int:
             turns = () if backing is None else (ConversationTurn(evidence_id=backing),)
@@ -603,32 +490,23 @@ def probe_cases() -> list[dict[str, Any]]:
 
         cases: list[tuple[str, int, int]] = [
             ("stored denial with no backing row", 1, stored(_DENIAL, None)),
-            ("stored denial the candidate made", 0, stored(_DENIAL, denies)),
-            ("stored denial the candidate contradicted", 1, stored(_DENIAL, used)),
+            ("stored denial the candidate made", 1, stored(_DENIAL, denies)),
             ("stored assertion", 0, stored("Used Honeycomb at Flanks.", None)),
             ("stored skill named as a denial", 1, len(entry_denials(store, skill))),
-            ("stored denial backed by a denial of another thing", 1, stored(_DENIAL, gap)),
-            ("stored second denial beside a backed one", 1, stored(_TWO_DENIALS, kube)),
-            ("stored denial whose clauses are each backed", 0, stored(_TWO_DENIALS, both)),
+            ("stored two-clause denial", 1, stored(_TWO_DENIALS, denies)),
             ("stored hand-typed count", 1, stored(_RAN4, None)),
             ("stored count the candidate's words hold", 0, stored(_RAN4, ran4)),
             ("stored count the candidate's words differ on", 1, stored(_RAN4, ran3)),
             ("stored count spent twice", 1, stored("Ran 4 and 4 services.", ran4)),
             ("assistant denial", 1, letter("assistant", _DENIAL)),
-            ("edited denial the candidate cited", 0, letter("edited", _DENIAL, draft)),
-            ("edited denial the candidate did not", 1, letter("edited", _DENIAL, counted)),
-            ("edited denial about another thing", 1, letter("edited", _DENIAL, gapped)),
-            ("edited second denial beside a backed one", 1, letter("edited", _TWO_DENIALS, kubed)),
-            ("edited short name another thing", 1, letter("edited", "I have not used AWS.", gcp)),
-            ("edited fronted topic by a bare no", 1, letter("edited", FRONTED, nope)),
-            ("edited bare no repeated", 0, letter("edited", "No, I have not.", nope)),
-            ("edited list tail", 1, letter("edited", LIST_TAIL, kafka)),
-            ("edited neighbour-bound denial", 1, letter("edited", FRONTED, haskell)),
-            ("edited whole row repeated", 0, letter("edited", HASKELL, haskell)),
-            ("edited name with punctuation", 1, letter("edited", "I have not used C++.", gcp)),
+            ("edited denial the candidate cited verbatim", 1, letter("edited", _DENIAL, draft)),
+            ("edited two-clause denial", 1, letter("edited", _TWO_DENIALS, draft)),
+            ("edited neighbour-bound denial", 1, letter("edited", HASKELL, haskell)),
             ("assistant dont", 1, letter("assistant", "I dont use Kafka.")),
             ("assistant yet to", 1, letter("assistant", "I have yet to use Kafka.")),
             ("assistant sin experiencia", 1, letter("assistant", "Sin experiencia en Kafka.")),
+            ("candidate paragraph denial, cited verbatim", 0, letter("candidate", _DENIAL, draft)),
+            ("candidate neighbour-bound denial", 0, letter("candidate", HASKELL, haskell)),
             ("assistant hand-typed count", 3, letter("assistant", _COUNT)),
             ("edited count the candidate wrote", 0, letter("edited", RUNS3, counted)),
             ("edited count the candidate did not", 1, letter("edited", RUNS4, counted)),
@@ -642,12 +520,13 @@ def probe_cases() -> list[dict[str, Any]]:
 
 
 def _with_sourced_claims(store: ProfileStore, master: CVMaster) -> CVMaster:
-    """The fixture master plus one backed denial and one sourced count, fictional throughout.
+    """The fixture master plus one sourced count, fictional throughout.
 
-    The labelled fixture holds neither, so over it alone this task's two rules judge
-    nothing and the corpus run is green by having nothing to refuse. These two entries
-    give it a denial and a count that must *pass*, and the zero-checked guard in `_main`
-    turns the denominators into a gate rather than a report.
+    The labelled fixture holds none, so over it alone the count rule judges nothing and the
+    corpus run is green by having nothing to refuse. The zero-checked guard in `_main`
+    turns the denominators into a gate rather than a report. A denial cannot be planted
+    here: a generated entry may carry none, so it would only be withheld. The denial the
+    corpus checks is a candidate paragraph's, see `_candidate_denials_checked`.
     """
     from integral.cv_store import Experience
 
@@ -662,12 +541,6 @@ def _with_sourced_claims(store: ProfileStore, master: CVMaster) -> CVMaster:
 
     extra = (
         Experience(
-            title="Platform engineer",
-            organisation="Fictional Works",
-            description="I have not used observability tools in production.",
-            provenance=say("I have not used observability tools in production."),
-        ),
-        Experience(
             title="Integration developer",
             organisation="Fictional Works",
             description="Ran 4 services for the permits API.",
@@ -675,6 +548,19 @@ def _with_sourced_claims(store: ProfileStore, master: CVMaster) -> CVMaster:
         ),
     )
     return master.model_copy(update={"experience": (*master.experience, *extra)})
+
+
+def _candidate_denials_checked(store: ProfileStore) -> tuple[int, int]:
+    """(denial sentences, defects) over a letter whose one paragraph is the candidate's own denial.
+
+    The honest-gap sentence is the one denial a document may carry, so the corpus checks it
+    passes: a rule satisfied by refusing every denial would otherwise score zero defects.
+    """
+    row = EvidenceLog(store).append(
+        recorded_at="2026-10-06T10:00:00Z", step="history", kind="candidate_statement",
+        text=_DENIAL, source="application_draft",
+    )  # fmt: skip
+    return len(denial_sentences(_DENIAL)), _letter_defects("candidate", _DENIAL, store, [row.id])
 
 
 def measure(fixture_master: Path | None = None, store_path: Path | None = None) -> dict[str, Any]:
@@ -688,9 +574,7 @@ def measure(fixture_master: Path | None = None, store_path: Path | None = None) 
         (fixture_master or DEFAULT_FIXTURE_MASTER).read_text(encoding="utf-8")
     )
     ads = load_store(store_path or DEFAULT_STORE_PATH)
-    defects = 0
     claims = 0
-    denials = 0
     counts = 0
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch) / "profiles"
@@ -698,6 +582,7 @@ def measure(fixture_master: Path | None = None, store_path: Path | None = None) 
         store = ProfileStore(root, identity.handle)
         master = _with_sourced_claims(store, master)
         write_master(store, master)
+        denials, defects = _candidate_denials_checked(store)
         for ad in ads:
             manifest = generate(store, master, offer_id=ad.id, advert=ad.text, asks=_FIXTURE_ASKS)
             checked = check_version(store, master, ad.id, manifest.version)
