@@ -4,7 +4,7 @@
 site: talent
 locale: es
 version: "1.0.0"
-last_verified: "2026-09-21"
+last_verified: "2026-10-05"
 auth: none
 # T224. The advert url is `/view?id=<n>` and `id` IS the identity: 183 canonical urls
 # were 183 distinct adverts. Keep it, drop every other parameter.
@@ -101,39 +101,20 @@ list:
 
 detail:
   fields:
-    # The advert body, and the only node on the page that is it: measured as
-    # exactly one match on two adverts fetched live on 2026-09-21
-    # (625247415533179156 → 3,212 chars, 600989642228510677 → 3,351). The
-    # wrapper one level out, `div.styles_jobDescriptionColumn__KIcuE`, is the
-    # stabler-looking name and is the wrong node — it drags in the title, the
-    # company, the posting age and a trailing "Crear una alerta de empleo"
-    # block.
-    #
-    # `sc-f4dbceab-10` is a styled-components hash and it STOPPED MATCHING (T234):
-    # a candidate session measured es.talent.com/view?id=635737020307146631 on
-    # 2026-10-02 - HTTP 200, 310,755 bytes, 0 elements with this class. The
-    # committed `fixture/detail.html` still has it twice, so no fixture can see
-    # the rot; that is why `sourcing` now counts and prints a 200 detail page
-    # that yields no text (`BoardOutcome.empty_detail`, the "EMPTY DETAIL" line).
-    #
-    # NOT FIXED HERE, and not re-verified: the environment that wrote this had
-    # no route to talent.com, so the live page's current hash is unknown and no
-    # new fixture was fabricated. A durable anchor was looked for in the
-    # committed fixture and does not exist for this engine: the body `<div>`
-    # carries only `class="sc-f4dbceab-10 fRvput"` - no id, no data attribute,
-    # no semantic element, no itemprop; the page has no `ld+json`; the advert
-    # text is also in Next.js flight data (`self.__next_f.push`), a JS string
-    # rather than a JSON document `from_json` could read. The one stable thing
-    # beside it is the label "Descripcion del trabajo" in the previous sibling,
-    # and the selector grammar has no combinator or text match to reach through
-    # it. Fix when a live page is available: read the current class from it, or
-    # extend the grammar.
-    #
-    # `build_hash_accepted` is the load-time exception the engine now requires
-    # for any selector on a generated class (`connectors.generated_classes`).
+    # The advert body. T254: the class on this div is a styled-components hash
+    # that rotated (`sc-f4dbceab-10` -> `sc-183fd419-10` between 2026-09-21 and
+    # 2026-10-05, 0 matches on the live page in between) and the div carries no
+    # id, data attribute or semantic tag, so no tag/id/attr selector can name
+    # it. The one durable thing is the human-readable label "Descripción del
+    # trabajo" in the `<span>` immediately before it, so the selector is the
+    # bare tag `div` anchored by `after_text` (the grammar's one sibling anchor,
+    # added for this). Measured 2026-10-05 on a live advert: exactly one `div`
+    # follows a sibling with that text and it holds the body. The enclosing
+    # `<article>` is the wrong node: it also holds the title, company, posting
+    # age and tags.
     text:
-      css: "div.sc-f4dbceab-10"
-      build_hash_accepted: "the body div has no id, data attribute or semantic tag, only this styled-components hash (stale on the live page as of 2026-10-02; not re-verified)"
+      css: "div"
+      after_text: "Descripción del trabajo"
 
 # Why the body is fetched per advert rather than read off the listing.
 #
