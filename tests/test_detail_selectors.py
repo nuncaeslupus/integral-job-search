@@ -26,6 +26,7 @@ from integral.connectors import (
     ListRequest,
     generated_classes,
     load_connector,
+    parse_detail_page,
 )
 from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots
@@ -71,12 +72,28 @@ def test_the_committed_talent_package_loads_with_its_stated_exceptions() -> None
     connector = load_connector(_CONNECTORS / "talent_es")
     assert connector.detail is not None
     text = connector.detail.fields["text"]
-    assert generated_classes(text.css) == ("sc-f4dbceab-10",)
-    assert text.build_hash_accepted
+    # T254: the body is read by a bare tag anchored on its label, no hash at all.
+    assert generated_classes(text.css) == ()
+    assert text.build_hash_accepted is None
+    assert text.after_text == "Descripción del trabajo"
+
+
+def test_the_label_anchored_selector_reads_the_committed_advert_body() -> None:
+    connector = load_connector(_CONNECTORS / "talent_es")
+    html = (_CONNECTORS / "talent_es" / "fixture" / "detail.html").read_text("utf-8")
+    body = parse_detail_page(connector, html)["text"]
+    assert body.startswith("¿Resides en Ontinyent"), body[:80]
+    assert len(body) > 400, len(body)
+    assert "Descripción del trabajo" not in body
 
 
 def test_a_detail_selector_on_a_styled_components_class_is_refused(tmp_path: Path) -> None:
-    package = _package_with(tmp_path, lambda t: _without_acceptance(t, 'css: "div.sc-f4dbceab-10"'))
+    package = _package_with(
+        tmp_path,
+        lambda t: t.replace(
+            'css: "div"\n      after_text: "Descripción del trabajo"', 'css: "div.sc-f4dbceab-10"'
+        ),
+    )
     with pytest.raises(ConnectorError, match=r"detail selector.*sc-f4dbceab-10"):
         load_connector(package)
 
@@ -130,7 +147,7 @@ def test_every_generated_class_selector_in_the_library_states_its_reason() -> No
                 if generated_classes(selector.css):
                     assert selector.build_hash_accepted, (package.name, selector.css)
                     accepted += 1
-    assert accepted >= 3, "talent_es's three stated exceptions were not reached"
+    assert accepted >= 2, "talent_es's two stated exceptions were not reached"
 
 
 # ---------------------------------------------------------------------------
@@ -175,16 +192,16 @@ def _outcome(store: ProfileStore, package: str, detail_html: str | None) -> Boar
     return outcome
 
 
-def _talent_detail_with_the_class_rotated() -> str:
-    """The committed advert page as the live one now is: the class the selector
-    names is gone. The one thing changed is the build hash."""
+def _talent_detail_with_the_label_changed() -> str:
+    """The committed advert page as it would read if the board renamed the label
+    the body selector anchors on: the one thing changed is that text."""
     committed = (_CONNECTORS / "talent_es" / "fixture" / "detail.html").read_text("utf-8")
-    assert committed.count("sc-f4dbceab-10") >= 2, "the committed fixture moved"
-    return committed.replace("sc-f4dbceab-10", "sc-126c3eb4-10")
+    assert committed.count("Descripción del trabajo") >= 1, "the committed fixture moved"
+    return committed.replace("Descripción del trabajo", "Detalle de la oferta")
 
 
 def test_a_200_page_whose_selector_matches_nothing_is_counted(store: ProfileStore) -> None:
-    rotated = _outcome(store, "talent_es", _talent_detail_with_the_class_rotated())
+    rotated = _outcome(store, "talent_es", _talent_detail_with_the_label_changed())
     assert rotated.detail_fetched >= 1
     assert rotated.empty_detail == rotated.detail_fetched, rotated
     # The row is lost either way; `empty_detail` is what says *why*.
@@ -254,8 +271,11 @@ def test_a_class_named_through_an_attribute_selector_is_still_a_generated_class(
 
 def test_the_attribute_spelling_does_not_get_past_the_refusal(tmp_path: Path) -> None:
     def edit(text: str) -> str:
-        text = _without_acceptance(text, 'css: "div.sc-f4dbceab-10"')
-        return _replaced(text, 'css: "div.sc-f4dbceab-10"', "css: 'div[class=\"sc-f4dbceab-10\"]'")
+        return _replaced(
+            text,
+            'css: "div"\n      after_text: "Descripción del trabajo"',
+            "css: 'div[class=\"sc-f4dbceab-10\"]'",
+        )
 
     with pytest.raises(ConnectorError, match=r"detail selector.*sc-f4dbceab-10"):
         load_connector(_package_with(tmp_path, edit))
@@ -287,8 +307,8 @@ def test_a_page_is_not_empty_when_detail_declares_no_text(
     def edit(text: str) -> str:
         text = _replaced(
             text,
-            'text:\n      css: "div.sc-f4dbceab-10"',
-            'company:\n      css: "div.sc-f4dbceab-10"',
+            'text:\n      css: "div"',
+            'company:\n      css: "div"',
         )
         anchor = '    detail_url: {css: "a", attr: href}'
         return _replaced(text, anchor, anchor + '\n    text: {css: "div.nope"}')

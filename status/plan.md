@@ -522,7 +522,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T251 | Only the first six aim terms are searched, so most of a candidate's terms never reach any board (test-mode 453a5c19) | 5 | M | — | `aim_terms_never_searched_on_a_steered_board == 0` | `tests/test_source_keeps_the_aim.py` and `tests/test_sourcing.py` — requests recorded per steerable board and term, derived from the connector's own URL builder; the ceiling stops the walk and names `offset=` | ☑ |
 | T252 | An offer's link can be the application form instead of the advert (test-mode 453a5c19) | 10 | S | — | `offers_presented_whose_url_is_an_application_form == 0` | `tests/test_advert_link.py` — builds every offer every committed fixture yields and reads `Offer.url`; the classifier cases are parsed path segments, not substrings | ☑ |
 | T253 | `OFFER_CEILING` is per board and counted after the reach constraint — a worldwide board fills the run's ceiling with adverts outside the candidate's reach (from #688 bullet 2, test-mode 453a5c19) | 5 | M | T251 | `offers_outside_reach_counted_against_the_ceiling == 0` | `tests/test_source_offer_ceiling.py` — constructed boards labelled by construction; rows outside reach neither counted nor collected, per-board share, capped boards named. Delivered: share is `OFFER_CEILING // boards` (no redistribution); no evidence file for the T251/T253 metrics (deferred) | ☑ |
-| T254 | talent_es still reads the advert body with a stale build-hash selector (from T234; needs egress to talent.com) | 10 | S | T234 | `talent_es_detail_selectors_on_a_generated_class == 0` | gate set in its own PR | ☐ |
+| T254 | talent_es still reads the advert body with a stale build-hash selector (from T234; needs egress to talent.com) | 10 | S | T234 | `talent_es_detail_selectors_on_a_generated_class == 0` | gate set in its own PR | ☑ |
 
 ### Divergences
 
@@ -572,7 +572,7 @@ from `arsenal/tasks/_history/`, never from the plan's own ticks.
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T15, T59, T91, T199, T202, T233 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T20, T69, T145, T249 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | T29, D-26, T142, T143, T146, T148, T191, T211 |
-| **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | D-23, D-25, T112, T117, T105, T106, T152, T189, T247, T254 |
+| **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | D-23, D-25, T112, T117, T105, T106, T152, T189, T247 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | T115, T119, T149, T164, T177, T213 |
 
 **S7 is deliberately not first.** The handover recommended it as the next task,

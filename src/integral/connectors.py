@@ -96,6 +96,7 @@ from datetime import date
 from functools import lru_cache
 from html import unescape
 from html.parser import HTMLParser
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Final, Literal
 from urllib.parse import SplitResult, parse_qsl, quote, unquote, urlsplit
@@ -1314,6 +1315,10 @@ class FieldSelector(Strict):
     #: load (`generated_classes`); present, it is a stated, reviewable
     #: exception — the reason is the whole value and may not be blank.
     build_hash_accepted: str | None = Field(default=None, min_length=1)
+    #: T254. Match only an element whose immediately preceding element sibling's
+    #: text is exactly this label. For a page whose body carries no tag, id or
+    #: data attribute but follows a stable human-readable heading.
+    after_text: str | None = Field(default=None, min_length=1)
 
     @field_validator("build_hash_accepted")
     @classmethod
@@ -1321,6 +1326,18 @@ class FieldSelector(Strict):
         if reason is not None and not reason.strip():
             raise ValueError("build_hash_accepted must say why, not be blank")
         return reason
+
+    @field_validator("after_text")
+    @classmethod
+    def _the_label_is_in_normal_form(cls, label: str | None) -> str | None:
+        # `Node.text_content()` collapses whitespace, so a label that is blank
+        # or padded can never equal it: the connector would load and read nothing.
+        if label is not None and label != " ".join(label.split()):
+            raise ValueError(
+                "after_text must be non-blank with single spaces and no padding, "
+                "the form Node.text_content() gives"
+            )
+        return label
 
     @model_validator(mode="after")
     def _take_and_attr_are_compatible(self) -> FieldSelector:
@@ -3897,8 +3914,21 @@ def build_list_requests(
     ]
 
 
+def _select_after_text(root: Node, compiled: SimpleSelector, label: str) -> Node | None:
+    """First node matching `compiled` whose previous element sibling's text is `label`."""
+    for parent in (root, *root.iter_descendants()):
+        elements = [c for c in parent.children if isinstance(c, Node)]
+        for previous, current in pairwise(elements):
+            if current.matches(compiled) and previous.text_content() == label:
+                return current
+    return None
+
+
 def _extract(node: Node, selector: FieldSelector, compiled: SimpleSelector) -> str | None:
-    match = select_first(node, compiled)
+    if selector.after_text is not None:
+        match = _select_after_text(node, compiled, selector.after_text)
+    else:
+        match = select_first(node, compiled)
     if match is None:
         return None
     if selector.attr is not None:
