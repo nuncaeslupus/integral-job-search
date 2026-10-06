@@ -95,6 +95,7 @@ DEFAULT_RATE_LIMIT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T73.jso
 #: T127. A third question of the same packages: whether the probe the rot
 #: check reads is a second read of the board or a restatement of the first.
 DEFAULT_DIVERGENCE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T127.json"
+DEFAULT_IDENTITY_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T117.json"
 
 #: T73. `inconclusive` is the third verdict, and it is not a soft `broken`:
 #: it says the question was not answered, the same distinction `liveness`
@@ -362,6 +363,18 @@ def assess(
         reasons.append(
             f"{len(baseline_items)} row(s) recorded previously, 0 now — the parser no "
             "longer matches this connector's own markup"
+        )
+
+    # T117. The one comparison this module can make with certainty: a probe
+    # that is the baseline, byte for byte, was not a second read. Whatever the
+    # parser yields from it, nothing was compared, and "healthy" would be the
+    # string-against-itself verdict this module's header records. Tested on the
+    # text, before any parsing, so it holds for every connector whatever it
+    # extracts.
+    if probe_html is not None and probe_html == baseline_html:
+        reasons.append(
+            "probe is byte-identical to the fixture — the rot check would compare "
+            "a page with itself; capture a genuine second read"
         )
 
     health: Health = "broken" if reasons else ("inconclusive" if refused else "healthy")
@@ -898,6 +911,7 @@ def _main(argv: list[str]) -> int:
     # written into the repository.
     rate_limits = write_rate_limit_evidence(Path(args.path).parent / "T73.json")
     divergence = write_divergence_evidence(Path(args.path).parent / "T127.json")
+    identity = write_identity_evidence(Path(args.path).parent / "T117.json")
     print(json.dumps(measured, ensure_ascii=False))
     for reading in measured["readings"]:
         for reason in reading["reasons"]:
@@ -919,6 +933,20 @@ def _main(argv: list[str]) -> int:
     # meaningless for that package — it compared a page with itself — so
     # reporting `silent_connector_failures: 0` first would be answering with a
     # number this finding says not to trust.
+    if identity["probes_identical_to_their_fixture"]:
+        for package in identity["identical_packages"]:
+            print(
+                f"{package}: probe/list.html is byte-identical to fixture/list.html",
+                file=sys.stderr,
+            )
+        return 1
+    if identity["gate_status"] == "unmeasured":
+        print(
+            f"probe identity unmeasured: {identity['packages_byte_compared']} package(s) "
+            f"compared, the floor is {identity['packages_byte_compared_floor']}",
+            file=sys.stderr,
+        )
+        return 3
     if divergence["connectors_whose_probe_repeats_its_fixture"]:
         for package in divergence["tautological_probes"]:
             print(
@@ -1077,6 +1105,53 @@ def measure_probe_divergence(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[s
         "tautological_probes": sorted(tautological),
         "readings": sorted(readings, key=lambda r: str(r["package"])),
     }
+
+
+#: T117. The population is every shipped package holding both a fixture and a
+#: probe; a scan that finds fewer than this reads `unmeasured`, because a clean
+#: zero over an empty library is what a deleted probe directory would produce.
+#: arsenal-floor-margin: MINIMUM_PACKAGES_BYTE_COMPARED value=12
+MINIMUM_PACKAGES_BYTE_COMPARED = 12
+
+
+def measure_probe_identity(directory: Path = DEFAULT_CONNECTORS_DIR) -> dict[str, Any]:
+    """T117's gate reading: `probes_identical_to_their_fixture`.
+
+    Compares bytes only, with no parser in the way, so it cannot be fooled by a
+    connector that stopped parsing. Every package is the denominator; one with
+    no probe, or no fixture, is named and not scored as a pass.
+    """
+    identical: list[str] = []
+    compared = 0
+    skipped: list[str] = []
+    for package in connector_packages(directory):
+        fixture = package / FIXTURE_DIRNAME / "list.html"
+        probe = package / PROBE_DIRNAME / "list.html"
+        if not fixture.is_file() or not probe.is_file():
+            skipped.append(package.name)
+            continue
+        compared += 1
+        if fixture.read_bytes() == probe.read_bytes():
+            identical.append(package.name)
+    return {
+        "probes_identical_to_their_fixture": len(identical),
+        "identical_packages": sorted(identical),
+        "packages_byte_compared": compared,
+        "packages_byte_compared_floor": MINIMUM_PACKAGES_BYTE_COMPARED,
+        "packages_not_compared": sorted(skipped),
+        "gate_status": "measured" if compared >= MINIMUM_PACKAGES_BYTE_COMPARED else "unmeasured",
+    }
+
+
+def write_identity_evidence(
+    evidence: Path = DEFAULT_IDENTITY_EVIDENCE_PATH,
+    directory: Path = DEFAULT_CONNECTORS_DIR,
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T117.json`."""
+    measured = measure_probe_identity(directory)
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
 
 
 def write_divergence_evidence(

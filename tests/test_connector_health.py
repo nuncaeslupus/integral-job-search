@@ -12,6 +12,7 @@ drifts away from it unnoticed.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -47,11 +48,39 @@ _LIST_HTML = (_PACKAGE / "fixture" / "list.html").read_text(encoding="utf-8")
 def test_a_healthy_connector_over_its_fixture_reads_ok() -> None:
     """The unmutated, committed fixture is what `trabajos_es` actually
     parses today — nothing here should read as breakage."""
-    reading = assess(_CONNECTOR, _SITE, baseline_html=_LIST_HTML, probe_html=_LIST_HTML)
+    probe_html = (_PACKAGE / PROBE_DIRNAME / "list.html").read_text(encoding="utf-8")
+    assert probe_html != _LIST_HTML  # T117: a healthy verdict needs a second read
+    reading = assess(_CONNECTOR, _SITE, baseline_html=_LIST_HTML, probe_html=probe_html)
 
     assert reading.health == "healthy"
     assert reading.reasons == ()
+    assert reading.baseline_items > 0 and reading.probe_items > 0
+
+
+def test_a_probe_byte_identical_to_its_fixture_is_a_silent_failure_not_a_healthy_run(
+    tmp_path: Path,
+) -> None:
+    """T117. Parsing cannot tell a second read from the first read twice; the
+    bytes can. Both sides parse to offers here, which is exactly the case the
+    old verdict called healthy."""
+    reading = assess(_CONNECTOR, _SITE, baseline_html=_LIST_HTML, probe_html=_LIST_HTML)
     assert reading.baseline_items == reading.probe_items > 0
+    assert reading.health == "broken"
+    assert any("byte-identical" in reason for reason in reading.reasons)
+
+    # And through the production path, over a real package copy.
+    package = tmp_path / _PACKAGE.name
+    shutil.copytree(_PACKAGE, package)
+    shutil.copyfile(package / "fixture" / "list.html", package / PROBE_DIRNAME / "list.html")
+    assert assess_package(package, _CONNECTOR, _SITE).health == "broken"
+    assert measure(tmp_path)["silent_connector_failures"] == 1
+
+
+def test_ticjob_es_probe_and_fixture_differ() -> None:
+    package = DEFAULT_CONNECTORS_DIR / "ticjob_es"
+    assert (package / "probe" / "list.html").read_bytes() != (
+        package / "fixture" / "list.html"
+    ).read_bytes()
 
 
 def test_a_connector_whose_selectors_no_longer_match_is_reported_broken() -> None:
@@ -73,7 +102,10 @@ def test_zero_yield_from_a_portal_that_never_yielded_is_not_breakage() -> None:
     yielded anything, a probe that also finds nothing is not a regression."""
     empty = "<html><body>no listings today</body></html>"
 
-    reading = assess(_CONNECTOR, _SITE, baseline_html=empty, probe_html=empty)
+    # Two reads, not one read twice: identity is its own finding (T117).
+    reading = assess(
+        _CONNECTOR, _SITE, baseline_html=empty, probe_html=empty.replace("today", "now")
+    )
 
     assert reading.health == "healthy"
     assert reading.baseline_items == reading.probe_items == 0
