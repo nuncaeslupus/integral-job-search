@@ -390,6 +390,13 @@ def assess(
     )
 
 
+def _read_untranslated(path: Path) -> str:
+    """UTF-8 text with line endings untouched (`Path.read_text` has no `newline`
+    before 3.13), so text equality is byte equality."""
+    with path.open(encoding="utf-8", newline="") as handle:
+        return handle.read()
+
+
 def default_fetch(package: Path) -> str:
     """The sentinel probe's source: a separately captured current read at
     `probe/list.html`, written by the permitted `[LAPTOP]` process.
@@ -398,7 +405,9 @@ def default_fetch(package: Path) -> str:
     and returning it here compared a string with itself. `OSError` when no
     capture exists is the correct answer, and `probe_fetch` turns it into
     the `None` that makes the gate report `unmeasured`."""
-    return (package / PROBE_DIRNAME / "list.html").read_text(encoding="utf-8")
+    # `newline=""`: no translation, so text equality is byte equality and the
+    # T117 identity test in `assess` means what the census (raw bytes) means.
+    return _read_untranslated(package / PROBE_DIRNAME / "list.html")
 
 
 def probe_fetch(package: Path, *, fetch: Callable[[Path], str] = default_fetch) -> str | None:
@@ -488,7 +497,7 @@ def assess_package(
     """`assess`, wired to one installed package's own recorded fixture."""
     baseline_path = package / FIXTURE_DIRNAME / "list.html"
     try:
-        baseline_html = baseline_path.read_text(encoding="utf-8")
+        baseline_html = _read_untranslated(baseline_path)
     except OSError as exc:
         return Reading(
             connector.site, site, "broken", 0, 0, (f"no recorded fixture: {exc}",), probed=False
