@@ -1711,11 +1711,13 @@ def disclosures_unbacked_by_a_document(store: ProfileStore, master: CVMaster) ->
 # exactly one of them per advert.
 _FIXTURE_EPISODES: tuple[Episode, ...] = (
     Episode(
+        provenance=(FIXTURE_SOURCE,),
         kind="achievement",
         text="Cut the nightly billing run from six hours to forty minutes by rewriting the "
         "reconciliation step.",
     ),
     Episode(
+        provenance=(FIXTURE_SOURCE,),
         kind="failure",
         text="Shipped a schema change without a backfill and left invoicing wrong for two "
         "days before anyone noticed.",
@@ -1725,6 +1727,7 @@ _FIXTURE_EPISODES: tuple[Episode, ...] = (
 # Overlapping the win above by a whole eight-word shingle, which is what
 # `_withdrawn_by` matches on: retracting one has to withdraw the other.
 _FIXTURE_TWIN = Episode(
+    provenance=(FIXTURE_SOURCE,),
     kind="achievement",
     text="Cut the nightly billing run from six hours to forty minutes by rewriting the "
     "ledger export.",
@@ -1743,10 +1746,12 @@ _FIXTURE_TWIN = Episode(
 # `Episode.kind` names `"number"` as first-class, so this is not an edge case
 # either.
 _FIXTURE_SIGNED_ACHIEVEMENT = Episode(
+    provenance=(FIXTURE_SOURCE,),
     kind="achievement",
     text="Gross margin moved +12% in the quarter after the reconciliation rewrite shipped.",
 )
 _FIXTURE_SIGNED_FAILURE = Episode(
+    provenance=(FIXTURE_SOURCE,),
     kind="failure",
     text="Gross margin moved -12% in the quarter after the reconciliation rewrite shipped.",
 )
@@ -1875,7 +1880,12 @@ def probe_boundary(root: Path) -> dict[str, Any]:
     store = fresh("reordered", plain)
     _probe_prepare(store, plain, approved=(0,))
     reordered = plain.model_copy(
-        update={"episodes": (Episode(kind="context", text="Unrelated."), *_FIXTURE_EPISODES)}
+        update={
+            "episodes": (
+                Episode(provenance=(FIXTURE_SOURCE,), kind="context", text="Unrelated."),
+                *_FIXTURE_EPISODES,
+            )
+        }
     )
     check(
         measure_prepared(store, reordered, _PROBE_OFFER, 1)["unapproved_episode_disclosures"] == 0,
@@ -2066,7 +2076,7 @@ def probe_boundary(root: Path) -> dict[str, Any]:
 MINIMUM_RETRACTION_PROBES = 21
 MINIMUM_RETRACTED_APPROVALS_EVALUATED = 16
 
-_REWORDED_ROW = "Cut the nightly billing run right down — it used to take us six hours."
+_REWORDED_ROW = "Cut the nightly billing run right down — it went from six hours to forty minutes."
 
 # The #305 cases. Each is one edit away from the sentence the approval names,
 # and each one sent before `_withdrawn_by` and `_NEVER_A_STORY` landed.
@@ -2225,6 +2235,7 @@ def probe_retracted_sends(root: Path) -> dict[str, Any]:
     row = episode_row(store, win)
     retract(EvidenceLog(store), row, at=later)
     write_master(store, plain)
+    seed_fixture_source(store, plain)
     try:
         _probe_prepare(store, plain, approved=(0,))
         drafting_refused = False
@@ -2753,6 +2764,7 @@ _FIXTURE_INNOCENT_FAILURE_ADJACENT = (
 # create a confirmed finding alongside a genuinely undecidable one — the
 # combination the boundary-message state below needs.
 _FIXTURE_SMUGGLED_EPISODE = Episode(
+    provenance=(FIXTURE_SOURCE,),
     kind="achievement",
     text="Negotiated a vendor contract renewal that saved forty thousand euros over two years.",
 )
@@ -3204,7 +3216,9 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     seam_head = "Zulu yankee xray whiskey alpha bravo charlie delta"
     seam_tail = "echo foxtrot golf hotel india juliet kilo lima"
     seam_episode = Episode(
-        kind="achievement", text="Alpha bravo charlie delta echo foxtrot golf hotel"
+        provenance=(FIXTURE_SOURCE,),
+        kind="achievement",
+        text="Alpha bravo charlie delta echo foxtrot golf hotel",
     )
     seamed = _probe_master(episodes=(_FIXTURE_EPISODES[0], seam_episode))
     store = fresh("seam", seamed)
@@ -4200,7 +4214,10 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=seam_tail),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name=seam_head, level=None),),
-        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=win),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom),
+        ),
     )
     store = fresh("intact-seam-cross-document", master)
     measured = score("cross-document", store, master, phantom)
@@ -4234,7 +4251,10 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
             Skill(provenance=(FIXTURE_SOURCE,), name=win, level=None),
             Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
-        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=win),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom2),
+        ),
     )
     store2 = fresh("intact-seam-within-document", master2)
     measured2 = score("within-document", store2, master2, phantom2)
@@ -4258,7 +4278,10 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     master3 = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=genuine.rstrip(".")),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=genuine)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=win),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=genuine),
+        ),
     )
     store3 = fresh("intact-seam-genuine-control", master3)
     try:
@@ -4298,7 +4321,10 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
             Skill(provenance=(FIXTURE_SOURCE,), name=alfa_text, level=None),
             Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
-        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=win),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom2),
+        ),
     )
     store4 = fresh("intact-seam-two-line-carry", master4)
     try:
@@ -4335,7 +4361,10 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     master5 = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=seam_tail),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name=seam_head, level=None),),
-        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=win),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom),
+        ),
     )
     store5 = fresh("intact-seam-approved-xdoc", master5)
     prepare(
@@ -4382,7 +4411,10 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
             Skill(provenance=(FIXTURE_SOURCE,), name=alfa_text, level=None),
             Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
-        episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=win),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom2),
+        ),
     )
     store6 = fresh("intact-seam-approved-2line", master6)
     prepare(

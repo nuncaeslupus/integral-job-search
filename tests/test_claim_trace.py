@@ -386,7 +386,12 @@ def test_f1_one_backed_denial_does_not_cover_a_second_clause() -> None:
     assert [d.kind for d in found] == ["denial_without_backing_row"]
     assert "observability" in found[0].text
     assert paragraph_defects("edited", TWO, [TWO]) == []
-    assert paragraph_defects("edited", TWO, [KUBE, "I have never used observability tools."]) == []
+    split = "I have not used Kubernetes in production, I have never used observability tools."
+    assert (
+        paragraph_defects("edited", split, [KUBE, "I have never used observability tools."]) == []
+    )
+    # "and ..." is not the candidate's clause: a document repeats their denial, never edits it
+    assert paragraph_defects("edited", TWO, [KUBE, "I have never used observability tools."])
 
 
 @pytest.mark.parametrize(
@@ -506,3 +511,106 @@ def test_f7_main_exits_three_when_the_corpus_has_no_denial_or_no_count(
     for key in ("denials_checked", "counts_checked"):
         monkeypatch.setattr(claim_trace, "measure", lambda key=key: {**real, key: 0})
         assert claim_trace._main(["claim_trace", str(tmp_path / "T.json")]) == 3
+
+
+# --- the second reader's re-review (PR #780, head 86214b5): repeat, never compose ---
+
+
+@pytest.mark.parametrize(
+    ("body", "said"),
+    [
+        ("I have not used AWS.", "I have never used GCP."),  # R1: 3-letter names
+        ("I have never written Go.", "I have never written R."),
+        ("I have not used AWS tools.", "I have not used GCP tools."),
+        ("Observability tools? I have never used them.", "No, I have not."),  # R2
+        ("Observability tools, I have never used them.", "No, I have not."),
+        ("I have not used Kafka.", "I have not used Kafka Streams, but I used Kafka daily."),  # R3
+        (
+            "I have not used Kafka and I have never used Spark",
+            "I have not used Kafka and Spark is great",
+        ),
+        (
+            "I have not used observability tools.",
+            "I have not used observability tools in the frontend.",
+        ),
+    ],
+)
+def test_r1_r2_r3_a_denial_that_is_not_the_candidates_own_clause_is_refused(
+    body: str, said: str
+) -> None:
+    assert [d.kind for d in paragraph_defects("edited", body, [said])] == [
+        "denial_without_backing_row"
+    ]
+
+
+def test_r1_through_a_cv_entry_generate_and_check_version(store: ProfileStore) -> None:
+    row = say(store, "I have never used GCP.")
+    entry = Experience(
+        title="Dev",
+        organisation="Cintra",
+        description="Ran billing. I have not used AWS.",
+        provenance=cited(row),
+    )
+    assert [d.kind for d in entry_defects(store, entry)] == ["denial_without_backing_row"]
+    master = CVMaster(experience=(entry,))
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="o1", advert=ADVERT)
+    assert all("AWS" not in c.text for c in manifest.claims)
+    assert [o.section for o in manifest.omissions] == ["experience"]
+
+
+def test_r2_a_content_free_denial_backs_only_itself(store: ProfileStore) -> None:
+    assert paragraph_defects("edited", "No, I have not.", ["No, I have not."]) == []
+    assert paragraph_defects("edited", "I have never used them.", ["No, I have not."])
+    entry = SourcedText(
+        text="Observability tools? I have never used them.",
+        provenance=cited(say(store, "No, I have not.")),
+    )
+    assert [d.kind for d in entry_defects(store, entry)] == ["denial_without_backing_row"]
+
+
+def test_normalisation_folds_case_whitespace_punctuation_and_contractions() -> None:
+    said = ["I haven't  used KAFKA!"]
+    assert paragraph_defects("edited", "i have not used kafka.", said) == []
+    assert paragraph_defects("edited", "I haven" + chr(0x2019) + "t used Kafka", said) == []
+    assert paragraph_defects("edited", "I cannot use Kafka.", ["I can't use Kafka."]) == []
+
+
+def test_split_sentence_boundary_a_denial_is_repeated_beside_an_affirmation() -> None:
+    """Mutant-killer: with no sentence split the cited row is one long clause."""
+    said = ["I have not used Kafka. I love Spark."]
+    assert paragraph_defects("edited", "I have not used Kafka.", said) == []
+    assert paragraph_defects("edited", "I have not used Spark.", said)
+
+
+def test_split_comma_and_a_cueless_piece_is_not_part_of_a_denial() -> None:
+    """Mutants: no comma split, or a cue-less piece folded into the denial before it."""
+    said = ["I have not used Kafka, but I used Spark daily."]
+    assert paragraph_defects("edited", "I have not used Kafka.", said) == []
+    assert (
+        paragraph_defects("edited", "I have not used Kafka, Spark.", ["I have not used Kafka."])
+        == []
+    )
+    assert paragraph_defects("edited", "I have not used Spark.", said)
+
+
+def test_a_year_shaped_number_with_a_plus_is_a_count() -> None:
+    assert [d.kind for d in paragraph_defects("assistant", "2000+ commits.", [])] == [
+        "hand_typed_count"
+    ]
+    assert paragraph_defects("assistant", "Since 2019+.", [])
+
+
+def test_episodes_are_not_exempt_from_the_count_rule(store: ProfileStore) -> None:
+    text = "I shipped 1,600 commits across seven repositories."
+    unnumbered = say(store, "I shipped many commits across several repositories.")
+    episode = Episode(kind="achievement", text=text, provenance=cited(unnumbered))
+    assert [d.kind for d in entry_defects(store, episode)] == ["hand_typed_count"] * 2
+    master = CVMaster(headline=SourcedText(text="Backend engineer"), episodes=(episode,))
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="o1", advert=ADVERT, _approved_episodes=(0,))
+    assert text not in {c.text for c in manifest.claims}
+    assert [o.section for o in manifest.omissions] == ["episodes"]
+    held = say(store, text)
+    sourced = Episode(kind="achievement", text=text, provenance=cited(held))
+    assert entry_defects(store, sourced) == []

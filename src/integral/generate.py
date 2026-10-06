@@ -46,7 +46,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from integral.claim_trace import counts_apply, entry_defects
+from integral.claim_trace import entry_defects
 from integral.cv_store import (
     SCALAR_FIELDS,
     Certification,
@@ -298,7 +298,7 @@ def _trace_filter(
     omissions: list[Omission] = []
     for section, index in chosen:
         entry = _entries(master, section)[index]
-        found = entry_defects(store, entry, counts=counts_apply(section))
+        found = entry_defects(store, entry)
         if not found:
             kept.append((section, index))
             continue

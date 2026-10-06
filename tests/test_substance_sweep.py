@@ -115,8 +115,8 @@ def _master(store: ProfileStore, headline: str | None = None) -> CVMaster:
         else SourcedText(provenance=(FIXTURE_SOURCE,), text=headline),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(
-            Episode(kind="achievement", text=WIN),
-            Episode(kind="failure", text=FAILURE),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
         ),
     )
     write_master(store, built)
@@ -638,7 +638,10 @@ def test_an_episodes_substance_surviving_in_a_cv_bullet_is_flagged(store: Profil
             ),
         ),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=FAILURE)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -719,7 +722,10 @@ def test_two_overlapping_episodes_with_one_retracted_are_both_stopped(
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -752,7 +758,10 @@ def test_an_untouched_draft_of_two_overlapping_episodes_is_clean(store: ProfileS
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -922,7 +931,10 @@ def test_a_paraphrased_cv_bullet_is_undecidable_not_withheld(store: ProfileStore
             ),
         ),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=FAILURE)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1055,7 +1067,10 @@ def test_two_unrelated_episodes_sharing_a_window_are_not_conflated(store: Profil
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1095,7 +1110,10 @@ def test_a_seam_between_two_unbacked_lines_does_not_manufacture_a_match(
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=e3_text)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=e3_text),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1146,7 +1164,10 @@ def test_intact_seam_across_documents_does_not_manufacture_a_finding(
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=seam_tail),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name=seam_head, level=None),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1195,7 +1216,10 @@ def test_intact_seam_within_one_document_does_not_manufacture_a_finding(
             Skill(provenance=(FIXTURE_SOURCE,), name=WIN, level=None),
             Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1262,7 +1286,10 @@ def test_intact_seam_fix_still_finds_a_genuine_two_line_carry(store: ProfileStor
             Skill(provenance=(FIXTURE_SOURCE,), name=alfa_text, level=None),
             Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1316,7 +1343,10 @@ def test_intact_seam_approved_branch_does_not_manufacture_a_cross_document_discl
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=seam_tail),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name=seam_head, level=None),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1371,7 +1401,10 @@ def test_intact_seam_approved_branch_does_not_undercount_a_genuine_two_line_carr
             Skill(provenance=(FIXTURE_SOURCE,), name=alfa_text, level=None),
             Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=phantom)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=phantom),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1407,7 +1440,10 @@ def test_a_duplicated_approved_line_does_not_conflate_a_twin(store: ProfileStore
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1441,7 +1477,10 @@ def test_a_deleted_manifest_row_for_an_approved_line_does_not_conflate_a_twin(
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1489,7 +1528,10 @@ def test_a_near_copy_of_an_approved_line_does_not_conflate_a_twin(
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1522,7 +1564,10 @@ def test_a_retraction_with_no_document_edit_does_not_conflate_a_twin(
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -1604,8 +1649,8 @@ def test_a_sign_flip_does_not_conflate_a_different_episode(store: ProfileStore) 
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data engineer — billing systems"),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(
-            Episode(kind="achievement", text=achievement),
-            Episode(kind="failure", text=failure),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=achievement),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=failure),
         ),
     )
     write_master(store, master)
@@ -1684,7 +1729,9 @@ def test_the_boundary_refusal_names_an_undecidable_episode_too(store: ProfileSto
     already happening for another reason.
     """
     smuggled = Episode(
-        kind="achievement", text="Renegotiated the hosting contract and cut spend by a third."
+        provenance=(FIXTURE_SOURCE,),
+        kind="achievement",
+        text="Renegotiated the hosting contract and cut spend by a third.",
     )
     master = CVMaster(
         headline=SourcedText(
@@ -1692,8 +1739,8 @@ def test_the_boundary_refusal_names_an_undecidable_episode_too(store: ProfileSto
         ),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(
-            Episode(kind="achievement", text=WIN),
-            Episode(kind="failure", text=FAILURE),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
             smuggled,
         ),
     )
@@ -1882,7 +1929,10 @@ def test_an_approved_cv_bullet_carried_episode_with_its_row_removed_is_counted(
             ),
         ),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="failure", text=FAILURE)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)
@@ -2066,7 +2116,10 @@ def test_a_second_correctly_disclosed_episode_does_not_mask_the_first(
     master = CVMaster(
         headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=WIN),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="achievement", text=WIN), Episode(kind="achievement", text=TWIN)),
+        episodes=(
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=TWIN),
+        ),
     )
     write_master(store, master)
     seed_fixture_source(store, master)

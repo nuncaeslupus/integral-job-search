@@ -25,30 +25,26 @@ words support (`paragraph_defects`, called by `application_authorship`). An
 `assistant` paragraph cites nothing, which is exactly why a denial or a number
 could pass through it: nothing was required of a paragraph that borrows no source.
 
-* **A denial is backed only by the candidate's own denial.** The words behind it
-  must resolve, be live (a retraction withdraws them), be something the candidate
-  said, and be *themselves* a denial clause that holds every content word of the
-  clause it backs. The check is per denial clause, never per paragraph: one backed
-  denial covers itself and nothing else in the document. Where the store is
-  silent the honest sentence is about the store ("nothing in what you told me
-  covers X"), never about the person. A denial that *does* have such a row passes,
-  so the check is not satisfiable by banning the word "not" — which would destroy
-  the honest-gap paragraph that is one of the letter's better features.
+* **A denial is backed only by the candidate's own denial, repeated.** A denial
+  clause in a generated document is backed only if, once case, whitespace,
+  punctuation and contractions are normalised, it is identical to a whole denial
+  clause in one live row the candidate said: the document may repeat their denial
+  and may never paraphrase, narrow, widen or compose one. Clauses are cut at every
+  sentence boundary and comma, and a piece with no negation cue is its own clause and
+  part of no denial. Where the store is silent the honest sentence is about the
+  store ("nothing in what you told me covers X"), never about the person. A denial
+  that *does* have such a row passes, so the check is not satisfiable by banning the
+  word "not" — which would destroy the honest-gap paragraph that is one of the
+  letter's better features.
 * **A count is computed or it is not written.** There is no computing channel in
   a letter, so a quantity in a paragraph the candidate did not write word for word
   passes only if the very same number is already in the words that paragraph
   cites: the candidate's, not the assistant's. The same rule runs over a CV entry:
   each number in it must be in that entry's own live provenance, spent once
-  (`entry_defects`). A number used as a date is not a count. A paragraph
+  (`entry_defects`). A number used as a date is not a count. No section is
+  exempt, episodes included. A paragraph
   that is exactly the candidate's own cited sentences is theirs and is left alone
   (`application_authorship` already requires it to be exactly that).
-
-**The one rule for "speaks of the same thing".** A denial clause is backed when some
-denial clause the candidate said contains *every* content word of it (content word:
-four or more letters, singular-ish, not a negation cue and not in `_FUNCTION`).
-Sharing one word is not enough: "production" or "tools" is in a thousand unrelated
-denials. The rule has no list of generic nouns to extend; a word the body adds that
-the candidate never said is, by that, something they did not deny.
 
 **The honest ceiling.** Negation and quantity are recognised from closed cue
 vocabularies in English, Spanish and Catalan (`NEGATORS`, `NUMBER_WORDS`). A
@@ -66,6 +62,7 @@ import json
 import re
 import sys
 import tempfile
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -133,68 +130,47 @@ def is_denial(text: str) -> bool:
     )
 
 
-# Words that do not say what a denial is about. A backing row must share a word that
-# does, or any denial in the store would back every denial in a document.
-_FUNCTION = frozenset(
-    {
-        "have", "has", "had", "with", "that", "this", "from", "used", "using", "work",
-        "worked", "been", "were", "what", "your", "they", "them", "than", "then",
-        "experience", "experiencia", "experiència", "exposure", "years", "year",
-        "also", "very", "much", "more", "some", "any",
-        "para", "como", "tengo", "tiene", "hecho", "hemos", "usado", "estoy", "esto",
-        "d'experiència", "d\u2019experiència", "amb", "per", "que", "una", "uns", "unes",
-        "tinc", "hem", "fet",
-    }
-)  # fmt: skip
-
-
-def subject_words(text: str) -> frozenset[str]:
-    """What a denial is about: its content words, singular-ish, cues and function words out."""
-    out = set()
-    for word in _words(text):
-        if _is_cue(word) or word in _FUNCTION:
-            continue
-        stem = word[:-1] if word.endswith("s") and len(word) > 4 else word
-        if len(stem) >= 4:
-            out.add(stem)
-    return frozenset(out)
-
-
 _SENTENCE_END = re.compile(r"[.;:!?\n]+(?=\s|$)")
-_CLAUSE_END = re.compile(r"[,]+(?=\s|$)")
+_COMMA = re.compile(r",+(?=\s|$)")
+_IRREGULAR = (
+    (re.compile(r"\bwon't\b"), "will not"),
+    (re.compile(r"\b(?:can't|cannot)\b"), "can not"),
+    (re.compile(r"\bshan't\b"), "shall not"),
+    (re.compile(r"\bdont\b"), "do not"),
+    (re.compile(r"n't\b"), " not"),
+)
+
+
+def normalise(clause: str) -> str:
+    """Case, whitespace, punctuation and contractions folded; nothing else touched."""
+    text = unicodedata.normalize("NFKC", clause).lower().replace(chr(0x2019), "'")
+    for pattern, replacement in _IRREGULAR:
+        text = pattern.sub(replacement, text)
+    return " ".join(_TOKEN.findall(text))
 
 
 def denial_clauses(text: str) -> list[str]:
-    """Each denial in `text`, one per negated clause rather than one per paragraph.
+    """Each piece of `text` (cut at every sentence boundary and comma) that carries a cue.
 
-    A sentence is cut at commas; a piece with a cue opens a clause, a piece without one
-    continues the clause before it in the same sentence ("not used Kafka, Spark, Flink").
-    A sentence with no cue has no denial in it.
+    A piece with no cue is its own clause, an affirmation or a topic, and is part of no
+    denial: a denial is never widened by what is written next to it.
     """
-    out: list[str] = []
-    for sentence in _SENTENCE_END.split(text):
-        clauses: list[str] = []
-        for piece in _CLAUSE_END.split(sentence):
-            if is_denial(piece):
-                clauses.append(piece)
-            elif clauses:
-                clauses[-1] += " " + piece
-        out.extend(c.strip() for c in clauses if c.strip())
-    return out
+    pieces = [
+        piece.strip() for sentence in _SENTENCE_END.split(text) for piece in _COMMA.split(sentence)
+    ]
+    return [piece for piece in pieces if piece and is_denial(piece)]
 
 
 def backs_clause(clause: str, said: Sequence[str]) -> bool:
-    """Does one denial the candidate said hold every content word of this clause?"""
-    about = subject_words(clause)
-    return any(
-        about <= subject_words(theirs) and (about or not subject_words(theirs))
-        for text in said
-        for theirs in denial_clauses(text)
+    """Is `clause` the same denial, normalised, as a whole clause the candidate said?"""
+    wanted = normalise(clause)
+    return bool(wanted) and any(
+        normalise(theirs) == wanted for text in said for theirs in denial_clauses(text)
     )
 
 
 def unbacked_clauses(text: str, said: Sequence[str]) -> list[str]:
-    """Every denial clause of `text` that no denial of `said` backs, each judged on its own."""
+    """Every denial clause of `text` that no clause of `said` repeats, each judged on its own."""
     return [c for c in denial_clauses(text) if not backs_clause(c, said)]
 
 
@@ -257,6 +233,8 @@ def _is_date(text: str, start: int, end: int) -> bool:
     """A year-shaped number used as a date: after a date word, or with nothing countable after."""
     if not _YEAR.fullmatch(text[start:end]):
         return False
+    if text[end : end + 1] == "+":
+        return False  # "2000+ commits": a lower bound on a count, never a date
     before = _words(text[:start])[-2:]
     if before and (before[-1] in _DATE_PREPOSITIONS or before[-2:] == ["des", "de"]):
         return True
@@ -343,23 +321,12 @@ def _count_defect(text: str, value: Quantity, where: str) -> Defect:
     )
 
 
-# An episode is a story the candidate told and then approved for one letter (T46); what
-# it says is theirs, so only its denials are traced here. Every other section is a line the
-# generator renders on its own, and its numbers must come from somewhere. Stated scope, not
-# an oversight: an episode's own figures are T46's to defend.
-COUNT_EXEMPT_SECTIONS: frozenset[str] = frozenset({"episodes"})
-
-
-def counts_apply(section: str) -> bool:
-    return section not in COUNT_EXEMPT_SECTIONS
-
-
-def inspect_entry(store: ProfileStore, entry: SourcedEntry, *, counts: bool = True) -> EntryReport:
+def inspect_entry(store: ProfileStore, entry: SourcedEntry) -> EntryReport:
     """Every denial clause and every number in a store entry that nothing the candidate said backs.
 
     All string fields are read, identifiers included: a denial typed into a skill name
     is still a denial. A denial clause needs a denial of the candidate's own that holds
-    all of its content words; a number must be in the entry's live provenance texts,
+    the same clause, normalised; a number must be in the entry's live provenance texts,
     spent once across the whole entry, the same rule a letter paragraph is held to.
     """
     values = [
@@ -378,8 +345,6 @@ def inspect_entry(store: ProfileStore, entry: SourcedEntry, *, counts: bool = Tr
             )
             for clause in unbacked_clauses(text, said)
         )
-    if not counts:
-        return EntryReport(tuple(defects), denials, 0)
     held = [q for text in said for q in quantities(text)]
     written = [(text, q) for text in values for q in quantities(text)]
     unspent = list(held)
@@ -391,8 +356,8 @@ def inspect_entry(store: ProfileStore, entry: SourcedEntry, *, counts: bool = Tr
     return EntryReport(tuple(defects), denials, len(written))
 
 
-def entry_defects(store: ProfileStore, entry: SourcedEntry, *, counts: bool = True) -> list[Defect]:
-    return list(inspect_entry(store, entry, counts=counts).defects)
+def entry_defects(store: ProfileStore, entry: SourcedEntry) -> list[Defect]:
+    return list(inspect_entry(store, entry).defects)
 
 
 def entry_denials(store: ProfileStore, entry: SourcedEntry) -> list[Defect]:
@@ -406,7 +371,7 @@ def paragraph_defects(author: str, body: str, cited: Sequence[str]) -> list[Defe
     `candidate` is the candidate's own sentences untouched, so nothing here is
     anyone's invention. For `edited` and `assistant` (which cites nothing, so
     everything it carries is new) every denial clause needs a cited denial that holds
-    all of its content words, and each number must be one the cited words already contain.
+    the same clause, normalised, and each number must be one the cited words already contain.
     """
     if author == "candidate":
         return []
@@ -450,7 +415,7 @@ def check_version(
     for claim in read_manifest(store, offer_id, version).claims:
         if claim_is_backed(master, claim, withdrawn):
             entry = section_entries(master, claim.section)[claim.entry_index]
-            report = inspect_entry(store, entry, counts=counts_apply(claim.section))
+            report = inspect_entry(store, entry)
             defects.extend(report.defects)
             denials += report.denials_checked
             counts += report.counts_checked
@@ -481,7 +446,7 @@ def seed_fixture_source(store: ProfileStore, master: CVMaster) -> None:
     span rather than an evidence row, so no probe's evidence-row arithmetic moves.
     """
     lines: list[str] = []
-    for section in ("headline", "residence_claim", "experience", "education", "skills"):
+    for section in ("headline", "residence_claim", "experience", "education", "skills", "episodes"):
         for entry in section_entries(master, section):
             lines.extend(
                 v for v in entry.model_dump(exclude={"provenance"}).values() if isinstance(v, str)
@@ -506,6 +471,7 @@ _KUBE = "I have not used Kubernetes in production."
 _TWO_DENIALS = (
     "I have not used Kubernetes in production, and I have never used observability tools."
 )
+FRONTED = "Observability tools? I have never used them."
 _RAN4 = "Ran 4 services for the permits API."
 
 
@@ -547,6 +513,8 @@ def probe_cases() -> list[dict[str, Any]]:
         gapped = record(
             "candidate_statement", "I have never deployed Kafka to production.", "application_draft"
         )
+        gcp = record("candidate_statement", "I have never used GCP.", "application_draft")
+        nope = record("candidate_statement", "No, I have not.", "application_draft")
         kubed = record("candidate_statement", _KUBE, "application_draft")
         dec = record("candidate_statement", "It took 2.5 seconds.", "application_draft")
 
@@ -582,6 +550,9 @@ def probe_cases() -> list[dict[str, Any]]:
             ("edited denial the candidate did not", 1, letter("edited", _DENIAL, counted)),
             ("edited denial about another thing", 1, letter("edited", _DENIAL, gapped)),
             ("edited second denial beside a backed one", 1, letter("edited", _TWO_DENIALS, kubed)),
+            ("edited short name another thing", 1, letter("edited", "I have not used AWS.", gcp)),
+            ("edited fronted topic by a bare no", 1, letter("edited", FRONTED, nope)),
+            ("edited bare no repeated", 0, letter("edited", "No, I have not.", nope)),
             ("assistant dont", 1, letter("assistant", "I dont use Kafka.")),
             ("assistant yet to", 1, letter("assistant", "I have yet to use Kafka.")),
             ("assistant sin experiencia", 1, letter("assistant", "Sin experiencia en Kafka.")),

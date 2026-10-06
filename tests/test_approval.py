@@ -106,8 +106,8 @@ def _master(store: ProfileStore, **overrides: object) -> CVMaster:
         ),
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(
-            Episode(kind="achievement", text=WIN),
-            Episode(kind="failure", text=FAILURE),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
         ),
         **overrides,  # type: ignore[arg-type]
     )
@@ -269,7 +269,12 @@ def test_reordering_the_story_bank_does_not_break_an_approval(
     """
     offer_id, version = _prepare(store, master, approved=(0,))
     reordered = master.model_copy(
-        update={"episodes": (Episode(kind="context", text="Unrelated."), *master.episodes)}
+        update={
+            "episodes": (
+                Episode(provenance=(FIXTURE_SOURCE,), kind="context", text="Unrelated."),
+                *master.episodes,
+            )
+        }
     )
     measured = measure_prepared(store, reordered, offer_id, version)
     assert measured["unapproved_episode_disclosures"] == 0
@@ -288,7 +293,12 @@ def test_rewriting_the_episode_afterwards_does_not_break_the_approval(
     """
     offer_id, version = _prepare(store, master, approved=(0,))
     rewritten = master.model_copy(
-        update={"episodes": (Episode(kind="achievement", text=WIN + " Twice."), master.episodes[1])}
+        update={
+            "episodes": (
+                Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=WIN + " Twice."),
+                master.episodes[1],
+            )
+        }
     )
     assert (
         measure_prepared(store, rewritten, offer_id, version)["unapproved_episode_disclosures"] == 0
@@ -520,7 +530,7 @@ def test_a_short_episode_does_not_match_a_longer_word(store: ProfileStore) -> No
     """
     built = CVMaster(
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
-        episodes=(Episode(kind="context", text="Python"),),
+        episodes=(Episode(provenance=(FIXTURE_SOURCE,), kind="context", text="Python"),),
     )
     write_master(store, built)
     seed_fixture_source(store, built)
@@ -772,8 +782,12 @@ def test_a_retracted_row_withdraws_the_episode_its_provenance_names(store: Profi
     built = CVMaster(
         skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(
-            Episode(kind="achievement", text=WIN, provenance=(ConversationTurn(evidence_id=row),)),
-            Episode(kind="failure", text=FAILURE),
+            Episode(
+                kind="achievement",
+                text=WIN,
+                provenance=(ConversationTurn(evidence_id=row), FIXTURE_SOURCE),
+            ),
+            Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
         ),
     )
     write_master(store, built)
@@ -827,7 +841,9 @@ def test_a_retracted_row_withdraws_an_approval_with_a_curly_apostrophe(
 ) -> None:
     """One typographic apostrophe, and byte equality reads the story as a different one."""
     built = _bank(
-        store, Episode(kind="achievement", text=OWNED), Episode(kind="failure", text=FAILURE)
+        store,
+        Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=OWNED),
+        Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
     )
     row = _episode_row(store, OWNED.replace("'", "\u2019"))
     assert not _sends_after_retracting(store, built, row)
@@ -860,7 +876,9 @@ def test_a_retracted_row_withdraws_an_accented_approval_in_either_normal_form(
     """
     composed = unicodedata.normalize("NFC", LLEIDA)
     built = _bank(
-        store, Episode(kind="achievement", text=composed), Episode(kind="failure", text=FAILURE)
+        store,
+        Episode(provenance=(FIXTURE_SOURCE,), kind="achievement", text=composed),
+        Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
     )
     row = _episode_row(store, unicodedata.normalize("NFD", LLEIDA))
     assert not _sends_after_retracting(store, built, row)
@@ -897,9 +915,11 @@ def test_retracting_the_story_bank_row_withdraws_the_cv_store_episode(
     built = _bank(
         store,
         Episode(
-            kind="achievement", text=WIN, provenance=(ConversationTurn(evidence_id=intake.id),)
+            kind="achievement",
+            text=WIN,
+            provenance=(ConversationTurn(evidence_id=intake.id), FIXTURE_SOURCE),
         ),
-        Episode(kind="failure", text=FAILURE),
+        Episode(provenance=(FIXTURE_SOURCE,), kind="failure", text=FAILURE),
     )
     assert not _sends_after_retracting(store, built, bank)
 
