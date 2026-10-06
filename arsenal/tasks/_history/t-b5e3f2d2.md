@@ -5,6 +5,7 @@ priority: 5
 tags: [PROFILE]
 workspace: PROFILE
 issue: 391
+status: merged
 ---
 
 ## Acceptance gate
