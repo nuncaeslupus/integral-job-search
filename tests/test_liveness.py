@@ -256,7 +256,7 @@ def test_a_shape_that_relocates_nothing_is_reported_not_passed() -> None:
                 return body.replace(anchor, anchor + PADDING, 1)
         return PADDING + body
 
-    old = Shape("buried", anchored_on_body_first, SHAPES[-1].moved)
+    old = Shape("buried", anchored_on_body_first, SHAPES[-1].moved, moves_marker=True)
     found = shape_cells(shapes=(old,))
     assert found["fixture_shape_cells_that_relocate_nothing"] == 2, found
     assert all(c.startswith("cloudflare") for c in found["cells"]), found
@@ -372,3 +372,47 @@ def test_an_unclosed_angle_bracket_does_not_make_the_scan_quadratic() -> None:
     start = time.perf_counter()
     liveness.dead_phrase_in("<a " * 200_000)
     assert time.perf_counter() - start < 5
+
+
+def test_a_retitle_with_no_fragment_fallback_is_reported() -> None:
+    """T177 F1. The pre-fix `named_innocuously` changed nothing on the renamed
+    infojobs fragment (no `<html>`, no `<head>`); the cell must be reported,
+    and only that one."""
+
+    def without_fallback(body: str) -> str:
+        demoted = body.replace("<h1", "<h2").replace("</h1>", "</h2>")
+        if "<head>" in demoted:
+            return demoted.replace("<head>", "<head><title>Acme Empleo</title>", 1)
+        return demoted.replace("<html>", "<html><head><title>Acme Empleo</title></head>", 1)
+
+    found = shape_cells(shapes=(Shape("named innocuously", without_fallback, SHAPES[0].moved),))
+    assert found["cells"] == ["infojobs edge check, markup renamed, served 200 / named innocuously"]
+
+
+def test_a_retitle_of_a_page_already_so_titled_is_reported() -> None:
+    """T177 F1. An identity shape over a sample already carrying the title
+    moves nothing, and so does the sample passing through unchanged."""
+    titled = ("titled", 200, "<html><head><title>Acme Empleo</title></head>captcha</html>")
+    found = shape_cells(
+        samples=(titled,), shapes=(Shape("named innocuously", lambda b: b, SHAPES[0].moved),)
+    )
+    assert found["fixture_shape_cells_that_relocate_nothing"] == 1, found
+    nudged = shape_cells(
+        samples=(titled,), shapes=(Shape("named innocuously", lambda b: b + " ", SHAPES[0].moved),)
+    )
+    assert nudged["fixture_shape_cells_that_relocate_nothing"] == 1, nudged
+
+
+def test_a_burial_that_does_not_clear_the_scan_window_is_reported() -> None:
+    """T177 F2. Moving the marker by a short title or a short padding is still
+    a move, and still inside the 2,000 characters a truncated scan reads."""
+
+    def short(body: str) -> str:
+        return "<p>x</p>" * 10 + body
+
+    def title_prepend(body: str) -> str:
+        return "<title>Acme Empleo</title>" + body
+
+    for apply in (short, title_prepend):
+        found = shape_cells(shapes=(Shape("buried", apply, SHAPES[-1].moved, moves_marker=True),))
+        assert found["fixture_shape_cells_that_relocate_nothing"] == 10, found

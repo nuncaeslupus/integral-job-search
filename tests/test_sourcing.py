@@ -2541,7 +2541,7 @@ def test_one_gate_failing_is_never_hidden_by_the_other_being_unmeasured(
 #: and also why it can shrink to nothing: an empty parametrize collects as
 #: `1 skipped`, which pytest reports as success. Asserted where the list is
 #: built, so deleting the test that consumes it does not delete the floor.
-#: Today 24 GET packages, 5 of them ATS hosts with employers.
+#: Today 25 GET packages, 5 of them ATS hosts with employers.
 MINIMUM_TWINNED_BOARDS = 20
 MINIMUM_TWINNED_ATS_HOSTS = 3
 

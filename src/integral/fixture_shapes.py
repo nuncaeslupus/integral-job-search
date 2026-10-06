@@ -68,13 +68,16 @@ def buried(body: str) -> str:
 
 
 def _marker_moved_later(before: str, after: str) -> bool:
+    """The first marker moved past the padding: a shorter shift would not clear
+    the 2,000-character window the shape exists to defeat."""
     a, b = first_marker_offset(before), first_marker_offset(after)
-    return a is not None and b is not None and b > a
+    return a is not None and b is not None and b - a >= len(PADDING)
 
 
 def _title_restyled(before: str, after: str) -> bool:
+    title = f"<title>{INNOCUOUS_TITLE.casefold()}</title>"
     folded = after.casefold()
-    return f"<title>{INNOCUOUS_TITLE.casefold()}</title>" in folded and "<h1" not in folded
+    return title not in before.casefold() and title in folded and ("<h1" not in folded)
 
 
 @dataclass(frozen=True)
@@ -84,13 +87,17 @@ class Shape:
     name: str
     apply: Callable[[str], str]
     moved: Callable[[str, str], bool]
+    #: Whether the shape moves a block marker, and so has nothing to move in a
+    #: sample that carries none. A shape that does not (a retitle) is measured
+    #: over every sample.
+    moves_marker: bool = False
 
 
 #: Shapes whose effect is checked. "as recorded" is the unshaped control and is
 #: deliberately not a member: it moves nothing by construction.
 SHAPES: tuple[Shape, ...] = (
     Shape("named innocuously", named_innocuously, _title_restyled),
-    Shape("buried", buried, _marker_moved_later),
+    Shape("buried", buried, _marker_moved_later, moves_marker=True),
 )
 
 AS_RECORDED = "as recorded"
@@ -108,21 +115,22 @@ def marker_bearing(samples: tuple[Sample, ...]) -> list[Sample]:
 
 
 #: A product that shrank must not read as a clean zero: ten marker-bearing
-#: samples times two shapes today.
-#: arsenal-floor-margin: MINIMUM_SHAPE_CELLS value=20
-MINIMUM_SHAPE_CELLS = 20
+#: samples for `buried` plus all thirteen samples for `named innocuously`.
+#: arsenal-floor-margin: MINIMUM_SHAPE_CELLS value=23
+MINIMUM_SHAPE_CELLS = 23
 
 
 def measure(
     samples: tuple[Sample, ...] = RATE_LIMIT_SAMPLES,
     shapes: tuple[Shape, ...] = SHAPES,
 ) -> dict[str, Any]:
-    """The cells of (marker-bearing sample x shape) whose shaping left the
+    """The (sample, shape) cells whose shaping left the
     thing the shape exists to move where it was."""
     stuck: list[str] = []
     compared = 0
-    for case, _status, body in marker_bearing(samples):
-        for shape in shapes:
+    bearing = marker_bearing(samples)
+    for shape in shapes:
+        for case, _status, body in bearing if shape.moves_marker else samples:
             compared += 1
             if not shape.moved(body, shape.apply(body)):
                 stuck.append(f"{case} / {shape.name}")
