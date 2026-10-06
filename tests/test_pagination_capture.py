@@ -380,22 +380,18 @@ def test_a_page_index_read_from_a_response_does_not_certify_a_request_key(
     assert measured["findings"][0]["param"] == "page"
 
 
-def test_the_usajobs_package_issues_only_the_request_that_was_measured() -> None:
-    """The plan's row for T113 named `test_usajobs_en_page_two_differs_from_page_one`,
-    and that test cannot be written here: it needs a live POST carrying
-    `"Page": 2`, and a fixture invented in its place would be the defect this
-    task is about. Only one of the task's two resolutions was open, so `Page`
-    was dropped and `pagination.mode` went to `none`.
-
-    What is checkable without a network is that the connector now issues exactly
-    the request the ledger records having measured, and no other.
-    """
+def test_the_usajobs_package_issues_the_request_that_was_measured() -> None:
+    """T152 restored `Page`: a live POST carrying `"Page": 2` is committed, so
+    the connector issues pages 1 and 2 and the committed capture is page 2's
+    body, one of the requests the engine builds."""
     package = _LIBRARY / "usajobs_en"
     requests = build_list_requests(load_connector(package))
 
-    assert len(requests) == 1
-    assert json.loads(requests[0].body or b"null") == {"Keyword": "python", "ResultsPerPage": 25}
-    assert pc.read_capture(package).body == {"Keyword": "python", "ResultsPerPage": 25}
+    assert [json.loads(r.body or b"null") for r in requests] == [
+        {"Keyword": "python", "ResultsPerPage": 25, "Page": 1},
+        {"Keyword": "python", "ResultsPerPage": 25, "Page": 2},
+    ]
+    assert pc.read_capture(package).body == {"Keyword": "python", "ResultsPerPage": 25, "Page": 2}
 
 
 # ---------------------------------------------------------------------------
@@ -1558,15 +1554,12 @@ def test_an_unrecognised_provenance_is_an_absence_not_a_third_category(library: 
 
 
 def test_the_usajobs_capture_says_where_it_came_from() -> None:
-    """The board this task is named for. Its request record is byte-identical
-    to the re-runnable `retest` curl `connectors/ruled-out.yaml` commits, so
-    `transcribed` is what the file now says — and the reason the distinction
-    was worth a field is that `mode: none` means the scan never reads this
-    capture at all, leaving its worth entirely to whoever opens the package."""
+    """T152 replaced the transcribed page-one record with a live POST of
+    `"Page": 2`, whose response bytes are committed beside it."""
     capture = pc.read_capture(_LIBRARY / "usajobs_en")
 
-    assert capture.provenance == pc.TRANSCRIBED
-    assert capture.body == {"Keyword": "python", "ResultsPerPage": 25}
+    assert capture.provenance == pc.LIVE
+    assert capture.body == {"Keyword": "python", "ResultsPerPage": 25, "Page": 2}
 
 
 def test_a_finding_names_the_provenance_of_the_capture_that_failed_to_certify(
@@ -2760,56 +2753,73 @@ def test_deleting_the_capture_is_not_the_cheapest_way_to_pass(
 
 def test_the_committed_library_has_no_unenforced_provenance() -> None:
     """The gate itself, over the shipped captures — most truthfully `unrecorded`,
-    one `transcribed` naming a ledger line that carries its URL and its body,
-    and three `live` (`trabajos_es`, `jobfluent_es`, `talent_es`) whose response
-    bytes are committed beside them."""
+    none `transcribed` since T152 made `usajobs_en` live, and five `live`
+    (`trabajos_es`, `jobfluent_es`, `talent_es`, `pythonorg_en`, `usajobs_en`)
+    whose response bytes are committed beside them."""
     measured = cp.measure(_LIBRARY)
 
     assert measured["gate_status"] == "measured"
     assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
     # 18, plus T144's five ATS-host probes, which say `unrecorded` too, less
-    # the three recorded `live` with their responses committed: T166's
-    # `trabajos_es`, T171's `jobfluent_es` and T194's `talent_es`. Two branches
+    # the four recorded `live` with their responses committed: T166's
+    # `trabajos_es`, T152's `pythonorg_en`, T171's `jobfluent_es` and T194's
+    # `talent_es`. Two branches
     # once asserted one `live` each for their own package, in the same words, so
     # the merge kept a number neither side measured — `CLAUDE.md`'s census
     # collision, in a test rather than in evidence. That is also why this line
     # is re-measured rather than incremented whenever a package lands: the
     # arithmetic below says which packages the three are, so a fourth cannot
     # arrive anonymously.
-    assert measured["claims"] == {"live": 3, "transcribed": 1, "unrecorded": 22}
+    assert measured["claims"] == {"live": 5, "transcribed": 0, "unrecorded": 21}
     assert sorted(
         package.name
         for package in sorted(_LIBRARY.iterdir())
         if (record := cp.read_record(package)) is not None and record["provenance"] == pc.LIVE
-    ) == ["jobfluent_es", "talent_es", "trabajos_es"]
+    ) == ["jobfluent_es", "pythonorg_en", "talent_es", "trabajos_es", "usajobs_en"]
     assert measured["example_packages_excluded"] == ["examplejobs_es"]
 
 
-def test_the_usajobs_capture_names_a_resolvable_committed_request() -> None:
-    """The one capture that claims anything. `connectors/ruled-out.yaml`'s
-    `retest` line for usajobs.gov is a single committed `curl` carrying the POST
-    URL and both body fields, so the claim is checkable rather than asserted —
-    and the stricter join this task shipped is one the genuine citation still
-    satisfies, which is the point of keeping it."""
-    package = _LIBRARY / "usajobs_en"
+def _usajobs_as_t113_shipped(package: Path) -> None:
+    """Rewrite a copy of `usajobs_en`'s capture to the transcribed record T113
+    committed: the page-one body, citing the ledger's `retest` line."""
+    path = package / "probe" / "captured.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record.pop("response", None)
+    record.update(
+        captured_at="2026-09-02",
+        body={"Keyword": "python", "ResultsPerPage": 25},
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="connectors/ruled-out.yaml",
+    )
+    path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+
+
+def test_a_transcribed_usajobs_capture_names_a_resolvable_committed_request(
+    tmp_path: Path,
+) -> None:
+    """`connectors/ruled-out.yaml`'s `retest` line for usajobs.gov is a single
+    committed `curl` carrying the POST URL and both body fields, so a
+    transcribed claim over it is checkable rather than asserted. `usajobs_en`
+    itself is live since T152; this keeps the join exercised against the real
+    ledger."""
+    package = tmp_path / "usajobs_en"
+    shutil.copytree(_LIBRARY / "usajobs_en", package)
+    _usajobs_as_t113_shipped(package)
     record = cp.read_record(package)
 
     assert record is not None
     assert record["provenance"] == pc.TRANSCRIBED
-    assert record["transcribed_from"] == "connectors/ruled-out.yaml"
     assert cp.check_transcribed(package, record) == []
 
 
-def test_the_usajobs_claim_rests_on_the_committed_command_and_not_on_a_mention(
+def test_a_transcribed_claim_rests_on_the_committed_command_and_not_on_a_mention(
     tmp_path: Path,
 ) -> None:
     """The join, exercised where it is actually load-bearing.
 
-    Over the shipped library exactly one capture makes a substantive claim, so a
-    weak join is invisible in the committed state — which is how bare
-    containment shipped. Here the ledger is copied with the one `retest` command
-    turned into prose about the same request: every string the check reads is
-    still present, and the claim must stop resolving.
+    Here the ledger is copied with the one `retest` command turned into prose
+    about the same request: every string the check reads is still present, and
+    the claim must stop resolving.
     """
     repo = tmp_path / "repo"
     (repo / "connectors").mkdir(parents=True)
@@ -2818,10 +2828,13 @@ def test_the_usajobs_claim_rests_on_the_committed_command_and_not_on_a_mention(
         'retest: "curl -s -X POST', 'retest: "we once ran a POST'
     )
     (repo / "connectors" / "ruled-out.yaml").write_text(prose, encoding="utf-8")
-    record = cp.read_record(_LIBRARY / "usajobs_en")
+    package = tmp_path / "usajobs_en"
+    shutil.copytree(_LIBRARY / "usajobs_en", package)
+    _usajobs_as_t113_shipped(package)
+    record = cp.read_record(package)
     assert record is not None
 
-    (reason,) = cp.check_transcribed(_LIBRARY / "usajobs_en", record, repo)
+    (reason,) = cp.check_transcribed(package, record, repo)
 
     assert "commits no command for it" in reason
 
@@ -2968,6 +2981,7 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
     """
     library = tmp_path / "connectors"
     shutil.copytree(_LIBRARY, library)
+    _usajobs_as_t113_shipped(library / "usajobs_en")
     for path in library.glob("*/probe/captured.json"):
         record = json.loads(path.read_text(encoding="utf-8"))
         # T113 shipped `transcribed` on usajobs_en and nothing anywhere else;
@@ -2991,3 +3005,137 @@ def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path:
     claims = sorted(row["claim"] for row in before["findings"])
     assert claims == ["absent"] * (before["captures_scanned"] - 1) + [pc.TRANSCRIBED]
     assert after["captures_with_an_unenforced_provenance"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T152 — a package dropped for want of a capture is named, not silent
+
+
+def _library_copy(tmp_path: Path) -> Path:
+    library = tmp_path / "connectors"
+    shutil.copytree(_LIBRARY, library)
+    return library
+
+
+def _edit_pagination(library: Path, package: str, **changes: Any) -> None:
+    path = library / package / "connector.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document["list"]["pagination"].update(changes)
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+
+
+def _drop_pagination(library: Path, package: str) -> None:
+    """Revert `package` to the state T113 left it in: `mode: none`, no page key,
+    and the capture of the first page that nobody could record beyond."""
+    path = library / package / "connector.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    document["list"]["pagination"] = {"mode": "none", "max_pages": 1}
+    if package == "pythonorg_en":
+        document["list"]["url_pattern"] = "https://www.python.org/jobs/"
+        capture = {"url": "https://www.python.org/jobs/", "provenance": "unrecorded"}
+    else:
+        document["list"]["body_json"].pop("Page")
+        capture = {
+            "url": document["list"]["url_pattern"],
+            "body": document["list"]["body_json"],
+            "provenance": "unrecorded",
+        }
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    (library / package / "probe" / "captured.json").write_text(
+        json.dumps({"captured_at": "2026-09-02", "status": 200, **capture}), encoding="utf-8"
+    )
+
+
+def test_the_committed_library_drops_no_further_page() -> None:
+    measured = pc.measure_unrecordable_drops()
+
+    assert measured["gate_status"] == "measured"
+    assert measured["packages_dropped_for_an_unrecordable_capture"] == 0, measured["still_dropped"]
+    assert measured["packages_scanned"] >= pc.MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES
+
+
+@pytest.mark.parametrize("package", ["pythonorg_en", "usajobs_en"])
+def test_a_restored_page_is_a_captured_request_beyond_the_first(package: str) -> None:
+    """The closed form (T171's, applied to the page position): the committed
+    capture is a request the engine issues, and not one it issues for page one."""
+    directory = _LIBRARY / package
+
+    assert pc.capture_is_beyond_the_first_page(directory)
+    assert pc.check_package(directory)[0] is None
+    assert cp.check_capture(directory) is None
+
+
+@pytest.mark.parametrize("package", ["pythonorg_en", "usajobs_en"])
+def test_the_derived_rule_flags_a_package_reverted_to_no_pagination(
+    tmp_path: Path, package: str
+) -> None:
+    """Both boards were dropped to `mode: none` for want of a capture; the rule
+    names each from its own committed response, and flags exactly that package."""
+    library = _library_copy(tmp_path)
+    assert pc.measure_unrecordable_drops(library)["still_dropped"] == []
+
+    _drop_pagination(library, package)
+    measured = pc.measure_unrecordable_drops(library)
+
+    assert measured["still_dropped"] == [package]
+    assert measured["packages_dropped_for_an_unrecordable_capture"] == 1
+
+
+@pytest.mark.parametrize("package", ["pythonorg_en", "usajobs_en"])
+@pytest.mark.parametrize("change", [{"max_pages": 1}, {"start": 3}], ids=["max_pages-1", "start-3"])
+def test_a_restored_mode_that_loses_the_page_again_is_flagged(
+    tmp_path: Path, package: str, change: dict[str, int]
+) -> None:
+    """`mode != "none"` was a proxy: `max_pages: 1` and `start: 3` both keep the
+    mode and lose the recorded page. The metric asks the engine what it issues."""
+    library = _library_copy(tmp_path)
+
+    _edit_pagination(library, package, **change)
+
+    assert pc.measure_unrecordable_drops(library)["still_dropped"] == [package]
+    assert not pc.capture_is_beyond_the_first_page(library / package)
+
+
+def test_a_board_whose_response_names_no_further_page_is_not_flagged(tmp_path: Path) -> None:
+    library = _library_copy(tmp_path)
+    for path in (library / "pythonorg_en").glob("*/*.html"):
+        path.write_text("<html></html>", encoding="utf-8")
+    _drop_pagination(library, "pythonorg_en")
+
+    assert pc.measure_unrecordable_drops(library)["still_dropped"] == []
+
+
+def test_an_empty_library_is_unmeasured_not_a_clean_zero(tmp_path: Path) -> None:
+    measured = pc.measure_unrecordable_drops(tmp_path)
+
+    assert measured["gate_status"] == "unmeasured"
+    assert measured["packages_scanned"] == 0
+
+
+def test_the_exit_code_is_non_zero_when_the_t152_metric_is(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_main` combines three gates, and the T152 one is a term of that
+    combination: dropping it would leave the metric a number nobody is stopped by."""
+    target = tmp_path / "T113.json"
+    assert pc._main(["pagination_capture", str(target)]) == 0
+
+    monkeypatch.setattr(
+        pc,
+        "measure_unrecordable_drops",
+        lambda directory=None: {
+            "packages_dropped_for_an_unrecordable_capture": 1,
+            "still_dropped": ["x"],
+            "packages_scanned": 99,
+            "gate_status": "measured",
+        },
+    )
+    assert pc._main(["pagination_capture", str(target)]) == 1
+
+
+def test_the_exit_code_is_non_zero_when_the_t152_scan_is_unmeasured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pc, "MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES", 10_000)
+
+    assert pc._main(["pagination_capture", str(tmp_path / "T113.json")]) == 1

@@ -1,16 +1,18 @@
-<!-- script and style blocks removed: a fixture proves the selectors find the fields in real markup, and neither is markup this connector reads. It also keeps the board's own front-end API keys and analytics config out of a public repo. -->
 
 
 <!doctype html>
 <html class="no-js" lang="en" dir="ltr">
 
 <head>
-    
+    <script defer
+            file-types="bz2,chm,dmg,exe,gz,json,msi,msix,pdf,pkg,tgz,xz,zip"
+            data-domain="python.org"
+            src="https://analytics.python.org/js/script.file-downloads.outbound-links.js"></script>
 
     <meta charset="utf-8">
 
-    <link rel="prefetch" href="//ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js">
-    <link rel="prefetch" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js">
+    <link rel="prefetch" href="https://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js">
+    <link rel="prefetch" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js">
 
     <meta name="application-name" content="Python.org">
     <meta name="apple-mobile-web-app-title" content="Python.org">
@@ -21,15 +23,19 @@
     <meta name="HandheldFriendly" content="True">
     <meta name="format-detection" content="telephone=no">
 
-    
-    
+    <script async
+            src="https://media.ethicalads.io/media/client/v1.4.0/ethicalads.min.js"
+            integrity="sha256-U3hKDidudIaxBDEzwGJApJgPEf2mWk6cfMWghrAa6i0= sha384-UcmsCqcNRSLW/dV3Lo1oCi2/VaurXbib6p4HyUEOeIa/4OpsrnucrugAefzVZJfI sha512-q4t1L4xEjGV2R4hzqCa41P8jrgFUS8xTb8rdNv4FGvw7FpydVj/kkxBJHOiaoxHa8olCcx1Slk9K+3sNbsM4ug=="
+            crossorigin="anonymous"
+    ></script>
+    <script src="/static/js/libs/modernizr.js"></script>
 
-    <link href="/static/stylesheets/style.c4f369bed0d3.css" rel="stylesheet" type="text/css" media="all" title="default" />
+    <link href="/static/stylesheets/style.6cb9f297dd80.css" rel="stylesheet" type="text/css" media="all" title="default" />
     <link href="/static/stylesheets/mq.a4feecea96fa.css" rel="stylesheet" type="text/css" media="not print, braille, embossed, speech, tty" />
     <link href="/static/stylesheets/font-awesome.bf0c425cdb73.css" rel="stylesheet" type="text/css" media="screen" />
     
 
-    <link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
+    <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
 
     
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -58,7 +64,7 @@
     <meta property="og:image" content="https://www.python.org/static/opengraph-icon-200x200.png">
     <meta property="og:image:secure_url" content="https://www.python.org/static/opengraph-icon-200x200.png">
     
-    <meta property="og:url" content="https://www.python.org/jobs/">
+    <meta property="og:url" content="https://www.python.org/jobs/?page=2">
 
     <link rel="author" href="/humans.txt">
 
@@ -76,7 +82,18 @@
     
 
     
-    
+    <script type="application/ld+json">
+     {
+       "@context": "https://schema.org",
+       "@type": "WebSite",
+       "url": "https://www.python.org/",
+       "potentialAction": {
+         "@type": "SearchAction",
+         "target": "https://www.python.org/search/?q={search_term_string}",
+         "query-input": "required name=search_term_string"
+       }
+     }
+    </script>
 
     
 </head>
@@ -220,17 +237,15 @@
             
             <li class="tier-2" role="menuitem"><a href="/jobs/type/front-end/">Front end</a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/type/image-processing/">Image Processing</a></li>
-            
             <li class="tier-2" role="menuitem"><a href="/jobs/type/integration/">Integration</a></li>
             
             <li class="tier-2" role="menuitem"><a href="/jobs/type/lead/">Lead</a></li>
             
             <li class="tier-2" role="menuitem"><a href="/jobs/type/machine-learning/">Machine Learning</a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/type/numeric-processing/">Numeric processing</a></li>
+            <li class="tier-2" role="menuitem"><a href="/jobs/type/management/">Management</a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/type/operations/">Operations</a></li>
+            <li class="tier-2" role="menuitem"><a href="/jobs/type/numeric-processing/">Numeric processing</a></li>
             
             <li class="tier-2" role="menuitem"><a href="/jobs/type/systems/">Systems</a></li>
             
@@ -248,22 +263,12 @@
             
             <li class="tier-2" role="menuitem"><a href="/jobs/category/developer-engineer/">Developer / Engineer</a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/category/manager-executive/">Manager / Executive</a></li>
-            
-            <li class="tier-2" role="menuitem"><a href="/jobs/category/researcher-scientist/">Researcher / Scientist</a></li>
-            
         </ul>
     </li>
     <li class="tier-1 element-4 ">
         <a href="/jobs/locations/">Locations</a>
         <ul class="subnav menu" role="menu" aria-hidden="true">
             <li class="tier-2" role="menuitem"><a href="/jobs/location/telecommute/">Telecommute</a></li>
-            
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/100-remote-usa/">
-                
-                    100% Remote &ndash; USA
-                
-            </a></li>
             
             <li class="tier-2" role="menuitem"><a href="/jobs/location/100-remote-usa-only/">
                 
@@ -277,21 +282,9 @@
                 
             </a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/bangalore-pune-india/">
+            <li class="tier-2" role="menuitem"><a href="/jobs/location/birmingham-united-kingdom/">
                 
-                    Bangalore, Pune &ndash; India
-                
-            </a></li>
-            
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/durham-north-carolina-usa/">
-                
-                    Durham, North Carolina &ndash; USA
-                
-            </a></li>
-            
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/glasgow-scotland-united-kingdom/">
-                
-                    Glasgow, Scotland &ndash; United Kingdom
+                    Birmingham &ndash; United Kingdom
                 
             </a></li>
             
@@ -307,33 +300,15 @@
                 
             </a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/illinois-chicago-united-states/">
-                
-                    Illinois, Chicago &ndash; United States
-                
-            </a></li>
-            
             <li class="tier-2" role="menuitem"><a href="/jobs/location/katy-tx-united-states/">
                 
                     Katy, TX &ndash; United States
                 
             </a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/latam-latam-latam/">
-                
-                    LATAM &ndash; LATAM
-                
-            </a></li>
-            
             <li class="tier-2" role="menuitem"><a href="/jobs/location/miami-shores-fl-united-states/">
                 
                     Miami Shores, FL &ndash; United States
-                
-            </a></li>
-            
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/montreal-qc-canada/">
-                
-                    Montreal, QC &ndash; Canada
                 
             </a></li>
             
@@ -355,27 +330,15 @@
                 
             </a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-london-uk-united-kingdom/">
-                
-                    Remote - London UK &ndash; United Kingdom
-                
-            </a></li>
-            
             <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-remote/">
                 
                     REMOTE &ndash; REMOTE
                 
             </a></li>
             
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-remote-anywhere/">
+            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-remote-worldwide/">
                 
-                    Remote &ndash; Anywhere
-                
-            </a></li>
-            
-            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-remote-remote/">
-                
-                    Remote &ndash; Remote
+                    Remote &ndash; Worldwide
                 
             </a></li>
             
@@ -385,9 +348,39 @@
                 
             </a></li>
             
+            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-remoteworldwide-remoteworldwide-remote/">
+                
+                    Remote, Remote/Worldwide, Remote/Worldwide &ndash; Remote
+                
+            </a></li>
+            
+            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-uk-eu-remote-uk-eu-remote-uk-eu/">
+                
+                    Remote (UK / EU) &ndash; Remote (UK / EU)
+                
+            </a></li>
+            
+            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-united-states-of-america/">
+                
+                    Remote &ndash; United States of America
+                
+            </a></li>
+            
             <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-us-based-any-us-state-us/">
                 
                     Remote (US Based), Any US State &ndash; US
+                
+            </a></li>
+            
+            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-within-2-hours-of-london-timezone-remote/">
+                
+                    Remote (within 2 hours of London timezone) &ndash; Remote
+                
+            </a></li>
+            
+            <li class="tier-2" role="menuitem"><a href="/jobs/location/remote-worlwide-worldwide/">
+                
+                    Remote, Worlwide &ndash; Worldwide
                 
             </a></li>
             
@@ -427,7 +420,7 @@
                     
 <div class="jobs-intro">
     <h2 class="welcome-message">Get exploring!</h2>
-    <h1 class="call-to-action">31 jobs on the Python Job Board</h1>
+    <h1 class="call-to-action">27 jobs on the Python Job Board</h1>
 <!--
     <p class="excerpt"><strong>Have a job to post?</strong> Please <a href="/jobs/create/">fill out this form</a>, or returning Job Board users may <a href="/accounts/login/?next=/jobs/">log in here</a> to update job postings and create new ones.</p>
 -->
@@ -457,313 +450,6 @@
 <div class="row">
     
     <ol class="list-recent-jobs list-row-container menu">
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    <span class="listing-new">New</span>
-                    
-                    <a href="/jobs/8129/">Python developer</a><br/>
-		    Eleks
-                </span>
-                <span class="listing-location"><a href="/jobs/location/poland-lviv-ivano-frankivsk-ternopil-uzhhorod-chernivtsi-or-kyiv-ukrainepoland/" title="More jobs in Poland, Lviv, Ivano-Frankivsk, Ternopil, Uzhhorod, Chernivtsi or Kyiv, Ukraine/Poland">Poland, Lviv, Ivano-Frankivsk, Ternopil, Uzhhorod, Chernivtsi or Kyiv, Ukraine/Poland</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, Devops 
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-08-28T11:17:37.526513+00:00">28 August 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    <span class="listing-new">New</span>
-                    
-                    <a href="/jobs/8128/">Python/DevOps Engineer</a><br/>
-		    NordVpn/NordSecurity
-                </span>
-                <span class="listing-location"><a href="/jobs/location/vilnius-kaunas-warsaw-lithuaniapoland/" title="More jobs in Vilnius / Kaunas / Warsaw, Lithuania/Poland">Vilnius / Kaunas / Warsaw, Lithuania/Poland</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-08-28T07:27:58.182627+00:00">28 August 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    <span class="listing-new">New</span>
-                    
-                    <a href="/jobs/8126/">Software Engineer (Remote)</a><br/>
-		    Softech Associate
-                </span>
-                <span class="listing-location"><a href="/jobs/location/panama-city-beach-florida-united-states/" title="More jobs in Panama City Beach, Florida, United States">Panama City Beach, Florida, United States</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>, <a href="/jobs/type/database/" title="More Database jobs">Database</a>, <a href="/jobs/type/front-end/" title="More Front end jobs">Front end</a>, <a href="/jobs/type/integration/" title="More Integration jobs">Integration</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, <a href="/jobs/type/numeric-processing/" title="More Numeric processing jobs">Numeric processing</a>, <a href="/jobs/type/testing/" title="More Testing jobs">Testing</a>, <a href="/jobs/type/text-processing/" title="More Text Processing jobs">Text Processing</a>, <a href="/jobs/type/web/" title="More Web jobs">Web</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-08-16T18:01:03.510916+00:00">16 August 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    <span class="listing-new">New</span>
-                    
-                    <a href="/jobs/8125/">Agentic Python Engineer</a><br/>
-		    Evaboot
-                </span>
-                <span class="listing-location"><a href="/jobs/location/remote-remoteworldwide-remoteworldwide/" title="More jobs in Remote, Remote/Worldwide, Remote/Worldwide">Remote, Remote/Worldwide, Remote/Worldwide</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/integration/" title="More Integration jobs">Integration</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, Agentic AI / LLM Agents 
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-08-16T17:22:39.843553+00:00">16 August 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    <span class="listing-new">New</span>
-                    
-                    <a href="/jobs/8123/">Backend Software Engineer (FastAPI) -Onsite in Katy, Texas</a><br/>
-		    Off Duty Management
-                </span>
-                <span class="listing-location"><a href="/jobs/location/katy-tx-united-states/" title="More jobs in Katy, TX, United States">Katy, TX, United States</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-08-11T21:13:55.260956+00:00">11 August 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    <span class="listing-new">New</span>
-                    
-                    <a href="/jobs/8122/">Lead Python Backend Engineer</a><br/>
-		    Reef Technologies
-                </span>
-                <span class="listing-location"><a href="/jobs/location/warsaw-fully-remote-poland/" title="More jobs in Warsaw (fully remote), Poland">Warsaw (fully remote), Poland</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-08-04T09:52:55.157350+00:00">04 August 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    <span class="listing-new">New</span>
-                    
-                    <a href="/jobs/8121/">Senior Python Backend Engineer</a><br/>
-		    Reef Technologies
-                </span>
-                <span class="listing-location"><a href="/jobs/location/warsaw-fully-remote-poland/" title="More jobs in Warsaw (fully remote), Poland">Warsaw (fully remote), Poland</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-08-04T09:51:49.799877+00:00">04 August 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8120/">Python Backend Engineer</a><br/>
-		    Constelli Signals
-                </span>
-                <span class="listing-location"><a href="/jobs/location/hyderabad-telangana-india/" title="More jobs in Hyderabad, Telangana, India">Hyderabad, Telangana, India</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/database/" title="More Database jobs">Database</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-24T13:11:57.361004+00:00">24 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8119/">Senior Full-Stack Engineer [Full Time; 100% remote; US-only]</a><br/>
-		    Hive Collective
-                </span>
-                <span class="listing-location"><a href="/jobs/location/anywhere-anywhere-usa/" title="More jobs in Anywhere, Anywhere, USA">Anywhere, Anywhere, USA</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, <a href="/jobs/type/web/" title="More Web jobs">Web</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-23T22:59:49.732889+00:00">23 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8118/">Python Developer</a><br/>
-		    Micro1
-                </span>
-                <span class="listing-location"><a href="/jobs/location/miami-shores-fl-united-states/" title="More jobs in Miami Shores, FL, United States">Miami Shores, FL, United States</a></span>
-            </h2>
-            
-            <span class="listing-job-type">
-                
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-23T10:28:45.747189+00:00">23 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8117/">Senior Python Engineer</a><br/>
-		    EPAM
-                </span>
-                <span class="listing-location"><a href="/jobs/location/miami-shores-fl-united-states/" title="More jobs in Miami Shores, FL, United States">Miami Shores, FL, United States</a></span>
-            </h2>
-            
-            <span class="listing-job-type">
-                
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-23T10:19:29.107361+00:00">23 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8116/">Senior Python Engineer</a><br/>
-		    Turing
-                </span>
-                <span class="listing-location"><a href="/jobs/location/miami-shores-fl-united-states/" title="More jobs in Miami Shores, FL, United States">Miami Shores, FL, United States</a></span>
-            </h2>
-            
-            <span class="listing-job-type">
-                
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-23T10:16:32.142683+00:00">23 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8113/">Senior Python/DevOps Engineer (100% Remote - USA Only)</a><br/>
-		    Six Feet Up
-                </span>
-                <span class="listing-location"><a href="/jobs/location/100-remote-usa-only/" title="More jobs in 100% Remote, USA Only">100% Remote, USA Only</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/big-data/" title="More Big Data jobs">Big Data</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>, <a href="/jobs/type/database/" title="More Database jobs">Database</a>, <a href="/jobs/type/evangelism/" title="More Evangelism jobs">Evangelism</a>, <a href="/jobs/type/finance/" title="More Finance jobs">Finance</a>, <a href="/jobs/type/front-end/" title="More Front end jobs">Front end</a>, <a href="/jobs/type/lead/" title="More Lead jobs">Lead</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-17T20:34:17.619459+00:00">17 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8111/">Python + TypeScript Engineers</a><br/>
-		    Fusionbox
-                </span>
-                <span class="listing-location"><a href="/jobs/location/remote-us-based-any-us-state-us/" title="More jobs in Remote (US Based), Any US State, US">Remote (US Based), Any US State, US</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/database/" title="More Database jobs">Database</a>, <a href="/jobs/type/front-end/" title="More Front end jobs">Front end</a>, <a href="/jobs/type/web/" title="More Web jobs">Web</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-16T22:22:51.369524+00:00">16 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8110/">Senior AI-Augmented Full Stack Developer</a><br/>
-		    SureSwift Capital
-                </span>
-                <span class="listing-location"><a href="/jobs/location/victoria-canada/" title="More jobs in Victoria, Canada">Victoria, Canada</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/front-end/" title="More Front end jobs">Front end</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-15T16:30:31.872277+00:00">15 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8109/">Senior Backend Python Engineer</a><br/>
-		    mindIT HR Agency (on behalf of a confidential client)
-                </span>
-                <span class="listing-location"><a href="/jobs/location/remote-argentina/" title="More jobs in Remote, Argentina">Remote, Argentina</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, <a href="/jobs/type/web/" title="More Web jobs">Web</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-15T14:40:16.433072+00:00">15 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
         
         <li>
             <h2 class="listing-company">
@@ -803,156 +489,23 @@
             
         </li>
         
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8105/">Computational Photonics Engineer</a><br/>
-		    LumiAIres Ltd
-                </span>
-                <span class="listing-location"><a href="/jobs/location/glasgow-scotland-united-kingdom/" title="More jobs in Glasgow, Scotland, United Kingdom">Glasgow, Scotland, United Kingdom</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/image-processing/" title="More Image Processing jobs">Image Processing</a>, <a href="/jobs/type/integration/" title="More Integration jobs">Integration</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, <a href="/jobs/type/numeric-processing/" title="More Numeric processing jobs">Numeric processing</a>, <a href="/jobs/type/systems/" title="More Systems jobs">Systems</a>, <a href="/jobs/type/testing/" title="More Testing jobs">Testing</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-02T11:59:11.913142+00:00">02 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8103/">Senior Python Developer</a><br/>
-		    Turing
-                </span>
-                <span class="listing-location"><a href="/jobs/location/remote-remote-remote/" title="More jobs in Remote, Remote, Remote">Remote, Remote, Remote</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/front-end/" title="More Front end jobs">Front end</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, Developer 
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-02T06:53:14.171904+00:00">02 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8102/">Python Machine Learning Engineer</a><br/>
-		    Turing
-                </span>
-                <span class="listing-location"><a href="/jobs/location/remote-remote-remote/" title="More jobs in Remote, Remote, Remote">Remote, Remote, Remote</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, ML/Data Engineering 
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-01T17:23:23.829766+00:00">01 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8101/">Python Developer</a><br/>
-		    Micro1
-                </span>
-                <span class="listing-location"><a href="/jobs/location/remote-remote-anywhere/" title="More jobs in Remote, Remote, Anywhere">Remote, Remote, Anywhere</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/front-end/" title="More Front end jobs">Front end</a>, Developer 
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-07-01T06:12:22.316104+00:00">01 July 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8098/">Junior Python Developer - AI &amp; Innovation Team</a><br/>
-		    Adzuna
-                </span>
-                <span class="listing-location"><a href="/jobs/location/remote-remote/" title="More jobs in Remote, Remote">Remote, Remote</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>, <a href="/jobs/type/database/" title="More Database jobs">Database</a>, <a href="/jobs/type/front-end/" title="More Front end jobs">Front end</a>, <a href="/jobs/type/integration/" title="More Integration jobs">Integration</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>, <a href="/jobs/type/testing/" title="More Testing jobs">Testing</a>, <a href="/jobs/type/web/" title="More Web jobs">Web</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-06-29T10:29:16.624309+00:00">29 June 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8097/">Data Acquisition &amp; Infrastructure Engineer</a><br/>
-		    Iconic Art AI
-                </span>
-                <span class="listing-location"><a href="/jobs/location/montreal-qc-canada/" title="More jobs in Montreal, QC, Canada">Montreal, QC, Canada</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/big-data/" title="More Big Data jobs">Big Data</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>, <a href="/jobs/type/database/" title="More Database jobs">Database</a>, <a href="/jobs/type/image-processing/" title="More Image Processing jobs">Image Processing</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-06-26T20:05:31.735607+00:00">26 June 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
-        <li>
-            <h2 class="listing-company">
-                <span class="listing-company-name">
-                    
-                    
-                    <a href="/jobs/8095/">Senior Data Engineer (100% Remote - USA Only)</a><br/>
-		    Six Feet Up
-                </span>
-                <span class="listing-location"><a href="/jobs/location/100-remote-usa/" title="More jobs in 100% Remote, USA">100% Remote, USA</a></span>
-            </h2>
-            
-            <span class="listing-job-type"><a href="/jobs/type/back-end/" title="More Back end jobs">Back end</a>, <a href="/jobs/type/big-data/" title="More Big Data jobs">Big Data</a>, <a href="/jobs/type/cloud/" title="More Cloud jobs">Cloud</a>, <a href="/jobs/type/database/" title="More Database jobs">Database</a>, <a href="/jobs/type/machine-learning/" title="More Machine Learning jobs">Machine Learning</a>
-            </span>
-            
-            <span class="listing-posted">Posted: <time datetime="2026-06-18T22:29:08.319144+00:00">18 June 2026</time></span>
-            <span class="listing-company-category"><a href="/jobs/category/developer-engineer/" title="More jobs in Developer / Engineer">Developer / Engineer</a></span>
-            
-        </li>
-        
     </ol>
 
     <!-- Pagination -->
     
     <ul class="pagination menu">
         
-            <li class="previous"><a class="disabled" href="">Prev</a></li>
+            <li class="previous"><a href="?page=1">Prev</a></li>
         
 
         
-        <li><a class="active" href="?page=1">1</a></li>
+        <li><a href="?page=1">1</a></li>
         
-        <li><a href="?page=2">2</a></li>
+        <li><a class="active" href="?page=2">2</a></li>
         
 
         
-            <li class="next"><a href="?page=2">Next</a></li>
+            <li class="next"><a class="disabled" href="">Next</a></li>
         
     </ul>
     
@@ -1203,8 +756,6 @@
     
         <li class="tier-2 element-4" role="treeitem"><a href="/about/help/" title="">Help</a></li>
     
-        <li class="tier-2 element-5" role="treeitem"><a href="http://brochure.getpython.info/" title="">Python Brochure</a></li>
-    
 </ul>
 
         
@@ -1343,11 +894,13 @@
     
         <li class="tier-2 element-2" role="treeitem"><a href="/psf/newsletter/" title="Python Software Foundation Newsletter">PSF Newsletter</a></li>
     
-        <li class="tier-2 element-3" role="treeitem"><a href="http://pyfound.blogspot.com/" title="PSF Blog">PSF News</a></li>
+        <li class="tier-2 element-3" role="treeitem"><a href="https://pyfound.blogspot.com" title="PSF Blog">PSF News</a></li>
     
-        <li class="tier-2 element-4" role="treeitem"><a href="http://pycon.blogspot.com/" title="PyCon Blog">PyCon US News</a></li>
+        <li class="tier-2 element-4" role="treeitem"><a href="https://pycon.blogspot.com/" title="PyCon Blog">PyCon US News</a></li>
     
-        <li class="tier-2 element-5" role="treeitem"><a href="http://planetpython.org/" title="Planet Python">News from the Community</a></li>
+        <li class="tier-2 element-5" role="treeitem"><a href="https://blog.python.org" title="News and updates from the Python core team">Python Insider</a></li>
+    
+        <li class="tier-2 element-6" role="treeitem"><a href="https://planetpython.org/" title="Planet Python">News from the Community</a></li>
     
 </ul>
 
@@ -1438,15 +991,15 @@
     </div><!-- end #touchnav-wrapper -->
 
     
-    
-    
-    
-    
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+    <script nonce="rIt6GOBmJbERfHzHt57qDw==">window.jQuery || document.write('<script src="/static/js/libs/jquery-1.8.2.min.js"><\/script>')</script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <script nonce="rIt6GOBmJbERfHzHt57qDw==">window.jQuery || document.write('<script src="/static/js/libs/jquery-ui-1.12.1.min.js"><\/script>')</script>
 
-    
-    
+    <script src="/static/js/libs/masonry.pkgd.min.js"></script>
+    <script src="/static/js/libs/html-includes.js"></script>
 
-    
+    <script type="text/javascript" src="/static/js/main-min.b1e587ad1920.js" charset="utf-8"></script>
     
 
     

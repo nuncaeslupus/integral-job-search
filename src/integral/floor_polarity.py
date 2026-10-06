@@ -1350,6 +1350,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "is not a refusal-shaped consumer, so the AST rule abstains."
         ),
     ),
+    "pagination_capture.MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES": (
+        "floor",
+        (
+            "`scanned < MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES` reports the run "
+            "unmeasured when the packages scanned fall below the bound: a minimum "
+            "on a count, breached by deleting packages from the library."
+        ),
+    ),
     "document_reader.EXPORT_VERSION": (
         "neither",
         (

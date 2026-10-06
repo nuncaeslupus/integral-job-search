@@ -1,7 +1,12 @@
 {
-  "captured_at": "2026-08-30",
-  "url": "https://www.python.org/jobs/",
+  "captured_at": "2026-10-05",
+  "url": "https://www.python.org/jobs/?page=2",
   "status": 200,
   "surface": "laptop",
-  "provenance": "unrecorded"
+  "provenance": "live",
+  "response": {
+    "file": "list.html",
+    "bytes": 41588,
+    "sha256": "4f334c70a43ddce69a22aa75531b2eaac57d5c910557fddd9c96a2b7c397fd12"
+  }
 }

@@ -169,9 +169,9 @@
       "compared": true,
       "reason": null,
       "fixture_offers": 3,
-      "probe_offers": 25,
-      "shared_offers": 3,
-      "overlap": 0.12,
+      "probe_offers": 2,
+      "shared_offers": 0,
+      "overlap": 0.0,
       "repeats_the_fixture": false,
       "byte_identical": false
     },
@@ -247,8 +247,8 @@
       "reason": null,
       "fixture_offers": 25,
       "probe_offers": 25,
-      "shared_offers": 23,
-      "overlap": 0.92,
+      "shared_offers": 1,
+      "overlap": 0.04,
       "repeats_the_fixture": false,
       "byte_identical": false
     },
