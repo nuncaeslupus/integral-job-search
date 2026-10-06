@@ -1544,6 +1544,24 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "breached by deleting members."
         ),
     ),
+    "end_to_end.MINIMUM_REVISIONS_REPLAYED": (
+        "floor",
+        (
+            '`measured["revisions_replayed"] < MINIMUM_REVISIONS_REPLAYED` refuses '
+            "the run (reports it unmeasured and exits 3) when the replay drafted "
+            "fewer revisions than the fixture carries: a minimum on a count, "
+            "breached by deleting revisions from the fixture."
+        ),
+    ),
+    "end_to_end.MINIMUM_STEPS_REPLAYED": (
+        "floor",
+        (
+            '`measured["steps_replayed"] < MINIMUM_STEPS_REPLAYED` refuses the run '
+            "(reports it unmeasured and exits 3) when the replay walked fewer steps "
+            "than the fixture carries: a minimum on a count, breached by deleting "
+            "steps from the fixture."
+        ),
+    ),
     "exclusion_live_round.MINIMUM_EXCLUDED_SERVED": (
         "floor",
         (

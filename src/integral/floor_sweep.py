@@ -3739,7 +3739,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: floors the gate itself added (`MINIMUM_POLARITY_CASES`, `MINIMUM_CEILINGS_SET_ASIDE`;
 #: `MINIMUM_BOUNDS_READ_FOR_POLARITY` is compared against a count this sweep does not
 #: trace, so it is out of scope).
-MINIMUM_FLOORS_SWEPT = 95
+#: **97 with T149**: `end_to_end`'s two floors (`MINIMUM_STEPS_REPLAYED`,
+#: `MINIMUM_REVISIONS_REPLAYED`) are two more swept. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 97
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3846,7 +3848,9 @@ MINIMUM_FLOORS_SWEPT = 95
 #: over `reach._cases` — so it joins this count through that file. Measured
 #: with `uv run python -m integral.floor_sweep` against this branch. Still
 #: seven points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=44
+#: **46 with T149**: `end_to_end`'s two floors are in-source literal counts, two more
+#: arithmetically checked; the floor stays 36, ten points of slack.
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=46
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -3874,7 +3878,10 @@ MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 #: marker is needed here either. Never the count of the day (T100): raise it
 #: deliberately when a round changes how many floors resolve through
 #: committed evidence, the same discipline as its two siblings.
-MINIMUM_FLOORS_EVIDENCE_PINNED = 31
+#: **33 with T149**: `end_to_end`'s two floors resolve through the committed
+#: `status/evidence/T149.json` (`steps_replayed_at_least`, `revisions_replayed_at_least`),
+#: two more pinned. Still zero slack.
+MINIMUM_FLOORS_EVIDENCE_PINNED = 33
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:
@@ -4191,12 +4198,14 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: **93 with T141**: `document_reader`'s one floor carries its own comment block
 #: and marker, so it is one scenario more. Still zero slack.
 #: **94 with T160**: `literal_pin.MINIMUM_PINS_SWEPT` is one scenario more. Still zero slack.
+#: **94 with T149**: `end_to_end`'s two floors each carry their own comment block
+#: and marker, so each is one scenario more. Still zero slack.
 #: **92 with T165, merged over main's 94**: four ceilings left the census
 #: (`_swept_floor_sites` no longer
 #: yields them; `MINIMUM_FLOORS_SWEPT` above), and the gate's own swept floors
 #: each carry a marker and so join the battery. Measured with
 #: `measure_prose_clearance()` against this branch. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 92
+MINIMUM_PROSE_MUTATION_SCENARIOS = 94
 
 
 def measure_prose_clearance() -> dict[str, Any]:

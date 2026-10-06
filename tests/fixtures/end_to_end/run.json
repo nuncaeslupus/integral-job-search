@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "provenance": "Shape of the first complete run (identify through a sent application), translated onto the stated fictional candidate of tests/fixtures/generation/master.json. Nothing here is copied from a real candidate's tree. Where the real run's detail was not available to the translator the entry says so in `assumed`.",
+  "candidate": {"display_name": "Marta Ferrer", "handle": "marta-ferrer", "language": "en"},
+  "master": "tests/fixtures/generation/master.json",
+  "episodes": [
+    {"kind": "achievement", "text": "Cut the nightly billing run from six hours to forty minutes by rewriting the reconciliation job."},
+    {"kind": "failure", "text": "Shipped a schema change without a backfill and left invoicing wrong for two days before anyone noticed."}
+  ],
+  "constraints": {
+    "remote_work": {"state": "stated", "value": "hybrid"},
+    "pay_floor": {"state": "stated", "value": "3200 EUR/month"},
+    "residence": {"state": "stated", "value": "Girona"},
+    "mobility": {"state": "unknown"}
+  },
+  "constraints_revisited": {
+    "mobility": {"state": "stated", "value": "will not relocate outside Catalonia"}
+  },
+  "stories": [
+    {"id": "s1", "text": "Led the move of the billing system off the mainframe onto PostgreSQL.", "dimensions": ["team_autonomy"]},
+    {"id": "s2", "text": "Ran the municipal permits API alone for two years.", "dimensions": ["team_autonomy"]}
+  ],
+  "traits": {"team_autonomy": {"evidence_count": 2}},
+  "reactions": [
+    {"text": "The on-call rota in this advert puts me off; the migration work attracts me.", "dimensions": ["on_call"]}
+  ],
+  "offers": [
+    {"slug": "girona-data", "title": "Data engineer", "company": "Girona Datacorp", "outcome": "ranked", "text": "Data engineer, Girona. You will own a PostgreSQL estate, write Python tooling and lead a migration. Kubernetes is a plus."},
+    {"slug": "barcelona-platform", "title": "Platform engineer", "company": "Barna Platforms", "outcome": "ranked", "text": "Platform engineer, Barcelona. PostgreSQL, Docker and Salesforce integrations."},
+    {"slug": "remote-python", "title": "Python developer", "company": "Remote Python SL", "outcome": "ranked", "text": "Python developer, remote within Spain. Python, Docker, PostgreSQL."},
+    {"slug": "valencia-migration", "title": "Migration analyst", "company": "Valencia Payroll", "outcome": "ranked", "text": "Migration analyst, Valencia. Catalan payroll law, PostgreSQL and Terraform."},
+    {"slug": "madrid-backend", "title": "Backend developer", "company": "Madrid Backends", "outcome": "ranked", "text": "Backend developer, Madrid. Python and PostgreSQL."},
+    {"slug": "lleida-closed", "title": "Data engineer", "company": "Lleida Old Co", "outcome": "expired", "text": "Data engineer, Lleida. Applications closed last month."},
+    {"slug": "sevilla-onsite", "title": "Backend developer", "company": "Sevilla Onsite", "outcome": "filtered", "text": "Backend developer, Sevilla, five days on site, relocation required."}
+  ],
+  "sequence": [
+    {"step": "identify", "stage": "greeting", "revisit": false, "writes": ["handle", "session_state"]},
+    {"step": "intake", "stage": "cv_import", "revisit": false, "writes": ["cv_master", "claimed_facts"]},
+    {"step": "constraints", "stage": "first_pass", "revisit": false, "writes": ["constraints", "currency", "locale"]},
+    {"step": "history", "stage": "story_bank", "revisit": false, "writes": ["stories", "trait_evidence"]},
+    {"step": "traits", "stage": "scoring", "revisit": false, "writes": ["traits"]},
+    {"step": "sourcing", "stage": "collect", "revisit": false, "writes": ["offers"]},
+    {"step": "sourcing", "stage": "liveness", "revisit": false, "writes": ["offers"]},
+    {"step": "sourcing", "stage": "filtering", "revisit": false, "writes": ["offers"]},
+    {"step": "constraints", "stage": "revisited_after_filtering", "revisit": true, "writes": ["constraints"], "assumed": "the point at which the real run returned to constraints is not recorded in the task; filtering is where a wrong constraint first shows"},
+    {"step": "understanding", "stage": "extraction", "revisit": false, "writes": ["extractions"]},
+    {"step": "ranking", "stage": "first_ranking", "revisit": false, "writes": ["rankings"]},
+    {"step": "reactions", "stage": "after_ranking", "revisit": false, "writes": ["reaction_evidence"], "assumed": "reactions ran after ranking in the real run, out of canonical order; the graph must still allow it"},
+    {"step": "ranking", "stage": "reranked_after_reactions", "revisit": true, "writes": ["rankings"], "assumed": "that ranking was revisited after reactions is the translator's reading of the revisit"},
+    {"step": "application", "stage": "documents", "revisit": false, "writes": ["generated_documents"]}
+  ],
+  "revisions": [
+    {"n": 1, "offer": "girona-data", "recipient": "hiring team, Girona Datacorp", "asks": [], "approved_episodes": [],
+     "judgement": "First draft: the candidate read it and said it listed no skill at all.",
+     "expect": {"version": 1, "cv_skills": [], "letter_episodes": [], "gaps": [], "voice_omitted": []}},
+    {"n": 2, "offer": "girona-data", "recipient": "Marta Puig, head of data, Girona Datacorp", "asks": ["Python"], "approved_episodes": [],
+     "judgement": "The advert names Python tooling, so the candidate asked for it, and addressed the letter to a named person.",
+     "expect": {"version": 2, "cv_skills": ["Python"], "letter_episodes": [], "gaps": [], "voice_omitted": []}},
+    {"n": 3, "offer": "girona-data", "recipient": "Marta Puig, head of data, Girona Datacorp", "asks": ["Python", "Kubernetes"], "approved_episodes": [0],
+     "judgement": "The candidate approved the billing-run story for this one letter and asked about Kubernetes, which the store does not hold.",
+     "expect": {"version": 3, "cv_skills": ["Python"], "letter_episodes": [0], "gaps": ["Kubernetes"], "voice_omitted": []}},
+    {"n": 4, "offer": "barcelona-platform", "recipient": "hiring team, Barna Platforms", "asks": ["PostgreSQL", "Docker"], "approved_episodes": [],
+     "judgement": "First draft for the platform role lists both skills the advert names.",
+     "expect": {"version": 1, "cv_skills": ["PostgreSQL", "Docker"], "letter_episodes": [], "gaps": [], "voice_omitted": []}},
+    {"n": 5, "offer": "barcelona-platform", "recipient": "hiring team, Barna Platforms", "asks": ["PostgreSQL", "Docker"], "approved_episodes": [],
+     "voice": {"statement": "Do not list Docker; I have only touched it once.", "forbid": ["\\bDocker\\b"]},
+     "judgement": "The candidate objected to Docker being claimed and stated a standing preference, which governs every later draft.",
+     "expect": {"version": 2, "cv_skills": ["PostgreSQL"], "letter_episodes": [], "gaps": [], "voice_omitted": ["Docker"]}},
+    {"n": 6, "offer": "barcelona-platform", "recipient": "Pere Soler, platform lead, Barna Platforms", "asks": ["PostgreSQL", "Salesforce"], "approved_episodes": [1],
+     "judgement": "The candidate chose to let the schema-change failure into this one letter and to leave Salesforce as a named gap.",
+     "expect": {"version": 3, "cv_skills": ["PostgreSQL"], "letter_episodes": [1], "gaps": ["Salesforce"], "voice_omitted": []}},
+    {"n": 7, "offer": "remote-python", "recipient": "hiring team, Remote Python SL", "asks": ["Python", "Docker"], "approved_episodes": [],
+     "judgement": "A different offer: the Docker correction from the platform letter still applies without being repeated.",
+     "expect": {"version": 1, "cv_skills": ["Python"], "letter_episodes": [], "gaps": [], "voice_omitted": ["Docker"]}},
+    {"n": 8, "offer": "remote-python", "recipient": "hiring team, Remote Python SL", "asks": ["Python", "PostgreSQL"], "approved_episodes": [],
+     "judgement": "The candidate swapped the asked-for Docker for PostgreSQL, the skill they would rather lead with.",
+     "expect": {"version": 2, "cv_skills": ["PostgreSQL", "Python"], "letter_episodes": [], "gaps": [], "voice_omitted": []}},
+    {"n": 9, "offer": "remote-python", "recipient": "hiring team, Remote Python SL", "asks": ["Python", "PostgreSQL"], "approved_episodes": [0, 1],
+     "judgement": "Both stories approved for this letter, the achievement before the failure.",
+     "expect": {"version": 3, "cv_skills": ["PostgreSQL", "Python"], "letter_episodes": [0, 1], "gaps": [], "voice_omitted": []}},
+    {"n": 10, "offer": "valencia-migration", "recipient": "hiring team, Valencia Payroll", "asks": ["Catalan payroll law"], "approved_episodes": [],
+     "judgement": "The one advert where the payroll-law skill is the point.",
+     "expect": {"version": 1, "cv_skills": ["Catalan payroll law"], "letter_episodes": [], "gaps": [], "voice_omitted": []}},
+    {"n": 11, "offer": "valencia-migration", "recipient": "hiring team, Valencia Payroll", "asks": ["PostgreSQL", "Terraform", "Catalan payroll law"], "approved_episodes": [],
+     "judgement": "The candidate added PostgreSQL and named Terraform as a gap rather than claim it.",
+     "expect": {"version": 2, "cv_skills": ["PostgreSQL", "Catalan payroll law"], "letter_episodes": [], "gaps": ["Terraform"], "voice_omitted": []}},
+    {"n": 12, "offer": "madrid-backend", "recipient": "hiring team, Madrid Backends", "asks": ["Python"], "approved_episodes": [],
+     "judgement": "First draft for the Madrid advert.",
+     "expect": {"version": 1, "cv_skills": ["Python"], "letter_episodes": [], "gaps": [], "voice_omitted": []}},
+    {"n": 13, "offer": "madrid-backend", "recipient": "Laia Vidal, engineering manager, Madrid Backends", "asks": ["Python", "PostgreSQL"], "approved_episodes": [],
+     "judgement": "The candidate added PostgreSQL and found the name of the person the letter should go to.",
+     "expect": {"version": 2, "cv_skills": ["PostgreSQL", "Python"], "letter_episodes": [], "gaps": [], "voice_omitted": []}}
+  ],
+  "sent": {"revision": 3}
+}
