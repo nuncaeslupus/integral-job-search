@@ -3744,8 +3744,10 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: **98 with T247, over T152's 96**, whose `alert_mailbox` declares two floors
 #: (`MINIMUM_PERMITTED_CASES`, `MINIMUM_REFUSING_CASES`).
 #: **99 with T117**, whose `connector_health.MINIMUM_PACKAGES_BYTE_COMPARED` joined the
-#: population on top of T247's. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 99
+#: population on top of T247's.
+#: **101 with T149, over T117's 99**: `end_to_end`'s two floors (`MINIMUM_STEPS_REPLAYED`,
+#: `MINIMUM_REVISIONS_REPLAYED`) are two more. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 101
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3852,7 +3854,9 @@ MINIMUM_FLOORS_SWEPT = 99
 #: over `reach._cases` — so it joins this count through that file. Measured
 #: with `uv run python -m integral.floor_sweep` against this branch. Still
 #: seven points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=44
+#: **46 with T149**: `end_to_end`'s two floors are in-source literal counts, two more
+#: arithmetically checked; the floor stays 36, ten points of slack.
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=46
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -3880,7 +3884,10 @@ MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 #: marker is needed here either. Never the count of the day (T100): raise it
 #: deliberately when a round changes how many floors resolve through
 #: committed evidence, the same discipline as its two siblings.
-MINIMUM_FLOORS_EVIDENCE_PINNED = 31
+#: **33 with T149**: `end_to_end`'s two floors resolve through the committed
+#: `status/evidence/T149.json` (`steps_replayed_at_least`, `revisions_replayed_at_least`),
+#: two more pinned. Still zero slack.
+MINIMUM_FLOORS_EVIDENCE_PINNED = 33
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:
@@ -4197,6 +4204,8 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: **93 with T141**: `document_reader`'s one floor carries its own comment block
 #: and marker, so it is one scenario more. Still zero slack.
 #: **94 with T160**: `literal_pin.MINIMUM_PINS_SWEPT` is one scenario more. Still zero slack.
+#: **94 with T149**: `end_to_end`'s two floors each carry their own comment block
+#: and marker, so each is one scenario more. Still zero slack.
 #: **92 with T165, merged over main's 94**: four ceilings left the census
 #: (`_swept_floor_sites` no longer
 #: yields them; `MINIMUM_FLOORS_SWEPT` above), and the gate's own swept floors
@@ -4207,8 +4216,10 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: **95 with T247, over T152's 93**: `alert_mailbox`'s two floors each carry
 #: their own comment block and marker, so each is one scenario more.
 #: **96 with T117**: `connector_health.MINIMUM_PACKAGES_BYTE_COMPARED` carries a marker and so
-#: joins the battery on top of T247's. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 96
+#: joins the battery on top of T247's.
+#: **98 with T149, over T117's 96**: `end_to_end`'s two floors are two scenarios more. Still zero
+#: slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 98
 
 
 def measure_prose_clearance() -> dict[str, Any]:
