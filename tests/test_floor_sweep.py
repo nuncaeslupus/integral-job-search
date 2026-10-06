@@ -4791,7 +4791,11 @@ def test_a_ceiling_nobody_adjudicated_is_named_and_still_not_counted_as_a_floor(
     )
     census = floor_sweep.measure(tmp_path)
     assert census["ceilings_excluded_from_the_floor_census"] == ["fresh.CAP"]
-    assert census["bounds_with_a_polarity_nobody_adjudicated"] == ["fresh.CAP"]
+    # Closed rule: the floor is named too - an entry-less member is never admitted silently.
+    assert census["bounds_with_a_polarity_nobody_adjudicated"] == [
+        "fresh.CAP",
+        "fresh.MINIMUM_ITEMS",
+    ]
     assert "fresh.CAP" not in census["floors_in_the_census"]
     assert "fresh.MINIMUM_ITEMS" in census["floors_in_the_census"]
 
@@ -4817,7 +4821,7 @@ def test_an_adjudication_naming_no_bound_is_reported(monkeypatch: pytest.MonkeyP
 def test_an_adjudication_that_overrules_the_ast_is_listed_by_name() -> None:
     measured = floor_sweep.measure_polarity()
     overruled = set(measured["adjudications_overruling_the_ast"])
-    assert {"test_mode.PASTE_CHARS", "sourcing_exclusions._MIN_STEM"} <= overruled
+    assert {"connector_contract._RUN_WINDOW", "sourcing_exclusions._MIN_STEM"} <= overruled
     # ...and none of the four ceilings is overruled into a floor.
     assert not overruled & set(_NAMED_CEILINGS_THE_AST_FINDS)
 
@@ -4904,13 +4908,91 @@ def test_every_member_of_the_floor_census_has_floor_polarity() -> None:
 
 
 def test_a_census_member_that_is_not_a_floor_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both halves, separately. `approval._SHINGLE` is registered `ceiling`: listed as a
+    member that is not a floor *and* counted with the wrong polarity. `annotation.
+    EGRESS_SAMPLE` is registered `neither`: listed as a member that is not a floor and
+    **not** counted wrong, so only the first list can name it."""
     real = floor_sweep.measure()
-    broken = dict(real)
-    broken["floors_in_the_census"] = [*real["floors_in_the_census"], "approval._SHINGLE"]
-    monkeypatch.setattr(floor_sweep, "measure", lambda src_dir=floor_sweep._SRC_DIR: broken)
-    measured = floor_sweep.measure_polarity()
-    assert "approval._SHINGLE" in measured["census_members_that_are_not_floors"] or (
-        measured["bounds_counted_with_the_wrong_polarity"] >= 1
+    for name, wrong in (("approval._SHINGLE", 1), ("annotation.EGRESS_SAMPLE", 0)):
+        broken = dict(real)
+        broken["floors_in_the_census"] = [*real["floors_in_the_census"], name]
+        monkeypatch.setattr(
+            floor_sweep, "measure", lambda src_dir=floor_sweep._SRC_DIR, b=broken: b
+        )
+        measured = floor_sweep.measure_polarity()
+        assert measured["census_members_that_are_not_floors"] == [name]
+        assert measured["bounds_counted_with_the_wrong_polarity"] == wrong
+        assert floor_sweep._polarity_exit_code(measured) == 1
+
+
+def _tree_with(tmp_path: Path, name: str, source: str) -> Path:
+    copy = tmp_path / "integral"
+    shutil.copytree(
+        floor_sweep._SRC_DIR, copy, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
+    )
+    (copy / name).write_text(source, encoding="utf-8")
+    return copy
+
+
+_CEILING_READ_AS_A_FLOOR = (
+    "ITEMS = [1, 2, 3]\nINTAKE_CAP = 3\n"
+    "def run():\n"
+    "    if len(ITEMS) <= INTAKE_CAP:\n"
+    "        return 0\n"
+    "    raise ValueError\n"
+)
+
+
+def test_a_new_ceiling_the_ast_reads_as_a_floor_is_named_not_admitted_silently(
+    tmp_path: Path,
+) -> None:
+    """The closed rule. `if len(ITEMS) <= INTAKE_CAP: return 0` is a ceiling (the cap is
+    breached by *adding*), and the AST reads it as a floor - `return 0` looks like a
+    refusal. Whatever the AST votes, a census member with no register entry is named and
+    the gate exits non-zero, so no misreading can admit a bound silently."""
+    copy = _tree_with(tmp_path, "fresh_cap.py", _CEILING_READ_AS_A_FLOOR)
+    trees = {m.stem: m.tree for m in floor_sweep._module_infos(copy)}
+    assert floor_sweep._bound_polarity(trees["fresh_cap"], "INTAKE_CAP").verdict == "floor"
+    census = floor_sweep.measure(copy)
+    assert "fresh_cap.INTAKE_CAP" in census["floors_in_the_census"]  # the AST let it in...
+    measured = floor_sweep.measure_polarity(copy)  # ...and the register did not
+    assert "fresh_cap.INTAKE_CAP" in measured["bounds_with_no_adjudication"]
+    assert "fresh_cap.INTAKE_CAP" in measured["census_members_that_are_not_floors"]
+    assert floor_sweep._polarity_exit_code(measured) == 1
+
+
+def test_a_register_entry_admits_the_same_bound_and_the_gate_goes_green(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Control: the same module with an entry saying `floor` is a clean census, so the
+    failure above is the missing entry and nothing else."""
+    copy = _tree_with(tmp_path, "fresh_cap.py", _CEILING_READ_AS_A_FLOOR)
+    kept = {**floor_sweep.ADJUDICATIONS, "fresh_cap.INTAKE_CAP": ("floor", "x " * 10)}
+    monkeypatch.setattr(floor_sweep, "ADJUDICATIONS", kept)
+    monkeypatch.setattr(floor_sweep, "MINIMUM_BOUNDS_READ_FOR_POLARITY", 0)  # a copy reads fewer
+    measured = floor_sweep.measure_polarity(copy)
+    assert measured["bounds_with_no_adjudication"] == []
+    assert measured["census_members_that_are_not_floors"] == []
+    assert floor_sweep._polarity_exit_code(measured) == 0
+
+
+def test_the_prose_battery_does_not_mutate_an_unregistered_undetermined_bound(
+    tmp_path: Path,
+) -> None:
+    """G2: `_swept_floor_sites` must not offer a bound the AST cannot place and nobody
+    registered. (An unregistered AST-floor is still mutated: the polarity gate names it
+    and exits 1, so that mutation cannot certify anything.)"""
+    copy = _tree_with(
+        tmp_path,
+        "fresh_send.py",
+        "ITEMS = [1, 2, 3, 4]\nSEND_CAP = 3\n"
+        "def run():\n    if len(ITEMS) < SEND_CAP:\n        send(ITEMS)\n",
+    )
+    swept = {f"{m.stem}.{n}" for m, n, _l, _e in floor_sweep._swept_floor_sites(copy)}
+    assert "fresh_send.SEND_CAP" not in swept
+    assert "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR" in swept
+    assert (
+        "fresh_send.SEND_CAP" in floor_sweep.measure_polarity(copy)["bounds_with_no_adjudication"]
     )
 
 

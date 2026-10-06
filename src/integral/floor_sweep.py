@@ -2360,6 +2360,14 @@ def _delegated_other_operand(
 # reader, F1). A name with no deciding vote, or whose votes disagree, is
 # `undetermined` and needs an entry in `floor_polarity.ADJUDICATIONS`; until it has one
 # it is named, fails the gate, and is still swept for its margin (T159's findings stay).
+#
+# The AST rule is a cross-check, never the gate (second reader, round 3). Three rounds
+# each found one more code shape it misread as a floor, and a misread floor is never
+# reported, so no refinement of the rule can close the hole - an enumeration has no last
+# element. The closed rule: **every member of the floor census needs a register entry
+# whose verdict is `floor`**, whatever the AST votes. An entry-less member is named in
+# `bounds_with_no_adjudication` and `census_members_that_are_not_floors` and the gate
+# exits 1; an entry the AST contradicts is listed as an override.
 # ---------------------------------------------------------------------------
 
 POLARITY_FLOOR = "floor"
@@ -2406,6 +2414,11 @@ _FAILURE_WORDS_RE = re.compile(
 )
 
 
+_FAILURE_VALUE_RE = re.compile(
+    r"unmeasured|fail|error|defect|violation|breach|refus|reject|invalid|blocked", re.IGNORECASE
+)
+
+
 def _target_name(target: ast.expr) -> str:
     if isinstance(target, ast.Name):
         return target.id
@@ -2420,34 +2433,74 @@ def _target_name(target: ast.expr) -> str:
     return ""
 
 
-def _guard_body_refuses(body: list[ast.stmt]) -> bool:
-    """Is this guard body a *refusal* — the response to a limit being crossed?
+def _is_refusal_value(value: ast.expr | None) -> bool:
+    """Is `value` what a refusal hands back: nothing (`return`, `None`) or a bare int or
+    bool constant (an exit status, a flag)? A returned *result* (`'ok'`, `fetch(n)`,
+    `cache.setdefault(...)`) is the normal work, not a refusal."""
+    if value is None:
+        return True
+    return isinstance(value, ast.Constant) and (
+        value.value is None or isinstance(value.value, (int, bool))
+    )
 
-    T165 (second reader, F1): the first version read every `if` body as one, which is
-    wrong whenever the body is the normal work (`if i < CAP: send(x)`), so a ceiling
-    written that way was decided "floor" and needed no adjudication. A body refuses only
-    when it **ends** in `raise`, `continue`, `break` or a `return` of something other
-    than a bare boolean expression (which hands the comparison's own truth back as the
-    answer — not a refusal), or it **records a failure**: a `print`, an assignment or
-    `+=` to a name that says exit/status/fail/error/defect/violation/finding, or an
-    `.append` onto one. Anything else abstains."""
+
+def _is_failure_marker(value: ast.expr) -> bool:
+    """An assigned value that records failure: a non-zero int, `True`, or a string
+    carrying a failure word (`'unmeasured'`, `'failed'`)."""
+    if not isinstance(value, ast.Constant):
+        return False
+    const = value.value
+    if isinstance(const, bool):
+        return const
+    if isinstance(const, int):
+        return const != 0
+    return isinstance(const, str) and bool(_FAILURE_VALUE_RE.search(const))
+
+
+def _guard_body_refuses(body: list[ast.stmt]) -> bool:
+    """Is this guard body a *refusal* - the response to a limit being crossed?
+
+    T165 (second reader, F1, then G1): the first version read every `if` body as one,
+    which is wrong whenever the body is the normal work (`if i < CAP: send(x)`). A body
+    refuses only when it **ends** in `raise`, `continue`, `break` or a `return` that is
+    bare, `None` or an int/bool constant (a returned *result* is the work), or it
+    **records a failure**: a `print(..., file=...)` (a bare `print` is output, not a
+    refusal), an `+=` to a name that says exit/status/fail/error/defect/violation/
+    finding, an assignment to such a name of a failure value (non-zero int, `True`, a
+    string with a failure word - `status = 'sent'` is not one), or an `.append` onto
+    one. Anything else abstains. This rule is only the cross-check: every census member
+    needs a register entry whatever it reads (`measure_polarity`)."""
     if not body:
         return False
     last = body[-1]
     if isinstance(last, (ast.Raise, ast.Continue, ast.Break)):
         return True
-    if isinstance(last, ast.Return) and not isinstance(last.value, (ast.Compare, ast.BoolOp)):
+    if isinstance(last, ast.Return) and _is_refusal_value(last.value):
         return True
     for stmt in body:
-        if isinstance(stmt, (ast.AugAssign, ast.AnnAssign)):
+        if isinstance(stmt, ast.AugAssign):
             if _FAILURE_WORDS_RE.search(_target_name(stmt.target)):
                 return True
+        elif isinstance(stmt, ast.AnnAssign):
+            if (
+                stmt.value is not None
+                and _FAILURE_WORDS_RE.search(_target_name(stmt.target))
+                and _is_failure_marker(stmt.value)
+            ):
+                return True
         elif isinstance(stmt, ast.Assign):
-            if any(_FAILURE_WORDS_RE.search(_target_name(t)) for t in stmt.targets):
+            if _is_failure_marker(stmt.value) and any(
+                _FAILURE_WORDS_RE.search(_target_name(t)) for t in stmt.targets
+            ):
                 return True
         elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-            func = stmt.value.func
-            if isinstance(func, ast.Name) and func.id == "print":
+            call = stmt.value
+            func = call.func
+            if (
+                isinstance(func, ast.Name)
+                and func.id == "print"
+                and any(kw.arg == "file" for kw in call.keywords)
+            ):
                 return True
             if (
                 isinstance(func, ast.Attribute)
@@ -3421,7 +3474,10 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
             qualified = f"{module.stem}.{name}"
             adjudication = ADJUDICATIONS.get(qualified)
             read = _bound_polarity(module.tree, name).verdict
-            if adjudication is None and read != POLARITY_FLOOR:
+            if adjudication is None:
+                # Closed rule (second reader, rounds 1-3): every census member needs a
+                # register entry, whatever the AST votes. A bound the AST misreads as a
+                # floor is therefore named like any other, never admitted silently.
                 polarity_unadjudicated.append(qualified)
             effective = adjudication[0] if adjudication is not None else read
             if effective == POLARITY_CEILING:
@@ -4344,8 +4400,8 @@ _POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
         "floor",
     ),
     (
-        "breach below, printed",
-        ("MIN = 3\ndef f(n):\n    if n < MIN:\n        print(n)"),
+        "breach below, printed to stderr",
+        ("MIN = 3\ndef f(n):\n    if n < MIN:\n        print(n, file=sys.stderr)"),
         "MIN",
         "floor",
     ),
@@ -4608,21 +4664,101 @@ _POLARITY_CASES: tuple[tuple[str, str, str, str], ...] = (
         "MIN",
         "undetermined",
     ),
+    (
+        "guarded retry returns the work",
+        (
+            "MAX_RETRIES = 3\n"
+            "def f(attempt):\n"
+            "    if attempt < MAX_RETRIES:\n"
+            "        return fetch(attempt + 1)\n"
+            "    return None"
+        ),
+        "MAX_RETRIES",
+        "undetermined",
+    ),
+    (
+        "guarded print is output, not a refusal",
+        (
+            "LIMIT = 3\n"
+            "def f(rows):\n"
+            "    for i, r in enumerate(rows):\n"
+            "        if i < LIMIT:\n"
+            "            print(r)"
+        ),
+        "LIMIT",
+        "undetermined",
+    ),
+    (
+        "guarded status assignment of a work value",
+        (
+            "CAP = 3\n"
+            "def f(n, row):\n"
+            "    if n < CAP:\n"
+            "        row['status'] = 'sent'\n"
+            "        send(row)"
+        ),
+        "CAP",
+        "undetermined",
+    ),
+    (
+        "guarded return of a computed result",
+        (
+            "MAX_CACHE = 3\n"
+            "def f(cache, k):\n"
+            "    if len(cache) < MAX_CACHE:\n"
+            "        return cache.setdefault(k, compute(k))\n"
+            "    return None"
+        ),
+        "MAX_CACHE",
+        "undetermined",
+    ),
+    (
+        "guarded return of a string constant",
+        ("CAP = 3\ndef f(n):\n    if n <= CAP:\n        return 'ok'\n    return 'over'"),
+        "CAP",
+        "undetermined",
+    ),
+    (
+        "control, failure recorded onto errors",
+        ("CAP = 3\ndef f(n, errors):\n    if n > CAP:\n        errors.append(n)"),
+        "CAP",
+        "ceiling",
+    ),
+    (
+        "control, stderr print and exit status",
+        (
+            "MIN = 3\n"
+            "import sys\n"
+            "def f(m):\n"
+            "    if m < MIN:\n"
+            "        print('x', file=sys.stderr)\n"
+            "        return 1\n"
+            "    return 0"
+        ),
+        "MIN",
+        "floor",
+    ),
+    (
+        "bare print is output",
+        ("MIN = 3\ndef f(n):\n    if n < MIN:\n        print(n)"),
+        "MIN",
+        "undetermined",
+    ),
 )
 
 #: A floor on the oracle's own battery, in `naming.MINIMUM_SCANNED`'s style (T100):
 #: the cases are a hand-maintained tuple, so a raw count would read as compliant
 #: merely because nobody deleted the last entry.
-#: arsenal-floor-margin: MINIMUM_POLARITY_CASES value=43
-MINIMUM_POLARITY_CASES = 43
+#: arsenal-floor-margin: MINIMUM_POLARITY_CASES value=51
+MINIMUM_POLARITY_CASES = 51
 
 #: A floor on how many bounds the gate reads — the census's floors plus the ceilings
 #: it set aside — committed as a **literal** per T122: derived from the census's own
 #: result it would shrink with any bound the sweep stopped finding, which is this
-#: task's defect committed inside this task's gate. Measured 97 when T165 landed
-#: (93 floors in the census, four ceilings out of it), zero slack.
-#: arsenal-floor-margin: MINIMUM_BOUNDS_READ_FOR_POLARITY value=97
-MINIMUM_BOUNDS_READ_FOR_POLARITY = 97
+#: task's defect committed inside this task's gate. Measured 99 on the last
+#: T165 round (95 floors in the census, four ceilings out of it), zero slack.
+#: arsenal-floor-margin: MINIMUM_BOUNDS_READ_FOR_POLARITY value=99
+MINIMUM_BOUNDS_READ_FOR_POLARITY = 99
 
 #: How many ceilings the census must have set aside. The task named five; the AST rule
 #: and the committed adjudications find four, because the fifth,
@@ -4694,10 +4830,20 @@ def measure_polarity(src_dir: Path | None = None) -> dict[str, Any]:
 
     # F3: every member of the census is a floor — the self floors included, which the
     # census loop does not route through the polarity check.
+    # Closed rule: membership needs a register entry whose verdict is `floor`. The AST
+    # vote is only a cross-check (`overrides` below), so no misreading of a code shape
+    # can admit a bound: an entry-less member is named in both lists, and an entry that
+    # says anything but `floor` for a member is a member that is not a floor.
+    no_entry_members = sorted(
+        f"{stem}.{name}"
+        for stem, name in counted_as_floors
+        if f"{stem}.{name}" not in ADJUDICATIONS
+    )
     not_floor_members = sorted(
         f"{stem}.{name}"
         for stem, name in counted_as_floors
-        if _effective_polarity(stem, name, trees[stem]) != POLARITY_FLOOR
+        if f"{stem}.{name}" not in ADJUDICATIONS
+        or ADJUDICATIONS[f"{stem}.{name}"][0] != POLARITY_FLOOR
     )
 
     # Where the AST decides and an adjudication says otherwise, the override is listed by
@@ -4710,8 +4856,10 @@ def measure_polarity(src_dir: Path | None = None) -> dict[str, Any]:
     dangling = sorted(q for q in ADJUDICATIONS if not _bound_exists(trees, q))
     oracle = measure_polarity_oracle()
     bounds_read = len(counted_as_floors) + len(set_aside)
-    unadjudicated = sorted(set(census["bounds_read_and_out_of_scope"]) - set(ADJUDICATIONS)) + list(
-        census["bounds_with_a_polarity_nobody_adjudicated"]
+    unadjudicated = (
+        sorted(set(census["bounds_read_and_out_of_scope"]) - set(ADJUDICATIONS))
+        + list(census["bounds_with_a_polarity_nobody_adjudicated"])
+        + no_entry_members
     )
     measured = (
         bounds_read >= MINIMUM_BOUNDS_READ_FOR_POLARITY
@@ -4724,7 +4872,7 @@ def measure_polarity(src_dir: Path | None = None) -> dict[str, Any]:
         "bounds_read": bounds_read,
         "ceilings_set_aside": sorted(f"{s}.{n}" for s, n in set_aside),
         "census_members_that_are_not_floors": not_floor_members,
-        "bounds_with_no_adjudication": sorted(unadjudicated),
+        "bounds_with_no_adjudication": sorted(set(unadjudicated)),
         "adjudications_without_a_bound": dangling,
         "adjudications_overruling_the_ast": overrides,
         **oracle,

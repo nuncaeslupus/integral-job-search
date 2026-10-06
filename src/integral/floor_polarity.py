@@ -1358,4 +1358,598 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "EXPORT_VERSION`): it identifies a format and bounds no count."
         ),
     ),
+    "approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS": (
+        "floor",
+        (
+            '`measured["carried_disclosure_checks_evaluated"] < '
+            "MINIMUM_CARRIED_DISCLOSURE_CHECKS` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "approval.MINIMUM_CARRIED_DISCLOSURE_STATES": (
+        "floor",
+        (
+            '`measured["carried_disclosure_states_evaluated"] < '
+            "MINIMUM_CARRIED_DISCLOSURE_STATES` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "arsenal_source.MINIMUM_BUNDLE_FILES": (
+        "floor",
+        (
+            '`measured["bundle_files"] < MINIMUM_BUNDLE_FILES` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "arsenal_source.MINIMUM_VENDORED_SKILLS": (
+        "floor",
+        (
+            '`measured["vendored_skills"] < MINIMUM_VENDORED_SKILLS` refuses the '
+            "run (reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "audit_followup.CASES_AT_LEAST": (
+        "floor",
+        (
+            '`measured["uncommitted_audit_cases_evaluated"] < CASES_AT_LEAST` '
+            "refuses the run (reports it unmeasured and exits non-zero) when the "
+            "measured population falls below the bound: a minimum on a count, "
+            "breached by deleting members."
+        ),
+    ),
+    "bodyless_post.MINIMUM_PROBES": (
+        "floor",
+        (
+            "`packages < MINIMUM_PACKAGES or len(probes) < MINIMUM_PROBES` refuses "
+            "the run (reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "bulk_filter.MINIMUM_BATCH": (
+        "floor",
+        (
+            "Never compared in source; committed beside the measured `offers_in` as"
+            " `offers_in_at_least`, a lower bound on the batch size, so deleting "
+            "rows from the planted batch is what breaches it: a floor on a count."
+        ),
+    ),
+    "bulk_filter.MUST_KEEP_ROWS": (
+        "floor",
+        (
+            "Never compared in source; committed beside the measured "
+            "`must_keep_rows_evaluated` as `must_keep_rows_at_least`, a lower bound"
+            " on the planted must-keep rows, so deleting a row breaches it: a floor"
+            " on a count."
+        ),
+    ),
+    "candidate.MINIMUM_CASES": (
+        "floor",
+        (
+            '`measured["cases_checked"] < MINIMUM_CASES` refuses the run (reports '
+            "it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "capture_provenance.MINIMUM_CAPTURES_SCANNED": (
+        "floor",
+        (
+            "`scanned < MINIMUM_CAPTURES_SCANNED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "connector_procedure.MINIMUM_CASES": (
+        "floor",
+        (
+            "`checked < MINIMUM_CASES` refuses the run (reports it unmeasured and "
+            "exits non-zero) when the measured population falls below the bound: a "
+            "minimum on a count, breached by deleting members."
+        ),
+    ),
+    "connectors.MINIMUM_PARTIAL_EXTRACTION_CONTRACTS": (
+        "floor",
+        (
+            "`len(PARTIAL_EXTRACTION_CONTRACTS) < "
+            "MINIMUM_PARTIAL_EXTRACTION_CONTRACTS` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "connectors.MINIMUM_PROBES": (
+        "floor",
+        (
+            '`measured["probes_run"] < MINIMUM_PROBES` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "constraints_step.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "cv_store.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "cv_store.MINIMUM_READ_CHECKS": (
+        "floor",
+        (
+            '`reads["checks_run"] < MINIMUM_READ_CHECKS` refuses the run (reports '
+            "it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "decline.MINIMUM_ASKS": (
+        "floor",
+        (
+            '`measured["asks_evaluated"] < MINIMUM_ASKS` refuses the run (reports '
+            "it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "dedup.MINIMUM_CLUSTER_PAIRS": (
+        "floor",
+        (
+            '`measured["majority_cluster_pairs_seeded"] < MINIMUM_CLUSTER_PAIRS` '
+            "refuses the run (reports it unmeasured and exits non-zero) when the "
+            "measured population falls below the bound: a minimum on a count, "
+            "breached by deleting members."
+        ),
+    ),
+    "dedup.MINIMUM_PAIRS": (
+        "floor",
+        (
+            '`measured["pairs_judged"] < MINIMUM_PAIRS` refuses the run (reports it'
+            " unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "document_reader.MINIMUM_CONTRACTS_EVALUATED": (
+        "floor",
+        (
+            "`contracts < MINIMUM_CONTRACTS_EVALUATED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "elicit_extract.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "employer_boards.MINIMUM_CONFORMING": (
+        "floor",
+        (
+            '`measured["ats_host_connectors_conforming"] < MINIMUM_CONFORMING` '
+            "refuses the run (reports it unmeasured and exits non-zero) when the "
+            "measured population falls below the bound: a minimum on a count, "
+            "breached by deleting members."
+        ),
+    ),
+    "exclusion_live_round.MINIMUM_EXCLUDED_SERVED": (
+        "floor",
+        (
+            "`len(excluded_served) < MINIMUM_EXCLUDED_SERVED` refuses the run "
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "exclusion_live_round.MINIMUM_EXCLUSIONS_TRIPPED": (
+        "floor",
+        (
+            "`len(tripped_abouts) < MINIMUM_EXCLUSIONS_TRIPPED` refuses the run "
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "exclusion_live_round.MINIMUM_UNEXCLUDED_SERVED": (
+        "floor",
+        (
+            "`len(unexcluded_served) < MINIMUM_UNEXCLUDED_SERVED` refuses the run "
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR": (
+        "floor",
+        (
+            "`len(spans) < _CONFIRMING_MATCHES_FOR_BIPOLAR and not negated_any` "
+            "returns None, so a dimension with fewer confirming matches than the "
+            "bound is refused and deleting a match breaches it: a minimum, not a "
+            "cap."
+        ),
+    ),
+    "floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED": (
+        "floor",
+        (
+            '`measured["arithmetically_checked"] < '
+            "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED` fails the run when fewer floors"
+            " reached the margin arithmetic than the bound: a minimum on a count, "
+            "breached by deletion."
+        ),
+    ),
+    "floor_sweep.MINIMUM_FLOORS_SWEPT": (
+        "floor",
+        (
+            '`measured["floors_swept"] < MINIMUM_FLOORS_SWEPT` fails the run when '
+            "the census counted fewer floors than the bound: a minimum on a count, "
+            "breached by a floor leaving the sweep."
+        ),
+    ),
+    "freshness.MINIMUM_OFFERS": (
+        "floor",
+        (
+            '`measured["offers_raised"] < MINIMUM_OFFERS` refuses the run (reports '
+            "it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED": (
+        "floor",
+        (
+            "`probed < MINIMUM_DETECTOR_STATES_PROBED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES": (
+        "floor",
+        (
+            "`distinct < MINIMUM_DISTINCT_STATE_TRACES` refuses the run (reports it"
+            " unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "gate_reader_agreement.MINIMUM_ARRANGEMENTS_PROBED": (
+        "floor",
+        (
+            "`probed < MINIMUM_ARRANGEMENTS_PROBED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "identity.MINIMUM_PROBES": (
+        "floor",
+        (
+            '`measured["probes_run"] < MINIMUM_PROBES` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "interview.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "lifecycle.MINIMUM_SCENARIOS": (
+        "floor",
+        (
+            '`measured["scenarios_checked"] < MINIMUM_SCENARIOS` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "naming.MINIMUM_SCANNED": (
+        "floor",
+        (
+            '`measured["files_scanned"] < MINIMUM_SCANNED` refuses the run (reports'
+            " it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "offers.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "page_placeholder.MINIMUM_PROBES": (
+        "floor",
+        (
+            "`len(probes) < MINIMUM_PROBES` refuses the run (reports it unmeasured "
+            "and exits non-zero) when the measured population falls below the "
+            "bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "pagination_capture.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED": (
+        "floor",
+        (
+            "`query_key_occurrences_scanned < "
+            "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "pagination_capture.MINIMUM_REQUEST_KEYS": (
+        "floor",
+        (
+            "`request_keys < MINIMUM_REQUEST_KEYS` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "pay.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "plan_v2._MIN_TASK_CELLS": (
+        "floor",
+        (
+            "`len(cells) < _MIN_TASK_CELLS` refuses the run (reports it unmeasured "
+            "and exits non-zero) when the measured population falls below the "
+            "bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "presentation_log.MINIMUM_CONTRACTS": (
+        "floor",
+        (
+            "`len(CONTRACTS) < MINIMUM_CONTRACTS` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "profile.MINIMUM_FIELDS_CHECKED": (
+        "floor",
+        (
+            '`measured["fields_checked"] < MINIMUM_FIELDS_CHECKED` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "profile_capture.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "profile_capture.MINIMUM_SUBJECT_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_SUBJECT_CHECKS` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "query_capture.MINIMUM_STEERABLE_PACKAGES_CHECKED": (
+        "floor",
+        (
+            "`checked < MINIMUM_STEERABLE_PACKAGES_CHECKED` refuses the run "
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "question_bank.MINIMUM_PROBES": (
+        "floor",
+        (
+            '`measured["adversarial_checks_run"] < MINIMUM_PROBES` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "reach.MINIMUM_FIXTURES": (
+        "floor",
+        (
+            '`measured["fixtures_checked"] < MINIMUM_FIXTURES` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "reader_notes.MINIMUM_PROBES": (
+        "floor",
+        (
+            '`measured["adversarial_checks_run"] < MINIMUM_PROBES` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "retraction.MINIMUM_SCANNED": (
+        "floor",
+        (
+            '`measured["derived_files_scanned"] < MINIMUM_SCANNED` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "revision.MINIMUM_AGED": (
+        "floor",
+        (
+            '`measured["artefacts_aged"] < MINIMUM_AGED` refuses the run (reports '
+            "it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "robots.FIXTURES_AT_LEAST": (
+        "floor",
+        (
+            '`measured["robots_verdicts_evaluated"] < FIXTURES_AT_LEAST` refuses '
+            "the run (reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "salary_recovery.MINIMUM_WORDING_CASES": (
+        "floor",
+        (
+            "`len(WORDING_CASES) < MINIMUM_WORDING_CASES` refuses the run (reports "
+            "it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "scoring.MINIMUM_TURNS": (
+        "floor",
+        (
+            '`measured["turns_evaluated"] < MINIMUM_TURNS` refuses the run (reports'
+            " it unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "search_terms.MINIMUM_CONTRACTS": (
+        "floor",
+        (
+            "`len(CONTRACTS) < MINIMUM_CONTRACTS` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "session.MINIMUM_PROBES": (
+        "floor",
+        (
+            '`measured["probes_run"] < MINIMUM_PROBES` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "sourcing.MINIMUM_OFFERS_COLLECTED": (
+        "floor",
+        (
+            "`collected < MINIMUM_OFFERS_COLLECTED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "sourcing_cycles.MINIMUM_NON_IMPROVING": (
+        "floor",
+        (
+            '`measured["non_improving_cycles"] < MINIMUM_NON_IMPROVING` refuses the'
+            " run (reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "sourcing_market.MINIMUM_EMPTY_MARKETS": (
+        "floor",
+        (
+            '`measured["empty_markets_reported"] < MINIMUM_EMPTY_MARKETS` refuses '
+            "the run (reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "sourcing_reentry.MINIMUM_TRIGGERS": (
+        "floor",
+        (
+            '`measured["reentry_offers"] < MINIMUM_TRIGGERS` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "sourcing_scope_review.MINIMUM_STANDING": (
+        "floor",
+        (
+            '`measured["standing_decisions"] < MINIMUM_STANDING` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "sourcing_strategy.MINIMUM_PROPOSALS": (
+        "floor",
+        (
+            '`scope["proposals_offered"] < MINIMUM_PROPOSALS` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "sourcing_strategy.MINIMUM_SCOPE_CHANGES": (
+        "floor",
+        (
+            '`consent["scope_changes_applied"] < MINIMUM_SCOPE_CHANGES` refuses the'
+            " run (reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "sourcing_strategy.MINIMUM_TRIGGERS": (
+        "floor",
+        (
+            '`measured["exhaustion_triggers"] < MINIMUM_TRIGGERS` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "spec_consistency.MINIMUM_DECLARATIONS_FOUND": (
+        "floor",
+        (
+            "`found < MINIMUM_DECLARATIONS_FOUND` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "step_gates.MINIMUM_STEPS_CHECKED": (
+        "floor",
+        (
+            '`measured["steps_checked"] < MINIMUM_STEPS_CHECKED` refuses the run '
+            "(reports it unmeasured and exits non-zero) when the measured "
+            "population falls below the bound: a minimum on a count, breached by "
+            "deleting members."
+        ),
+    ),
+    "step_runtime.MINIMUM_PROBES": (
+        "floor",
+        (
+            '`measured["probes_run"] < MINIMUM_PROBES` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "trait_sufficiency.MINIMUM_CHECKS": (
+        "floor",
+        (
+            '`measured["checks_run"] < MINIMUM_CHECKS` refuses the run (reports it '
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "verified_gate.MINIMUM_CI_CLAIM_SCENARIOS": (
+        "floor",
+        (
+            '`ci_measured["ci_claim_scenarios_checked"] < '
+            "MINIMUM_CI_CLAIM_SCENARIOS` refuses the run (reports it unmeasured and"
+            " exits non-zero) when the measured population falls below the bound: a"
+            " minimum on a count, breached by deleting members."
+        ),
+    ),
 }

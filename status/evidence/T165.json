@@ -13,12 +13,12 @@
   "adjudications_overruling_the_ast": [
     "connector_contract._RUN_WINDOW",
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED",
-    "sourcing_exclusions._MIN_STEM",
-    "test_mode.PASTE_CHARS"
+    "sourcing.OFFER_CEILING",
+    "sourcing_exclusions._MIN_STEM"
   ],
   "polarity_cases_misjudged": [],
   "gate_status": "measured",
-  "bounds_read_at_least": 97,
-  "polarity_cases_checked_at_least": 43,
+  "bounds_read_at_least": 99,
+  "polarity_cases_checked_at_least": 51,
   "ceilings_set_aside_at_least": 4
 }

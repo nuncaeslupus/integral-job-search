@@ -85,7 +85,7 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4633
+      "line": 4769
     },
     {
       "module": "gate_detector_states",
@@ -322,19 +322,19 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3794,
+      "line": 3850,
       "population": 44
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3821,
+      "line": 3877,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3686,
+      "line": 3742,
       "population": 95
     },
     {
