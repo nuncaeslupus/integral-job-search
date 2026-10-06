@@ -100,7 +100,7 @@
     {
       "module": "fixture_shapes",
       "name": "MINIMUM_SHAPE_CELLS",
-      "line": 113
+      "line": 120
     },
     {
       "module": "floor_sweep",
