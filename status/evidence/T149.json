@@ -1,5 +1,6 @@
 {
   "end_to_end_replay_defects": 0,
+  "end_to_end_replay_status": "measured",
   "steps_replayed_at_least": 14,
   "revisions_replayed_at_least": 13,
   "steps_replayed": 14,

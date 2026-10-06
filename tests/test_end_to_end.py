@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from integral import candidate, liveness
 from integral import end_to_end as e2e
 from integral.application_render import render_document
 from integral.approval import Payload, payload_digest, read_payload, verify_send
@@ -73,7 +74,7 @@ def test_a_step_run_before_its_input_exists_is_named(tmp_path: Path) -> None:
 
 def test_a_step_whose_output_the_detector_cannot_see_is_named(tmp_path: Path) -> None:
     unresolved = FIXTURE.model_copy(
-        update={"constraints": {**FIXTURE.constraints, "mobility": {"state": "pending"}}}
+        update={"constraints": {**FIXTURE.constraints, "relocation": {"state": "pending"}}}
     )
     defects = _run(tmp_path, unresolved).defects
     assert any("constraints/first_pass: wrote constraints" in d for d in defects)
@@ -98,9 +99,9 @@ def test_ranking_never_carries_an_expired_offer(tmp_path: Path) -> None:
     _run(tmp_path)
     store = _store(tmp_path)
     ranking = next(r for r in FIXTURE.sequence if r.stage == "reranked_after_reactions")
-    path = store.path("rankings", f"{ranking.stage}.json")
+    path = store.path("rankings", e2e._ranking_name(ranking))
     payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["offers"].append(e2e._offer_ids(FIXTURE)["lleida-closed"])
+    payload["pareto"].append(e2e._offer_ids(FIXTURE)["lleida-closed"])
     path.write_text(json.dumps(payload), encoding="utf-8")
     seen = e2e.Replay()
     e2e._seams(seen, store, FIXTURE, ranking)
@@ -225,7 +226,9 @@ def test_a_replay_that_walked_too_little_is_unmeasured_not_clean(tmp_path: Path)
     short.write_text(json.dumps(data), encoding="utf-8")
     evidence = tmp_path / "T149.json"
     assert e2e._main(["end_to_end", str(evidence), str(short)]) == 3
-    assert json.loads(evidence.read_text(encoding="utf-8"))["end_to_end_replay_defects"] == 0
+    written = json.loads(evidence.read_text(encoding="utf-8"))
+    assert written["end_to_end_replay_defects"] == -1
+    assert written["end_to_end_replay_status"] == "unmeasured"
 
 
 def test_a_to_block_that_does_not_survive_the_disk_is_named(
@@ -304,3 +307,162 @@ def test_the_committed_evidence_is_what_the_replay_measures() -> None:
     committed = json.loads(e2e.DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8"))
     assert committed == measured
     assert committed["end_to_end_replay_defects"] == 0
+    assert committed["end_to_end_replay_status"] == "measured"
+
+
+# ---------------------------------------------------------------------------
+# the second reader's fixtures on #775 (F1-F6): each stage is judged from what the
+# stage before left on disk, with the real code, and the labels are only the
+# expectation.
+
+
+def _sequence(fixture: e2e.Fixture, runs: list[e2e.StepRun]) -> e2e.Fixture:
+    return fixture.model_copy(update={"sequence": tuple(runs)})
+
+
+def _index(stage: str) -> int:
+    return next(i for i, r in enumerate(FIXTURE.sequence) if r.stage == stage)
+
+
+def test_an_application_before_the_first_ranking_is_named(tmp_path: Path) -> None:
+    runs = list(FIXTURE.sequence)
+    application = runs.pop(_index("documents"))
+    runs.insert(_index("first_ranking"), application)
+    assert len(runs) == len(FIXTURE.sequence) == 14
+    defects = _run(tmp_path, _sequence(FIXTURE, runs)).defects
+    assert "application/documents: no ranking is on disk to draft for" in defects
+    assert any("revision 1" in d and "no ranking on disk names" in d for d in defects)
+
+
+def test_an_application_for_an_offer_no_ranking_names_is_named(tmp_path: Path) -> None:
+    # The fixture's labels say nothing about this offer being ranked at all; the
+    # real ranking over what is on disk did not carry it, so drafting for it is named.
+    revision = _revision(FIXTURE, 12, offer="lleida-closed")
+    defects = _run(tmp_path, revision).defects
+    assert any("revision 12" in d and "no ranking on disk names" in d for d in defects)
+
+
+def test_a_run_that_never_retires_or_screens_names_both_offers(tmp_path: Path) -> None:
+    runs = list(FIXTURE.sequence)
+    for stage in ("liveness", "filtering"):  # still 14 steps, nothing retires anything
+        i = next(i for i, r in enumerate(runs) if r.stage == stage)
+        runs[i] = runs[i].model_copy(update={"stage": f"recollect_{stage}"})
+    defects = _run(tmp_path, _sequence(FIXTURE, runs)).defects
+    assert any("lleida-closed" in d for d in defects)
+    assert any("sevilla-onsite" in d for d in defects)
+
+
+def test_a_liveness_reader_that_sees_no_closure_is_noticed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(liveness, "dead_phrase_in", lambda text: None)
+    defects = _run(tmp_path).defects
+    assert any(
+        "sourcing/liveness: expired offer lleida-closed is still 'new'" in d for d in defects
+    )
+
+
+def test_the_closed_advert_really_reads_as_closed_to_the_real_reader() -> None:
+    closed = next(s for s in FIXTURE.offers if s.slug == "lleida-closed")
+    assert liveness.dead_phrase_in(closed.text) is not None
+    for spec in FIXTURE.offers:
+        if spec.outcome != "expired":
+            assert liveness.dead_phrase_in(spec.text) is None, spec.slug
+
+
+def test_a_constraint_screen_that_removes_nothing_is_noticed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = candidate.filter_hard_constraints
+
+    def lenient(constraints: Any, offers: Any) -> Any:
+        result = real(constraints, offers)
+        return result.__class__(
+            surviving=tuple(o.offer_id for o in offers),
+            removed=(),
+            outstanding_fields=result.outstanding_fields,
+            unplaced=(),
+        )
+
+    monkeypatch.setattr(e2e, "filter_hard_constraints", lenient)
+    defects = _run(tmp_path).defects
+    assert any("filtered offer sevilla-onsite is still 'new'" in d for d in defects)
+
+
+def test_the_screen_reads_the_stored_constraints_not_the_label(tmp_path: Path) -> None:
+    # Nothing in the labels changes: the candidate simply no longer holds the
+    # constraint that rules the Sevilla offer out, so the real screen keeps it.
+    kept = FIXTURE.model_copy(
+        update={
+            "constraints": {k: v for k, v in FIXTURE.constraints.items() if k != "relocation"},
+            "constraints_revisited": {},
+        }
+    )
+    defects = _run(tmp_path, kept).defects
+    assert any("filtered offer sevilla-onsite is still 'new'" in d for d in defects)
+
+
+def test_an_offer_whose_facts_the_screen_clears_is_named(tmp_path: Path) -> None:
+    spec = next(s for s in FIXTURE.offers if s.slug == "sevilla-onsite")
+    plain = spec.model_copy(update={"requires_relocation": False, "delivery": "remote"})
+    offers = tuple(plain if s.slug == spec.slug else s for s in FIXTURE.offers)
+    defects = _run(tmp_path, FIXTURE.model_copy(update={"offers": offers})).defects
+    assert any("sevilla-onsite" in d for d in defects)
+
+
+def test_a_ranking_is_built_from_the_extractions_on_disk(tmp_path: Path) -> None:
+    _run(tmp_path)
+    store = _store(tmp_path)
+    ids = e2e._offer_ids(FIXTURE)
+    expected = {ids[s.slug] for s in FIXTURE.offers if s.outcome == "ranked"}
+    assert e2e.ranked_offers(store) == expected
+    paths = sorted(store.path("rankings").glob("*.json"))
+    assert len(paths) == 2
+    for path in paths:
+        assert set(json.loads(path.read_text(encoding="utf-8"))["pareto"]) == expected
+
+
+def test_a_send_folder_edited_after_staging_is_refused(tmp_path: Path) -> None:
+    _run(tmp_path)
+    store = _store(tmp_path)
+    ids = e2e._offer_ids(FIXTURE)
+    sent = next(r for r in FIXTURE.revisions if r.n == FIXTURE.sent.revision)
+    offer, version = ids[sent.offer], sent.expect.version
+    letter = store.path("cv", "generated", offer, f"v{version}", "send", "letter.md")
+    letter.write_text(letter.read_text(encoding="utf-8") + "\nAn unapproved sentence.\n")
+    assert verify_send(store, offer, version) != []
+
+
+def test_a_verifier_that_passes_a_tampered_send_is_noticed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(e2e, "verify_send", lambda *a, **k: [])
+    defects = _run(tmp_path).defects
+    assert any("still verifies" in d for d in defects)
+
+
+def test_application_swapped_with_collect_is_named_not_a_traceback(tmp_path: Path) -> None:
+    runs = list(FIXTURE.sequence)
+    a, c = _index("documents"), _index("collect")
+    runs[a], runs[c] = runs[c], runs[a]
+    defects = _run(tmp_path, _sequence(FIXTURE, runs)).defects  # must not raise
+    assert any(d.startswith("application/documents") for d in defects)
+    assert (
+        "application/documents: ran without offers, which the step before did not hand over"
+        in defects
+    )
+
+
+def test_a_revisit_that_is_the_first_visit_is_named(tmp_path: Path) -> None:
+    runs = [
+        r.model_copy(update={"revisit": True}) if r.step == "identify" else r
+        for r in FIXTURE.sequence
+    ]
+    defects = _run(tmp_path, _sequence(FIXTURE, runs)).defects
+    assert any("identify/greeting: marked as a revisit of identify" in d for d in defects)
+
+
+def test_every_guess_the_header_promises_to_mark_is_marked() -> None:
+    assert "`assumed`" in FIXTURE.provenance
+    assert all(r.assumed for r in FIXTURE.revisions)
+    assert FIXTURE.sent.assumed
