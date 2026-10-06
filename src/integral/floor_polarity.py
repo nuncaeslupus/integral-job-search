@@ -1122,6 +1122,15 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "questions asked."
         ),
     ),
+    "connector_health.MINIMUM_PACKAGES_BYTE_COMPARED": (
+        "floor",
+        (
+            'Read as `"measured" if compared >= FLOOR else "unmeasured"`: the gate '
+            "reports measured only when the byte-compared population reaches it, so "
+            "deleting a probe breaches it. A conditional expression is not a "
+            "refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
     "connector_health.MINIMUM_PROBES_COMPARED": (
         "floor",
         (
