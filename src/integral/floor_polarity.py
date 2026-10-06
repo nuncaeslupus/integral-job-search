@@ -1122,6 +1122,15 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "questions asked."
         ),
     ),
+    "connector_health.MINIMUM_PACKAGES_BYTE_COMPARED": (
+        "floor",
+        (
+            'Read as `"measured" if compared >= FLOOR else "unmeasured"`: the gate '
+            "reports measured only when the byte-compared population reaches it, so "
+            "deleting a probe breaches it. A conditional expression is not a "
+            "refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
     "connector_health.MINIMUM_PROBES_COMPARED": (
         "floor",
         (
@@ -1356,6 +1365,24 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "`scanned < MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES` reports the run "
             "unmeasured when the packages scanned fall below the bound: a minimum "
             "on a count, breached by deleting packages from the library."
+        ),
+    ),
+    "alert_mailbox.MINIMUM_PERMITTED_CASES": (
+        "floor",
+        (
+            "`len(permitted) >= MINIMUM_PERMITTED_CASES and len(refusing) >= "
+            "MINIMUM_REFUSING_CASES` decides measured or unmeasured: the gate reads "
+            "measured only when the permitted cases reach it, so deleting a case "
+            "breaches it. A boolean assignment is not a refusal-shaped consumer."
+        ),
+    ),
+    "alert_mailbox.MINIMUM_REFUSING_CASES": (
+        "floor",
+        (
+            "`len(permitted) >= MINIMUM_PERMITTED_CASES and len(refusing) >= "
+            "MINIMUM_REFUSING_CASES` decides measured or unmeasured: the gate reads "
+            "measured only when the refusing cases reach it, so deleting a case "
+            "breaches it. A boolean assignment is not a refusal-shaped consumer."
         ),
     ),
     "document_reader.EXPORT_VERSION": (

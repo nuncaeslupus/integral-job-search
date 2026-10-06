@@ -3739,10 +3739,15 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: floors the gate itself added (`MINIMUM_POLARITY_CASES`, `MINIMUM_CEILINGS_SET_ASIDE`;
 #: `MINIMUM_BOUNDS_READ_FOR_POLARITY` is compared against a count this sweep does not
 #: trace, so it is out of scope).
-#: **98 with T152 and T149, over T165's 95**: `pagination_capture` declares one floor
-#: (`MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES`) and `end_to_end`'s two floors
-#: (`MINIMUM_STEPS_REPLAYED`, `MINIMUM_REVISIONS_REPLAYED`) are two more. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 98
+#: **96 with T152, over T165's 95**, whose `pagination_capture` declares one floor
+#: (`MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES`). Still zero slack.
+#: **98 with T247, over T152's 96**, whose `alert_mailbox` declares two floors
+#: (`MINIMUM_PERMITTED_CASES`, `MINIMUM_REFUSING_CASES`).
+#: **99 with T117**, whose `connector_health.MINIMUM_PACKAGES_BYTE_COMPARED` joined the
+#: population on top of T247's.
+#: **101 with T149, over T117's 99**: `end_to_end`'s two floors (`MINIMUM_STEPS_REPLAYED`,
+#: `MINIMUM_REVISIONS_REPLAYED`) are two more. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 101
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4206,9 +4211,15 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: yields them; `MINIMUM_FLOORS_SWEPT` above), and the gate's own swept floors
 #: each carry a marker and so join the battery. Measured with
 #: `measure_prose_clearance()` against this branch. Still zero slack.
-#: **95 with T152 and T149, over T165's 92**: `pagination_capture`'s one floor and `end_to_end`'s
-#: two are three scenarios more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 95
+#: **93 with T152, over T165's 92**: `pagination_capture`'s one floor is one scenario more. Still
+#: zero slack.
+#: **95 with T247, over T152's 93**: `alert_mailbox`'s two floors each carry
+#: their own comment block and marker, so each is one scenario more.
+#: **96 with T117**: `connector_health.MINIMUM_PACKAGES_BYTE_COMPARED` carries a marker and so
+#: joins the battery on top of T247's.
+#: **98 with T149, over T117's 96**: `end_to_end`'s two floors are two scenarios more. Still zero
+#: slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 98
 
 
 def measure_prose_clearance() -> dict[str, Any]:
