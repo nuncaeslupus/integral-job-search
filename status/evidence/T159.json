@@ -3,14 +3,24 @@
   "findings": [],
   "unpinnable_floors": [
     {
+      "module": "alert_mailbox",
+      "name": "MINIMUM_PERMITTED_CASES",
+      "line": 183
+    },
+    {
+      "module": "alert_mailbox",
+      "name": "MINIMUM_REFUSING_CASES",
+      "line": 192
+    },
+    {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3655
+      "line": 3669
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3650
+      "line": 3664
     },
     {
       "module": "arsenal_source",
@@ -85,7 +95,7 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4773
+      "line": 4778
     },
     {
       "module": "gate_detector_states",
@@ -327,20 +337,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3852,
+      "line": 3855,
       "population": 44
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3879,
+      "line": 3882,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3744,
-      "population": 96
+      "line": 3747,
+      "population": 98
     },
     {
       "module": "freshness",
@@ -590,6 +600,8 @@
     "weights.MAX_CHOICES"
   ],
   "floors_in_the_census": [
+    "alert_mailbox.MINIMUM_PERMITTED_CASES",
+    "alert_mailbox.MINIMUM_REFUSING_CASES",
     "approval.MINIMUM_CARRIED_DISCLOSURE_CHECKS",
     "approval.MINIMUM_CARRIED_DISCLOSURE_STATES",
     "arsenal_source.MINIMUM_BUNDLE_FILES",
@@ -695,6 +707,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 96,
+  "floors_swept_at_least": 98,
   "floors_arithmetically_checked_at_least": 36
 }
