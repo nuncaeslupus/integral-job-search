@@ -275,6 +275,9 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+_SUBCOMMANDS = ("grant", "check")
+
+
 def _cli(argv: list[str]) -> int:
     """`grant` mints the ids and the time and records one yes; `check` judges one pointer."""
     session_default = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
@@ -330,7 +333,8 @@ def _cli(argv: list[str]) -> int:
 
 
 def _main(argv: list[str]) -> int:
-    if len(argv) > 1 and argv[1] in ("--root", "--handle"):
+    # evidence mode is only "no argument, or one path"; anything else is argparse's to refuse
+    if len(argv) > 2 or (len(argv) == 2 and (argv[1].startswith("-") or argv[1] in _SUBCOMMANDS)):
         return _cli(argv[1:])
     measured = write_evidence(Path(argv[1]) if len(argv) > 1 else DEFAULT_EVIDENCE_PATH)
     print(json.dumps(measured))

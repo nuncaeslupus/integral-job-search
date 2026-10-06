@@ -256,6 +256,35 @@ def test_the_cli_refuses_a_mailbox_that_is_not_an_address(
     assert am.load(ProfileStore(tmp_path, "ada")) == []
 
 
+_CHECK_TAIL = ["--read-id", "r", "--mailbox", "a@x.org", "--read-at", "2999-01-01T00:00:00+00:00"]
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        lambda b: ["check", *b, *_CHECK_TAIL],  # subcommand first
+        lambda b: [f"--root={b[1]}", "--handle=ada", "check", *_CHECK_TAIL],  # `=` form
+        lambda b: ["--roo", b[1], "--handle", "ada", "check", *_CHECK_TAIL],  # abbreviation
+        lambda b: ["grant", *b, "--mailbox", "a@x.org"],
+        lambda b: ["--bogus"],
+        lambda b: ["out.json", "extra"],  # more than one argument is never evidence mode
+    ],
+)
+def test_anything_but_no_argument_or_one_path_never_runs_evidence_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spelling: object
+) -> None:
+    base = _profile(tmp_path)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    try:
+        code = am._main(["x", *spelling(base)])  # type: ignore[operator]
+    except SystemExit as exc:
+        code = int(exc.code or 0)
+    assert code != 0
+    assert list(cwd.iterdir()) == []
+
+
 def test_the_cli_exits_2_for_an_unknown_profile(tmp_path: Path) -> None:
     argv = ["x", "--root", str(tmp_path), "--handle", "nobody", "grant", "--mailbox", "a@x.org"]
     assert am._main(argv) == 2
