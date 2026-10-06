@@ -3,7 +3,7 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 55,
+  "unpinnable_floors_cleared_by_marker_restatement": 52,
   "marker_restatement_cleared": [
     {
       "module": "approval",
@@ -14,11 +14,6 @@
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
       "lineno": 3638
-    },
-    {
-      "module": "approval",
-      "name": "_SHINGLE",
-      "lineno": 482
     },
     {
       "module": "arsenal_source",
@@ -91,6 +86,11 @@
       "lineno": 155
     },
     {
+      "module": "floor_sweep",
+      "name": "MINIMUM_CEILINGS_SET_ASIDE",
+      "lineno": 4773
+    },
+    {
       "module": "gate_detector_states",
       "name": "MINIMUM_DETECTOR_STATES_PROBED",
       "lineno": 148
@@ -104,16 +104,6 @@
       "module": "gate_reader_agreement",
       "name": "MINIMUM_ARRANGEMENTS_PROBED",
       "lineno": 123
-    },
-    {
-      "module": "generate",
-      "name": "GENERATION_CAP",
-      "lineno": 88
-    },
-    {
-      "module": "interview",
-      "name": "MAX_EXTRA_EPISODE_ATTEMPTS",
-      "lineno": 124
     },
     {
       "module": "interview",
@@ -247,11 +237,6 @@
     },
     {
       "module": "sourcing",
-      "name": "DETAIL_FETCH_CEILING",
-      "lineno": 119
-    },
-    {
-      "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
       "lineno": 110
     },
@@ -281,7 +266,7 @@
       "lineno": 590
     }
   ],
-  "marker_restatement_scenarios_checked": 55,
+  "marker_restatement_scenarios_checked": 52,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 95
+  "scenarios_checked_at_least": 93
 }
