@@ -15,12 +15,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3643
+      "line": 3669
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3638
+      "line": 3664
     },
     {
       "module": "arsenal_source",
@@ -342,13 +342,13 @@
     {
       "module": "end_to_end",
       "name": "MINIMUM_REVISIONS_REPLAYED",
-      "line": 699,
+      "line": 707,
       "population": 13
     },
     {
       "module": "end_to_end",
       "name": "MINIMUM_STEPS_REPLAYED",
-      "line": 695,
+      "line": 703,
       "population": 14
     },
     {
@@ -495,6 +495,7 @@
     "bodyless_post.MINIMUM_PACKAGES",
     "bulk_filter.PROBE_BATCH",
     "calibration.TWENTY",
+    "claim_trace.FIXTURE_SOURCE_CHARS",
     "connector_contract.MINIMUM_PACKAGES",
     "connector_contract._RUN_WINDOW",
     "connector_contract._RUN_WINDOW_CEILING",

@@ -46,6 +46,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from integral.claim_trace import entry_defects
 from integral.cv_store import (
     SCALAR_FIELDS,
     Certification,
@@ -284,6 +285,44 @@ def _voice_filter(
     return kept, omitted
 
 
+def _trace_filter(
+    store: ProfileStore, master: CVMaster, chosen: list[tuple[str, int]]
+) -> tuple[list[tuple[str, int]], list[Omission]]:
+    """T146: leave out every entry carrying a denial, or a number nothing the candidate said backs.
+
+    Applied to every selected entry whatever its section, so a type added later is
+    covered. Nothing is rewritten; the omission says why, so the candidate can say
+    the absence themselves (and it is then recorded) or accept the gap.
+    """
+    kept: list[tuple[str, int]] = []
+    omissions: list[Omission] = []
+    for section, index in chosen:
+        entry = _entries(master, section)[index]
+        found = entry_defects(store, entry)
+        if not found:
+            kept.append((section, index))
+            continue
+        reasons = {
+            "denial_outside_candidate_paragraph": (
+                "a denial: a generated entry may not state an absence about the candidate, "
+                "however much they said; only their own letter paragraph may"
+            ),
+            "hand_typed_count": (
+                "a number no source holds: it is not in the words behind this entry, "
+                "and a document has nothing to compute it from"
+            ),
+        }
+        omissions.append(
+            Omission(
+                section=section,
+                entry_index=index,
+                text=render_entry(section, entry),
+                reason="; ".join(dict.fromkeys(reasons[d.kind] for d in found)),
+            )
+        )
+    return kept, omissions
+
+
 def _select(
     master: CVMaster, advert: str, asks: tuple[str, ...]
 ) -> tuple[list[tuple[str, int]], list[Omission]]:
@@ -417,7 +456,15 @@ def generate(
     chosen, omissions = _select(master, advert, asks)
     chosen, voice_omissions = _voice_filter(master, chosen, preferences)
     episode_picks, episode_omissions = _voice_filter(master, episode_picks, preferences)
-    omissions = [*omissions, *voice_omissions, *episode_omissions]
+    chosen, trace_omissions = _trace_filter(store, master, chosen)
+    episode_picks, episode_trace_omissions = _trace_filter(store, master, episode_picks)
+    omissions = [
+        *omissions,
+        *voice_omissions,
+        *episode_omissions,
+        *trace_omissions,
+        *episode_trace_omissions,
+    ]
     # Only the headings this CV actually emits: a preference forbidding a word
     # that a section the CV does not have is titled must not refuse it.
     for section in _CLAIMABLE:
