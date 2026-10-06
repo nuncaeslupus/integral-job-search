@@ -21,7 +21,9 @@ from integral.claim_trace import (
     check_version,
     entry_defects,
     entry_denials,
+    is_context_dependent,
     is_denial,
+    normalise,
     paragraph_defects,
     quantities,
 )
@@ -137,7 +139,7 @@ def test_a_denial_with_no_backing_row_is_refused(store: ProfileStore) -> None:
 
 def test_a_denial_the_candidate_made_passes(store: ProfileStore) -> None:
     """The case that keeps the check honest: not satisfiable by banning 'not'."""
-    row = say(store, "I have not used observability tools in production, only logs.")
+    row = say(store, "I have not used observability tools in production. I only kept logs.")
     assert kinds(store, SourcedText(text=DENIAL, provenance=cited(row))) == []
 
 
@@ -386,7 +388,7 @@ def test_f1_one_backed_denial_does_not_cover_a_second_clause() -> None:
     assert [d.kind for d in found] == ["denial_without_backing_row"]
     assert "observability" in found[0].text
     assert paragraph_defects("edited", TWO, [TWO]) == []
-    split = "I have not used Kubernetes in production, I have never used observability tools."
+    split = KUBE + " I have never used observability tools."
     assert (
         paragraph_defects("edited", split, [KUBE, "I have never used observability tools."]) == []
     )
@@ -583,15 +585,93 @@ def test_split_sentence_boundary_a_denial_is_repeated_beside_an_affirmation() ->
     assert paragraph_defects("edited", "I have not used Spark.", said)
 
 
-def test_split_comma_and_a_cueless_piece_is_not_part_of_a_denial() -> None:
-    """Mutants: no comma split, or a cue-less piece folded into the denial before it."""
-    said = ["I have not used Kafka, but I used Spark daily."]
+def test_a_cueless_sentence_is_part_of_no_denial() -> None:
+    """Mutant-killer: a cue-less sentence folded into the denial before it would break this."""
+    said = ["I have not used Kafka. I used Spark daily."]
     assert paragraph_defects("edited", "I have not used Kafka.", said) == []
+    assert paragraph_defects("edited", "I have not used Spark.", said)
+
+
+# --- round 3: a list is one sentence; a grammar-only denial needs its whole row ---
+
+
+def test_a1_the_tail_of_a_list_after_a_backed_denial_is_checked() -> None:
+    said = ["I have not used Kafka."]
+    for body in (
+        "I have not used Kafka, Spark or Flink.",
+        "I have not used Kafka, observability tools, or tracing.",
+    ):
+        assert [d.kind for d in paragraph_defects("edited", body, said)] == [
+            "denial_without_backing_row"
+        ], body
     assert (
-        paragraph_defects("edited", "I have not used Kafka, Spark.", ["I have not used Kafka."])
+        paragraph_defects(
+            "edited",
+            "I have not used Kafka, Spark or Flink.",
+            ["I have not used Kafka, Spark or Flink."],
+        )
         == []
     )
-    assert paragraph_defects("edited", "I have not used Spark.", said)
+
+
+def test_a1_through_a_cv_entry_generate_and_check_version(store: ProfileStore) -> None:
+    row = say(store, "I have not used Kafka.")
+    entry = Experience(
+        title="Dev",
+        organisation="Cintra",
+        description="Ran billing. I have not used Kafka, Spark or Flink.",
+        provenance=cited(row),
+    )
+    assert [d.kind for d in entry_defects(store, entry)] == ["denial_without_backing_row"]
+    master = CVMaster(experience=(entry,))
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="o1", advert=ADVERT)
+    assert all("Flink" not in c.text for c in manifest.claims)
+    assert [o.section for o in manifest.omissions] == ["experience"]
+
+
+@pytest.mark.parametrize(
+    ("body", "said"),
+    [
+        ("Observability tools? I have never used them.", "Haskell? I have never used them."),
+        ("Observability tools? No.", "Did I use Haskell? No."),
+        ("Observability tools, I have none.", "Certifications, I have none."),
+        ("Observability: not yet.", "Kubernetes: not yet."),
+    ],
+)
+def test_a2_a_denial_that_lives_in_its_neighbours_needs_the_whole_row(
+    body: str, said: str, store: ProfileStore
+) -> None:
+    assert [d.kind for d in paragraph_defects("edited", body, [said])] == [
+        "denial_without_backing_row"
+    ]
+    entry = SourcedText(text=body, provenance=cited(say(store, said)))
+    assert [d.kind for d in entry_defects(store, entry)] == ["denial_without_backing_row"]
+
+
+def test_a2_the_whole_row_in_the_document_backs_its_grammar_only_denial() -> None:
+    row = "Haskell? I have never used them."
+    assert paragraph_defects("edited", row, [row]) == []
+    assert paragraph_defects("edited", "Intro. " + row + " Outro.", [row]) == []
+    assert is_context_dependent("Not yet.") and is_context_dependent("I have never used them.")
+    assert not is_context_dependent("I have never used Kafka.")
+
+
+def test_a3_the_punctuation_inside_a_name_is_kept() -> None:
+    assert normalise("I have not used C#.") != normalise("I have not used C++.")
+    assert normalise("I have never used .NET.") != normalise("I have never used NET.")
+    for body, said in (
+        ("I have not used C#.", "I have not used C++."),
+        ("I have never used .NET.", "I have never used NET."),
+    ):
+        assert paragraph_defects("edited", body, [said])
+    assert paragraph_defects("edited", "I have not used C++.", ["I have not used C++."]) == []
+
+
+def test_nfkc_a_fullwidth_spelling_is_the_same_denial() -> None:
+    fullwidth = "\uff29 have not used Kafka."
+    assert paragraph_defects("edited", fullwidth, ["I have not used Kafka."]) == []
+    assert paragraph_defects("edited", "I have not used Kafka.", [fullwidth]) == []
 
 
 def test_a_year_shaped_number_with_a_plus_is_a_count() -> None:

@@ -25,17 +25,20 @@ words support (`paragraph_defects`, called by `application_authorship`). An
 `assistant` paragraph cites nothing, which is exactly why a denial or a number
 could pass through it: nothing was required of a paragraph that borrows no source.
 
-* **A denial is backed only by the candidate's own denial, repeated.** A denial
-  clause in a generated document is backed only if, once case, whitespace,
-  punctuation and contractions are normalised, it is identical to a whole denial
-  clause in one live row the candidate said: the document may repeat their denial
-  and may never paraphrase, narrow, widen or compose one. Clauses are cut at every
-  sentence boundary and comma, and a piece with no negation cue is its own clause and
-  part of no denial. Where the store is silent the honest sentence is about the
-  store ("nothing in what you told me covers X"), never about the person. A denial
-  that *does* have such a row passes, so the check is not satisfiable by banning the
-  word "not" — which would destroy the honest-gap paragraph that is one of the
-  letter's better features.
+* **A denial is backed only by the candidate's own denial, repeated.** A sentence
+  carrying a negation cue is backed only if, once case, whitespace, apostrophes,
+  contractions and sentence-final punctuation are normalised (`+ # .` stay inside
+  a token, so C# is not C++), it equals a whole sentence of one live row the candidate
+  said; and a denial sentence that says nothing but grammar (pronouns, auxiliaries,
+  determiners, yes/no/not yet: "I have never used them", "No.") is backed only if
+  that row's whole text appears contiguously in the document, because its meaning
+  lives in the sentences beside it. The document may repeat their denial and may never
+  paraphrase, narrow, widen or compose one. Commas do not cut a sentence, so a list is
+  one sentence and is backed whole or not at all. Where the store is silent the honest
+  sentence is about the store ("nothing in what you told me covers X"), never about the
+  person. A denial that *does* have such a row passes, so the check is not satisfiable
+  by banning the word "not" — which would destroy the honest-gap paragraph that is one
+  of the letter's better features.
 * **A count is computed or it is not written.** There is no computing channel in
   a letter, so a quantity in a paragraph the candidate did not write word for word
   passes only if the very same number is already in the words that paragraph
@@ -131,7 +134,6 @@ def is_denial(text: str) -> bool:
 
 
 _SENTENCE_END = re.compile(r"[.;:!?\n]+(?=\s|$)")
-_COMMA = re.compile(r",+(?=\s|$)")
 _IRREGULAR = (
     (re.compile(r"\bwon't\b"), "will not"),
     (re.compile(r"\b(?:can't|cannot)\b"), "can not"),
@@ -139,39 +141,102 @@ _IRREGULAR = (
     (re.compile(r"\bdont\b"), "do not"),
     (re.compile(r"n't\b"), " not"),
 )
+# A token keeps `+ # .` and a leading dot inside it: C# is not C++, and .NET is not NET.
+_NORM_TOKEN = re.compile(r"(?:(?<![^\W_])\.(?=[^\W_]))?[^\W_]+(?:['.\-][^\W_]+)*[+#]*")
+
+# The closed grammatical classes of en/es/ca: what a sentence says when it says nothing
+# about any thing. Pronouns, auxiliaries, determiners, yes/no/not yet, and the verbs a
+# denial hangs on ("used", "worked", "know"). A sentence made only of these (cues
+# removed) gets its meaning from the sentences beside it, so it is no evidence alone.
+_PRONOUNS = (
+    "i me my mine myself you your yours he him his she her it its we us our they them their "
+    "this that these those one ones none anything something everything anyone someone "
+    "which what who whom there here "
+    "yo tú tu usted él ella nosotros ellos ellas me te se lo la los las le les nos os mi mis "
+    "su sus esto eso aquello algo "
+    "jo ell nosaltres vosaltres ells elles em et es ho el els li ens us hi meu seu això allò"
+)
+_AUXILIARIES = (
+    "am is are was were be been being have has had having do does did will would shall "
+    "should can could may might must "
+    "he has ha hemos han había habido soy eres es somos son estoy estás está estamos están "
+    "ser estar haber hacer hecho puedo "
+    "hem heu havia sóc ets és som sou són estic estàs està estem esteu estan haver puc"
+)
+_DETERMINERS = (
+    "a an the any some all both each every either another other such much many more most few "
+    "un una unos unas el la los las algún alguna algunos todo toda todos "
+    "uns unes algun tot tota"
+)
+_PARTICLES = "yes no not yet ever also too so at really sí si ya todavía aún también ja encara"
+_LIGHT_VERBS = (
+    "use used using uses work worked working know known knew knows done see seen tried try "
+    "touched need usado usar uso trabajado trabajar conocer conozco conocido tenido tener "
+    "tengo usat utilitzat utilitzar treballat treballar tingut tenir fet fer"
+)
+GRAMMAR: frozenset[str] = frozenset(
+    " ".join((_PRONOUNS, _AUXILIARIES, _DETERMINERS, _PARTICLES, _LIGHT_VERBS)).split()
+)
 
 
-def normalise(clause: str) -> str:
-    """Case, whitespace, punctuation and contractions folded; nothing else touched."""
-    text = unicodedata.normalize("NFKC", clause).lower().replace(chr(0x2019), "'")
+def tokens(text: str) -> list[str]:
+    """Case, whitespace, apostrophes, contractions and sentence-final punctuation folded.
+
+    NFKC is kept (a fullwidth spelling is the same word); `+ # .` stay inside a token.
+    """
+    text = unicodedata.normalize("NFKC", text).lower().replace(chr(0x2019), "'")
     for pattern, replacement in _IRREGULAR:
         text = pattern.sub(replacement, text)
-    return " ".join(_TOKEN.findall(text))
+    return _NORM_TOKEN.findall(text)
 
 
-def denial_clauses(text: str) -> list[str]:
-    """Each piece of `text` (cut at every sentence boundary and comma) that carries a cue.
+def normalise(text: str) -> str:
+    return " ".join(tokens(text))
 
-    A piece with no cue is its own clause, an affirmation or a topic, and is part of no
-    denial: a denial is never widened by what is written next to it.
+
+def sentences(text: str) -> list[str]:
+    """`text` cut at every sentence boundary. Commas do not cut: a list is one sentence."""
+    return [piece.strip() for piece in _SENTENCE_END.split(text) if piece.strip()]
+
+
+def denial_sentences(text: str) -> list[str]:
+    """Each sentence of `text` that carries a negation cue. A cue-less sentence is no denial."""
+    return [sentence for sentence in sentences(text) if is_denial(sentence)]
+
+
+def is_context_dependent(sentence: str) -> bool:
+    """With its cues taken out, is nothing left but the closed grammatical classes?
+
+    "I have never used them." and "No." and "Not yet." point at something written beside
+    them, so the same words in another paragraph deny a different thing.
     """
-    pieces = [
-        piece.strip() for sentence in _SENTENCE_END.split(text) for piece in _COMMA.split(sentence)
-    ]
-    return [piece for piece in pieces if piece and is_denial(piece)]
+    bare = _PHRASE_CUES.sub(" ", sentence.lower())
+    rest = [t for t in tokens(bare) if not _is_cue(t)]
+    return all(t in GRAMMAR for t in rest)
 
 
-def backs_clause(clause: str, said: Sequence[str]) -> bool:
-    """Is `clause` the same denial, normalised, as a whole clause the candidate said?"""
-    wanted = normalise(clause)
-    return bool(wanted) and any(
-        normalise(theirs) == wanted for text in said for theirs in denial_clauses(text)
-    )
+def backs_sentence(sentence: str, said: Sequence[str], document: str) -> bool:
+    """Does one row the candidate said hold this denial sentence, whole, as a sentence of its own?
+
+    The sentence must equal, normalised, a whole sentence of one row. A context-dependent
+    sentence also needs that row's whole text to appear contiguously in `document`, so
+    its neighbours are the candidate's too.
+    """
+    wanted = normalise(sentence)
+    if not wanted:
+        return False
+    padded = f" {normalise(document)} "
+    for row in said:
+        if wanted not in {normalise(theirs) for theirs in sentences(row)}:
+            continue
+        if not is_context_dependent(sentence) or f" {normalise(row)} " in padded:
+            return True
+    return False
 
 
 def unbacked_clauses(text: str, said: Sequence[str]) -> list[str]:
-    """Every denial clause of `text` that no clause of `said` repeats, each judged on its own."""
-    return [c for c in denial_clauses(text) if not backs_clause(c, said)]
+    """Every denial sentence of `text` that no row of `said` repeats, each judged on its own."""
+    return [s for s in denial_sentences(text) if not backs_sentence(s, said, text)]
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +391,7 @@ def inspect_entry(store: ProfileStore, entry: SourcedEntry) -> EntryReport:
 
     All string fields are read, identifiers included: a denial typed into a skill name
     is still a denial. A denial clause needs a denial of the candidate's own that holds
-    the same clause, normalised; a number must be in the entry's live provenance texts,
+    the same sentence, normalised; a number must be in the entry's live provenance texts,
     spent once across the whole entry, the same rule a letter paragraph is held to.
     """
     values = [
@@ -336,7 +401,7 @@ def inspect_entry(store: ProfileStore, entry: SourcedEntry) -> EntryReport:
     defects: list[Defect] = []
     denials = 0
     for text in values:
-        denials += len(denial_clauses(text))
+        denials += len(denial_sentences(text))
         defects.extend(
             Defect(
                 "denial_without_backing_row",
@@ -371,7 +436,7 @@ def paragraph_defects(author: str, body: str, cited: Sequence[str]) -> list[Defe
     `candidate` is the candidate's own sentences untouched, so nothing here is
     anyone's invention. For `edited` and `assistant` (which cites nothing, so
     everything it carries is new) every denial clause needs a cited denial that holds
-    the same clause, normalised, and each number must be one the cited words already contain.
+    the same sentence, normalised, and each number must be one the cited words already contain.
     """
     if author == "candidate":
         return []
@@ -471,6 +536,8 @@ _KUBE = "I have not used Kubernetes in production."
 _TWO_DENIALS = (
     "I have not used Kubernetes in production, and I have never used observability tools."
 )
+HASKELL = "Haskell? I have never used them."
+LIST_TAIL = "I have not used Kafka, Spark or Flink."
 FRONTED = "Observability tools? I have never used them."
 _RAN4 = "Ran 4 services for the permits API."
 
@@ -515,6 +582,8 @@ def probe_cases() -> list[dict[str, Any]]:
         )
         gcp = record("candidate_statement", "I have never used GCP.", "application_draft")
         nope = record("candidate_statement", "No, I have not.", "application_draft")
+        haskell = record("candidate_statement", HASKELL, "application_draft")
+        kafka = record("candidate_statement", "I have not used Kafka.", "application_draft")
         kubed = record("candidate_statement", _KUBE, "application_draft")
         dec = record("candidate_statement", "It took 2.5 seconds.", "application_draft")
 
@@ -553,6 +622,10 @@ def probe_cases() -> list[dict[str, Any]]:
             ("edited short name another thing", 1, letter("edited", "I have not used AWS.", gcp)),
             ("edited fronted topic by a bare no", 1, letter("edited", FRONTED, nope)),
             ("edited bare no repeated", 0, letter("edited", "No, I have not.", nope)),
+            ("edited list tail", 1, letter("edited", LIST_TAIL, kafka)),
+            ("edited neighbour-bound denial", 1, letter("edited", FRONTED, haskell)),
+            ("edited whole row repeated", 0, letter("edited", HASKELL, haskell)),
+            ("edited name with punctuation", 1, letter("edited", "I have not used C++.", gcp)),
             ("assistant dont", 1, letter("assistant", "I dont use Kafka.")),
             ("assistant yet to", 1, letter("assistant", "I have yet to use Kafka.")),
             ("assistant sin experiencia", 1, letter("assistant", "Sin experiencia en Kafka.")),
@@ -592,7 +665,7 @@ def _with_sourced_claims(store: ProfileStore, master: CVMaster) -> CVMaster:
             title="Platform engineer",
             organisation="Fictional Works",
             description="I have not used observability tools in production.",
-            provenance=say("I have not used observability tools in production, only logs."),
+            provenance=say("I have not used observability tools in production."),
         ),
         Experience(
             title="Integration developer",
