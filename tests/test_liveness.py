@@ -19,7 +19,7 @@ import pytest
 
 from integral import liveness
 from integral.connector_health import BLOCK_PAGE_MARKERS, RATE_LIMIT_SAMPLES
-from integral.fixture_shapes import PADDING, SHAPES, Shape, shaped_pages
+from integral.fixture_shapes import PADDING, SCAN_WINDOW, SHAPES, Shape, shaped_pages
 from integral.fixture_shapes import measure as shape_cells
 from integral.offers import Offer
 
@@ -416,3 +416,20 @@ def test_a_burial_that_does_not_clear_the_scan_window_is_reported() -> None:
     for apply in (short, title_prepend):
         found = shape_cells(shapes=(Shape("buried", apply, SHAPES[-1].moved, moves_marker=True),))
         assert found["fixture_shape_cells_that_relocate_nothing"] == 10, found
+
+
+def test_the_padding_clears_the_scan_window_and_a_shorter_one_is_reported() -> None:
+    """T177 R1. The bound is the literal `SCAN_WINDOW`, not the padding's own
+    length, so shortening the padding cannot lower it unnoticed."""
+    assert len(PADDING) > SCAN_WINDOW
+
+    def short_padding(body: str) -> str:
+        for anchor in ("<html>", "<body>"):
+            if anchor in body:
+                return body.replace(anchor, anchor + PADDING[:1900], 1)
+        return PADDING[:1900] + body
+
+    found = shape_cells(
+        shapes=(Shape("buried", short_padding, SHAPES[-1].moved, moves_marker=True),)
+    )
+    assert found["fixture_shape_cells_that_relocate_nothing"] == 10, found

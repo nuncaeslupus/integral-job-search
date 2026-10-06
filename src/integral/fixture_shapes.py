@@ -26,6 +26,10 @@ from typing import Any
 
 from integral.connector_health import BLOCK_PAGE_MARKERS, RATE_LIMIT_SAMPLES
 
+#: The scan truncation `buried` defeats. A literal, not derived from `PADDING`:
+#: a bound taken from the thing it bounds cannot fire when that thing shrinks.
+SCAN_WINDOW = 2000
+
 #: Inert page text, long enough that a scan cut short at any plausible length
 #: never reaches what follows it (#455 round 4, N5). No block marker in it.
 PADDING = "<p>Ofertas de empleo en Barcelona, actualizadas cada día.</p>" * 400
@@ -69,9 +73,9 @@ def buried(body: str) -> str:
 
 def _marker_moved_later(before: str, after: str) -> bool:
     """The first marker moved past the padding: a shorter shift would not clear
-    the 2,000-character window the shape exists to defeat."""
+    the `SCAN_WINDOW` (2,000 characters, a literal) the shape exists to defeat."""
     a, b = first_marker_offset(before), first_marker_offset(after)
-    return a is not None and b is not None and b - a >= len(PADDING)
+    return a is not None and b is not None and b >= a + SCAN_WINDOW
 
 
 def _title_restyled(before: str, after: str) -> bool:
