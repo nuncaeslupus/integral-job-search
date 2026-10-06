@@ -103,12 +103,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "lineno": 4798
+      "lineno": 4799
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "lineno": 4952
+      "lineno": 4953
     },
     {
       "module": "gate_detector_states",

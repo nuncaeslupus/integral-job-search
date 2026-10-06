@@ -521,6 +521,7 @@ from typing import Any
 
 from integral.floor_polarity import ADJUDICATIONS as ADJUDICATIONS
 from integral.floor_populations import FLOOR_POPULATIONS as FLOOR_POPULATIONS
+from integral.floor_populations import REVIEWED_SCALARS as REVIEWED_SCALARS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = Path(__file__).resolve().parent
@@ -4978,17 +4979,100 @@ def _is_bound_ref(expr: ast.expr, name: str) -> bool:
     )
 
 
-def _compared_against(func: ast.AST, name: str, compared_to: str) -> bool:
-    """Whether some comparison in `func` sets `name` against exactly `compared_to`."""
+def _floor_aliases(func: ast.AST, name: str) -> set[str]:
+    """Local names that stand for the floor inside `func`, by two closed binding forms.
+
+    A `for` (or comprehension) target bound over a **literal** tuple or list whose element
+    at that position is the floor - `for key, floor in (("a", MINIMUM_A), ...)` - and a
+    parameter whose **default** is the floor. Nothing else makes a local an alias, so a
+    name that merely sits near the floor in the source stays unrelated to it.
+    """
+    aliases: set[str] = set()
     for node in ast.walk(func):
-        if not isinstance(node, ast.Compare):
+        if isinstance(node, (ast.For, ast.comprehension)) and isinstance(
+            node.iter, (ast.Tuple, ast.List)
+        ):
+            target = node.target
+            for element in node.iter.elts:
+                if isinstance(target, ast.Name) and _is_bound_ref(element, name):
+                    aliases.add(target.id)
+                elif isinstance(target, ast.Tuple) and isinstance(element, (ast.Tuple, ast.List)):
+                    for index, slot in enumerate(target.elts):
+                        if (
+                            isinstance(slot, ast.Name)
+                            and index < len(element.elts)
+                            and _is_bound_ref(element.elts[index], name)
+                        ):
+                            aliases.add(slot.id)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args
+            positional = [*args.posonlyargs, *args.args]
+            for arg, default in zip(
+                positional[len(positional) - len(args.defaults) :], args.defaults, strict=True
+            ):
+                if _is_bound_ref(default, name):
+                    aliases.add(arg.arg)
+            for kwarg, kwdefault in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+                if kwdefault is not None and _is_bound_ref(kwdefault, name):
+                    aliases.add(kwarg.arg)
+    return aliases
+
+
+def _sets_against(node: ast.AST, is_floor: Callable[[ast.expr], bool], other: str) -> bool:
+    """`node` is a comparison, or a shortfall subtraction, of the floor and `other`."""
+    pairs: list[tuple[ast.expr, ast.expr]] = []
+    if isinstance(node, ast.Compare):
+        pairs = list(pairwise([node.left, *node.comparators]))
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Sub):
+        pairs = [(node.left, node.right)]
+    return any(
+        (is_floor(left) and ast.unparse(right) == other)
+        or (is_floor(right) and ast.unparse(left) == other)
+        for left, right in pairs
+    )
+
+
+def _compared_against(
+    func: ast.AST, name: str, compared_to: str, scope: ast.Module | None = None
+) -> bool:
+    """Whether `func` sets the floor against exactly `compared_to`.
+
+    Closed over four forms, none of them a mention: the floor itself on one side of a
+    comparison; a local alias of it (`_floor_aliases`); a shortfall `FLOOR - x`; or a call
+    that hands the floor and `compared_to` to a helper in the same file whose body
+    compares those two parameters. The operand is matched by source text, never by
+    appearing nearby.
+    """
+    aliases = _floor_aliases(func, name)
+
+    def is_floor(expr: ast.expr) -> bool:
+        return _is_bound_ref(expr, name) or (isinstance(expr, ast.Name) and expr.id in aliases)
+
+    if any(_sets_against(node, is_floor, compared_to) for node in ast.walk(func)):
+        return True
+    helpers = {f.name: f for f in _all_function_defs(scope)} if scope is not None else {}
+    for node in ast.walk(func):
+        if not isinstance(node, ast.Call):
             continue
-        operands = [node.left, *node.comparators]
-        for left, right in pairwise(operands):
-            if _is_bound_ref(left, name) and ast.unparse(right) == compared_to:
-                return True
-            if _is_bound_ref(right, name) and ast.unparse(left) == compared_to:
-                return True
+        callee = node.func
+        helper = helpers.get(
+            callee.id if isinstance(callee, ast.Name) else getattr(callee, "attr", "")
+        )
+        if helper is None:
+            continue
+        params = [a.arg for a in (*helper.args.posonlyargs, *helper.args.args)]
+        for i, floor_arg in enumerate(node.args):
+            if not is_floor(floor_arg) or i >= len(params):
+                continue
+            for j, other_arg in enumerate(node.args):
+                if j == i or j >= len(params) or ast.unparse(other_arg) != compared_to:
+                    continue
+
+                def is_param(expr: ast.expr, wanted: str = params[i]) -> bool:
+                    return isinstance(expr, ast.Name) and expr.id == wanted
+
+                if any(_sets_against(inner, is_param, params[j]) for inner in ast.walk(helper)):
+                    return True
     return False
 
 
@@ -4999,9 +5083,10 @@ def _declaration_defect(
 
     Structural only, never executed: a declaration is a claim about where the population
     is counted, and the claim is kept honest by the code it names - the counter must
-    exist, must mention the floor, and (when `compared_to` is given) must compare the
-    floor against exactly that operand. Deleting the counter, renaming it, or changing
-    what the floor is read against therefore stops the declaration counting.
+    exist, must mention the floor, and must compare the floor against exactly the
+    `compared_to` operand (which is mandatory: a mention is not a comparison). Deleting the
+    counter, renaming it, or changing what the floor is read against therefore stops the
+    declaration counting.
     """
     if not (isinstance(declaration, tuple) and len(declaration) == 4):
         return "malformed: a declaration is (kind, counter, compared_to, description)"
@@ -5014,9 +5099,13 @@ def _declaration_defect(
     if kind == "scalar":
         if counter or compared_to:
             return "a scalar bound names no counter and no comparand"
+        if qualified not in REVIEWED_SCALARS:
+            return "a scalar bound must be in the reviewed set `REVIEWED_SCALARS`"
         return None
     if not counter:
         return "a counted floor names the function that counts its population"
+    if not compared_to:
+        return "a counted floor names the operand it is compared against, never left empty"
     scope: ast.AST | None
     if "::" in counter:
         file_name, _, func_name = counter.partition("::")
@@ -5036,7 +5125,7 @@ def _declaration_defect(
     reading = [f for f in functions if _mentions_bound(f, name)]
     if not reading:
         return f"counter {counter!r} never mentions {name}"
-    if compared_to and not any(_compared_against(f, name, compared_to) for f in reading):
+    if not any(_compared_against(f, name, compared_to, scope) for f in reading):
         return f"counter {counter!r} never compares {name} against {compared_to!r}"
     return None
 

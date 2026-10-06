@@ -5136,10 +5136,14 @@ def test_a_floor_nobody_adjudicated_is_named_too(tmp_path: Path) -> None:
         (("counted", "mod.measure", "len(other)", "the things it is handed"), "never compares"),
         (("counted", "mod.measure", "", "x"), "words"),
         (("counted", "", "", "the things it is handed"), "names the function"),
-        (("counted", "other.measure", "", "the things it is handed"), "own module"),
-        (("counted", "tests/test_nowhere.py::t", "", "the things it is handed"), "not there"),
-        (("counted", "mod", "", "the things it is handed"), "no function"),
-        (("counted", "mod.measure", "", ""), "words"),
+        (("counted", "other.measure", "len(things)", "the things it is handed"), "own module"),
+        (
+            ("counted", "tests/test_nowhere.py::t", "len(things)", "the things it is handed"),
+            "not there",
+        ),
+        (("counted", "mod", "len(things)", "the things it is handed"), "no function"),
+        (("counted", "mod.measure", "len(things)", ""), "words"),
+        (("counted", "mod.measure", "", "the things it is handed"), "never left empty"),
         (("sometimes", "mod.measure", "", "the things it is handed"), "unknown kind"),
         (("scalar", "mod.measure", "", "bounds one value, never a collection"), "no counter"),
         (("counted", "mod.measure"), "malformed"),
@@ -5194,7 +5198,10 @@ def test_a_test_function_can_be_the_counter(
     assert "never compares" in _why(_declared(tmp_path, entry=wrong))[0]
 
 
-def test_a_scalar_bound_needs_a_reason_and_names_no_counter(tmp_path: Path) -> None:
+def test_a_scalar_bound_needs_a_reason_and_names_no_counter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(floor_sweep, "REVIEWED_SCALARS", ("mod.MINIMUM_THINGS",))
     ok = ("scalar", "", "", "bounds the length of one string, not a population")
     assert _declared(tmp_path, entry=ok)["declared_scalar"] == 1
     bare = ("scalar", "", "", "scalar")
@@ -5273,3 +5280,141 @@ def test_every_register_entry_names_a_function_in_its_own_module() -> None:
     for qualified, (kind, counter, _compared, _text) in floor_sweep.FLOOR_POPULATIONS.items():
         if kind == "counted" and "::" not in counter:
             assert counter.split(".", 1)[0] == qualified.split(".", 1)[0], qualified
+
+
+def test_a_scalar_relabel_counts_only_for_a_reviewed_bound(tmp_path: Path) -> None:
+    """N1: a real floor relabelled `scalar` with any three words is not accepted until a
+    reviewer adds it to `REVIEWED_SCALARS`."""
+    relabel = ("scalar", "", "", "bounds one value, never a collection")
+    measured = _declared(tmp_path, entry=relabel)
+    assert measured["declared_scalar"] == 0
+    assert "reviewed set" in _why(measured)[0], measured
+
+
+def test_the_reviewed_scalar_set_is_pinned_and_each_member_is_a_live_scalar() -> None:
+    assert len(floor_sweep.REVIEWED_SCALARS) == 14
+    assert len(set(floor_sweep.REVIEWED_SCALARS)) == 14
+    declared = {q for q, v in floor_sweep.FLOOR_POPULATIONS.items() if v[0] == "scalar"}
+    assert declared == set(floor_sweep.REVIEWED_SCALARS)
+
+
+_RESTATING_COUNTER = """
+#: Why this value: the fixture feeds three things.
+#: arsenal-floor-margin: MINIMUM_THINGS value=3
+MINIMUM_THINGS = 3
+
+
+def record(things):
+    committed = {"things_at_least": MINIMUM_THINGS}
+    committed["note"] = f"floor is {MINIMUM_THINGS}"
+    return committed
+"""
+
+_HEAD = """
+#: Why this value: the fixture feeds three things.
+#: arsenal-floor-margin: MINIMUM_THINGS value=3
+MINIMUM_THINGS = 3
+
+"""
+
+
+def test_a_counter_that_only_restates_the_floor_is_undeclared(tmp_path: Path) -> None:
+    """The dead floor T164's second reader found: a dict write is a mention, not a
+    comparison, so the declaration must not count even with the operand named."""
+    entry = ("counted", "mod.record", "len(things)", "the things record is handed")
+    measured = _declared(tmp_path, source=_RESTATING_COUNTER, entry=entry)
+    assert measured["floors_with_no_declared_population"] == 1, measured
+    assert "never compares" in _why(measured)[0]
+    bare = ("counted", "mod.record", "", "the things record is handed")
+    assert "never left empty" in _why(_declared(tmp_path, source=_RESTATING_COUNTER, entry=bare))[0]
+
+
+def test_an_fstring_only_mention_is_undeclared(tmp_path: Path) -> None:
+    source = _DECLARED_FLOOR.replace(
+        "    if len(things) < MINIMUM_THINGS:\n        return None\n",
+        '    print(f"need {MINIMUM_THINGS} versus {len(things)}")\n',
+    )
+    assert "MINIMUM_THINGS}" in source
+    measured = _declared(tmp_path, source=source)
+    assert "never compares" in _why(measured)[0], measured
+
+
+def test_a_docstring_or_comment_mention_is_undeclared(tmp_path: Path) -> None:
+    source = _DECLARED_FLOOR.replace(
+        "    if len(things) < MINIMUM_THINGS:\n        return None\n",
+        '    """Compared with len(things) < MINIMUM_THINGS."""\n'
+        "    # len(things) < MINIMUM_THINGS\n",
+    )
+    measured = _declared(tmp_path, source=source)
+    assert measured["floors_with_no_declared_population"] == 1, measured
+
+
+def test_a_loop_target_over_a_literal_table_holding_the_floor_is_a_comparison(
+    tmp_path: Path,
+) -> None:
+    table = _HEAD + (
+        "def measure(measured):\n"
+        '    for key, floor in (("things", MINIMUM_THINGS), ("other", 9)):\n'
+        "        if measured[key] < floor:\n"
+        "            return None\n"
+        "    return 1\n"
+    )
+    entry = ("counted", "mod.measure", "measured[key]", "the things measure() is handed")
+    assert _declared(tmp_path, source=table, entry=entry)["floors_with_no_declared_population"] == 0
+    wrong = ("counted", "mod.measure", "measured[other]", "the things measure() is handed")
+    assert _declared(tmp_path, source=table, entry=wrong)["floors_with_no_declared_population"] == 1
+    # a loop over a table that does NOT hold the floor makes nothing an alias of it
+    unrelated = table.replace('("things", MINIMUM_THINGS)', '("things", 7)').replace(
+        "return 1\n", "return MINIMUM_THINGS\n"
+    )
+    measured = _declared(tmp_path, source=unrelated, entry=entry)
+    assert measured["floors_with_no_declared_population"] == 1, measured
+
+
+def test_a_default_parameter_and_a_helper_call_and_a_shortfall_are_comparisons(
+    tmp_path: Path,
+) -> None:
+    entry = ("counted", "mod.measure", "len(things)", "the things measure() is handed")
+
+    def undeclared(source: str) -> int:
+        return int(
+            _declared(tmp_path, source=source, entry=entry)["floors_with_no_declared_population"]
+        )
+
+    default = (
+        _HEAD + "def measure(things, minimum=MINIMUM_THINGS):\n    return len(things) < minimum\n"
+    )
+    assert undeclared(default) == 0
+    helper = _HEAD + (
+        "def _check(seen, minimum):\n    return seen >= minimum\n\n\n"
+        "def measure(things):\n    return _check(len(things), MINIMUM_THINGS)\n"
+    )
+    assert undeclared(helper) == 0
+    # a helper that never compares the two parameters is a mention, not a comparison
+    assert undeclared(helper.replace("return seen >= minimum", "return seen")) == 1
+    shortfall = _HEAD + "def measure(things):\n    return max(0, MINIMUM_THINGS - len(things))\n"
+    assert undeclared(shortfall) == 0
+
+
+def test_a_dead_live_floor_is_found_when_its_real_comparison_is_deleted(tmp_path: Path) -> None:
+    """The live-tree mutation the second reader ran: `task_gate.MINIMUM_GATES_READ` is
+    declared against `floor_breaches`; delete the comparison there and the floor guards
+    nothing, whatever else still writes its value into a record."""
+    copy_dir = tmp_path / "src_copy"
+    shutil.copytree(floor_sweep._SRC_DIR, copy_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    target = copy_dir / "task_gate.py"
+    source = target.read_text(encoding="utf-8")
+    comparison = '            ("evidence_gates_read", MINIMUM_GATES_READ),\n'
+    assert comparison in source
+    target.write_text(source.replace(comparison, ""), encoding="utf-8")
+    assert "task_gate.MINIMUM_GATES_READ" not in {
+        row["floor"] for row in floor_sweep.measure_declarations()["undeclared"]
+    }
+    measured = floor_sweep.measure_declarations(copy_dir)
+    assert "task_gate.MINIMUM_GATES_READ" in {row["floor"] for row in measured["undeclared"]}
+
+
+def test_every_counted_register_entry_names_its_comparand() -> None:
+    for qualified, (kind, _counter, compared, _text) in floor_sweep.FLOOR_POPULATIONS.items():
+        if kind == "counted":
+            assert compared, qualified

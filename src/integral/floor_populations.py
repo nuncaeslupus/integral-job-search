@@ -9,16 +9,17 @@ bounds and asks the floor. `FLOOR_POPULATIONS` maps `module.NAME` to one declara
 
 * `counted` - the floor is compared against a population counted in `counter`: a
   `module.function` in `src/integral/`, or `tests/test_x.py::function` for a floor only a
-  test reads. `compared_to` is the source text of the other operand of that comparison
-  (`len(permitted)`), or empty where the floor is read through a table the sweep does
-  not trace.
+  test reads. `compared_to` is mandatory: the source text of the other operand of the comparison
+  (`len(permitted)`). The comparison may be direct, through a loop or comprehension
+  target bound over a literal tuple holding the floor, a parameter defaulting to it, a
+  `FLOOR - x` shortfall, or a helper call that compares the two - never a mere mention.
 * `scalar` - the bound limits the size of one value (a string length, a word count, a
   pixel side). No collection of cases exists whose deletion could breach it, so there is
   no population to declare; `description` is the reason, reviewed here, never inferred.
 
 A declaration is only checked structurally and never run: `floor_sweep.
 measure_declarations` refuses one whose counter does not exist, whose counter never
-mentions the floor, or whose `compared_to` is not the operand of a comparison against
+mentions the floor, or whose `compared_to` is empty or not the operand of a comparison against
 the floor in that counter. A declaration that does not resolve is not a declaration, so
 the floor it names is counted as undeclared.
 
@@ -30,6 +31,27 @@ remembering to list it. Adding a floor means adding its entry here.
 """
 
 from __future__ import annotations
+
+#: The reviewed set of bounds that limit the size of one value and so guard no population.
+#: A `scalar` declaration counts only for a name listed here, so relabelling a real floor
+#: `scalar` with a three-word reason does nothing until a reviewer adds it to this tuple,
+#: and `tests/test_floor_sweep.py` pins the tuple's exact size so the addition is visible.
+REVIEWED_SCALARS: tuple[str, ...] = (
+    "annotation.MIN_IDENTIFYING_LENGTH",
+    "connector_exchange.LEAK_NEEDLE_MINIMUM",
+    "connector_salary_audit._MIN_REASON",
+    "elicit_extract.MIN_ANSWER_CHARS",
+    "floor_sweep._MINIMUM_REASON_WORDS",
+    "lesson_triage.MIN_REASON_WORDS",
+    "lesson_triage.MIN_RULE_WORDS",
+    "photo_extract.MIN_SHORT_SIDE",
+    "plan_v2._MIN_TASK_CELLS",
+    "process_spec.MIN_ITEM_WORDS",
+    "skill_budget.MIN_HEADROOM_CHARS",
+    "sourcing_exclusions._MIN_STEM",
+    "step_specs.MIN_FIELD_WORDS",
+    "test_mode.PASTE_CHARS",
+)
 
 FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "alert_mailbox.MINIMUM_PERMITTED_CASES": (
@@ -65,7 +87,7 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "approval.MINIMUM_DISCLOSURE_PROBES": (
         "counted",
         "approval._disclosure_report",
-        "",
+        "measured[key]",
         "the disclosure probes counted by `_disclosure_report`",
     ),
     "approval.MINIMUM_INTACT_SEAM_CHECKS": (
@@ -83,32 +105,37 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "approval.MINIMUM_MANIFEST_DISCLOSURES_COMPARED": (
         "counted",
         "approval._disclosure_report",
-        "",
+        "measured[key]",
         "the manifest disclosures compared counted by `_disclosure_report`",
     ),
     "approval.MINIMUM_PARAPHRASE_CHECKS": (
         "counted",
         "approval._paraphrase_report",
-        "",
+        "measured[key]",
         "the paraphrase checks counted by `_paraphrase_report`",
     ),
     "approval.MINIMUM_PARAPHRASE_STATES": (
         "counted",
         "approval._paraphrase_report",
-        "",
+        "measured[key]",
         "the paraphrase states counted by `_paraphrase_report`",
     ),
-    "approval.MINIMUM_PROBES": ("counted", "approval._main", "", "the probes counted by `_main`"),
+    "approval.MINIMUM_PROBES": (
+        "counted",
+        "approval._main",
+        "measured[key]",
+        "the probes counted by `_main`",
+    ),
     "approval.MINIMUM_RETRACTED_APPROVALS_EVALUATED": (
         "counted",
         "approval._retraction_report",
-        "",
+        "measured[key]",
         "the retracted approvals evaluated counted by `_retraction_report`",
     ),
     "approval.MINIMUM_RETRACTION_PROBES": (
         "counted",
         "approval._retraction_report",
-        "",
+        "measured[key]",
         "the retraction probes counted by `_retraction_report`",
     ),
     "arsenal_source.MINIMUM_BUNDLE_FILES": (
@@ -179,15 +206,15 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     ),
     "connector_salary_audit.MINIMUM_DISTINCT_SALARY_VERDICTS_READ": (
         "counted",
-        "connector_salary_audit.record",
-        "",
-        "the distinct salary verdicts read counted by `record`",
+        "tests/test_connector_salary_audit.py::test_the_floors_sit_under_the_live_populations",
+        "measured['distinct_salary_verdicts_read']",
+        "the population the floor is compared against in the named test",
     ),
     "connector_salary_audit.MINIMUM_PACKAGES_MEASURED": (
         "counted",
-        "connector_salary_audit.record",
-        "",
-        "the packages measured counted by `record`",
+        "tests/test_connector_salary_audit.py::test_the_floors_sit_under_the_live_populations",
+        "measured['packages_measured']",
+        "the population the floor is compared against in the named test",
     ),
     "connector_salary_audit._MIN_REASON": (
         "scalar",
@@ -222,7 +249,7 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "corpus.MIN_ADS_PER_FAMILY": (
         "counted",
         "corpus.write_family_evidence",
-        "",
+        "n",
         "the ads per family counted by `write_family_evidence`",
     ),
     "corpus_scope.MINIMUM_CORPUS_ROWS": (
@@ -249,30 +276,35 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
         "stimulus_pool",
         "the stimulus pool counted by `measure_provenance`",
     ),
-    "cue_audit.MINIMUM_CASES": ("counted", "cue_audit.audit", "", "the cases counted by `audit`"),
+    "cue_audit.MINIMUM_CASES": (
+        "counted",
+        "tests/test_cue_audit.py::test_the_audit_denominator_is_a_floor_and_never_falls",
+        "audited['cue_audit_cases']",
+        "the population the floor is compared against in the named test",
+    ),
     "cue_audit.MINIMUM_CITABLE_FIELDS_CITED": (
         "counted",
-        "cue_audit.audit",
-        "",
-        "the citable fields cited counted by `audit`",
+        "tests/test_cue_audit.py::test_every_definition_and_tell_is_cited_or_acknowledged",
+        "audited['cue_audit_fields_cited']",
+        "the population the floor is compared against in the named test",
     ),
     "cue_audit.MINIMUM_CITATIONS_CHECKED": (
         "counted",
-        "cue_audit.audit",
-        "",
-        "the citations checked counted by `audit`",
+        "tests/test_cue_audit.py::test_the_audit_denominator_is_a_floor_and_never_falls",
+        "audited['cue_audit_citations_checked']",
+        "the population the floor is compared against in the named test",
     ),
     "cue_audit.MINIMUM_FAIL_OPEN_CASES": (
         "counted",
-        "cue_audit.audit",
-        "",
-        "the fail open cases counted by `audit`",
+        "tests/test_cue_audit.py::test_the_audit_denominator_is_a_floor_and_never_falls",
+        "audited['cue_audit_fail_open_cases']",
+        "the population the floor is compared against in the named test",
     ),
     "cue_audit.MINIMUM_MECHANISM_PINNED_CASES": (
         "counted",
-        "cue_audit.audit",
-        "",
-        "the mechanism pinned cases counted by `audit`",
+        "tests/test_cue_audit.py::test_the_audit_denominator_is_a_floor_and_never_falls",
+        "audited['cue_audit_cases_pinning_mechanism']",
+        "the population the floor is compared against in the named test",
     ),
     "cv_store.MINIMUM_CHECKS": (
         "counted",
@@ -331,7 +363,7 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION": (
         "counted",
         "extraction.negation_audit",
-        "",
+        "len(negated_labels)",
         "the evaluation labels per dimension counted by `negation_audit`",
     ),
     "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR": (
@@ -343,19 +375,19 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "floor_sweep.MINIMUM_FLOORS_SWEPT": (
         "counted",
         "floor_sweep._analyse",
-        "",
+        "swept",
         "the floors this sweep counts into the census, checked by `_analyse` itself",
     ),
     "floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED": (
         "counted",
         "floor_sweep._analyse",
-        "",
+        "arithmetically_checked",
         "the floors that reached an arithmetic check, counted by `_analyse` itself",
     ),
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED": (
         "counted",
         "floor_sweep._analyse",
-        "",
+        "evidence_population",
         "the floors pinned by committed evidence, counted by `_analyse` itself",
     ),
     "floor_sweep._MINIMUM_REASON_WORDS": (
@@ -385,7 +417,7 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS": (
         "counted",
         "floor_sweep._measure_prose_clearance",
-        "",
+        "len(site_ids)",
         "the prose mutation scenarios counted by `_measure_prose_clearance`",
     ),
     "gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED": (
@@ -421,25 +453,25 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "interview.MINIMUM_TRAIT_EPISODES": (
         "counted",
         "interview.trait_floor_state",
-        "",
+        "len(episodes)",
         "the trait episodes counted by `trait_floor_state`",
     ),
     "interview.MINIMUM_TRAIT_OCCASIONS": (
         "counted",
         "interview.trait_floor_state",
-        "",
+        "len(occasions)",
         "the trait occasions counted by `trait_floor_state`",
     ),
     "interview_direction.MINIMUM_NON_SOFTWARE_ARTEFACT_FIELDS": (
         "counted",
         "tests/test_interview_direction.py::test_the_artefact_question_follows_the_candidates_field",
-        "",
+        "len(non_software)",
         "the non software artefact fields counted by `test_the_artefact_question_follows_the_cand`",
     ),
     "interview_direction.MINIMUM_OPEN_TALK_STEPS": (
         "counted",
         "tests/test_interview_direction.py::test_the_opening_invites_open_ended_talk",
-        "",
+        "len(inviting)",
         "the open talk steps counted by `test_the_opening_invites_open_ended_talk`",
     ),
     "language_set.MINIMUM_LANGUAGE_DECLARATIONS": (
@@ -541,7 +573,7 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "pay_normalise.MINIMUM_REFUSAL_STATES": (
         "counted",
         "pay_normalise.measure",
-        "",
+        "refusals['states_checked']",
         "the refusal states counted by `measure`",
     ),
     "photo_extract.MIN_SHORT_SIDE": (
@@ -553,13 +585,13 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "plan_milestones.MINIMUM_MERGED_RESOLVED": (
         "counted",
         "plan_milestones.floor_breaches",
-        "",
+        "count",
         "the merged resolved counted by `floor_breaches`",
     ),
     "plan_milestones.MINIMUM_ROW_LABELS": (
         "counted",
         "plan_milestones.floor_breaches",
-        "",
+        "count",
         "the row labels counted by `floor_breaches`",
     ),
     "plan_v2.MINIMUM_BOARD_SIZE": (
@@ -619,49 +651,49 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED": (
         "counted",
         "repo_gate.measure_evidence_stability",
-        "",
+        "keys_compared",
         "the evidence keys compared counted by `measure_evidence_stability`",
     ),
     "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED": (
         "counted",
         "repo_gate.measure_evidence_stability",
-        "",
+        "result['evidence_sources_compared']",
         "the evidence sources compared counted by `measure_evidence_stability`",
     ),
     "repo_gate.MINIMUM_FILES_FORMATTED": (
         "counted",
         "repo_gate.measure_formatting",
-        "",
+        "found",
         "the files formatted counted by `measure_formatting`",
     ),
     "repo_gate.MINIMUM_PYTHON_FILES_FORMATTED": (
         "counted",
         "repo_gate.measure_formatting",
-        "",
+        "found",
         "the python files formatted counted by `measure_formatting`",
     ),
     "review_reader.MINIMUM_DISTINCT_SCOPE_STATES": (
         "counted",
         "review_reader.measure_marker_scope",
-        "",
+        "distinct",
         "the distinct scope states counted by `measure_marker_scope`",
     ),
     "review_reader.MINIMUM_PRS_EVALUATED": (
         "counted",
         "review_reader.measure",
-        "",
+        "len(states)",
         "the prs evaluated counted by `measure`",
     ),
     "review_reader.MINIMUM_REPORTS_FOUND": (
         "counted",
         "review_reader.measure",
-        "",
+        "reports_found",
         "the reports found counted by `measure`",
     ),
     "review_reader.MINIMUM_SCOPE_STATES": (
         "counted",
         "review_reader.measure_marker_scope",
-        "",
+        "len(evaluated)",
         "the scope states counted by `measure_marker_scope`",
     ),
     "salary_period.MINIMUM_PERIOD_CONTRACTS": (
@@ -745,7 +777,7 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "sourcing_exclusions.MINIMUM_PRESENTATIONS": (
         "counted",
         "tests/test_sourcing_exclusions.py::test_the_probe_reports_no_resurfaced_exclusions",
-        "",
+        "measured['restated_exclusions_resurfaced_evaluated']",
         "the presentations counted by `test_the_probe_reports_no_resurfaced_exclusions`",
     ),
     "sourcing_exclusions._MIN_STEM": (
@@ -787,32 +819,32 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "task_gate.MINIMUM_EMITTED_FIELDS_SCANNED": (
         "counted",
         "task_gate.field_naming_floor_breaches",
-        "",
+        "measured[name]",
         "the emitted fields scanned counted by `field_naming_floor_breaches`",
     ),
     "task_gate.MINIMUM_GATES_READ": (
         "counted",
-        "task_gate.record",
-        "",
-        "the gates read counted by `record`",
+        "task_gate.floor_breaches",
+        "measured[name]",
+        "the population the floor is compared against in the named test",
     ),
     "task_gate.MINIMUM_PRESENCE_RECORDING_FIELDS": (
         "counted",
         "task_gate.field_naming_floor_breaches",
-        "",
+        "measured[name]",
         "the presence recording fields counted by `field_naming_floor_breaches`",
     ),
     "task_gate.MINIMUM_RECORD_KEYS_COMPARED": (
         "counted",
         "task_gate.write_evidence",
-        "",
+        "sensitivity['record_keys_compared']",
         "the record keys compared counted by `write_evidence`",
     ),
     "task_gate.MINIMUM_STATUS_KEY_GATES": (
         "counted",
-        "task_gate.record",
-        "",
-        "the status key gates counted by `record`",
+        "task_gate.floor_breaches",
+        "measured[name]",
+        "the population the floor is compared against in the named test",
     ),
     "test_mode.PASTE_CHARS": (
         "scalar",
