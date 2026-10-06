@@ -46,7 +46,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from integral.claim_trace import entry_denials
+from integral.claim_trace import counts_apply, entry_defects
 from integral.cv_store import (
     SCALAR_FIELDS,
     Certification,
@@ -288,7 +288,7 @@ def _voice_filter(
 def _trace_filter(
     store: ProfileStore, master: CVMaster, chosen: list[tuple[str, int]]
 ) -> tuple[list[tuple[str, int]], list[Omission]]:
-    """T146: leave out every entry whose line is a denial nothing the candidate said backs.
+    """T146: leave out every entry carrying a denial or a number nothing the candidate said backs.
 
     Applied to every selected entry whatever its section, so a type added later is
     covered. Nothing is rewritten; the omission says why, so the candidate can say
@@ -298,18 +298,26 @@ def _trace_filter(
     omissions: list[Omission] = []
     for section, index in chosen:
         entry = _entries(master, section)[index]
-        if not entry_denials(store, entry):
+        found = entry_defects(store, entry, counts=counts_apply(section))
+        if not found:
             kept.append((section, index))
             continue
+        reasons = {
+            "denial_without_backing_row": (
+                "a denial with no backing row: nothing the candidate said states this "
+                "absence, so the document cannot say it about them"
+            ),
+            "hand_typed_count": (
+                "a number no source holds: it is not in the words behind this entry, "
+                "and a document has nothing to compute it from"
+            ),
+        }
         omissions.append(
             Omission(
                 section=section,
                 entry_index=index,
                 text=render_entry(section, entry),
-                reason=(
-                    "a denial with no backing row: nothing the candidate said states this "
-                    "absence, so the document cannot say it about them"
-                ),
+                reason="; ".join(dict.fromkeys(reasons[d.kind] for d in found)),
             )
         )
     return kept, omissions

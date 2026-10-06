@@ -431,6 +431,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from integral.claim_trace import FIXTURE_SOURCE, seed_fixture_source
 from integral.cv_store import (
     ConversationTurn,
     CVMaster,
@@ -1782,9 +1783,9 @@ def _probe_master(
     measurement. Both default to what every earlier probe already used.
     """
     return CVMaster(
-        headline=SourcedText(text=headline),
+        headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=headline),
         experience=experience,
-        skills=(Skill(name="PostgreSQL", level="strong"),),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=episodes,
     )
 
@@ -1823,6 +1824,7 @@ def probe_boundary(root: Path) -> dict[str, Any]:
         identity = create_profile(root, "Probe", handle=handle, language="en")
         store = ProfileStore(root, identity.handle)
         write_master(store, master)
+        seed_fixture_source(store, master)
         return store
 
     win, failure = (episode.text for episode in _FIXTURE_EPISODES)
@@ -1946,7 +1948,11 @@ def probe_boundary(root: Path) -> dict[str, Any]:
     # 10 — a personal detail sitting in the intake store, written a slightly
     # different way. Without this the gate's `[]` is a pass over nothing.
     leaked = plain.model_copy(
-        update={"headline": SourcedText(text="Backend engineer +34600000000")}
+        update={
+            "headline": SourcedText(
+                provenance=(FIXTURE_SOURCE,), text="Backend engineer +34600000000"
+            )
+        }
     )
     store = fresh("leaked", leaked)
     check(
@@ -2020,6 +2026,7 @@ def probe_boundary(root: Path) -> dict[str, Any]:
         headline="Data platform engineer",
         experience=(
             Experience(
+                provenance=(FIXTURE_SOURCE,),
                 title="Data engineer",
                 organisation="Probe S.A.",
                 description=win.rstrip("."),
@@ -2126,6 +2133,7 @@ def probe_retracted_sends(root: Path) -> dict[str, Any]:
 
     def drafted(store: ProfileStore, master: CVMaster) -> Payload:
         write_master(store, master)
+        seed_fixture_source(store, master)
         return _probe_prepare(store, master, approved=(0,))
 
     win, failure = (episode.text for episode in _FIXTURE_EPISODES)
@@ -2423,6 +2431,7 @@ def probe_unbacked_disclosures(root: Path) -> dict[str, Any]:
         identity = create_profile(root, "Probe", handle=handle, language="en")
         store = ProfileStore(root, identity.handle)
         write_master(store, master)
+        seed_fixture_source(store, master)
         return store
 
     def where(store: ProfileStore) -> Path:
@@ -2826,6 +2835,7 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         identity = create_profile(root, "Probe", handle=handle, language="en")
         store = ProfileStore(root, identity.handle)
         write_master(store, master)
+        seed_fixture_source(store, master)
         return store
 
     win, failure = (episode.text for episode in _FIXTURE_EPISODES)
@@ -2911,15 +2921,16 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     # T114 established the sweep must not be blind to a document other than
     # the headline; this is that same axis for T156.
     bulleted = CVMaster(
-        headline=SourcedText(text="Data platform engineer"),
+        headline=SourcedText(provenance=(FIXTURE_SOURCE,), text="Data platform engineer"),
         experience=(
             Experience(
+                provenance=(FIXTURE_SOURCE,),
                 title="Data engineer",
                 organisation="Probe S.A.",
                 description=_FIXTURE_PARAPHRASE,
             ),
         ),
-        skills=(Skill(name="PostgreSQL", level="strong"),),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(_FIXTURE_EPISODES[0],),
     )
     store = fresh("paraphrase-bullet", bulleted)
@@ -2963,6 +2974,7 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
         headline="Data engineer — billing systems",
         experience=(
             Experience(
+                provenance=(FIXTURE_SOURCE,),
                 title="Data engineer",
                 organisation="Probe S.A.",
                 description=_FIXTURE_INNOCENT_FAILURE_ADJACENT,
@@ -3136,8 +3148,8 @@ def probe_paraphrase_undecidability(root: Path) -> dict[str, Any]:
     # one approved-and-disclosed episode, one paraphrased-and-undecidable
     # episode, and one verbatim-planted-and-confirmed episode.
     combined = CVMaster(
-        headline=SourcedText(text=_FIXTURE_FAILURE_PARAPHRASE),
-        skills=(Skill(name="PostgreSQL", level="strong"),),
+        headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=_FIXTURE_FAILURE_PARAPHRASE),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(_FIXTURE_EPISODES[0], _FIXTURE_EPISODES[1], _FIXTURE_SMUGGLED_EPISODE),
     )
     store = fresh("boundary-message", combined)
@@ -3675,6 +3687,7 @@ def probe_carried_disclosures_reported(root: Path) -> dict[str, Any]:
         identity = create_profile(root, "Probe", handle=handle, language="en")
         store = ProfileStore(root, identity.handle)
         write_master(store, master)
+        seed_fixture_source(store, master)
         return store
 
     def where(store: ProfileStore) -> Path:
@@ -3758,7 +3771,10 @@ def probe_carried_disclosures_reported(root: Path) -> dict[str, Any]:
         headline="Data platform engineer",
         experience=(
             Experience(
-                title="Data engineer", organisation="Vall S.A.", description=win.rstrip(".")
+                provenance=(FIXTURE_SOURCE,),
+                title="Data engineer",
+                organisation="Vall S.A.",
+                description=win.rstrip("."),
             ),
         ),
     )
@@ -4113,6 +4129,7 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
         identity = create_profile(root, "Probe", handle=handle, language="en")
         store = ProfileStore(root, identity.handle)
         write_master(store, master)
+        seed_fixture_source(store, master)
         return store
 
     def score(label: str, store: ProfileStore, master: CVMaster, phantom: str) -> dict[str, Any]:
@@ -4181,8 +4198,8 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     seam_tail = "Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu"
     phantom = "Oscar Papa Quebec Romeo Sierra Tango Uniform Victor"
     master = CVMaster(
-        headline=SourcedText(text=seam_tail),
-        skills=(Skill(name=seam_head, level=None),),
+        headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=seam_tail),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name=seam_head, level=None),),
         episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom)),
     )
     store = fresh("intact-seam-cross-document", master)
@@ -4209,11 +4226,13 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     india_text = "India Juliet Kilo Lima Mike November Oscar Papa"
     phantom2 = "Echo Foxtrot Golf Hotel India Juliet Kilo Lima"
     master2 = CVMaster(
-        headline=SourcedText(text="Backend engineer — data platforms"),
+        headline=SourcedText(
+            provenance=(FIXTURE_SOURCE,), text="Backend engineer — data platforms"
+        ),
         skills=(
-            Skill(name=alfa_text, level=None),
-            Skill(name=win, level=None),
-            Skill(name=india_text, level=None),
+            Skill(provenance=(FIXTURE_SOURCE,), name=alfa_text, level=None),
+            Skill(provenance=(FIXTURE_SOURCE,), name=win, level=None),
+            Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
         episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
     )
@@ -4237,8 +4256,8 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     # if run)` must find it exactly as `_carries(intact, episode.text)` used to.
     genuine = _FIXTURE_EPISODES[1].text
     master3 = CVMaster(
-        headline=SourcedText(text=genuine.rstrip(".")),
-        skills=(Skill(name="PostgreSQL", level="strong"),),
+        headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=genuine.rstrip(".")),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=genuine)),
     )
     store3 = fresh("intact-seam-genuine-control", master3)
@@ -4272,10 +4291,12 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     # already applies to a single line, applied here to a genuine two-line
     # carry the per-line rewrite lost.
     master4 = CVMaster(
-        headline=SourcedText(text="Backend engineer — data platforms"),
+        headline=SourcedText(
+            provenance=(FIXTURE_SOURCE,), text="Backend engineer — data platforms"
+        ),
         skills=(
-            Skill(name=alfa_text, level=None),
-            Skill(name=india_text, level=None),
+            Skill(provenance=(FIXTURE_SOURCE,), name=alfa_text, level=None),
+            Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
         episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
     )
@@ -4312,8 +4333,8 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     # strips both, leaving only the manufactured `cv.md`-tail/`letter.md`-
     # head join as anything that could confirm it.
     master5 = CVMaster(
-        headline=SourcedText(text=seam_tail),
-        skills=(Skill(name=seam_head, level=None),),
+        headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=seam_tail),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name=seam_head, level=None),),
         episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom)),
     )
     store5 = fresh("intact-seam-approved-xdoc", master5)
@@ -4354,10 +4375,12 @@ def probe_intact_seam(root: Path) -> dict[str, Any]:
     # both leaves only the two genuinely adjacent skill lines as anything
     # that could confirm it.
     master6 = CVMaster(
-        headline=SourcedText(text="Backend engineer — data platforms"),
+        headline=SourcedText(
+            provenance=(FIXTURE_SOURCE,), text="Backend engineer — data platforms"
+        ),
         skills=(
-            Skill(name=alfa_text, level=None),
-            Skill(name=india_text, level=None),
+            Skill(provenance=(FIXTURE_SOURCE,), name=alfa_text, level=None),
+            Skill(provenance=(FIXTURE_SOURCE,), name=india_text, level=None),
         ),
         episodes=(Episode(kind="achievement", text=win), Episode(kind="failure", text=phantom2)),
     )
@@ -4493,6 +4516,7 @@ def measure(
         identity = create_profile(root, "Gate Fixture", handle="fixture", language="en")
         store = ProfileStore(root, identity.handle)
         write_master(store, master)
+        seed_fixture_source(store, master)
         for position, ad in enumerate(ads):
             payload = prepare(
                 store,

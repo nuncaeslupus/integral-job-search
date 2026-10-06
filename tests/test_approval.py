@@ -43,6 +43,7 @@ from integral.approval import (
     retracted_episodes_sendable,
     sends_without_confirmation,
 )
+from integral.claim_trace import FIXTURE_SOURCE, seed_fixture_source
 from integral.cv_store import (
     ConversationTurn,
     CVMaster,
@@ -95,6 +96,7 @@ def _master(store: ProfileStore, **overrides: object) -> CVMaster:
     built = CVMaster(
         experience=(
             Experience(
+                provenance=(FIXTURE_SOURCE,),
                 title="Data migration lead",
                 organisation="Cintra Logistics",
                 start="2021",
@@ -102,7 +104,7 @@ def _master(store: ProfileStore, **overrides: object) -> CVMaster:
                 description="Moved the billing system off the mainframe.",
             ),
         ),
-        skills=(Skill(name="PostgreSQL", level="strong"),),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(
             Episode(kind="achievement", text=WIN),
             Episode(kind="failure", text=FAILURE),
@@ -110,6 +112,7 @@ def _master(store: ProfileStore, **overrides: object) -> CVMaster:
         **overrides,  # type: ignore[arg-type]
     )
     write_master(store, built)
+    seed_fixture_source(store, built)
     return built
 
 
@@ -206,7 +209,9 @@ def test_an_episode_smuggled_through_another_entry_is_caught(store: ProfileStore
     saying the story was withheld. A false summary is the one thing the send
     boundary cannot survive.
     """
-    built = _master(store, headline=SourcedText(text=FAILURE.rstrip(".")))
+    built = _master(
+        store, headline=SourcedText(provenance=(FIXTURE_SOURCE,), text=FAILURE.rstrip("."))
+    )
     with pytest.raises(ApprovalError, match="no payload was written"):
         _prepare(store, built)
 
@@ -514,10 +519,11 @@ def test_a_short_episode_does_not_match_a_longer_word(store: ProfileStore) -> No
     episode.
     """
     built = CVMaster(
-        skills=(Skill(name="PostgreSQL", level="strong"),),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(Episode(kind="context", text="Python"),),
     )
     write_master(store, built)
+    seed_fixture_source(store, built)
     assert not _carries("A Pythonista writing Pythonic code.", "Python")
     assert _carries("We shipped it in Python, mostly.", "Python")
 
@@ -764,13 +770,14 @@ def test_a_retracted_row_withdraws_the_episode_its_provenance_names(store: Profi
     """
     row = _episode_row(store, "Cut the nightly billing run right down. It took six hours.")
     built = CVMaster(
-        skills=(Skill(name="PostgreSQL", level="strong"),),
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
         episodes=(
             Episode(kind="achievement", text=WIN, provenance=(ConversationTurn(evidence_id=row),)),
             Episode(kind="failure", text=FAILURE),
         ),
     )
     write_master(store, built)
+    seed_fixture_source(store, built)
     offer_id, version = _prepare(store, built, approved=(0,))
     payload = read_payload(store, offer_id, version)
     _retract_row(store, row)
@@ -786,8 +793,12 @@ def test_a_retracted_row_withdraws_the_episode_its_provenance_names(store: Profi
 
 def _bank(store: ProfileStore, *episodes: Episode) -> CVMaster:
     """A story bank of exactly these episodes, written to the store."""
-    built = CVMaster(skills=(Skill(name="PostgreSQL", level="strong"),), episodes=episodes)
+    built = CVMaster(
+        skills=(Skill(provenance=(FIXTURE_SOURCE,), name="PostgreSQL", level="strong"),),
+        episodes=episodes,
+    )
     write_master(store, built)
+    seed_fixture_source(store, built)
     return built
 
 
