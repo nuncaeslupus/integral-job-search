@@ -57,6 +57,15 @@ def _never_rewrite_the_live_prose_evidence(
 
     monkeypatch.setattr(floor_sweep, "write_polarity_evidence", redirected_polarity)
 
+    # T164: `_main` writes `status/evidence/T164.json` too — same hazard, same redirect.
+    real_declarations = floor_sweep.write_declaration_evidence
+    declaration_scratch = tmp_path_factory.mktemp("declarations") / "T164.json"
+
+    def redirected_declarations(evidence: Path | None = None) -> dict[str, Any]:
+        return real_declarations(declaration_scratch if evidence is None else evidence)
+
+    monkeypatch.setattr(floor_sweep, "write_declaration_evidence", redirected_declarations)
+
 
 def _write(tmp_path: Path, source: str, name: str = "mod") -> Path:
     path = tmp_path / f"{name}.py"
@@ -1225,6 +1234,22 @@ def test_the_live_tree_has_zero_findings() -> None:
 
 def test_main_exits_zero_on_the_live_tree(tmp_path: Path) -> None:
     assert floor_sweep._main([str(tmp_path / "T159.json")]) == 0
+
+
+def test_main_exits_one_when_a_floor_declares_no_population(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T164's verdict reaches the exit status of the one command `make evidence` runs:
+    the sweep itself is clean, and the only thing wrong is an undeclared floor."""
+    real = floor_sweep.measure_declarations
+
+    def one_floor_declares_nothing(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        measured = real(*args, **kwargs)
+        row = {"floor": "a.B", "why": "declares no population"}
+        return {**measured, "undeclared": [row], "floors_with_no_declared_population": 1}
+
+    monkeypatch.setattr(floor_sweep, "measure_declarations", one_floor_declares_nothing)
+    assert floor_sweep._main([str(tmp_path / "T159.json")]) == 1
 
 
 def test_main_exits_one_on_a_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -5027,3 +5052,224 @@ def test_the_t165_plan_row_records_the_four_ceilings_and_the_confirming_matches_
     assert "four" in row
     assert "_CONFIRMING_MATCHES_FOR_BIPOLAR" in row
     assert "floor" in row.split("_CONFIRMING_MATCHES_FOR_BIPOLAR", 1)[1]
+
+
+# ---------------------------------------------------------------------------
+# T164: a floor declares the population it guards, or is ruled out with a reason.
+# ---------------------------------------------------------------------------
+
+_DECLARED_FLOOR = """
+#: Why this value: the fixture feeds three things.
+#: arsenal-floor-margin: MINIMUM_THINGS value=3
+MINIMUM_THINGS = 3
+
+
+def measure(things):
+    if len(things) < MINIMUM_THINGS:
+        return None
+    return len(things)
+"""
+
+_FLOOR_ENTRY = ("floor", "a lower bound on the things measure() is handed")
+_COUNTED = ("counted", "mod.measure", "len(things)", "the things measure() is handed")
+
+
+def _declared(
+    tmp_path: Path,
+    source: str = _DECLARED_FLOOR,
+    entry: Any = _COUNTED,
+    adjudication: Any = _FLOOR_ENTRY,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    _write(tmp_path, source)
+    populations = {"mod.MINIMUM_THINGS": entry, **(extra or {})} if entry is not None else {}
+    adjudications = {"mod.MINIMUM_THINGS": adjudication} if adjudication is not None else {}
+    return floor_sweep.measure_declarations(tmp_path, populations, adjudications)
+
+
+def _why(measured: dict[str, Any]) -> list[str]:
+    return [row["why"] for row in measured["undeclared"]]
+
+
+def test_the_live_tree_declares_the_population_of_every_floor() -> None:
+    measured = floor_sweep.measure_declarations()
+    assert measured["undeclared"] == []
+    assert measured["floors_with_no_declared_population"] == 0
+    assert measured["declarations_without_a_floor"] == []
+    assert measured["gate_status"] == "measured"
+    # Every candidate lands in exactly one bucket: the partition has no remainder.
+    assert measured["floors_judged"] == (
+        measured["resolved_by_the_sweep"]
+        + measured["declared_with_a_counter"]
+        + measured["declared_scalar"]
+        + measured["ruled_out_with_a_reason"]
+    )
+
+
+def test_a_declared_floor_is_accounted_for(tmp_path: Path) -> None:
+    measured = _declared(tmp_path)
+    assert measured["floors_with_no_declared_population"] == 0, measured
+    assert measured["declared_with_a_counter"] == 1
+
+
+def test_a_floor_that_declares_nothing_is_named_not_classified_out_of_scope(
+    tmp_path: Path,
+) -> None:
+    """The closed rule: nothing lists the floor anywhere but its own source and its
+    polarity ruling, and it is still found - and named."""
+    measured = _declared(tmp_path, entry=None)
+    assert measured["floors_with_no_declared_population"] == 1
+    assert measured["undeclared"] == [
+        {"floor": "mod.MINIMUM_THINGS", "why": "declares no population"}
+    ]
+
+
+def test_a_floor_nobody_adjudicated_is_named_too(tmp_path: Path) -> None:
+    measured = _declared(tmp_path, adjudication=None)
+    assert _why(measured) == ["no polarity adjudication"]
+
+
+@pytest.mark.parametrize(
+    ("entry", "fragment"),
+    [
+        (("counted", "mod.gone", "len(things)", "the things it is handed"), "no function"),
+        (("counted", "mod.measure", "len(other)", "the things it is handed"), "never compares"),
+        (("counted", "mod.measure", "", "x"), "words"),
+        (("counted", "", "", "the things it is handed"), "names the function"),
+        (("counted", "other.measure", "", "the things it is handed"), "own module"),
+        (("counted", "tests/test_nowhere.py::t", "", "the things it is handed"), "not there"),
+        (("counted", "mod", "", "the things it is handed"), "no function"),
+        (("counted", "mod.measure", "", ""), "words"),
+        (("sometimes", "mod.measure", "", "the things it is handed"), "unknown kind"),
+        (("scalar", "mod.measure", "", "bounds one value, never a collection"), "no counter"),
+        (("counted", "mod.measure"), "malformed"),
+        (["counted", "mod.measure", "", "the things it is handed"], "malformed"),
+    ],
+)
+def test_a_declaration_that_does_not_resolve_is_not_a_declaration(
+    tmp_path: Path, entry: Any, fragment: str
+) -> None:
+    measured = _declared(tmp_path, entry=entry)
+    assert measured["floors_with_no_declared_population"] == 1, measured
+    assert fragment in _why(measured)[0], measured
+
+
+def test_a_counter_that_never_reads_the_floor_does_not_count(tmp_path: Path) -> None:
+    """The declaration is checked against the code it names: the same counter, with the
+    floor no longer mentioned, stops resolving."""
+    source = _DECLARED_FLOOR.replace("< MINIMUM_THINGS", "< 3")
+    measured = _declared(tmp_path, source=source)
+    assert "never mentions" in _why(measured)[0], measured
+
+
+def test_a_counter_compares_the_floor_with_the_declared_operand_on_either_side(
+    tmp_path: Path,
+) -> None:
+    flipped = _DECLARED_FLOOR.replace(
+        "len(things) < MINIMUM_THINGS", "MINIMUM_THINGS > len(things)"
+    )
+    assert _declared(tmp_path, source=flipped)["floors_with_no_declared_population"] == 0
+    chained = _DECLARED_FLOOR.replace(
+        "len(things) < MINIMUM_THINGS", "0 <= MINIMUM_THINGS > len(things)"
+    )
+    assert _declared(tmp_path, source=chained)["floors_with_no_declared_population"] == 0
+
+
+def test_a_test_function_can_be_the_counter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A floor only a test reads (`interview_direction.MINIMUM_OPEN_TALK_STEPS`) is
+    declared against that test, and the same checks apply to it."""
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_mod.py").write_text(
+        "from mod import MINIMUM_THINGS\n\n\ndef test_enough(things):\n"
+        "    assert len(things) >= MINIMUM_THINGS\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(floor_sweep, "_REPO_ROOT", tmp_path)
+    entry = ("counted", "tests/test_mod.py::test_enough", "len(things)", "the things it gets")
+    assert _declared(tmp_path, entry=entry)["floors_with_no_declared_population"] == 0
+    wrong = ("counted", "tests/test_mod.py::test_enough", "len(stuff)", "the things it gets")
+    assert "never compares" in _why(_declared(tmp_path, entry=wrong))[0]
+
+
+def test_a_scalar_bound_needs_a_reason_and_names_no_counter(tmp_path: Path) -> None:
+    ok = ("scalar", "", "", "bounds the length of one string, not a population")
+    assert _declared(tmp_path, entry=ok)["declared_scalar"] == 1
+    bare = ("scalar", "", "", "scalar")
+    assert "words" in _why(_declared(tmp_path, entry=bare))[0]
+
+
+def test_a_floor_ruled_a_ceiling_needs_a_reason_not_a_declaration(tmp_path: Path) -> None:
+    ruled = ("ceiling", "breached by adding a member, never by deleting one")
+    measured = _declared(tmp_path, entry=None, adjudication=ruled)
+    assert measured["floors_with_no_declared_population"] == 0
+    assert measured["ruled_out_with_a_reason"] == 1
+    silent = _declared(tmp_path, entry=None, adjudication=("neither", "x"))
+    assert _why(silent) == ["ruled out with no reason"]
+
+
+def test_a_declaration_for_a_name_that_is_not_a_floor_is_reported(tmp_path: Path) -> None:
+    ghost = {"mod.NO_SUCH_FLOOR": _COUNTED}
+    assert _declared(tmp_path, extra=ghost)["declarations_without_a_floor"] == ["mod.NO_SUCH_FLOOR"]
+    ruled = ("ceiling", "breached by adding a member, never by deleting one")
+    measured = _declared(tmp_path, adjudication=ruled)
+    assert measured["declarations_without_a_floor"] == ["mod.MINIMUM_THINGS"]
+
+
+def test_the_declaration_gate_is_unmeasured_when_it_judged_too_little(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _declared(tmp_path)["gate_status"] == "unmeasured"  # one floor, floor is 242
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_JUDGED", 1)
+    assert _declared(tmp_path)["gate_status"] == "measured"
+    monkeypatch.setattr(floor_sweep, "MINIMUM_FLOORS_JUDGED", 2)
+    assert _declared(tmp_path)["gate_status"] == "unmeasured"
+
+
+def test_the_declaration_exit_code_is_one_unless_measured_and_clean() -> None:
+    clean = {
+        "gate_status": "measured",
+        "floors_judged": 300,
+        "undeclared": [],
+        "declarations_without_a_floor": [],
+    }
+    assert floor_sweep._declaration_exit_code(clean) == 0
+    for key, value in (
+        ("gate_status", "unmeasured"),
+        ("undeclared", [{"floor": "a.B", "why": "declares no population"}]),
+        ("declarations_without_a_floor", ["a.B"]),
+    ):
+        assert floor_sweep._declaration_exit_code({**clean, key: value}) == 1, key
+
+
+def test_the_declaration_evidence_commits_the_verdict_and_a_floor_not_counts(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "T164.json"
+    measured = floor_sweep.write_declaration_evidence(target)
+    committed = json.loads(target.read_text(encoding="utf-8"))
+    assert committed["floors_with_no_declared_population"] == 0
+    assert committed["gate_status"] == "measured"
+    assert committed["floors_judged_at_least"] == floor_sweep.MINIMUM_FLOORS_JUDGED
+    assert measured["floors_judged"] >= committed["floors_judged_at_least"]
+    for census_shaped in ("floors_judged", "declared_with_a_counter", "resolved_by_the_sweep"):
+        assert census_shaped not in committed
+
+
+def test_a_new_floor_in_the_live_tree_is_found_with_nothing_listing_it(tmp_path: Path) -> None:
+    """The live universe, plus one module that was never registered anywhere: it is judged
+    the moment it exists."""
+    copy_dir = _tree_with(tmp_path, "fresh_floor.py", _DECLARED_FLOOR)
+    measured = floor_sweep.measure_declarations(copy_dir)
+    assert {row["floor"] for row in measured["undeclared"]} == {"fresh_floor.MINIMUM_THINGS"}
+    assert measured["undeclared"][0]["why"] == "no polarity adjudication"
+
+
+def test_every_register_entry_names_a_function_in_its_own_module() -> None:
+    """Pinned over the live register, not through the sweep: a declaration whose counter
+    was renamed away must not be one a green gate can hide behind."""
+    for qualified, (kind, counter, _compared, _text) in floor_sweep.FLOOR_POPULATIONS.items():
+        if kind == "counted" and "::" not in counter:
+            assert counter.split(".", 1)[0] == qualified.split(".", 1)[0], qualified

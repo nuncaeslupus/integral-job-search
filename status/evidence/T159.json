@@ -100,7 +100,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4792
+      "line": 4798
+    },
+    {
+      "module": "floor_sweep",
+      "name": "_MINIMUM_REASON_WORDS",
+      "line": 4952
     },
     {
       "module": "gate_detector_states",
@@ -250,7 +255,7 @@
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 110
+      "line": 114
     },
     {
       "module": "spec_consistency",
@@ -354,20 +359,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3860,
+      "line": 3864,
       "population": 46
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3890,
+      "line": 3894,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3750,
-      "population": 101
+      "line": 3754,
+      "population": 102
     },
     {
       "module": "freshness",
@@ -537,6 +542,7 @@
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
     "floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY",
+    "floor_sweep.MINIMUM_FLOORS_JUDGED",
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS",
     "floor_sweep._MAX_DELEGATION_DEPTH",
     "freshness.DEFAULT_ELAPSED_DAYS",
@@ -656,6 +662,7 @@
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED",
     "floor_sweep.MINIMUM_FLOORS_SWEPT",
     "floor_sweep.MINIMUM_POLARITY_CASES",
+    "floor_sweep._MINIMUM_REASON_WORDS",
     "freshness.MINIMUM_OFFERS",
     "gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED",
     "gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES",
@@ -726,6 +733,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 101,
+  "floors_swept_at_least": 102,
   "floors_arithmetically_checked_at_least": 36
 }
