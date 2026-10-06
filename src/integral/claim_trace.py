@@ -44,7 +44,7 @@ paragraph has an author in `trazabilidad.md` (`paragraph_defects`, called by
 
 **The honest ceiling.** Negation and quantity are recognised from closed cue
 vocabularies in English, Spanish and Catalan (`NEGATORS`, `NUMBER_WORDS`). A
-denial that carries none of those words ("I am new to tracing") is not seen, and
+denial that carries none of those words ("I stayed away from tracing") is not seen, and
 neither is the bare word "one"; a digit string is always seen. That is a limit of
 reading text, stated rather than hidden. Every cue the vocabulary lacks is
 fail-open, and every cue it gains only adds refusals. Also stated: "I led 3 teams"
@@ -58,6 +58,7 @@ import json
 import re
 import sys
 import tempfile
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -85,42 +86,69 @@ NEGATORS: frozenset[str] = frozenset(
     {
         # en
         "not", "no", "never", "none", "nobody", "nothing", "neither", "nor",
-        "cannot", "lack", "lacks", "lacking", "unfamiliar", "inexperienced",
-        "unable", "dont",
+        "cannot", "lack", "lacks", "lacked", "lacking", "unfamiliar", "inexperienced",
+        "unable", "hardly", "barely", "nope",
+        # en, a contraction typed without its apostrophe: the closed auxiliary list
+        "aint", "arent", "cant", "couldnt", "didnt", "doesnt", "dont", "hadnt", "hasnt",
+        "havent", "isnt", "mightnt", "mustnt", "neednt", "shant", "shouldnt", "wasnt",
+        "werent", "wont", "wouldnt",
         # es
-        "nunca", "jamás", "jamas", "ni", "nada", "ningún", "ninguno", "ninguna",
-        "tampoco", "nadie", "carezco", "carece", "carecemos",
-        "desconozco", "desconoce", "desconocemos",
+        "nunca", "jamás", "jamas", "ni", "nada", "ningún", "ninguno", "ninguna", "ningunos",
+        "ningunas", "tampoco", "nadie", "carezco", "carece", "carecemos", "carecía",
+        "desconozco", "desconoce", "desconocemos", "desconocía",
         # ca
-        "mai", "cap", "res", "tampoc", "ningú", "manco", "gens",
+        "mai", "cap", "res", "tampoc", "ningú", "manco", "gens", "desconec",
     }
 )  # fmt: skip
-_APOSTROPHES = "'" + chr(0x2019)  # straight and typographic
-_TOKEN = re.compile(rf"[^\W_]+(?:[{_APOSTROPHES}][^\W_]+)*(?:-[^\W_]+)*")
+_APOSTROPHE_VARIANTS = "".join(chr(c) for c in (0x2019, 0xB4, 0x2018, 0x2BC, 0x60, 0x2032))
+_APOSTROPHE_FOLD = str.maketrans(dict.fromkeys(_APOSTROPHE_VARIANTS, "'"))
+
+
+def fold(text: str) -> str:
+    """NFKC, combining marks stripped, apostrophe look-alikes folded to ', lower-cased.
+
+    Applied to the text and to every cue, so a spelling the vocabulary already holds is
+    seen however it is written: fullwidth, decomposed, accentless, or with a look-alike
+    apostrophe. Over-reading only adds refusals.
+    """
+    # the look-alikes go first: NFKC would turn an acute accent into a space and a mark
+    text = unicodedata.normalize("NFKC", text.translate(_APOSTROPHE_FOLD))
+    text = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
+    return text.lower()
+
+
+_NEGATORS_FOLDED = frozenset(fold(word) for word in NEGATORS)
+_TOKEN = re.compile(r"[^\W_]+(?:'[^\W_]+)*(?:-[^\W_]+)*")
 # "haven't", "doesn't", "can't": a contraction of a negator, whatever the verb.
-_CONTRACTED_NEGATION = re.compile(rf"[^\W_]n[{_APOSTROPHES}]t$")
+_CONTRACTED_NEGATION = re.compile(r"[^\W_]n't$")
 
 
 # Cues that are two words, so no single word carries them: "have yet to", "sin experiencia",
-# "gens d'experiència". "without" and "sin" alone stay non-cues (see above); only the pair
-# that names an absence of experience is one.
+# "gens d'experiència", "new to", "n/a". Bare "without" and "sin" stay non-cues ("migrated it
+# without downtime" asserts something); only the pair that names an absence of experience is one.
 _PHRASE_CUES = re.compile(
-    rf"\byet to\b|\b(?:sin|sense) experi[eè]nci[aà]\b|\blittle (?:or no )?(?:experience|exposure)\b"
-    rf"|\bgens d[{_APOSTROPHES}] ?experi[eè]ncia\b"
+    r"\byet\s+to\b|\bnew\s+to\b|\bn/a\b|\b(?:sin|sense|without)\s+experienc?i?[ae]\b"
+    r"|\b(?:little|limited|minimal|zero)\s+(?:or\s+no\s+)?(?:experience|exposure)\b"
+    r"|\bgens\s+d'\s*experiencia\b"
 )
 
 
 def _words(text: str) -> list[str]:
-    return _TOKEN.findall(text.lower())
+    """Each token of `text`, and each hyphen part of a compound beside it: "never-used"."""
+    out: list[str] = []
+    for token in _TOKEN.findall(fold(text)):
+        out.append(token)
+        out.extend(part for part in token.split("-") if part != token)
+    return out
 
 
 def _is_cue(word: str) -> bool:
-    return word in NEGATORS or _CONTRACTED_NEGATION.search(word) is not None
+    return word in _NEGATORS_FOLDED or _CONTRACTED_NEGATION.search(word) is not None
 
 
 def is_denial(text: str) -> bool:
     """Does `text` carry a negation cue? Over-reading only adds refusals."""
-    return _PHRASE_CUES.search(text.lower()) is not None or any(
+    return _PHRASE_CUES.search(fold(text)) is not None or any(
         _is_cue(word) for word in _words(text)
     )
 
@@ -551,7 +579,11 @@ def _with_sourced_claims(store: ProfileStore, master: CVMaster) -> CVMaster:
 
 
 def _candidate_denials_checked(store: ProfileStore) -> tuple[int, int]:
-    """(denial sentences, defects) over a letter whose one paragraph is the candidate's own denial.
+    """(denials `check_authorship` judged, defects) over a letter with the candidate's own denial.
+
+    The count is what the judge refused in the same words under an `edited` author, so it
+    is zero if `check_authorship` stops seeing denials; the defects are what it said about
+    the `candidate` paragraph, which must be none.
 
     The honest-gap sentence is the one denial a document may carry, so the corpus checks it
     passes: a rule satisfied by refusing every denial would otherwise score zero defects.
@@ -560,7 +592,8 @@ def _candidate_denials_checked(store: ProfileStore) -> tuple[int, int]:
         recorded_at="2026-10-06T10:00:00Z", step="history", kind="candidate_statement",
         text=_DENIAL, source="application_draft",
     )  # fmt: skip
-    return len(denial_sentences(_DENIAL)), _letter_defects("candidate", _DENIAL, store, [row.id])
+    seen = _letter_defects("edited", _DENIAL, store, [row.id])
+    return seen, _letter_defects("candidate", _DENIAL, store, [row.id])
 
 
 def measure(fixture_master: Path | None = None, store_path: Path | None = None) -> dict[str, Any]:

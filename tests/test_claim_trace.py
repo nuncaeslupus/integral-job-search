@@ -108,7 +108,6 @@ def test_denials_are_recognised_in_three_languages(text: str) -> None:
     [
         "Used Honeycomb at Flanks.",
         "Built the NoSQL layer.",
-        "No-code automation lead.",
         "Migrated billing without downtime.",
         "Sin pausas, con calma: migré la facturación.",
     ],
@@ -530,3 +529,112 @@ def test_episodes_are_not_exempt_from_the_count_rule(store: ProfileStore) -> Non
     held = say(store, text)
     sourced = Episode(kind="achievement", text=text, provenance=cited(held))
     assert entry_defects(store, sourced) == []
+
+
+# --- round 5: `is_denial` recall is the whole guarantee, so each spelling is a case ---
+
+FULLWIDTH_NOT = "".join(chr(0xFF00 + ord(c) - 0x20) for c in "not")
+RESPELLED = [
+    "I havent used observability tools.",  # B1: a contraction without its apostrophe
+    "I didnt use Kafka.",
+    "It hasnt been used.",
+    "It isnt used.",
+    "I wont use it.",
+    "I cant use it.",
+    "I don" + chr(0xB4) + "t use Kafka.",  # B2: look-alike apostrophes
+    "I don" + chr(0x2018) + "t use Kafka.",
+    "I don" + chr(0x2BC) + "t use Kafka.",
+    "I don`t use Kafka.",
+    "I don" + chr(0x2032) + "t use Kafka.",
+    "I " + FULLWIDTH_NOT + " use Kafka.",  # fullwidth "not"
+    "Jamás he usado Kafka.",  # NFD "Jamás"
+    "Ningún uso de Kafka.",
+    "Ningun uso de Kafka.",  # accentless
+    "Ningu he fet servir Kafka.",
+    "Never-used Kafka.",  # B3: a hyphen compound
+    "Not-yet-used Kafka.",
+    "Sin  experiencia en Kafka.",  # B4: any whitespace between the words of a phrase
+    "Little\nexposure to Kafka.",
+    "I have yet\nto use Kafka.",
+    "I lacked Kafka.",  # N1 inflections
+    "Desconocía Kafka.",
+    "Carecía de Kafka.",
+    "Ningunos de ellos.",
+    "Desconec Kafka.",
+    "I hardly used Kafka.",  # N2 phrasings
+    "I barely used Kafka.",
+    "Nope.",
+    "Kafka: n/a.",
+    "I am new to Kafka.",
+    "Limited experience with Kafka.",
+    "Minimal exposure to Kafka.",
+    "Zero experience with Kafka.",
+    "Without experience in Kafka.",
+]
+
+
+@pytest.mark.parametrize("text", RESPELLED)
+def test_a_respelled_cue_is_still_a_denial(text: str) -> None:
+    assert is_denial(text), text
+    assert [d.kind for d in paragraph_defects("assistant", text, [])] == [DENIAL_KIND]
+    assert [d.kind for d in paragraph_defects("edited", text, [text])] == [DENIAL_KIND]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Built a zero-downtime cutover.",
+        "Migrated without downtime.",
+        "Wrote non-trivial services.",
+        "Re-architected billing.",
+        "Cantaba en un coro.",
+        "Wonton soup.",
+    ],
+)
+def test_the_negative_controls_are_not_denials(text: str) -> None:
+    assert not is_denial(text), text
+    assert paragraph_defects("assistant", text, []) == []
+
+
+def test_b_cases_through_check_authorship_and_the_generator(store: ProfileStore) -> None:
+    found = _letter(store, "edited", "Ran billing. I havent used observability tools.", DENIAL)
+    assert any(DENIAL_KIND in d for d in found), found
+    headline = SourcedText(text="Never-used Kafka; havent touched Flink.")
+    exp = Experience(
+        title="Dev", organisation="Cintra", description="didnt use observability tools."
+    )
+    master = CVMaster(headline=headline, experience=(exp,))
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="o1", advert=ADVERT)
+    assert sorted(o.section for o in manifest.omissions) == ["experience", "headline"]
+    assert check_version(store, master, "o1", 1)["untraced_claim_defects"] == 0
+    _append_claim(
+        store,
+        manifest,
+        Claim(document="cv.md", text=headline.text, section="headline", entry_index=0),
+    )
+    assert [d.kind for d in check_version(store, master, "o1", 1)["defects"]] == [DENIAL_KIND] * 2
+
+
+def test_each_fold_is_load_bearing() -> None:
+    """One assertion per fold, so switching any one off goes red here."""
+    assert claim_trace.fold("Jamás") == "jamas"  # combining marks
+    assert claim_trace.fold(FULLWIDTH_NOT) == "not"  # NFKC
+    assert claim_trace.fold("don" + chr(0xB4) + "t") == "don't"  # apostrophes
+    assert is_denial("Never-used") and not is_denial("Reused-twice")  # hyphen parts
+
+
+def test_a_cited_sentence_plus_a_new_denial_is_not_a_candidate_paragraph(
+    store: ProfileStore,
+) -> None:
+    said = "I run 3 services."
+    found = _letter(store, "candidate", said + " I have never used Kafka.", said)
+    assert any("not exactly the cited sentences" in d for d in found), found
+
+
+def test_the_gate_derives_its_denial_count_from_what_check_authorship_judged(
+    store: ProfileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert claim_trace._candidate_denials_checked(store) == (1, 0)
+    monkeypatch.setattr(claim_trace, "is_denial", lambda text: False)
+    assert claim_trace._candidate_denials_checked(store)[0] == 0

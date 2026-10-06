@@ -41,15 +41,20 @@ número."*
 Both holes have the same shape — a claim whose truth-maker is not an entry the
 manifest can point at — so both close the same way:
 
-- **A denial needs a backing row exactly as an assertion does.** "The candidate
-  has not done X" is a claim about the candidate. Where the store is silent, the
-  honest sentence is about the store, not about the person.
+- **A denial is stated only by the candidate.** "The candidate has not done X"
+  is a claim about the candidate, and a generated document may never contain
+  one except inside a `candidate`-authored letter paragraph (the candidate's
+  own cited sentences verbatim). In an `assistant` or `edited` paragraph, or in
+  any generated CV entry, episode or headline, it is refused or omitted. Where
+  the store is silent, the honest sentence is about the store, not about the
+  person, and it lives in a candidate-authored paragraph.
 - **A number in a document is computed or it is not written.** A count typed
   into prose has no source of truth and begins ageing the moment it is typed.
 
 The measurement extends T45's: run the generator over the labelled corpus as it
-already does, and add a case per hole. A denial with no backing row must be
-refused; a hand-typed count must be refused; and **a denial that does have a
-backing row must pass**, so the check is not satisfiable by banning the word
-"not" — which would pass this gate while destroying the honest-gap paragraph
-that is one of the letter's better features.
+already does, and add a case per hole. A denial outside a candidate
+paragraph must be refused; a hand-typed count must be refused; and **the
+candidate's own cited denial, in a candidate paragraph, must pass**, so the
+check is not satisfiable by banning the word "not" — which would pass this gate
+while destroying the honest-gap paragraph that is one of the letter's better
+features.
