@@ -534,7 +534,19 @@ def test_episodes_are_not_exempt_from_the_count_rule(store: ProfileStore) -> Non
 # --- round 5: `is_denial` recall is the whole guarantee, so each spelling is a case ---
 
 FULLWIDTH_NOT = "".join(chr(0xFF00 + ord(c) - 0x20) for c in "not")
+INVISIBLE = [  # R5-1: a format character inside a cue
+    "ne" + chr(0xAD) + "ver used Kafka.",
+    "ne" + chr(0x200B) + "ver used Kafka.",
+    "ne" + chr(0x200D) + "ver used Kafka.",
+    "ne" + chr(0x2060) + "ver used Kafka.",
+    "N" + chr(0x200B) + "o experience.",
+]
 RESPELLED = [
+    *INVISIBLE,
+    "I don" + chr(0x2BB) + "t use Kafka.",  # R5-2
+    "I don" + chr(0x201B) + "t use Kafka.",
+    "Without any real experience in Kafka.",  # R5-3
+    "Sin ninguna experiencia en Kafka.",
     "I havent used observability tools.",  # B1: a contraction without its apostrophe
     "I didnt use Kafka.",
     "It hasnt been used.",
@@ -638,3 +650,24 @@ def test_the_gate_derives_its_denial_count_from_what_check_authorship_judged(
     assert claim_trace._candidate_denials_checked(store) == (1, 0)
     monkeypatch.setattr(claim_trace, "is_denial", lambda text: False)
     assert claim_trace._candidate_denials_checked(store)[0] == 0
+
+
+def test_r5_1_invisible_characters_through_check_authorship_and_the_generator(
+    store: ProfileStore,
+) -> None:
+    found = _letter(store, "edited", "Ran billing. " + INVISIBLE[1], DENIAL)
+    assert any(DENIAL_KIND in d for d in found), found
+    master = CVMaster(headline=SourcedText(text=INVISIBLE[0]))
+    write_master(store, master)
+    manifest = generate(store, master, offer_id="o1", advert=ADVERT)
+    assert [o.section for o in manifest.omissions] == ["headline"]
+    _append_claim(
+        store,
+        manifest,
+        Claim(document="cv.md", text=INVISIBLE[0], section="headline", entry_index=0),
+    )
+    assert [d.kind for d in check_version(store, master, "o1", 1)["defects"]] == [DENIAL_KIND]
+
+
+def test_r5_1_the_format_character_strip_is_load_bearing() -> None:
+    assert claim_trace.fold("ne" + chr(0x200B) + "ver") == "never"

@@ -100,12 +100,28 @@ NEGATORS: frozenset[str] = frozenset(
         "mai", "cap", "res", "tampoc", "ningú", "manco", "gens", "desconec",
     }
 )  # fmt: skip
-_APOSTROPHE_VARIANTS = "".join(chr(c) for c in (0x2019, 0xB4, 0x2018, 0x2BC, 0x60, 0x2032))
+_APOSTROPHE_VARIANTS = "".join(
+    chr(c)
+    for c in (
+        0x2019,
+        0xB4,
+        0x2018,
+        0x2BC,
+        0x60,
+        0x2032,
+        0x2BB,
+        0x2B9,
+        0x2035,
+        0x55A,
+        0xA78C,
+        0x201B,
+    )
+)
 _APOSTROPHE_FOLD = str.maketrans(dict.fromkeys(_APOSTROPHE_VARIANTS, "'"))
 
 
 def fold(text: str) -> str:
-    """NFKC, combining marks stripped, apostrophe look-alikes folded to ', lower-cased.
+    """NFKC, marks and format characters stripped, apostrophes folded to a straight one, lowered.
 
     Applied to the text and to every cue, so a spelling the vocabulary already holds is
     seen however it is written: fullwidth, decomposed, accentless, or with a look-alike
@@ -113,7 +129,13 @@ def fold(text: str) -> str:
     """
     # the look-alikes go first: NFKC would turn an acute accent into a space and a mark
     text = unicodedata.normalize("NFKC", text.translate(_APOSTROPHE_FOLD))
-    text = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
+    # a format character (soft hyphen, zero-width space or joiner, word joiner) is invisible
+    # and splits a cue in two: it goes, like a combining mark
+    text = "".join(
+        c
+        for c in unicodedata.normalize("NFD", text)
+        if not unicodedata.combining(c) and unicodedata.category(c) != "Cf"
+    )
     return text.lower()
 
 
@@ -127,7 +149,7 @@ _CONTRACTED_NEGATION = re.compile(r"[^\W_]n't$")
 # "gens d'experiència", "new to", "n/a". Bare "without" and "sin" stay non-cues ("migrated it
 # without downtime" asserts something); only the pair that names an absence of experience is one.
 _PHRASE_CUES = re.compile(
-    r"\byet\s+to\b|\bnew\s+to\b|\bn/a\b|\b(?:sin|sense|without)\s+experienc?i?[ae]\b"
+    r"\byet\s+to\b|\bnew\s+to\b|\bn/a\b|\b(?:sin|sense|without)\s+(?:\w+\s+){0,2}experienc?i?[ae]\b"
     r"|\b(?:little|limited|minimal|zero)\s+(?:or\s+no\s+)?(?:experience|exposure)\b"
     r"|\bgens\s+d'\s*experiencia\b"
 )
