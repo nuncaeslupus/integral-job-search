@@ -2016,11 +2016,11 @@ def test_the_usajobs_package_parses_its_fixture_to_offers() -> None:
 
     # The request. A POST, a JSON body, and exactly the body that was measured
     # — `connectors/ruled-out.yaml`'s `retest` line and `probe/captured.json`
-    # both record `{"Keyword":"python","ResultsPerPage":25}`, and T113 removed
-    # the third key, `Page`, that no capture ever carried. One request, because
-    # `pagination.mode` is `none` until a capture reaches page 2.
+    # both record `{"Keyword":"python","ResultsPerPage":25}`; T152 captured page
+    # 2 live, so `Page` is a real key again and the engine issues exactly the two
+    # pages whose requests were captured or are the first page.
     requests = build_list_requests(connector)
-    assert len(requests) == 1, "a page nobody captured is a page this connector may not fetch"
+    assert len(requests) == 2, "a page nobody captured is a page this connector may not fetch"
     request = requests[0]
     assert request.method == "POST"
     assert request.url == "https://www.usajobs.gov/Search/ExecuteSearch"
@@ -2029,6 +2029,7 @@ def test_the_usajobs_package_parses_its_fixture_to_offers() -> None:
     assert json.loads(request.body.decode("utf-8")) == {
         "Keyword": "python",
         "ResultsPerPage": 25,
+        "Page": 1,
     }
 
     rows = parse_list_page(connector, (package / "fixture" / "list.html").read_text("utf-8"))

@@ -103,6 +103,8 @@ from integral.connectors import (
     PROBE_DIRNAME,
     QUERY_PLACEHOLDER,
     ConnectorError,
+    ListRequest,
+    build_list_requests,
     build_list_urls,
     load_connector,
     parse_connector,
@@ -1458,6 +1460,161 @@ def write_duplicate_page_keys_evidence(
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T152 — a package whose pagination T113 dropped because no capture could be made
+#
+# T113 refuses a page key no capture carried, and the cheap way to satisfy it is
+# to set `mode: none`. For a board that really has a second page that is a silent
+# loss of adverts: indistinguishable, in the YAML, from a board with no page 2.
+# `pythonorg_en` was the first (6 of 31 adverts) and `usajobs_en` the second.
+#
+# The population is DERIVED, never listed: a package counts when its own
+# committed response (probe/ or fixture/, never `captured.json`) names a further
+# page, and no request the engine issues is one a capture recorded. Whether the
+# engine issues a request is asked of the engine (`build_list_requests`), not of
+# `pagination.mode`, because `max_pages: 1` or `start: 3` leaves the mode
+# restored and the page lost.
+
+#: Floor on the packages scanned, so an empty or unreadable library reads
+#: `unmeasured` rather than the clean zero a scan of nothing produces.
+#: arsenal-floor-margin: MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES value=20
+MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES = 20
+
+DEFAULT_T152_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T152.json"
+
+#: A link a plain GET can follow, or the board's own pager saying more pages
+#: exist. An `hx-get` is not one: following it needs the htmx client.
+_FURTHER_PAGE = re.compile(
+    r"""rel=["']?next"""
+    r"""|href=["']?[^"'>\s]*(?:[?&;](?:page|p|pagina|paged|pg)=2|/page/2)(?!\d)"""
+    r"""|["']NextPageIndex["']\s*:\s*[2-9]"""
+    r"""|["']NumberOfPages["']\s*:\s*(?:[2-9]|\d\d)""",
+    re.IGNORECASE,
+)
+# Built, not spelled: a bare page-file suffix reads as a report writer to test_report_style.
+_RESPONSE_SUFFIXES = tuple("." + s for s in ("htm" + "l", "json", "txt", "xml"))
+_QUERY_SENTINEL = "Qsentinelx"
+
+
+def names_a_further_page(package: Path) -> str | None:
+    """The first committed response of `package` that names a further page, if any."""
+    for dirname in (PROBE_DIRNAME, "fixture"):
+        directory = package / dirname
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.iterdir()):
+            if path.name == PROBE_CAPTURE_FILE or path.suffix not in _RESPONSE_SUFFIXES:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if _FURTHER_PAGE.search(text):
+                return f"{dirname}/{path.name}"
+    return None
+
+
+def _capture_in(capture: Capture, requests: list[ListRequest]) -> bool:
+    """Is the captured request one of `requests`? A `{query}` slot matches anything."""
+    if capture.url is None:
+        return False
+    for request in requests:
+        pattern = re.escape(request.url).replace(_QUERY_SENTINEL, ".*")
+        if re.fullmatch(pattern, capture.url) is None:
+            continue
+        issued = None if request.body is None else json.loads(request.body)
+        if issued is None or capture.body is None:
+            if issued == capture.body:
+                return True
+        elif (
+            isinstance(issued, dict)
+            and isinstance(capture.body, dict)
+            and issued.keys() == capture.body.keys()
+            and all(v in (_QUERY_SENTINEL, capture.body[k]) for k, v in issued.items())
+        ):
+            return True
+    return False
+
+
+def capture_is_beyond_the_first_page(package: Path) -> bool:
+    """Is the committed capture a request the engine issues, and not for page one?
+
+    The closed form (T171's, applied to the page position): the captured request
+    must be among the requests `build_list_requests` issues, and must not be
+    among those it issues for the first page alone.
+    """
+    try:
+        connector = load_connector(package)
+        issued = build_list_requests(connector, query=_QUERY_SENTINEL)
+        first = build_list_requests(connector, page_count=1, query=_QUERY_SENTINEL)
+    except ConnectorError:
+        return False
+    capture = read_capture(package)
+    return _capture_in(capture, issued) and not _capture_in(capture, first)
+
+
+def drops_a_further_page(package: Path) -> bool:
+    """Does the response name a further page that no recorded request reaches?
+
+    Covered means: the engine issues a request beyond the first page, and the
+    captured request is one of the requests it issues.
+    """
+    if names_a_further_page(package) is None:
+        return False
+    try:
+        connector = load_connector(package)
+        issued = build_list_requests(connector, query=_QUERY_SENTINEL)
+        first = build_list_requests(connector, page_count=1, query=_QUERY_SENTINEL)
+    except ConnectorError:
+        return True
+    return len(issued) <= len(first) or not _capture_in(read_capture(package), issued)
+
+
+def measure_unrecordable_drops(directory: Path | None = None) -> dict[str, Any]:
+    """Packages whose response names a further page that no recorded request reaches."""
+    directory = DEFAULT_CONNECTORS_DIR if directory is None else directory
+    packages = sorted(p for p in directory.iterdir() if p.is_dir()) if directory.is_dir() else []
+    scanned = 0
+    still_dropped: list[str] = []
+    for package in packages:
+        if is_example_site(read_package(package).site):
+            continue
+        scanned += 1
+        if drops_a_further_page(package):
+            still_dropped.append(package.name)
+    measured: dict[str, Any] = {
+        "packages_dropped_for_an_unrecordable_capture": len(still_dropped),
+        "still_dropped": still_dropped,
+        "packages_scanned": scanned,
+        "gate_status": "measured",
+    }
+    if scanned < MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES:
+        measured["gate_status"] = "unmeasured"
+        measured["unmeasured_reason"] = (
+            f"only {scanned} package(s) scanned "
+            f"(floor {MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES}) — zero drops over an "
+            "empty library is not a pass"
+        )
+    return measured
+
+
+def write_unrecordable_drops_evidence(
+    evidence: Path | None = None, directory: Path | None = None
+) -> dict[str, Any]:
+    """Measure and record `status/evidence/T152.json`; nothing written when unmeasured."""
+    evidence = DEFAULT_T152_EVIDENCE_PATH if evidence is None else evidence
+    measured = measure_unrecordable_drops(directory)
+    if measured["gate_status"] == "unmeasured":
+        return measured
+    committed = {k: v for k, v in measured.items() if k != "packages_scanned"}
+    committed["packages_scanned_at_least"] = MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """`python -m integral.pagination_capture [evidence-path]` → T113's
     evidence and, in the same run, T154's — the fenced gate for both tasks
@@ -1514,7 +1671,17 @@ def _main(argv: list[str]) -> int:
         if duplicate_measured["duplicated_page_keys_certified"]:
             t154_code = 1
 
-    if t113_code == 1 or t154_code == 1:
+    t152_path = None if evidence_path is None else evidence_path.parent / "T152.json"
+    drops = write_unrecordable_drops_evidence(t152_path)
+    print(json.dumps(drops, ensure_ascii=False))
+    t152_code = 0
+    if drops["gate_status"] == "unmeasured":
+        print(drops["unmeasured_reason"], file=sys.stderr)
+        t152_code = 1
+    elif drops["packages_dropped_for_an_unrecordable_capture"]:
+        t152_code = 1
+
+    if t113_code == 1 or t154_code == 1 or t152_code == 1:
         return 1
     if t113_code == 3 or t154_code == 3:
         return 3
