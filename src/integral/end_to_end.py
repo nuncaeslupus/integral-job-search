@@ -241,10 +241,7 @@ def _in_play(offer: Offer) -> bool:
 def _source_check(offer: Offer) -> SourceCheck:
     """What fetching the advert's own page says: the stored title and text, served as a 200."""
     title, text = escape(offer.title or ""), escape(offer.text)
-    page = (
-        f"<html><head><title>{title}</title></head>"
-        f"<body><h1>{title}</h1><p>{text}</p></body></html>"
-    )
+    page = f"<head><title>{title}</title></head><body><h1>{title}</h1><p>{text}</p></body>"
     return read_response(offer.id, 200, page, title=offer.title)
 
 
