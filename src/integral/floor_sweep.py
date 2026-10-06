@@ -3747,7 +3747,8 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: population on top of T247's.
 #: **101 with T149, over T117's 99**: `end_to_end`'s two floors (`MINIMUM_STEPS_REPLAYED`,
 #: `MINIMUM_REVISIONS_REPLAYED`) are two more. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 101
+#: **102 with T177**, whose `fixture_shapes.MINIMUM_SHAPE_CELLS` is one more.
+MINIMUM_FLOORS_SWEPT = 102
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4219,7 +4220,8 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: joins the battery on top of T247's.
 #: **98 with T149, over T117's 96**: `end_to_end`'s two floors are two scenarios more. Still zero
 #: slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 98
+#: **99 with T177**: `fixture_shapes.MINIMUM_SHAPE_CELLS` carries a marker, one scenario more.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 99
 
 
 def measure_prose_clearance() -> dict[str, Any]:

@@ -98,9 +98,14 @@
       "line": 155
     },
     {
+      "module": "fixture_shapes",
+      "name": "MINIMUM_SHAPE_CELLS",
+      "line": 113
+    },
+    {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4792
+      "line": 4794
     },
     {
       "module": "gate_detector_states",
@@ -250,7 +255,7 @@
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 110
+      "line": 112
     },
     {
       "module": "spec_consistency",
@@ -354,20 +359,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3860,
+      "line": 3861,
       "population": 46
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3890,
+      "line": 3891,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3750,
-      "population": 101
+      "line": 3751,
+      "population": 102
     },
     {
       "module": "freshness",
@@ -651,6 +656,7 @@
     "exclusion_live_round.MINIMUM_EXCLUSIONS_TRIPPED",
     "exclusion_live_round.MINIMUM_UNEXCLUDED_SERVED",
     "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR",
+    "fixture_shapes.MINIMUM_SHAPE_CELLS",
     "floor_sweep.MINIMUM_CEILINGS_SET_ASIDE",
     "floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED",
@@ -726,6 +732,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 101,
+  "floors_swept_at_least": 102,
   "floors_arithmetically_checked_at_least": 36
 }

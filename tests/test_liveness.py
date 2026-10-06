@@ -13,13 +13,14 @@ page identity is one more way to reach the third.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from integral import liveness
 from integral.connector_health import BLOCK_PAGE_MARKERS, RATE_LIMIT_SAMPLES
+from integral.fixture_shapes import PADDING, SHAPES, Shape, shaped_pages
+from integral.fixture_shapes import measure as shape_cells
 from integral.offers import Offer
 
 _LISTINGS_PAGE = "<h1>Ofertas de empleo</h1><p>Explora nuestras vacantes en el sector servicios</p>"
@@ -229,33 +230,37 @@ def test_with_no_title_a_marker_anywhere_withholds_and_a_title_restores() -> Non
     assert liveness.read_response("b", 200, advert, title="Research Fellow").liveness == "live"
 
 
-def _named_innocuously(body: str) -> str:
-    """A block page given a site-name `<title>` and no `<h1>` — what a restyle
-    of any challenge page can look like (#455 round 3, N3)."""
-    demoted = body.replace("<h1", "<h2").replace("</h1>", "</h2>")
-    if "<head>" in demoted:
-        return demoted.replace("<head>", "<head><title>Acme Empleo</title>", 1)
-    return demoted.replace("<html>", "<html><head><title>Acme Empleo</title></head>", 1)
+_SHAPES = shaped_pages()
+_PADDING = PADDING
 
 
-#: Inert page text, long enough that a scan cut short at any plausible length
-#: never reaches what follows it (#455 round 4, N5). No block marker in it.
-_PADDING = "<p>Ofertas de empleo en Barcelona, actualizadas cada día.</p>" * 400
+def test_no_shape_leaves_the_thing_it_moves_where_it_was() -> None:
+    """T177. A cell whose shaping relocates nothing runs, passes and asserts
+    nothing the unshaped cell did not (#455 round 5: `buried` anchored on
+    `<body>` and the two Cloudflare samples keep their markers in `<head>`).
+    The property, over every (marker-bearing sample, shape) cell and not
+    over any anchor tuple: each shape's own `moved` test must hold."""
+    measured = shape_cells()
+    assert measured["fixture_shape_cells_that_relocate_nothing"] == 0, measured.get("cells")
+    assert measured["gate_status"] == "measured", measured
 
 
-def _buried(body: str) -> str:
-    """The same refusal with its words after ~24 KB of an ordinary page."""
-    for anchor in ("<body>", "<html>"):
-        if anchor in body:
-            return body.replace(anchor, anchor + _PADDING, 1)
-    return _PADDING + body
+def test_a_shape_that_relocates_nothing_is_reported_not_passed() -> None:
+    """The measurement can fail: the pre-fix anchor order reports exactly the
+    two Cloudflare cells, and a product too small to be a reading is
+    `unmeasured` rather than a clean zero."""
 
+    def anchored_on_body_first(body: str) -> str:
+        for anchor in ("<body>", "<html>"):
+            if anchor in body:
+                return body.replace(anchor, anchor + PADDING, 1)
+        return PADDING + body
 
-_SHAPES: dict[str, Callable[[str], str]] = {
-    "as recorded": lambda body: body,
-    "named innocuously": _named_innocuously,
-    "buried": _buried,
-}
+    old = Shape("buried", anchored_on_body_first, SHAPES[-1].moved)
+    found = shape_cells(shapes=(old,))
+    assert found["fixture_shape_cells_that_relocate_nothing"] == 2, found
+    assert all(c.startswith("cloudflare") for c in found["cells"]), found
+    assert shape_cells(samples=RATE_LIMIT_SAMPLES[:1])["gate_status"] == "unmeasured"
 
 
 @pytest.mark.parametrize("shape", list(_SHAPES))

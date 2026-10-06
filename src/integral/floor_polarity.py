@@ -1131,6 +1131,15 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "refusal-shaped consumer, so the AST rule abstains."
         ),
     ),
+    "fixture_shapes.MINIMUM_SHAPE_CELLS": (
+        "floor",
+        (
+            'Read as `"measured" if compared >= FLOOR else "unmeasured"`: the gate '
+            "reports measured only when the (marker-bearing sample x shape) product "
+            "reaches it, so deleting a sample or a shape breaches it. A conditional "
+            "expression is not a refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
     "connector_health.MINIMUM_PROBES_COMPARED": (
         "floor",
         (

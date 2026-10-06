@@ -72,6 +72,7 @@ from integral.connectors import (
     parse_detail_page,
     source_kind_of,
 )
+from integral.fixture_shapes import measure as measure_shape_cells
 from integral.gate_exit import worst
 from integral.identity import ProfileStore
 from integral.lifecycle import (
@@ -88,6 +89,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T126.json"
 DEFAULT_BROWSER_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T173.json"
+SHAPE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T177.json"
 
 #: The first line of a page the candidate's browser saved: the URL it was
 #: rendered from. Written by the capture snippet in the step-7 skill, and the
@@ -2690,9 +2692,9 @@ def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    """`python -m integral.sourcing` — T126's, T167's and T173's evidence.
+    """`python -m integral.sourcing` — T126's, T167's, T173's and T177's evidence.
 
-    The three gates' exits are combined by `gate_exit.worst`, never by hand: a
+    The four gates' exits are combined by `gate_exit.worst`, never by hand: a
     hand-rolled "unmeasured wins" let one gate's failure hide behind another's
     `unmeasured` (second reader on #455, F1).
     """
@@ -2718,6 +2720,11 @@ def _main(argv: list[str] | None = None) -> int:
             DEFAULT_BROWSER_EVIDENCE_PATH,
             measure_browser_route(),
             ("browser_boards_fetched_over_plain_http",),
+        ),
+        (
+            SHAPE_EVIDENCE_PATH,
+            measure_shape_cells(),
+            ("fixture_shape_cells_that_relocate_nothing",),
         ),
     ):
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import sys
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -64,6 +65,7 @@ from integral.sourcing import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONNECTORS = _REPO_ROOT / "connectors"
+_REAL_CONNECTORS = _CONNECTORS
 
 ALLOW_ALL = "User-agent: *\nAllow: /\n"
 AT = "2026-01-01T00:00:00+00:00"
@@ -2528,20 +2530,67 @@ def test_one_gate_failing_is_never_hidden_by_the_other_being_unmeasured(
     monkeypatch.setattr(sourcing, "DEFAULT_EVIDENCE_PATH", tmp_path / "a.json")
     monkeypatch.setattr(sourcing, "DEFAULT_BROWSER_EVIDENCE_PATH", tmp_path / "b.json")
     monkeypatch.setattr(sourcing, "FLOOD_EVIDENCE_PATH", tmp_path / "c.json")
+    monkeypatch.setattr(sourcing, "SHAPE_EVIDENCE_PATH", tmp_path / "d.json")
     assert sourcing._main([]) == expected
 
 
 # #455 round 4, N4 — the rule over every installed board, not over InfoJobs alone.
 
 
+#: T177. The twin list is derived, which is why a board added later is covered
+#: and also why it can shrink to nothing: an empty parametrize collects as
+#: `1 skipped`, which pytest reports as success. Asserted where the list is
+#: built, so deleting the test that consumes it does not delete the floor.
+#: Today 24 GET packages, 5 of them ATS hosts with employers.
+MINIMUM_TWINNED_BOARDS = 20
+MINIMUM_TWINNED_ATS_HOSTS = 3
+
+
 def _installed_get_packages() -> list[str]:
     from integral.connector_coverage import installed_packages
 
-    return [
-        p.name
+    loaded = {
+        p.name: load_connector(_CONNECTORS / p.name)
         for p in installed_packages(_CONNECTORS)
-        if p.usable and load_connector(_CONNECTORS / p.name).list.method == "GET"
-    ]
+        if p.usable
+    }
+    names = [n for n, c in loaded.items() if c.list.method == "GET"]
+    ats = [n for n in names if loaded[n].list.employers]
+    assert len(names) >= MINIMUM_TWINNED_BOARDS, (
+        f"only {len(names)} installed GET boards are twinned; floor "
+        f"{MINIMUM_TWINNED_BOARDS} — an empty list would collect as a skip"
+    )
+    assert len(ats) >= MINIMUM_TWINNED_ATS_HOSTS, (
+        f"only {len(ats)} twinned boards are ATS hosts with employers; ATS hosts floor "
+        f"{MINIMUM_TWINNED_ATS_HOSTS}"
+    )
+    return names
+
+
+def test_an_empty_or_shrunken_twin_population_is_refused_not_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T177. With no installed board the list builder must raise; an empty
+    parametrize would have collected as one skip and read as green. And with
+    every board but the ATS hosts, the ATS floor must raise on its own."""
+    import shutil
+
+    from integral.connector_coverage import installed_packages
+
+    here = sys.modules[__name__]
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setattr(here, "_CONNECTORS", empty)
+    with pytest.raises(AssertionError, match="installed GET boards"):
+        _installed_get_packages()
+
+    without_ats = tmp_path / "without_ats"
+    for p in installed_packages(_REAL_CONNECTORS):
+        if p.usable and not load_connector(_REAL_CONNECTORS / p.name).list.employers:
+            shutil.copytree(_REAL_CONNECTORS / p.name, without_ats / p.name)
+    monkeypatch.setattr(here, "_CONNECTORS", without_ats)
+    with pytest.raises(AssertionError, match="ATS hosts"):
+        _installed_get_packages()
 
 
 def _browser_twin(tmp_path: Path, name: str) -> Any:
