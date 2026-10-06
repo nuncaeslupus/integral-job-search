@@ -3739,9 +3739,10 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: floors the gate itself added (`MINIMUM_POLARITY_CASES`, `MINIMUM_CEILINGS_SET_ASIDE`;
 #: `MINIMUM_BOUNDS_READ_FOR_POLARITY` is compared against a count this sweep does not
 #: trace, so it is out of scope).
-#: **97 with T149**: `end_to_end`'s two floors (`MINIMUM_STEPS_REPLAYED`,
-#: `MINIMUM_REVISIONS_REPLAYED`) are two more swept. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 97
+#: **98 with T152 and T149, over T165's 95**: `pagination_capture` declares one floor
+#: (`MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES`) and `end_to_end`'s two floors
+#: (`MINIMUM_STEPS_REPLAYED`, `MINIMUM_REVISIONS_REPLAYED`) are two more. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 98
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4205,7 +4206,9 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: yields them; `MINIMUM_FLOORS_SWEPT` above), and the gate's own swept floors
 #: each carry a marker and so join the battery. Measured with
 #: `measure_prose_clearance()` against this branch. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 94
+#: **95 with T152 and T149, over T165's 92**: `pagination_capture`'s one floor and `end_to_end`'s
+#: two are three scenarios more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 95
 
 
 def measure_prose_clearance() -> dict[str, Any]:

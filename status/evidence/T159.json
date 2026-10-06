@@ -85,7 +85,7 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4778
+      "line": 4781
     },
     {
       "module": "gate_detector_states",
@@ -139,13 +139,18 @@
     },
     {
       "module": "pagination_capture",
+      "name": "MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES",
+      "line": 1481
+    },
+    {
+      "module": "pagination_capture",
       "name": "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
-      "line": 1312
+      "line": 1314
     },
     {
       "module": "pagination_capture",
       "name": "MINIMUM_REQUEST_KEYS",
-      "line": 123
+      "line": 125
     },
     {
       "module": "plan_v2",
@@ -334,20 +339,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3854,
+      "line": 3855,
       "population": 46
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3884,
+      "line": 3885,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3744,
-      "population": 97
+      "line": 3745,
+      "population": 98
     },
     {
       "module": "freshness",
@@ -649,6 +654,7 @@
     "naming.MINIMUM_SCANNED",
     "offers.MINIMUM_CHECKS",
     "page_placeholder.MINIMUM_PROBES",
+    "pagination_capture.MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES",
     "pagination_capture.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
     "pagination_capture.MINIMUM_REQUEST_KEYS",
     "pay.MINIMUM_CHECKS",
@@ -702,6 +708,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 97,
+  "floors_swept_at_least": 98,
   "floors_arithmetically_checked_at_least": 36
 }
