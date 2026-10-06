@@ -1348,6 +1348,22 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "set aside, breached by deleting one."
         ),
     ),
+    "floor_sweep._MINIMUM_REASON_WORDS": (
+        "floor",
+        (
+            "`len(description.split()) < _MINIMUM_REASON_WORDS` rejects a declaration "
+            "or a ruling whose text is shorter than three words: a minimum length of "
+            "one string."
+        ),
+    ),
+    "floor_sweep.MINIMUM_FLOORS_JUDGED": (
+        "floor",
+        (
+            '`"measured" if len(universe) >= MINIMUM_FLOORS_JUDGED else "unmeasured"` '
+            "in `measure_declarations`: a lower bound on how many floor-shaped constants "
+            "the declaration gate read, breached by the sweep ceasing to find one."
+        ),
+    ),
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED": (
         "floor",
         (

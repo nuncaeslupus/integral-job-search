@@ -1661,6 +1661,20 @@ def test_the_population_counts_adverts_the_budget_could_ask_for(
     assert measured["gate_status"] == "unmeasured", measured
 
 
+def test_a_run_that_consulted_fewer_boards_than_the_floor_is_unmeasured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T164: `MINIMUM_BOARDS` was declared and compared against nothing. A floor above
+    the number of boards the committed-capture run consults must leave the gate
+    unmeasured, and name the boards, so the constant guards a population."""
+    consulted = measure_fixture()["boards_consulted"]
+    assert consulted >= sourcing.MINIMUM_BOARDS
+    monkeypatch.setattr(sourcing, "MINIMUM_BOARDS", consulted + 1)
+    measured = measure_fixture()
+    assert measured["gate_status"] == "unmeasured", measured
+    assert "board(s) consulted" in measured["reasons"][0], measured
+
+
 def test_the_flood_gate_measures_and_reads_clean() -> None:
     measured = measure_flood()
     assert measured["gate_status"] == "measured", measured

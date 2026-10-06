@@ -101,14 +101,14 @@
       "lineno": 155
     },
     {
-      "module": "fixture_shapes",
-      "name": "MINIMUM_SHAPE_CELLS",
-      "lineno": 124
+      "module": "floor_sweep",
+      "name": "MINIMUM_CEILINGS_SET_ASIDE",
+      "lineno": 4799
     },
     {
       "module": "floor_sweep",
-      "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "lineno": 4794
+      "name": "_MINIMUM_REASON_WORDS",
+      "lineno": 4953
     },
     {
       "module": "gate_detector_states",
@@ -258,7 +258,7 @@
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "lineno": 112
+      "lineno": 114
     },
     {
       "module": "spec_consistency",

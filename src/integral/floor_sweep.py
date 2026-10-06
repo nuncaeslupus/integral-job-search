@@ -515,10 +515,13 @@ import tempfile
 import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
 from integral.floor_polarity import ADJUDICATIONS as ADJUDICATIONS
+from integral.floor_populations import FLOOR_POPULATIONS as FLOOR_POPULATIONS
+from integral.floor_populations import REVIEWED_SCALARS as REVIEWED_SCALARS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR = Path(__file__).resolve().parent
@@ -526,6 +529,7 @@ _THIS_FILE = Path(__file__).resolve()
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T159.json"
 DEFAULT_PROSE_CLEARANCE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T163.json"
 DEFAULT_POLARITY_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T165.json"
+DEFAULT_DECLARATION_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T164.json"
 
 #: Round 2's fix for the reader's first finding: this repository's module-constant
 #: convention (a name starting with a letter, all caps) — not a floor-specific
@@ -3747,8 +3751,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: population on top of T247's.
 #: **101 with T149, over T117's 99**: `end_to_end`'s two floors (`MINIMUM_STEPS_REPLAYED`,
 #: `MINIMUM_REVISIONS_REPLAYED`) are two more. Still zero slack.
-#: **102 with T177**, whose `fixture_shapes.MINIMUM_SHAPE_CELLS` is one more.
-MINIMUM_FLOORS_SWEPT = 102
+#: **102 with T164**, whose `_MINIMUM_REASON_WORDS` joined the population.
+#: **103 with T177**, whose `fixture_shapes.MINIMUM_SHAPE_CELLS` is one more. Still zero slack.
+MINIMUM_FLOORS_SWEPT = 103
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4220,8 +4225,10 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: joins the battery on top of T247's.
 #: **98 with T149, over T117's 96**: `end_to_end`'s two floors are two scenarios more. Still zero
 #: slack.
-#: **99 with T177**: `fixture_shapes.MINIMUM_SHAPE_CELLS` carries a marker, one scenario more.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 99
+#: **99 with T164**: `_MINIMUM_REASON_WORDS` carries a marker and joins the battery.
+#: **100 with T177**: `fixture_shapes.MINIMUM_SHAPE_CELLS` carries a marker, one scenario more.
+#: Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 100
 
 
 def measure_prose_clearance() -> dict[str, Any]:
@@ -4931,6 +4938,316 @@ def write_polarity_evidence(evidence: Path | None = None) -> dict[str, Any]:
     return measured
 
 
+#: T164: a floor must say what it guards. How many floor-shaped constants the declaration
+#: gate judges - every candidate `measure()` reads (the census, the names it ruled out of
+#: scope, the ceilings it set aside) - committed as a **literal** per T122: derived from
+#: that result it would shrink with any constant the sweep stopped reading, which is the
+#: defect this gate exists to refuse, committed inside it.
+#: arsenal-floor-margin: MINIMUM_FLOORS_JUDGED value=242
+MINIMUM_FLOORS_JUDGED = 242
+
+_DECLARATION_KINDS = ("counted", "scalar")
+
+#: A description or a ruling's reason must be at least this many words, the same bar
+#: `lesson_triage.MIN_REASON_WORDS` sets for a dismissal: shorter is a label, not a reason.
+#: A bound on one text's length, so it guards no population of cases.
+#: arsenal-floor-margin: _MINIMUM_REASON_WORDS value=3
+_MINIMUM_REASON_WORDS = 3
+
+
+def _declaration_test_tree(name: str) -> ast.Module | None:
+    path = _REPO_ROOT / "tests" / name
+    if not path.is_file():
+        return None
+    try:
+        return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return None
+
+
+def _mentions_bound(node: ast.AST, name: str) -> bool:
+    """`NAME` or `module.NAME` anywhere under `node`."""
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Name) and sub.id == name:
+            return True
+        if isinstance(sub, ast.Attribute) and sub.attr == name:
+            return True
+    return False
+
+
+def _is_bound_ref(expr: ast.expr, name: str) -> bool:
+    return (isinstance(expr, ast.Name) and expr.id == name) or (
+        isinstance(expr, ast.Attribute) and expr.attr == name
+    )
+
+
+def _floor_aliases(func: ast.AST, name: str) -> set[str]:
+    """Local names that stand for the floor inside `func`, by two closed binding forms.
+
+    A `for` (or comprehension) target bound over a **literal** tuple or list whose element
+    at that position is the floor - `for key, floor in (("a", MINIMUM_A), ...)` - and a
+    parameter whose **default** is the floor. Nothing else makes a local an alias, so a
+    name that merely sits near the floor in the source stays unrelated to it.
+    """
+    aliases: set[str] = set()
+    for node in ast.walk(func):
+        if isinstance(node, (ast.For, ast.comprehension)) and isinstance(
+            node.iter, (ast.Tuple, ast.List)
+        ):
+            target = node.target
+            for element in node.iter.elts:
+                if isinstance(target, ast.Name) and _is_bound_ref(element, name):
+                    aliases.add(target.id)
+                elif isinstance(target, ast.Tuple) and isinstance(element, (ast.Tuple, ast.List)):
+                    for index, slot in enumerate(target.elts):
+                        if (
+                            isinstance(slot, ast.Name)
+                            and index < len(element.elts)
+                            and _is_bound_ref(element.elts[index], name)
+                        ):
+                            aliases.add(slot.id)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args
+            positional = [*args.posonlyargs, *args.args]
+            for arg, default in zip(
+                positional[len(positional) - len(args.defaults) :], args.defaults, strict=True
+            ):
+                if _is_bound_ref(default, name):
+                    aliases.add(arg.arg)
+            for kwarg, kwdefault in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+                if kwdefault is not None and _is_bound_ref(kwdefault, name):
+                    aliases.add(kwarg.arg)
+    return aliases
+
+
+def _sets_against(node: ast.AST, is_floor: Callable[[ast.expr], bool], other: str) -> bool:
+    """`node` is a comparison, or a shortfall subtraction, of the floor and `other`."""
+    pairs: list[tuple[ast.expr, ast.expr]] = []
+    if isinstance(node, ast.Compare):
+        pairs = list(pairwise([node.left, *node.comparators]))
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Sub):
+        pairs = [(node.left, node.right)]
+    return any(
+        (is_floor(left) and ast.unparse(right) == other)
+        or (is_floor(right) and ast.unparse(left) == other)
+        for left, right in pairs
+    )
+
+
+def _compared_against(
+    func: ast.AST, name: str, compared_to: str, scope: ast.Module | None = None
+) -> bool:
+    """Whether `func` sets the floor against exactly `compared_to`.
+
+    Closed over four forms, none of them a mention: the floor itself on one side of a
+    comparison; a local alias of it (`_floor_aliases`); a shortfall `FLOOR - x`; or a call
+    that hands the floor and `compared_to` to a helper in the same file whose body
+    compares those two parameters. The operand is matched by source text, never by
+    appearing nearby.
+    """
+    aliases = _floor_aliases(func, name)
+
+    def is_floor(expr: ast.expr) -> bool:
+        return _is_bound_ref(expr, name) or (isinstance(expr, ast.Name) and expr.id in aliases)
+
+    if any(_sets_against(node, is_floor, compared_to) for node in ast.walk(func)):
+        return True
+    helpers = {f.name: f for f in _all_function_defs(scope)} if scope is not None else {}
+    for node in ast.walk(func):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        helper = helpers.get(
+            callee.id if isinstance(callee, ast.Name) else getattr(callee, "attr", "")
+        )
+        if helper is None:
+            continue
+        params = [a.arg for a in (*helper.args.posonlyargs, *helper.args.args)]
+        for i, floor_arg in enumerate(node.args):
+            if not is_floor(floor_arg) or i >= len(params):
+                continue
+            for j, other_arg in enumerate(node.args):
+                if j == i or j >= len(params) or ast.unparse(other_arg) != compared_to:
+                    continue
+
+                def is_param(expr: ast.expr, wanted: str = params[i]) -> bool:
+                    return isinstance(expr, ast.Name) and expr.id == wanted
+
+                if any(_sets_against(inner, is_param, params[j]) for inner in ast.walk(helper)):
+                    return True
+    return False
+
+
+def _declaration_defect(
+    qualified: str, declaration: tuple[str, str, str, str], trees: dict[str, ast.Module]
+) -> str | None:
+    """Why `declaration` does not count as one, or `None` when it does.
+
+    Structural only, never executed: a declaration is a claim about where the population
+    is counted, and the claim is kept honest by the code it names - the counter must
+    exist, must mention the floor, and must compare the floor against exactly the
+    `compared_to` operand (which is mandatory: a mention is not a comparison). Deleting the
+    counter, renaming it, or changing what the floor is read against therefore stops the
+    declaration counting.
+    """
+    if not (isinstance(declaration, tuple) and len(declaration) == 4):
+        return "malformed: a declaration is (kind, counter, compared_to, description)"
+    kind, counter, compared_to, description = declaration
+    if kind not in _DECLARATION_KINDS:
+        return f"unknown kind {kind!r}"
+    if len(str(description).split()) < _MINIMUM_REASON_WORDS:
+        return f"description is under {_MINIMUM_REASON_WORDS} words"
+    stem, _, name = qualified.partition(".")
+    if kind == "scalar":
+        if counter or compared_to:
+            return "a scalar bound names no counter and no comparand"
+        if qualified not in REVIEWED_SCALARS:
+            return "a scalar bound must be in the reviewed set `REVIEWED_SCALARS`"
+        return None
+    if not counter:
+        return "a counted floor names the function that counts its population"
+    if not compared_to:
+        return "a counted floor names the operand it is compared against, never left empty"
+    scope: ast.AST | None
+    if "::" in counter:
+        file_name, _, func_name = counter.partition("::")
+        if not file_name.startswith("tests/"):
+            return f"counter {counter!r} is neither module.function nor tests/file.py::function"
+        scope = _declaration_test_tree(file_name.removeprefix("tests/"))
+    else:
+        counter_module, _, func_name = counter.partition(".")
+        if counter_module != stem:
+            return f"counter {counter!r} is not in the floor's own module {stem!r}"
+        scope = trees.get(counter_module)
+    if scope is None:
+        return f"counter {counter!r}: its file is not there"
+    functions = [f for f in _all_function_defs(scope) if f.name == func_name]
+    if not functions:
+        return f"counter {counter!r}: no function {func_name!r}"
+    reading = [f for f in functions if _mentions_bound(f, name)]
+    if not reading:
+        return f"counter {counter!r} never mentions {name}"
+    if not any(_compared_against(f, name, compared_to, scope) for f in reading):
+        return f"counter {counter!r} never compares {name} against {compared_to!r}"
+    return None
+
+
+def measure_declarations(
+    src_dir: Path | None = None,
+    populations: dict[str, tuple[str, str, str, str]] | None = None,
+    adjudications: dict[str, tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    """T164's gate: floor-shaped constants that neither declare the population they guard
+    nor are ruled out of scope, with a reason, in a register.
+
+    Closed rule, nothing listed: the universe is every candidate `measure()` reads. A
+    candidate is accounted for when exactly one holds - the sweep itself resolved a
+    population for it (a census member not in `unpinnable_floors`); `ADJUDICATIONS` rules
+    it a ceiling or `neither`, with a reason; or it is a floor and `FLOOR_POPULATIONS`
+    carries a declaration that `_declaration_defect` accepts. Everything else is named.
+    """
+    directory = _SRC_DIR if src_dir is None else src_dir
+    registry = FLOOR_POPULATIONS if populations is None else populations
+    adjudicated = ADJUDICATIONS if adjudications is None else adjudications
+    census = measure(directory)
+    trees = {module.stem: module.tree for module in _module_infos(directory)}
+
+    members = set(census["floors_in_the_census"])
+    unresolved = {f"{u['module']}.{u['name']}" for u in census["unpinnable_floors"]}
+    universe = sorted(
+        members
+        | set(census["bounds_read_and_out_of_scope"])
+        | set(census["ceilings_excluded_from_the_floor_census"])
+    )
+
+    undeclared: list[dict[str, str]] = []
+    resolved = declared = scalar = ruled_out = 0
+    for qualified in universe:
+        if qualified in members and qualified not in unresolved:
+            resolved += 1
+            continue
+        verdict = adjudicated.get(qualified)
+        if verdict is None:
+            undeclared.append({"floor": qualified, "why": "no polarity adjudication"})
+        elif verdict[0] != POLARITY_FLOOR:
+            if len(verdict[1].split()) < _MINIMUM_REASON_WORDS:
+                undeclared.append({"floor": qualified, "why": "ruled out with no reason"})
+            else:
+                ruled_out += 1
+        elif qualified not in registry:
+            undeclared.append({"floor": qualified, "why": "declares no population"})
+        else:
+            defect = _declaration_defect(qualified, registry[qualified], trees)
+            if defect is not None:
+                undeclared.append({"floor": qualified, "why": defect})
+            elif registry[qualified][0] == "scalar":
+                scalar += 1
+            else:
+                declared += 1
+
+    dangling = sorted(
+        qualified
+        for qualified in registry
+        if qualified not in universe or adjudicated.get(qualified, ("", ""))[0] != POLARITY_FLOOR
+    )
+    return {
+        "floors_with_no_declared_population": len(undeclared),
+        "undeclared": undeclared,
+        "declarations_without_a_floor": dangling,
+        "floors_judged": len(universe),
+        "resolved_by_the_sweep": resolved,
+        "declared_with_a_counter": declared,
+        "declared_scalar": scalar,
+        "ruled_out_with_a_reason": ruled_out,
+        "gate_status": "measured" if len(universe) >= MINIMUM_FLOORS_JUDGED else "unmeasured",
+    }
+
+
+def record_declarations(measured: dict[str, Any]) -> dict[str, Any]:
+    """What is committed: the verdict and the names behind it, and the judged census as
+    its floor (T100/T122) - the partition counts are census-shaped and would drift on
+    every task PR that adds a floor, so they are printed and not committed."""
+    return {
+        "floors_with_no_declared_population": measured["floors_with_no_declared_population"],
+        "undeclared": measured["undeclared"],
+        "declarations_without_a_floor": measured["declarations_without_a_floor"],
+        "gate_status": measured["gate_status"],
+        "floors_judged_at_least": MINIMUM_FLOORS_JUDGED,
+    }
+
+
+def write_declaration_evidence(evidence: Path | None = None) -> dict[str, Any]:
+    """Measure and record `status/evidence/T164.json`; return what was measured."""
+    path = DEFAULT_DECLARATION_EVIDENCE_PATH if evidence is None else evidence
+    measured = measure_declarations()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(record_declarations(measured), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return measured
+
+
+def _declaration_exit_code(declarations: dict[str, Any]) -> int:
+    """T164's verdict, as an exit status (1, never 3 - see `_main`)."""
+    if declarations["gate_status"] != "measured":
+        print(
+            f"declaration gate unmeasured: {declarations['floors_judged']} floor(s) judged "
+            f"(floor {MINIMUM_FLOORS_JUDGED}) - a clean zero over a shrunken read is not "
+            "a measurement",
+            file=sys.stderr,
+        )
+        return 1
+    status = 0
+    for row in declarations["undeclared"]:
+        print(f"x {row['floor']} declares no population: {row['why']}", file=sys.stderr)
+        status = 1
+    for qualified in declarations["declarations_without_a_floor"]:
+        print(f"x declaration {qualified} names no floor", file=sys.stderr)
+        status = 1
+    return status
+
+
 def write_evidence(
     evidence: Path = DEFAULT_EVIDENCE_PATH, src_dir: Path | None = None
 ) -> dict[str, Any]:
@@ -5064,9 +5381,9 @@ def _main(argv: list[str] | None = None) -> int:
             f"ⓘ {prose_measured['unpinnable_floors_cleared_by_marker_restatement']} "
             "unpinnable floor(s) still read compliant after their own marker was "
             "retyped to match a lowered value in the same commit — expected, and does "
-            "not fail this gate: no independent population exists for an unpinnable "
-            "floor's marker to be checked against short of T164's registry (out of "
-            "this task's scope).",
+            "not fail this gate: T164's register (`floor_populations`) names where each "
+            "such floor's population is counted, but records no number, so there is "
+            "still nothing independent for a marker to be checked against.",
             file=sys.stderr,
         )
 
@@ -5100,7 +5417,9 @@ def _main(argv: list[str] | None = None) -> int:
 
     polarity = write_polarity_evidence()
     print(json.dumps(polarity, ensure_ascii=False))
-    return exit_code or _polarity_exit_code(polarity)
+    declarations = write_declaration_evidence()
+    print(json.dumps(declarations, ensure_ascii=False))
+    return exit_code or _polarity_exit_code(polarity) or _declaration_exit_code(declarations)
 
 
 def _polarity_exit_code(polarity: dict[str, Any]) -> int:
