@@ -103,7 +103,7 @@
     {
       "module": "fixture_shapes",
       "name": "MINIMUM_SHAPE_CELLS",
-      "lineno": 120
+      "lineno": 124
     },
     {
       "module": "floor_sweep",

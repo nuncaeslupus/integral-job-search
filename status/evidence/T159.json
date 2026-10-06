@@ -100,7 +100,7 @@
     {
       "module": "fixture_shapes",
       "name": "MINIMUM_SHAPE_CELLS",
-      "line": 120
+      "line": 124
     },
     {
       "module": "floor_sweep",
@@ -542,6 +542,7 @@
     "exclusion_live_round._PER_EXCLUSION",
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
+    "fixture_shapes.SCAN_WINDOW",
     "floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY",
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS",
     "floor_sweep._MAX_DELEGATION_DEPTH",

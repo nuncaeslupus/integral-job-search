@@ -1131,6 +1131,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "refusal-shaped consumer, so the AST rule abstains."
         ),
     ),
+    "fixture_shapes.SCAN_WINDOW": (
+        "neither",
+        (
+            "A character distance, `marker offset after >= offset before + SCAN_WINDOW`: "
+            "the size of the scan truncation a burial must clear. It measures a shift "
+            "in text, not a count of anything a deletion could shrink."
+        ),
+    ),
     "fixture_shapes.MINIMUM_SHAPE_CELLS": (
         "floor",
         (
