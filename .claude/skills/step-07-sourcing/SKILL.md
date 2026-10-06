@@ -196,6 +196,41 @@ that serves its listings only to a browser is read through the candidate's own, 
 
 Tell the candidate the saved pages stay in their Downloads folder and that they can delete them.
 
+## A board's job-alert emails — a pointer, read only with a yes for that read (T247)
+
+A board's emailed recommendations are a second search engine run for this candidate, and they
+surface adverts the connectors miss. Read them only through the candidate's own browser session,
+and only when the candidate offers it or says yes; this applies the same way in every language the
+tool supports. Never read a mailbox by any other route: no API, no credentials, no forwarded copy.
+
+1. **Ask every time, naming the mailbox on screen.** Open the mail page, read the address the
+   screen shows (the browser may be signed in to another person's mailbox, or another provider),
+   and ask in the candidate's language, quoting that address:
+
+   ```text
+   "Your browser shows the mailbox <address>. May I read the job-alert emails from <board> in it
+   now? I'll note only job titles and employers to check, and nothing else from your mail."
+   ```
+
+   A yes covers **this read only**. A second read, later or in another session, asks again. If
+   the address shown is not the candidate's, or no address can be read, stop and say so.
+2. **Record the yes** before reading, with the recorder, which mints the read's id, the permission
+   id and the time itself (never type them):
+   `uv run python -m integral.alert_mailbox --root <profiles root> --handle <handle> grant --mailbox
+   <address shown>`. It prints the `permission_id` and `read_id` to cite, and keeps the address as
+   shown, the session and the time in the candidate's `session/mailbox_permissions.jsonl`. It
+   refuses an address that is not plain ASCII. Nothing else from the mailbox is kept: no subject,
+   body, link, sender or contact.
+3. **Take pointers, not offers.** Each recommendation is a pointer: title, employer, the read it came
+   from, the mailbox and the time it was read. Check it with the same tool before use:
+   `... check --read-id <read_id> --mailbox <address shown> --permission-id <permission_id>
+   --read-at <time read>`. It prints `ok` (exit 0) or the reason (exit 1); on a reason, drop the
+   pointer and say why. This check is run by hand here: the offer path does not call it yet.
+4. **Resolve at source.** The alert's links are the board's redirects and land on third-party
+   walls; do not follow them to read the advert. Find the employer's own page, or the advert
+   through its connector, and take it through `## Liveness` below. Only then is it an offer; a
+   pointer that cannot be resolved there is reported as unresolved, never shown as a vacancy.
+
 ## Liveness — a search index is not a vacancy
 
 **Real searches are run inside the portals.** A general web search is for *discovering which portals

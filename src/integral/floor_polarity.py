@@ -1367,6 +1367,24 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "on a count, breached by deleting packages from the library."
         ),
     ),
+    "alert_mailbox.MINIMUM_PERMITTED_CASES": (
+        "floor",
+        (
+            "`len(permitted) >= MINIMUM_PERMITTED_CASES and len(refusing) >= "
+            "MINIMUM_REFUSING_CASES` decides measured or unmeasured: the gate reads "
+            "measured only when the permitted cases reach it, so deleting a case "
+            "breaches it. A boolean assignment is not a refusal-shaped consumer."
+        ),
+    ),
+    "alert_mailbox.MINIMUM_REFUSING_CASES": (
+        "floor",
+        (
+            "`len(permitted) >= MINIMUM_PERMITTED_CASES and len(refusing) >= "
+            "MINIMUM_REFUSING_CASES` decides measured or unmeasured: the gate reads "
+            "measured only when the refusing cases reach it, so deleting a case "
+            "breaches it. A boolean assignment is not a refusal-shaped consumer."
+        ),
+    ),
     "document_reader.EXPORT_VERSION": (
         "neither",
         (
