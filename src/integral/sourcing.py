@@ -101,7 +101,11 @@ CAPTURE_MARK = re.compile(r"\A<!-- integral-capture: (\S+) -->\n")
 FETCH_LOG = "_fetches.jsonl"
 
 #: A run that consulted fewer boards than this consulted nothing worth
-#: reporting. Spain had six usable packages when this landed.
+#: reporting. Spain had six usable packages when this landed. It is deliberately the
+#: smallest meaningful floor: `measure_fixture` consults every installed board, and the
+#: gate it guards (`boards_with_a_committed_capture`, the starved-board checks) is
+#: separately bounded; this only refuses a run that consulted nothing at all.
+#: arsenal-floor-margin: MINIMUM_BOARDS value=1
 MINIMUM_BOARDS = 1
 
 #: A run that collected no offers says nothing about how offers get recorded.
@@ -2091,6 +2095,15 @@ def measure_fixture() -> dict[str, Any]:
             measured["reasons"] = [
                 f"only {collected} offer(s) collected (floor {MINIMUM_OFFERS_COLLECTED}) — "
                 "a run that collected nothing proves nothing about how offers are recorded"
+            ]
+        elif len(run.outcomes) < MINIMUM_BOARDS:
+            # T164: `MINIMUM_BOARDS` was declared and read nowhere - a floor on a
+            # population that nothing compared it to. A run that consulted no board
+            # collected its offers from nowhere this gate measures.
+            measured["gate_status"] = "unmeasured"
+            measured["reasons"] = [
+                f"only {len(run.outcomes)} board(s) consulted (floor {MINIMUM_BOARDS}) — "
+                "a run that consulted no board proves nothing about how boards are read"
             ]
         elif not measured["boards_needing_the_advert_page"]:
             # A zero over a run where no board ever needed the advert page is
