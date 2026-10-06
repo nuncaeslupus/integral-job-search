@@ -39,8 +39,13 @@
     },
     {
       "module": "connector_health",
+      "name": "MINIMUM_PACKAGES_BYTE_COMPARED",
+      "line": 1123
+    },
+    {
+      "module": "connector_health",
       "name": "MINIMUM_PROBES_COMPARED",
-      "line": 986
+      "line": 1023
     },
     {
       "module": "connector_policy",
@@ -95,7 +100,7 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4778
+      "line": 4781
     },
     {
       "module": "gate_detector_states",
@@ -337,20 +342,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3855,
+      "line": 3856,
       "population": 44
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3882,
+      "line": 3883,
       "population": 31
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3747,
-      "population": 98
+      "line": 3748,
+      "population": 99
     },
     {
       "module": "freshness",
@@ -612,6 +617,7 @@
     "bulk_filter.MUST_KEEP_ROWS",
     "candidate.MINIMUM_CASES",
     "capture_provenance.MINIMUM_CAPTURES_SCANNED",
+    "connector_health.MINIMUM_PACKAGES_BYTE_COMPARED",
     "connector_health.MINIMUM_PROBES_COMPARED",
     "connector_policy.PACKAGES_AT_LEAST",
     "connector_procedure.MINIMUM_CASES",
@@ -707,6 +713,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 98,
+  "floors_swept_at_least": 99,
   "floors_arithmetically_checked_at_least": 36
 }
