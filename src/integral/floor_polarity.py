@@ -1496,6 +1496,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "below the bound: a minimum on a count, breached by deleting members."
         ),
     ),
+    "claim_trace.FIXTURE_SOURCE_CHARS": (
+        "ceiling",
+        (
+            "`len(text) > FIXTURE_SOURCE_CHARS` raises: the fixed width of the "
+            "stored source a probe master's span points at, an upper limit on how "
+            "much fixture text it may hold, never a minimum on a measured count."
+        ),
+    ),
     "connector_procedure.MINIMUM_CASES": (
         "floor",
         (
