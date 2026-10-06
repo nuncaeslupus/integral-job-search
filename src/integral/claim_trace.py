@@ -480,7 +480,7 @@ def seed_fixture_source(store: ProfileStore, master: CVMaster) -> None:
     The span is fixed, so a master can be built before its store exists. A document
     span rather than an evidence row, so no probe's evidence-row arithmetic moves.
     """
-    lines = []
+    lines: list[str] = []
     for section in ("headline", "residence_claim", "experience", "education", "skills"):
         for entry in section_entries(master, section):
             lines.extend(
