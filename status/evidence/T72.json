@@ -165,10 +165,10 @@
       "site": "python.org",
       "health": "healthy",
       "baseline_items": 3,
-      "probe_items": 25,
+      "probe_items": 2,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-08-30",
+      "probe_captured_at": "2026-10-05",
       "rate_limited": null
     },
     {
@@ -245,7 +245,7 @@
       "probe_items": 25,
       "reasons": [],
       "probed": true,
-      "probe_captured_at": "2026-09-02",
+      "probe_captured_at": "2026-10-05",
       "rate_limited": null
     },
     {

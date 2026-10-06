@@ -1,0 +1,29 @@
+{
+  "literal_pins_a_nested_rebinding_escapes": 0,
+  "escaping_pins": [],
+  "forms_that_escaped": {},
+  "nested_forms_tried": [
+    "augassign",
+    "del",
+    "except_alias",
+    "for",
+    "if",
+    "if_annotated",
+    "if_literal",
+    "import_alias",
+    "match_as",
+    "match_capture",
+    "match_rest",
+    "match_star",
+    "nested_if",
+    "nested_literal",
+    "star_import",
+    "try",
+    "type_alias",
+    "walrus",
+    "while",
+    "with"
+  ],
+  "pins_swept_at_least": 3,
+  "gate_status": "measured"
+}

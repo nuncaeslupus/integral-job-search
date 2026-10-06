@@ -2,7 +2,7 @@ site: es.talent.com
 country: ES
 language: es
 maintainer: "@nuncaeslupus"
-last_verified: "2026-09-21"
+last_verified: "2026-10-05"
 
 policy:
   listings: public
@@ -21,11 +21,11 @@ policy:
 
 fixture:
   provenance: sampled
-  recorded: "2026-09-21"
-  # The advert body in `fixture/detail.html` is truncated by
-  # `tools/excerpt_fixture.py` — 3,351 characters down to 609, ending in the
-  # tool's own marker — so what is committed is enough markup to prove the
-  # selector finds the body and not enough to be a copy of somebody's advert.
+  recorded: "2026-10-05"
+  # The advert body in `fixture/detail.html` is the live advert's whole body, 1,176
+  # characters (measured through `parse_detail_page`), followed by the 49-character
+  # marker `tools/excerpt_fixture.py` appends. Nothing was cut: the body is one short
+  # paragraph, so the tool kept it whole. The marker is the tool's, not a cut.
   # The listing fixture is untouched by it and needs to be: this connector maps
   # no `text` on the card, so there is no teaser span for the tool to cut, and
   # the board's own preview is ~200 characters anyway.
@@ -37,7 +37,7 @@ fixture:
   #
   # Never an advert a candidate was reading: every query and advert here was
   # chosen for this capture.
-  bodies: excerpted
+  bodies: verbatim
   # Not vacuously: the board writes who fetched the page into every capture, in
   # more than one shape. All three carried the requester's own address as
   # `\"ip\"` and `\"ipLocation\"`, and beside them — inside the same flat JSON

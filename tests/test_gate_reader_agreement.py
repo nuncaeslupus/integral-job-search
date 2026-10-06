@@ -16,7 +16,6 @@ while asserting nothing at all.
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import itertools
 import json
@@ -41,6 +40,7 @@ from integral.gate_reader_agreement import (
     record,
     write_evidence,
 )
+from integral.literal_pin import binding_defects
 from integral.task_gate import gate_declaration
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -244,18 +244,11 @@ def test_the_floor_is_a_literal_the_population_cannot_drag() -> None:
     task is about, one level up.
     """
     source = Path(gate_reader_agreement.__file__).read_text(encoding="utf-8")
-    assigned = [
-        node.value
-        for node in ast.parse(source).body
-        if isinstance(node, ast.Assign)
-        and len(node.targets) == 1
-        and isinstance(node.targets[0], ast.Name)
-        and node.targets[0].id == "MINIMUM_ARRANGEMENTS_PROBED"
-    ]
-    assert len(assigned) == 1, "the floor is assigned once, at module level"
-    assert isinstance(assigned[0], ast.Constant) and isinstance(assigned[0].value, int), (
-        "the floor must be an integer literal; derived from ARRANGEMENTS it shrinks "
-        "with the very deletion it exists to catch, and the guard can never fire"
+    assert binding_defects(source, "MINIMUM_ARRANGEMENTS_PROBED") == [], (
+        "the floor must be bound once, as an integer literal; derived from ARRANGEMENTS it "
+        "shrinks with the very deletion it exists to catch, and the guard can never fire. "
+        "T160: the rule walks every depth, so a rebinding nested one block deep beside a "
+        "decoy literal is refused too"
     )
     assert len(ARRANGEMENTS) + 1 == MINIMUM_ARRANGEMENTS_PROBED, (
         "the literal must equal the population `floor_breaches` reads it against — "

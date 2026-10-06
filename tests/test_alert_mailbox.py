@@ -267,6 +267,7 @@ _CHECK_TAIL = ["--read-id", "r", "--mailbox", "a@x.org", "--read-at", "2999-01-0
         lambda b: ["--roo", b[1], "--handle", "ada", "check", *_CHECK_TAIL],  # abbreviation
         lambda b: ["grant", *b, "--mailbox", "a@x.org"],
         lambda b: ["--bogus"],
+        lambda b: ["check"],  # a bare subcommand name is not a path
         lambda b: ["out.json", "extra"],  # more than one argument is never evidence mode
     ],
 )

@@ -24,7 +24,6 @@ So every case here is one of two shapes:
 
 from __future__ import annotations
 
-import ast
 import json
 import subprocess
 import sys
@@ -34,6 +33,7 @@ from typing import Any
 import pytest
 
 from integral import verified_gate as vg
+from integral.literal_pin import binding_defects
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _ROOT / "tools" / "verified_gate.sh"
@@ -349,11 +349,18 @@ def test_a_script_that_only_contains_the_patterns_fails_almost_every_contract(
 
 
 def test_the_floor_is_a_literal_the_table_cannot_drag() -> None:
+    """One module-level integer literal, at any depth of scrutiny (T160).
+
+    `literal_pin.binding_defects` walks every node, so a rebinding nested in an
+    `if` beside a decoy literal is seen; the old substring and top-level-body
+    forms of this pin were not.
+    """
     source = Path(vg.__file__).read_text(encoding="utf-8")
-    assert "MINIMUM_CONTRACTS = 10" in source, (
-        "the floor must be a literal; written as `len(CONTRACTS)` it is compared "
-        "against a count derived from CONTRACTS and can never fire"
+    assert binding_defects(source, "MINIMUM_CONTRACTS") == [], (
+        "the floor must be bound once, as a literal; written as `len(CONTRACTS)` it "
+        "is compared against a count derived from CONTRACTS and can never fire"
     )
+    assert vg.MINIMUM_CONTRACTS == 10
     assert len(vg.CONTRACTS) >= vg.MINIMUM_CONTRACTS
 
 
@@ -1055,30 +1062,19 @@ def test_the_pin_ties_the_trailer_sha_to_the_commit_field(tmp_path: Path) -> Non
 
 
 def test_the_ci_claim_scenario_floor_is_a_literal() -> None:
-    """AST fact, not a substring — the same idiom
-    `tests/test_gate_reader_agreement.py::test_the_floor_is_a_literal_the_population_cannot_drag`
-    uses for the identical shape, and the one this test used to be missing:
-    #472's F2 mutated `MINIMUM_CI_CLAIM_SCENARIOS = 3` to
-    `len(CI_CLAIM_SCENARIOS)` and the OLD substring-grep version of this test
-    still passed 72 green, because the decoy literal `3` still sat in a
-    trailing comment. A comment cannot satisfy an AST check."""
+    """AST fact over every depth (T160), not a substring and not `.body` alone.
+
+    #472's F2 mutated `MINIMUM_CI_CLAIM_SCENARIOS = 3` to `len(CI_CLAIM_SCENARIOS)`
+    and the old substring-grep form still passed, because the decoy literal sat
+    in a comment; a top-level-only AST form is beaten by the same decoy plus a
+    rebinding inside an `if`. `literal_pin.binding_defects` is the one rule."""
     source = Path(vg.__file__).read_text(encoding="utf-8")
-    assigned = [
-        node.value
-        for node in ast.parse(source).body
-        if isinstance(node, ast.Assign)
-        and len(node.targets) == 1
-        and isinstance(node.targets[0], ast.Name)
-        and node.targets[0].id == "MINIMUM_CI_CLAIM_SCENARIOS"
-    ]
-    assert len(assigned) == 1, "the floor is assigned once, at module level"
-    assert isinstance(assigned[0], ast.Constant) and isinstance(assigned[0].value, int), (
-        "the floor must be an integer literal; written as `len(CI_CLAIM_SCENARIOS)` "
-        "it is compared against a count derived from the table itself and can "
-        "never fire — and that construction is exactly what #472's F2 mutated it "
-        "to, surviving the old substring-grep form of this test at 72 passed"
+    assert binding_defects(source, "MINIMUM_CI_CLAIM_SCENARIOS") == [], (
+        "the floor must be bound once, as an integer literal; written as "
+        "`len(CI_CLAIM_SCENARIOS)` it is compared against a count derived from the "
+        "table itself and can never fire"
     )
-    assert len(vg.CI_CLAIM_SCENARIOS) == assigned[0].value, (
+    assert len(vg.CI_CLAIM_SCENARIOS) == vg.MINIMUM_CI_CLAIM_SCENARIOS, (
         "the literal must equal the population it is sized to — an added "
         "scenario should raise the floor rather than widen the slack"
     )

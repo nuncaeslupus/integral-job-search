@@ -1,5 +1,21 @@
 # Session handover
 
+## 00019. Cloud run: T141, T160, T165 merged; each took a second-reader BLOCK first
+
+- **Merged:** T141 annotatable document reader (#766), T160 literal pins at every depth (#765),
+  T165 floor census by polarity (#770). Each: Opus second reader on the PR, CI green, `verified_gate.sh` block posted.
+- **Every first review blocked, all fail-open:** T141 re-substituted placeholders so document text ran as
+  script; T160 missed `match`/`type` rebindings; T165 read normal-work guards as floors, twice. T165 ended
+  only when enumeration was replaced by a closed rule (every census floor needs a `floor` register entry in
+  `floor_polarity.ADJUDICATIONS`; the AST only cross-checks). `_CONFIRMING_MATCHES_FOR_BIPOLAR` is a floor:
+  the task's "five ceilings" are four.
+- **Non-blocking residuals left on the PRs** (not filed): #766 R4/R5/R7; #765 list-valued branch redundant;
+  #770 H1 (duplicate no-entry list), H2 (`bulk_filter` reasons say "never compared"), H3, G5 (fail-closed).
+- **Still not cloud work:** T152, T254 (laptop); T233, T213, T191, T247 carry `false` placeholder gates.
+- **Mechanics confirmed this run:** `gh api` POST of issue comments works; POST of git refs is 403, so
+  claims go through MCP `create_branch`. Three full gates in parallel slow each to ~25 min. A fix round on an
+  implementer with ~400k context is cheaper as a fresh agent briefed from the PR comment.
+
 ## 00018. Overnight cloud run: ~50 PRs merged; ending to split into one laptop and one cloud session
 
 - **Merged this run (task PRs):** D-29, T147, T180, T190, T192, T207, T208, T209, T224, T226, T229,
