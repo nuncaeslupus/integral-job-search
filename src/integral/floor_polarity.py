@@ -1350,6 +1350,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "is not a refusal-shaped consumer, so the AST rule abstains."
         ),
     ),
+    "pagination_capture.MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES": (
+        "floor",
+        (
+            "`scanned < MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES` reports the run "
+            "unmeasured when the packages scanned fall below the bound: a minimum "
+            "on a count, breached by deleting packages from the library."
+        ),
+    ),
     "document_reader.EXPORT_VERSION": (
         "neither",
         (
@@ -1443,6 +1451,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "`scanned < MINIMUM_CAPTURES_SCANNED` refuses the run (reports it "
             "unmeasured and exits non-zero) when the measured population falls "
             "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "claim_trace.FIXTURE_SOURCE_CHARS": (
+        "ceiling",
+        (
+            "`len(text) > FIXTURE_SOURCE_CHARS` raises: the fixed width of the "
+            "stored source a probe master's span points at, an upper limit on how "
+            "much fixture text it may hold, never a minimum on a measured count."
         ),
     ),
     "connector_procedure.MINIMUM_CASES": (

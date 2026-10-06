@@ -1,7 +1,9 @@
 {
   "untraced_claim_defects": 0,
-  "claims_checked": 3744,
+  "claims_checked": 4576,
+  "denials_checked": 416,
+  "counts_checked": 416,
   "adverts_generated": 208,
-  "probe_cases": 13,
+  "probe_cases": 28,
   "probe_cases_misjudged": 0
 }

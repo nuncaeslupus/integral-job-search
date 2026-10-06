@@ -36,7 +36,7 @@
 site: usajobs
 locale: en
 version: "1.0.0"
-last_verified: "2026-09-02"
+last_verified: "2026-10-05"
 # Listings and announcements are public; no account, no session.
 auth: none
 
@@ -55,41 +55,24 @@ list:
   # candidate's search: the corpus is drawn by specification and never from a
   # session's harvest.
   #
-  # **Exactly the two keys the capture was taken with, and no third one.**
-  # `probe/captured.json` records this body; `connectors/ruled-out.yaml`'s
-  # `retest` line reproduces it; both read `{"Keyword":"python",
-  # "ResultsPerPage":25}`.
+  # `Page` is the page index, and it is the key the capture was taken with
+  # (`probe/captured.json`, 2026-10-05): a POST of this body with `"Page": 2`
+  # answered 200, `Pager.CurrentPageIndex: 2`, 25 rows, 23 of them not on page
+  # one. `connectors/ruled-out.yaml`'s `retest` still reproduces page one.
   body_json:
     Keyword: python
     # The board's own default and the value the capture was taken with.
     ResultsPerPage: 25
+    Page: "{page}"
   pagination:
-    # **`none`, because no capture ever measured a page key on this board (T113).**
-    #
-    # This connector used to send a third body key, `Page: "{page}"`, under
-    # `mode: body_field`. That name came out of the board's *response* — `Pager`
-    # reports `CurrentPageIndex` and `NextPageIndex` — which shows the board
-    # REPORTS a page index, not that it ACCEPTS one in the request under that
-    # spelling. No capture and no retest ever sent it.
-    #
-    # It was defended as inert at `max_pages: 1` ("an unbound key is ignored and
-    # returns page 1; a bound one returns page 1 too"), and that defence is
-    # exactly the shape T113 exists to refuse: it stops being inert the moment
-    # anybody raises `max_pages`, and if the board ignores the key then page 2
-    # is a duplicate of page 1, the fetcher collects duplicate offers, and
-    # nothing reports it. A key that may only ever be sent at one value is a key
-    # nothing needs.
-    #
-    # `Pager` does report `NumberOfPages: 2` for this query (`Total: 44`,
-    # `ItemsPerPage: 25`), so a second page does exist and this connector cannot
-    # reach it. Restoring it takes one measurement and one commit: POST the same
-    # body with `"Page": 2`, check the rows differ from page 1, commit that
-    # response as a second capture recording the body it was taken with, then
-    # set `mode: body_field`, `param: Page`, `start: 1`, `max_pages: 2` and add
-    # `Page: "{page}"` back. `integral.pagination_capture` refuses the key until
-    # that capture exists.
-    mode: none
-    max_pages: 1
+    # `body_field` with `max_pages: 2`, because that is the page the capture
+    # measured (T113/T152). The board now reports `NumberOfPages: 3` for this
+    # query (`Total: 52`); a third page is not captured, so it is not asked for.
+    # Raising `max_pages` takes a capture of that page and a commit.
+    mode: body_field
+    param: Page
+    start: 1
+    max_pages: 2
   # The response IS JSON — the board's own endpoint, no markup anywhere — which
   # is the simpler of the two `from_json` cases and the one this library would
   # rather have. `Jobs` is the array of adverts; `Total` and `Pager` sit beside
