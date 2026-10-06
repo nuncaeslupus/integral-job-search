@@ -1,5 +1,32 @@
 # Session handover
 
+## 00020. Laptop run: T131, T152, T254, T247 merged; the laptop-only list is empty
+
+- **Merged:** T131 (#763, docs-only: ai-jobs.net is already read by `foorilla_en`), T152 (#764,
+  `pythonorg_en` and `usajobs_en` page 2 really captured, dropped population derived from the library),
+  T254 (#767, `FieldSelector.after_text`, `talent_es` bodies verbatim), T247 (#771, `alert_mailbox`:
+  per-read permission ledger in the profile, `refusal()` the single enforcement point). Each code PR:
+  Opus second reader CLEAR on the PR, CI green, `verified_gate.sh` block on the merged head.
+- **Scope decisions taken without the owner, all reversible:** T131 treated as already delivered;
+  T247 is the rule and its record only, no mailbox or API integration; usajobs page 2 captured rather
+  than the package excluded.
+- **Follow-ups filed (`arsenal:queue`):** #768 (404 past the last page), #769 (python.org unasked gzip),
+  #772 (fixture tools do not know `after_text`), #773 (wire `alert_mailbox.refusal` into the offer path;
+  `read_at` is typed, a grant never expires in its session), #776 (first issued request is page 1,
+  library-wide), #777 (`foorilla_en` page 2 via `hx-get`), #778 (usajobs stops at page 2 of 3).
+- **Every new floor now needs a `floor_polarity.ADJUDICATIONS` entry** (T165). A branch cut before T165
+  that adds a floor fails `make evidence` after merging main with "has no polarity adjudication"; add
+  the entry beside the others, do not touch the census.
+- **Two sessions merging into one `main` cost more than the work.** Each merge moved `status/plan.md`
+  and the `floor_sweep` constants, so every open PR conflicted again, got no CI run, and needed a new
+  ~25 min gate. What worked: merge the PRs strictly one after another, smallest census footprint first,
+  and merge main into the next only after the previous one landed.
+- **Mechanics:** `gh pr edit` fails here (Projects-classic GraphQL); use
+  `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@file`. That edit also retriggers the
+  `arsenal queue` workflow, which unsticks a "task PR closes its task" check no runner picked up.
+  A suspended laptop kills background gates silently: an empty output file hours later is a dead job.
+- **Still the owner's:** #707 and #723.
+
 ## 00019. Cloud run: T141, T160, T165 merged; each took a second-reader BLOCK first
 
 - **Merged:** T141 annotatable document reader (#766), T160 literal pins at every depth (#765),
