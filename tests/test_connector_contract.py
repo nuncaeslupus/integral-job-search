@@ -732,6 +732,10 @@ def test_meta_that_is_not_valid_utf8_leaves_the_command_with_a_documented_status
 #: occurs fails too, so this cannot outlive what it excuses. Written as octets
 #: so this file does not itself carry the literal it excuses.
 _NOT_ADDRESSES = {
+    (
+        "uv.lock",
+        ".".join(map(str, (1, 2, 0, 2))),
+    ): "the brotlicffi package version (T142's pdf extra)",
     ("src/integral/robots.py", ".".join(map(str, (124, 0, 0, 0)))): (
         "Chrome's version in a browser User-Agent"
     ),

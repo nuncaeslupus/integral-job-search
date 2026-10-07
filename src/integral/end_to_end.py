@@ -69,6 +69,7 @@ from integral.approval import (
     verify_send,
 )
 from integral.candidate import CandidateError, OfferFacts, filter_hard_constraints, load_constraints
+from integral.claim_trace import FIXTURE_SOURCE, seed_fixture_source
 from integral.cv_store import CVMaster, Episode, write_master
 from integral.dimensions import Dimension, ad_side, load_dimensions
 from integral.extraction import ExtractionError, OfferExtraction, extract
@@ -623,7 +624,13 @@ def replay(root: Path, fixture: Fixture | None = None, steps: StepList | None = 
 
     master = CVMaster.model_validate_json((_REPO_ROOT / fixture.master).read_text(encoding="utf-8"))
     master = master.model_copy(
-        update={"episodes": tuple(Episode(**episode) for episode in fixture.episodes)}  # type: ignore[arg-type]
+        update={
+            "episodes": tuple(
+                # T146: a figure in an episode must be in its live provenance
+                Episode(**episode, provenance=(FIXTURE_SOURCE,))  # type: ignore[arg-type]
+                for episode in fixture.episodes
+            )
+        }
     )
 
     identity = create_profile(
@@ -634,6 +641,7 @@ def replay(root: Path, fixture: Fixture | None = None, steps: StepList | None = 
         fiction=True,
     )
     store = ProfileStore(root, identity.handle)
+    seed_fixture_source(store, master)
 
     seen: set[str] = set()
     for run in fixture.sequence:

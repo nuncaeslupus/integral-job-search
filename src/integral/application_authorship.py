@@ -24,6 +24,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from integral.claim_trace import paragraph_defects
 from integral.identity import ProfileStore
 from integral.profile import EvidenceLog
 
@@ -165,7 +166,8 @@ def check_authorship(
     Row format: ``| <paragraph number, from 1> | <author> | <evidence ids> | <changes> |``.
     ``candidate`` and ``edited`` must cite live ``candidate_statement`` rows from an
     application draft; ``edited`` must also name its changes; ``assistant`` must cite
-    nothing (a sentence the candidate did not say cannot borrow a source).
+    nothing (a sentence the candidate did not say cannot borrow a source). Neither of
+    those two may carry a denial or a number the cited words do not (T146).
     """
     paragraphs = letter_paragraphs(letter_md)
     rows = _table_rows(trazabilidad_md)
@@ -216,6 +218,14 @@ def check_authorship(
                 for ev in ids:
                     if ev in live and _shared(live[ev][1], body) < EDITED_KEEPS:
                         defects.append(f"paragraph {n}: edited, but {ev} is not in it")
+        if author in AUTHORS:
+            # T146: a paragraph the candidate did not write word for word may assert only
+            # what the words it cites say - an absence, or a number, needs its own source.
+            cited_words = [live[ev][1] for ev in ids if ev in live]
+            defects += [
+                f"paragraph {n}: {d.kind}: {d.detail}"
+                for d in paragraph_defects(author, _squash(paragraphs[n - 1]), cited_words)
+            ]
     defects += [
         f"carta.md line {line!r} is a heading; the candidate's letter has none"
         for line in letter_md.splitlines()

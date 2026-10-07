@@ -419,12 +419,30 @@ def notice(
 # the gate
 
 
-def _fixture_master(drafts: Sequence[str]) -> Any:
-    from integral.cv_store import CVMaster, Experience
+def _fixture_master(drafts: Sequence[str], log: EvidenceLog) -> Any:
+    from integral.cv_store import ConversationTurn, CVMaster, Experience
+
+    # Lettered, never numbered: a digit in a title is a count (T146), and a count with no
+    # source is withheld, which this gate would then read as a voice defect.
+    def tag(i: int) -> str:
+        return "".join(chr(ord("A") + int(d)) for d in str(i))
+
+    def said(text: str) -> tuple[Any, ...]:
+        """The candidate's own words for a draft, so a figure in it has a source (T146)."""
+        row = log.append(
+            recorded_at="2026-01-01T00:00:00Z", step="history", kind="statement", text=text,
+            source="conversation",
+        )  # fmt: skip
+        return (ConversationTurn(evidence_id=row.id),)
 
     return CVMaster(
         experience=tuple(
-            Experience(title=f"Role {i}", organisation=f"Org {i}", description=text)
+            Experience(
+                title=f"Role {tag(i)}",
+                organisation=f"Org {tag(i)}",
+                description=text,
+                provenance=said(text),
+            )
             for i, text in enumerate(drafts)
         )
     )
@@ -454,7 +472,7 @@ def measure() -> dict[str, Any]:
         store = ProfileStore(root, identity.handle)
         log = EvidenceLog(store)
         master = _fixture_master(
-            [seed[2] for seed in enforceable] + [seed[3] for seed in enforceable]
+            [seed[2] for seed in enforceable] + [seed[3] for seed in enforceable], log
         )
         stored = [record(log, s[0], s[1], at="2026-01-01") for s in SEEDS]
 

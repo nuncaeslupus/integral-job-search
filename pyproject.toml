@@ -27,6 +27,14 @@ collect = [
 cv = [
     "pypdf>=4.0",
 ]
+# Only `integral.document_render.render_pdf` needs this (T142). The HTML a
+# document renders to, and every contract the gate reads over it, are stdlib
+# and need nothing; the PDF contracts in tests/test_document_render.py skip
+# without it. WeasyPrint also wants Pango on the machine, which is why it is
+# not part of `dev` and so not part of every gate run.
+pdf = [
+    "weasyprint>=62",
+]
 dev = [
     "mypy>=1.11",
     "pytest>=8.3",

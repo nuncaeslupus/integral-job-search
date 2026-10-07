@@ -5,6 +5,7 @@ priority: 5
 tags: [docs]
 workspace: CANDIDATE
 issue: 387
+status: merged
 ---
 
 ## Acceptance gate

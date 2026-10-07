@@ -72,6 +72,7 @@ from integral.connectors import (
     parse_detail_page,
     source_kind_of,
 )
+from integral.fixture_shapes import measure as measure_shape_cells
 from integral.gate_exit import worst
 from integral.identity import ProfileStore
 from integral.lifecycle import (
@@ -88,6 +89,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T126.json"
 DEFAULT_BROWSER_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T173.json"
+SHAPE_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T177.json"
 
 #: The first line of a page the candidate's browser saved: the URL it was
 #: rendered from. Written by the capture snippet in the step-7 skill, and the
@@ -101,7 +103,11 @@ CAPTURE_MARK = re.compile(r"\A<!-- integral-capture: (\S+) -->\n")
 FETCH_LOG = "_fetches.jsonl"
 
 #: A run that consulted fewer boards than this consulted nothing worth
-#: reporting. Spain had six usable packages when this landed.
+#: reporting. Spain had six usable packages when this landed. It is deliberately the
+#: smallest meaningful floor: `measure_fixture` consults every installed board, and the
+#: gate it guards (`boards_with_a_committed_capture`, the starved-board checks) is
+#: separately bounded; this only refuses a run that consulted nothing at all.
+#: arsenal-floor-margin: MINIMUM_BOARDS value=1
 MINIMUM_BOARDS = 1
 
 #: A run that collected no offers says nothing about how offers get recorded.
@@ -2092,6 +2098,15 @@ def measure_fixture() -> dict[str, Any]:
                 f"only {collected} offer(s) collected (floor {MINIMUM_OFFERS_COLLECTED}) — "
                 "a run that collected nothing proves nothing about how offers are recorded"
             ]
+        elif len(run.outcomes) < MINIMUM_BOARDS:
+            # T164: `MINIMUM_BOARDS` was declared and read nowhere - a floor on a
+            # population that nothing compared it to. A run that consulted no board
+            # collected its offers from nowhere this gate measures.
+            measured["gate_status"] = "unmeasured"
+            measured["reasons"] = [
+                f"only {len(run.outcomes)} board(s) consulted (floor {MINIMUM_BOARDS}) — "
+                "a run that consulted no board proves nothing about how boards are read"
+            ]
         elif not measured["boards_needing_the_advert_page"]:
             # A zero over a run where no board ever needed the advert page is
             # the vacuous pass this key exists to refuse: it would read clean
@@ -2690,9 +2705,9 @@ def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    """`python -m integral.sourcing` — T126's, T167's and T173's evidence.
+    """`python -m integral.sourcing` — T126's, T167's, T173's and T177's evidence.
 
-    The three gates' exits are combined by `gate_exit.worst`, never by hand: a
+    The four gates' exits are combined by `gate_exit.worst`, never by hand: a
     hand-rolled "unmeasured wins" let one gate's failure hide behind another's
     `unmeasured` (second reader on #455, F1).
     """
@@ -2718,6 +2733,11 @@ def _main(argv: list[str] | None = None) -> int:
             DEFAULT_BROWSER_EVIDENCE_PATH,
             measure_browser_route(),
             ("browser_boards_fetched_over_plain_http",),
+        ),
+        (
+            SHAPE_EVIDENCE_PATH,
+            measure_shape_cells(),
+            ("fixture_shape_cells_that_relocate_nothing",),
         ),
     ):
         path.parent.mkdir(parents=True, exist_ok=True)
