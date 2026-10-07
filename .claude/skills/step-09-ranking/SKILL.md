@@ -48,6 +48,29 @@ In this step that sounds like:
 - Never show what is unknown about an offer as neutral — an advert silent on hours is not an advert promising good ones.
 - Never assemble the card's prose a paragraph at a time by a model — it is a template filled from the normalised JSON.
 
+## Say what the order could not use (T233)
+
+Step 7 hands here with no question asked: never ask whether to rank before showing the list.
+The ranked view is shown first, in the same turn. When offers come out not separated, say which
+input is missing and that an answer could change it, for the one or two inputs that bear on
+the most offers (the function may return more; say no more than two):
+
+```python
+from integral.rank import missing_inputs, unseparated_units
+
+entries = missing_inputs(ranking, candidates)   # [] when nothing is missing
+for entry in entries[:2]:
+    say(entry)   # {"input", "offers", "answer_would", "asked_of"}
+if not entries and unseparated_units(ranking):
+    say("level on what I have")   # a real tie: nothing is missing, say so
+```
+
+`offers` is how many unseparated offers that input bears on, not how many it would separate:
+say "are not currently separated; this answer could change that", never "would separate".
+`asked_of: "candidate"` is a question for them. `asked_of: "employer"` (`salary`,
+`unknown:<dimension>`) is the advert's silence: never ask the candidate for it; say the advert
+does not publish it and that those offers are ranked apart until it does.
+
 ## Say what is working and what would widen the fit (T209)
 
 Presenting a list and saying nothing of the candidate is half a ranking. After the cards, say

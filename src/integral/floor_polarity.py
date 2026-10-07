@@ -1409,6 +1409,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "on a count, breached by deleting packages from the library."
         ),
     ),
+    "rank.MINIMUM_UNSEPARATED_RANKINGS": (
+        "floor",
+        (
+            "`len(unseparated) >= MINIMUM_UNSEPARATED_RANKINGS` decides "
+            "`unseparated_rankings_ok`, which `_main` refuses on: deleting a constructed "
+            "case that is left tied by a missing input breaches it."
+        ),
+    ),
     "alert_mailbox.MINIMUM_PERMITTED_CASES": (
         "floor",
         (

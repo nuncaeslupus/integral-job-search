@@ -1,0 +1,18 @@
+{
+  "inputs_named": [
+    "preference:company_kind",
+    "salary",
+    "unknown:company_kind",
+    "unknown:remote",
+    "weight:company_kind",
+    "weights"
+  ],
+  "inputs_named_that_bear_on_no_unseparated_offer": 0,
+  "nothing_missing_controls": 4,
+  "rankings_with_unordered_ties_and_no_named_missing_input": 0,
+  "silent_when_reporter_is_empty": 9,
+  "spurious_when_reporter_always_names_weights": 12,
+  "unseparated_rankings": 13,
+  "unseparated_rankings_at_least": 13,
+  "unseparated_rankings_ok": 1
+}

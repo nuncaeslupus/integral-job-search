@@ -595,6 +595,7 @@
     "process_spec.MIN_ITEM_WORDS",
     "profile._ID_WIDTH",
     "profile_standing.MAX_ITEMS",
+    "rank.MINIMUM_UNSEPARATED_RANKINGS",
     "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED",
     "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED",
     "repo_gate.MINIMUM_FILES_FORMATTED",
