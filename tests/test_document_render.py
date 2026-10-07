@@ -14,6 +14,8 @@ import dataclasses
 import importlib.util
 import json
 import re
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -627,3 +629,60 @@ def test_the_accent_reaches_the_pdf(tmp_path: Path) -> None:
     # fill: section titles' text, the SVG bar and dot; stroke: the heading rules
     assert found[b"rg"], found
     assert found[b"RG"], found
+
+
+# Engine-free pin for the PDF fetcher (second reader, #786 G1): runs in the gate without WeasyPrint.
+
+_FETCH_URLS = (
+    "file:///etc/passwd",
+    "http://127.0.0.1:9/x",
+    "https://a.test/x",
+    "data:text/plain,x",
+)
+
+
+def _fake_engine(monkeypatch: pytest.MonkeyPatch, *, with_fetcher_class: bool) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
+
+    class _Rendered:
+        pages = (object(),)
+
+        def write_pdf(self) -> bytes:
+            return b"%PDF-fake"
+
+    def html(*, string: str, url_fetcher: Any = None, **kw: Any) -> Any:
+        seen["url_fetcher"] = url_fetcher
+        return types.SimpleNamespace(render=lambda: _Rendered())
+
+    engine = types.ModuleType("weasyprint")
+    engine.HTML = html  # type: ignore[attr-defined]
+    urls = types.ModuleType("weasyprint.urls")
+    if with_fetcher_class:
+
+        class URLFetcher:  # a base whose own fetch would succeed, as the real one does
+            _fail_on_errors = False
+
+            def fetch(self, url: str, headers: Any = None) -> Any:
+                return {"string": b"SECRET"}
+
+            def __call__(self, url: str) -> Any:
+                return self.fetch(url)
+
+        urls.URLFetcher = URLFetcher  # type: ignore[attr-defined]
+    engine.urls = urls  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "weasyprint", engine)
+    monkeypatch.setitem(sys.modules, "weasyprint.urls", urls)
+    return seen
+
+
+@pytest.mark.parametrize("with_fetcher_class", [True, False])
+def test_render_pdf_hands_the_engine_a_fetcher_that_refuses_everything(
+    monkeypatch: pytest.MonkeyPatch, with_fetcher_class: bool
+) -> None:
+    seen = _fake_engine(monkeypatch, with_fetcher_class=with_fetcher_class)
+    dr.render_pdf(dr.render(dr.sample_letter()))
+    fetcher = seen.get("url_fetcher")
+    assert fetcher is not None, "render_pdf left the engine its default fetcher"
+    for url in _FETCH_URLS:
+        with pytest.raises(ValueError, match="fetches nothing"):
+            fetcher(url)
