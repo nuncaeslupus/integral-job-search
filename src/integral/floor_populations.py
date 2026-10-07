@@ -657,7 +657,7 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
     "rank.MINIMUM_UNSEPARATED_RANKINGS": (
         "counted",
         "rank.measure_missing_inputs",
-        "unseparated_rankings",
+        "out['unseparated_rankings']",
         "the unseparated rankings counted by `measure_missing_inputs`",
     ),
     "reader_notes.MINIMUM_PROBES": (

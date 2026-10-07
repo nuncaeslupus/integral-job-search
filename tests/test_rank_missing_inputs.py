@@ -67,7 +67,9 @@ def test_the_listed_fields_are_exactly_the_non_ordering_fields_order_readings_pu
     ("field", "index"),
     [("ties", IDENTICAL), ("incomparable", UNKNOWN_PRICED), ("unordered", L1_NO_SALARY)],
 )
-def test_blanking_any_non_ordering_field_changes_what_is_unseparated(field: str, index: int) -> None:
+def test_blanking_any_non_ordering_field_changes_what_is_unseparated(
+    field: str, index: int
+) -> None:
     ranking = RANKS[index]
     assert ranking[field], "the example must publish this field"
     assert unseparated_units({**ranking, field: []}) < unseparated_units(ranking)
@@ -173,9 +175,9 @@ TEXTS = {
 }
 #: The passage each file gives to the T233 instruction: from its start marker to its end marker.
 REGION = {
-    "step-07": ("```text\n\"Fourteen new", "Writes `last_activity`."),
+    "step-07": ('```text\n"Fourteen new', "Writes `last_activity`."),
     "step-09": ("## Say what the order could not use (T233)", "## Say what is working"),
-    "spec": ("**Boundary.** *\"Fourteen new", "**Gate.** `offer_schema"),
+    "spec": ('**Boundary.** *"Fourteen new', "**Gate.** `offer_schema"),
 }
 RULE = {
     "step-07": "never ask whether they want it ranked",

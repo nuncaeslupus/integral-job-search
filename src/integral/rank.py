@@ -1790,17 +1790,20 @@ def _t233_answers(case: Mapping[str, Any], ranking: Mapping[str, Any]) -> dict[s
                     **case["weights"]["part_worths"],
                     name: {"utility_per_unit": 0.2, "salary_equivalent_per_month": 300.0},
                 }
-                out[f"price:{name}"] = {**case, "weights": {**case["weights"], "part_worths": worths}}
+                out[f"price:{name}"] = {
+                    **case,
+                    "weights": {**case["weights"], "part_worths": worths},
+                }
     for name in priced:
         lacking = [c for c in candidates if name not in c.scores]
         if lacking:
-            given = {
-                c.offer_id: (1.0 if i % 2 == 0 else -1.0) for i, c in enumerate(lacking)
-            }
+            given = {c.offer_id: (1.0 if i % 2 == 0 else -1.0) for i, c in enumerate(lacking)}
             out[f"unknown:{name}"] = {
                 **case,
                 "candidates": [
-                    replace(c, scores={**c.scores, name: given[c.offer_id]}, unknown=c.unknown - {name})
+                    replace(
+                        c, scores={**c.scores, name: given[c.offer_id]}, unknown=c.unknown - {name}
+                    )
                     if c.offer_id in given
                     else c
                     for c in candidates
@@ -1812,7 +1815,9 @@ def _t233_answers(case: Mapping[str, Any], ranking: Mapping[str, Any]) -> dict[s
             "candidates": [
                 c
                 if c.salary_per_month is not None
-                else replace(c, salary_per_month=2000.0 + 100 * i, pay=point_band(2000.0 + 100 * i, "EUR"))
+                else replace(
+                    c, salary_per_month=2000.0 + 100 * i, pay=point_band(2000.0 + 100 * i, "EUR")
+                )
                 for i, c in enumerate(candidates)
             ],
         }
@@ -1875,8 +1880,11 @@ def measure_missing_inputs() -> dict[str, Any]:
             cases, lambda _r, _c: [{"input": "weights"}]
         )["spurious"],
         "inputs_named": sorted(
-            {e["input"] for r, c in zip(rankings, cases, strict=True)
-             for e in missing_inputs(r, _t233_candidates(c))}
+            {
+                e["input"]
+                for r, c in zip(rankings, cases, strict=True)
+                for e in missing_inputs(r, _t233_candidates(c))
+            }
         ),
     }
     out["unseparated_rankings_ok"] = int(
