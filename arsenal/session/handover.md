@@ -1,5 +1,25 @@
 # Session handover
 
+## 00021. Cloud run: T117, T149, T146, T164, T177, T142 merged
+
+- **Merged:** T117 (#779), T149 (#775), T146 (#780, generated denials banned; candidate-authored
+  paragraphs exempt, owner's decision), T164 (#785, every counted floor needs `compared_to`), T177 (#784),
+  T142 (#786, parametrised CV and letter rendering; `render_pdf` hands WeasyPrint a fetcher that refuses
+  every URL, pinned by an engine-free test). Each: Opus second reader CLEAR on the PR, CI green,
+  `verified_gate.sh` block on the merged head.
+- **`verified_gate.sh` needs `UV_PYTHON=3.12` in the cloud container.** The repo pins no interpreter, so
+  the clean checkout picks 3.13 and fails 16 tests on interpreter differences (`__firstlineno__`,
+  robotparser). CI uses 3.12. Candidate task: pin it (`.python-version` or `requires-python`).
+- **Owner questions still open from T149 (#775):** did the real run skip steps 6 and 10? May a
+  superseded revision be sent?
+- **Follow-ups noted, not filed:** T146 N-R6 (a Cf character as the only word separator); T164 alias
+  scope; T142: skipped PDF contracts not recorded as `unmeasured`, CLI page-budget check only under the
+  engine.
+- **Still skipped:** T112, T105, T119, T115, T233, T213, T191 carry `false` placeholder gates.
+- **Mechanics:** `gh pr comment`/`gh pr view` hit GraphQL (403); use `gh api repos/.../issues/<n>/comments`
+  and `gh api repos/.../pulls/<n>`. A stale `.mypy_cache` after `uv sync --exact` reports phantom errors;
+  delete it.
+
 ## 00020. Laptop run: T131, T152, T254, T247 merged; the laptop-only list is empty
 
 - **Merged:** T131 (#763, docs-only: ai-jobs.net is already read by `foorilla_en`), T152 (#764,
