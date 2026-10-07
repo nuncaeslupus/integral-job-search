@@ -110,7 +110,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from integral.connector_policy import _as_date
+from integral.connector_policy import _as_date as _policy_as_date
 from integral.connectors import (
     CONNECTOR_FILENAME,
     DEFAULT_CONNECTORS_DIR,
@@ -1154,6 +1154,20 @@ def write_evidence(
     return measured
 
 
+def _as_date(raw: object) -> date | None:
+    """A canonical capture date, or `None`. Never raises.
+
+    The ledger's reader (T99) trims a string before parsing; a capture date is
+    stricter, so a `str` counts only when its *untrimmed* text is exactly what
+    the parsed day prints — padding, a newline, `20260801` and `2026-W31-6`
+    all fail that one comparison, with no list of shapes to keep complete.
+    """
+    parsed = _policy_as_date(raw)
+    if isinstance(raw, str) and (parsed is None or raw != parsed.isoformat()):
+        return None
+    return parsed
+
+
 # ---------------------------------------------------------------------------
 # T105 — a capture date is a canonical `YYYY-MM-DD`, not anything that parses
 # ---------------------------------------------------------------------------
@@ -1166,13 +1180,20 @@ NON_CANONICAL_CAPTURE_DATES: tuple[tuple[str, Any], ...] = (
     ("a timestamp at midnight", datetime(2026, 8, 1)),
     ("an unpadded string", "2026-8-1"),
     ("an unpadded day", "2026-08-1"),
+    ("leading padding", " 2026-08-30"),
+    ("trailing padding", "2026-08-30 "),
+    ("padding both sides", " 2026-08-30 "),
+    ("a trailing newline", "2026-08-30\n"),
+    ("an integer", 20260801),
+    ("the compact basic form", "20260801"),
+    ("an ISO week date", "2026-W31-6"),
 )
 
 #: Positive controls: canonical values `check_meta` must still accept, so a
 #: reader that refuses every date cannot score a clean zero.
 CANONICAL_CAPTURE_DATES: tuple[Any, ...] = (date(2026, 8, 1), "2026-08-01")
 
-MINIMUM_NON_CANONICAL_CAPTURE_DATES = 4
+MINIMUM_NON_CANONICAL_CAPTURE_DATES = 11
 
 
 def _meta_refuses_last_verified(value: Any) -> bool:

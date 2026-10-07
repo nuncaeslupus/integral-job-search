@@ -66,7 +66,6 @@ from integral.connector_contract import (
     unblocked_address_key_sites,
     write_evidence,
 )
-from integral.connector_policy import _as_date
 from integral.connector_shape import measure as shape_measure
 from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME, connector_packages
 from integral.pagination_capture import measure as pagination_measure
@@ -324,7 +323,7 @@ def test_a_non_canonical_last_verified_is_rejected_by_the_gate(
 
 @pytest.mark.parametrize(("name", "value"), NON_CANONICAL_CAPTURE_DATES)
 def test_the_date_reader_refuses_a_non_canonical_capture_date(name: str, value: Any) -> None:
-    assert _as_date(value) is None, name
+    assert connector_contract._as_date(value) is None, name
 
 
 @pytest.mark.parametrize("value", CANONICAL_CAPTURE_DATES)
@@ -338,6 +337,36 @@ def test_the_capture_date_gate_measures_zero_over_its_floor() -> None:
     assert measured["non_canonical_capture_dates_accepted"] == 0, measured
     assert measured["canonical_capture_dates_rejected"] == 0, measured
     assert measured["non_canonical_capture_dates_checked"] >= MINIMUM_NON_CANONICAL_CAPTURE_DATES
+
+
+@pytest.mark.parametrize(
+    ("accepted", "canonical_rejected", "status", "expected"),
+    [(0, 0, "measured", 0), (1, 0, "measured", 1), (0, 1, "measured", 1), (0, 0, "unmeasured", 3)],
+)
+def test_main_records_t105_and_escalates_its_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    accepted: int,
+    canonical_rejected: int,
+    status: str,
+    expected: int,
+) -> None:
+    """The T105 block in `_main`: the write happens, and a bad result moves the exit."""
+    t53 = tmp_path / "T53.json"
+    written: list[bool] = []
+
+    def fake_write() -> dict[str, Any]:
+        written.append(True)
+        return {
+            "non_canonical_capture_dates_accepted": accepted,
+            "canonical_capture_dates_rejected": canonical_rejected,
+            "gate_status": status,
+        }
+
+    monkeypatch.setattr(connector_contract, "DEFAULT_EVIDENCE_PATH", t53)
+    monkeypatch.setattr(connector_contract, "write_capture_dates_evidence", fake_write)
+    assert connector_contract._main(["connector_contract", str(t53)]) == expected
+    assert written == [True]
 
 
 def test_a_missing_meta_file_is_rejected(package: Path) -> None:
