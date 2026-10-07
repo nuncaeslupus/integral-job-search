@@ -3747,7 +3747,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: population on top of T247's.
 #: **101 with T149, over T117's 99**: `end_to_end`'s two floors (`MINIMUM_STEPS_REPLAYED`,
 #: `MINIMUM_REVISIONS_REPLAYED`) are two more. Still zero slack.
-MINIMUM_FLOORS_SWEPT = 101
+#: **102 with T105**: `connector_contract.MINIMUM_NON_CANONICAL_CAPTURE_DATES` is one more.
+#: Still zero slack.
+MINIMUM_FLOORS_SWEPT = 102
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3856,7 +3858,7 @@ MINIMUM_FLOORS_SWEPT = 101
 #: seven points of slack.
 #: **46 with T149**: `end_to_end`'s two floors are in-source literal counts, two more
 #: arithmetically checked; the floor stays 36, ten points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=46
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=47
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -4219,7 +4221,8 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: joins the battery on top of T247's.
 #: **98 with T149, over T117's 96**: `end_to_end`'s two floors are two scenarios more. Still zero
 #: slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 98
+#: **99 with T105**: `connector_contract`'s one new floor is one scenario more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 99
 
 
 def measure_prose_clearance() -> dict[str, Any]:

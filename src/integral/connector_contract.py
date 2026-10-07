@@ -100,15 +100,17 @@ import ast
 import json
 import re
 import sys
+import tempfile
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import ValidationError
 
+from integral.connector_policy import _as_date
 from integral.connectors import (
     CONNECTOR_FILENAME,
     DEFAULT_CONNECTORS_DIR,
@@ -122,9 +124,11 @@ from integral.connectors import (
     parse_detail_page,
     parse_list_page,
 )
+from integral.gate_exit import worst
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T53.json"
+DEFAULT_T105_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T105.json"
 
 PARSE_FILENAME = "parse.py"
 
@@ -532,16 +536,6 @@ def _load_yaml(path: Path) -> Any:
         raise ConnectorError(f"{path.name} could not be read: {exc}") from exc
 
 
-def _as_date(raw: object) -> date | None:
-    """An ISO date, or None. Never raises — the caller reports, it does not die."""
-    if isinstance(raw, date):
-        return raw
-    try:
-        return date.fromisoformat(str(raw))
-    except (TypeError, ValueError):
-        return None
-
-
 def check_layout(package: Path) -> list[str]:
     """Rule 1 — one connector, one directory, exactly those files."""
     violations: list[str] = []
@@ -595,7 +589,7 @@ def check_meta(package: Path) -> list[str]:
             violations.append(f"rule 5: {META_FILENAME} has no {key}")
     if meta.get("last_verified") is not None:
         raw = meta["last_verified"]
-        if not isinstance(raw, date) and _as_date(raw) is None:
+        if _as_date(raw) is None:
             violations.append(
                 f"rule 5: last_verified {raw!r} is not an ISO date — a date nobody "
                 "can parse is the same as no date"
@@ -621,7 +615,7 @@ def check_meta(package: Path) -> list[str]:
         except ConnectorError:
             connector = None  # rule 2 reports an unloadable connector already
         if connector is not None:
-            stated = declared if isinstance(declared, date) else _as_date(declared)
+            stated = _as_date(declared)
             if stated is not None and stated != connector.last_verified:
                 violations.append(
                     f"rule 5: {META_FILENAME} says last_verified {stated.isoformat()} but "
@@ -1160,6 +1154,69 @@ def write_evidence(
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T105 — a capture date is a canonical `YYYY-MM-DD`, not anything that parses
+# ---------------------------------------------------------------------------
+
+#: `last_verified` values `check_meta` must refuse: a YAML timestamp (a `date`
+#: subtype, so an `isinstance` check lets it through) and an unpadded day
+#: (`strptime`/`fromisoformat` shapes that are not the day the file claims).
+NON_CANONICAL_CAPTURE_DATES: tuple[tuple[str, Any], ...] = (
+    ("a YAML timestamp", datetime(2026, 8, 1, 14, 30)),
+    ("a timestamp at midnight", datetime(2026, 8, 1)),
+    ("an unpadded string", "2026-8-1"),
+    ("an unpadded day", "2026-08-1"),
+)
+
+#: Positive controls: canonical values `check_meta` must still accept, so a
+#: reader that refuses every date cannot score a clean zero.
+CANONICAL_CAPTURE_DATES: tuple[Any, ...] = (date(2026, 8, 1), "2026-08-01")
+
+MINIMUM_NON_CANONICAL_CAPTURE_DATES = 4
+
+
+def _meta_refuses_last_verified(value: Any) -> bool:
+    """Whether `check_meta` reports `value` as not an ISO date, run through the gate."""
+    with tempfile.TemporaryDirectory() as tmp:
+        package = Path(tmp)
+        (package / META_FILENAME).write_text(
+            yaml.safe_dump({"last_verified": value}), encoding="utf-8"
+        )
+        return any("is not an ISO date" in v for v in check_meta(package))
+
+
+def measure_capture_dates() -> dict[str, Any]:
+    """T105's gate: `non_canonical_capture_dates_accepted`."""
+    accepted = [
+        name
+        for name, value in NON_CANONICAL_CAPTURE_DATES
+        if _as_date(value) is not None or not _meta_refuses_last_verified(value)
+    ]
+    rejected = [
+        repr(value)
+        for value in CANONICAL_CAPTURE_DATES
+        if _as_date(value) is None or _meta_refuses_last_verified(value)
+    ]
+    checked = len(NON_CANONICAL_CAPTURE_DATES)
+    measured = checked >= MINIMUM_NON_CANONICAL_CAPTURE_DATES
+    return {
+        "non_canonical_capture_dates_accepted": len(accepted) if measured else -1,
+        "non_canonical_capture_dates_checked": checked,
+        "canonical_capture_dates_rejected": len(rejected),
+        "gate_status": "measured" if measured else "unmeasured",
+        "accepted": accepted,
+    }
+
+
+def write_capture_dates_evidence(
+    evidence: Path = DEFAULT_T105_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    measured = measure_capture_dates()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     """The conformance command.
 
@@ -1215,7 +1272,20 @@ def _main(argv: list[str]) -> int:
         return 3
     for violation in measured["violations"]:
         print(f"connector contract: {violation}", file=sys.stderr)
-    return 1 if measured["violations"] else 0
+    status = 1 if measured["violations"] else 0
+    if target == DEFAULT_EVIDENCE_PATH:
+        # T105 is about the contract's own date reader, not the library, so it
+        # is recorded on the same run that records T53 and never for a foreign one.
+        dates = write_capture_dates_evidence()
+        if dates["gate_status"] != "measured":
+            status = worst(status, 3)
+        elif (
+            dates["non_canonical_capture_dates_accepted"]
+            or dates["canonical_capture_dates_rejected"]
+        ):
+            print(f"connector contract: T105 {dates}", file=sys.stderr)
+            status = worst(status, 1)
+    return status
 
 
 if __name__ == "__main__":

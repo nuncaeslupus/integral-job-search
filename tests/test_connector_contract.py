@@ -41,8 +41,11 @@ from integral.connector_contract import (
     _STRING_BODY,
     _TRAILING_RUN,
     ADDRESS_BEARING_KEYS,
+    CANONICAL_CAPTURE_DATES,
     DEFAULT_EVIDENCE_PATH,
+    MINIMUM_NON_CANONICAL_CAPTURE_DATES,
     MINIMUM_PACKAGES,
+    NON_CANONICAL_CAPTURE_DATES,
     OPTIONAL_ENTRIES,
     PARSE_FILENAME,
     REQUESTER_OBJECT_KEYS,
@@ -63,6 +66,7 @@ from integral.connector_contract import (
     unblocked_address_key_sites,
     write_evidence,
 )
+from integral.connector_policy import _as_date
 from integral.connector_shape import measure as shape_measure
 from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME, connector_packages
 from integral.pagination_capture import measure as pagination_measure
@@ -299,6 +303,41 @@ def test_a_last_verified_nobody_can_parse_is_the_same_as_none(package: Path) -> 
     _edit_meta(package, lambda m: m.__setitem__("last_verified", "sometime last spring"))
     violations = check_package(package).violations
     assert any("last_verified" in v for v in violations), violations
+
+
+@pytest.mark.parametrize(("name", "value"), NON_CANONICAL_CAPTURE_DATES)
+def test_a_non_canonical_last_verified_is_rejected_by_the_gate(
+    package: Path, name: str, value: Any
+) -> None:
+    """T105 — a timestamp and an unpadded day parse, and are not the day claimed.
+
+    Through `check_package` (rule 5's isinstance site), and asserted to produce
+    no *disagreement* message either: that is the second site, which used to
+    compare a `datetime` against the connector's `date` and report a mismatch
+    for the wrong reason.
+    """
+    _edit_meta(package, lambda m: m.__setitem__("last_verified", value))
+    violations = check_package(package).violations
+    assert any("is not an ISO date" in v for v in violations), (name, violations)
+    assert not any("says last_verified" in v for v in violations), (name, violations)
+
+
+@pytest.mark.parametrize(("name", "value"), NON_CANONICAL_CAPTURE_DATES)
+def test_the_date_reader_refuses_a_non_canonical_capture_date(name: str, value: Any) -> None:
+    assert _as_date(value) is None, name
+
+
+@pytest.mark.parametrize("value", CANONICAL_CAPTURE_DATES)
+def test_a_canonical_last_verified_is_still_accepted(package: Path, value: Any) -> None:
+    _edit_meta(package, lambda m: m.__setitem__("last_verified", value))
+    assert not any("is not an ISO date" in v for v in check_package(package).violations)
+
+
+def test_the_capture_date_gate_measures_zero_over_its_floor() -> None:
+    measured = connector_contract.measure_capture_dates()
+    assert measured["non_canonical_capture_dates_accepted"] == 0, measured
+    assert measured["canonical_capture_dates_rejected"] == 0, measured
+    assert measured["non_canonical_capture_dates_checked"] >= MINIMUM_NON_CANONICAL_CAPTURE_DATES
 
 
 def test_a_missing_meta_file_is_rejected(package: Path) -> None:
