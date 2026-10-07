@@ -71,7 +71,7 @@ import json
 import re
 import sys
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import combinations, product
 from pathlib import Path
 from typing import Any
@@ -89,6 +89,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T18.json"
 DEFAULT_T79_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T79.json"
 DEFAULT_T242_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T242.json"
+DEFAULT_T233_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T233.json"
 
 #: How `rankings/<run_id>.json` names an offer's collapser (spec §5.5).
 DOMINATED_BY = "dominated_by:"
@@ -900,6 +901,48 @@ def order_readings(
     }
 
 
+def missing_inputs(ranking: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """T233: the inputs whose absence leaves offers unseparated, and what one answer would change.
+
+    Derived only from fields `rank` already publishes: `ties` and `unordered`
+    say which offers the data does not separate, `level` says whether any weight
+    priced anything, `unpriced_trait_dimensions` names what the candidate said
+    that the order cannot move on, and `dimensions` against `priced_by` names a
+    ranked axis the candidate has no price on. Each entry is `{"input", "offers",
+    "answer_would"}`: `offers` is how many shown offers are currently unseparated,
+    the number one answer can move. Nothing is reported when every offer is
+    separated, and a tie nothing above explains still names `preferences` — a tied
+    order is never left silent. The session says these to the candidate (step 9).
+    """
+    unseparated = {o for tie in ranking["ties"] for o in tie["offer_ids"]} | set(
+        ranking["unordered"]
+    )
+    if not unseparated:
+        return []
+    n = len(unseparated)
+    out: list[dict[str, Any]] = []
+    if ranking["level"] == "L1":
+        out.append({"input": "weights", "offers": n, "answer_would": "price_dimensions"})
+    if ranking["unordered"]:
+        out.append(
+            {"input": "salary", "offers": len(ranking["unordered"]), "answer_would": "order_offers"}
+        )
+    priced = {name for names in ranking["priced_by"].values() for name in names}
+    unpriced = set(ranking["unpriced_trait_dimensions"]["dimensions"])
+    if ranking["level"] != "L1":
+        # A fit axis is read from the CV, not asked of the candidate.
+        bare = sorted(set(ranking["dimensions"]) - priced - unpriced - set(FIT_DIMENSIONS))
+        out += [
+            {"input": f"preference:{name}", "offers": n, "answer_would": "price_dimension"}
+            for name in bare
+        ]
+    out += [
+        {"input": f"weight:{name}", "offers": n, "answer_would": "price_dimension"}
+        for name in sorted(unpriced)
+    ]
+    return out or [{"input": "preferences", "offers": n, "answer_would": "separate_offers"}]
+
+
 def _reference_interval(candidate: Candidate, priced: Mapping[str, float]) -> tuple[float, float]:
     """The audit's own reading of a candidate's interval, independent of `salary_interval`.
 
@@ -1574,6 +1617,95 @@ def write_order_evidence(evidence: Path = DEFAULT_T242_EVIDENCE_PATH) -> dict[st
     return measured
 
 
+#: T233's floor on constructed rankings that are not separated by data: the
+#: gate's zero means nothing over fewer than these. The population is the five
+#: constructed cases of `_t233_cases`, four of them unseparated, so the margin is
+#: nil by design: dropping one is a refusal, not a slack.
+#: arsenal-floor-margin: MINIMUM_UNSEPARATED_RANKINGS value=4
+MINIMUM_UNSEPARATED_RANKINGS = 4
+
+
+def _t233_cases() -> list[dict[str, Any]]:
+    """Constructed rankings, each left unseparated by a different missing input."""
+
+    def offers(*specs: tuple[str, float | None, dict[str, float]]) -> list[Candidate]:
+        return [
+            Candidate(
+                offer_id=f"sha256:{name * 64}",
+                salary_per_month=salary,
+                scores=scores,
+                unknown=frozenset(_FIXTURE_DIMENSIONS) - set(scores),
+                pay=point_band(salary, "EUR"),
+            )
+            for name, salary, scores in specs
+        ]
+
+    same = {"remote": 0.5, "commute": 0.5, "mentoring": 0.5}
+    bare = {"remote": 0.5}
+    traits = {"dimensions": {"company_kind": {"evidence_count": 3}}}
+    return [
+        {"candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)), "weights": None},
+        {
+            "candidates": offers(("a", None, bare), ("b", None, bare)),
+            "weights": _FIXTURE_WEIGHTS,
+            "extra_dimensions": ("company_kind",),
+        },
+        {
+            "candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)),
+            "weights": _FIXTURE_WEIGHTS,
+            "extra_dimensions": ("fit_stack",),  # read from the CV: never asked of the candidate
+        },
+        {
+            "candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)),
+            "weights": _FIXTURE_WEIGHTS,
+            "traits": traits,
+            "extra_dimensions": ("company_kind",),
+        },
+        {"candidates": offers(("a", 3000.0, same), ("b", 3500.0, same)), "weights": None},
+    ]
+
+
+def _t233_rank(case: Mapping[str, Any]) -> dict[str, Any]:
+    extra = case.get("extra_dimensions", ())
+    candidates = [replace(c, unknown=c.unknown | frozenset(extra)) for c in case["candidates"]]
+    return rank(
+        candidates,
+        dimensions=(*_FIXTURE_DIMENSIONS, *extra),
+        revision=ProfileRevision(rows=len(candidates), sha256="0" * 64),
+        weights=case["weights"],
+        traits=case.get("traits"),
+        at="2026-10-06T00:00:00Z",
+    )
+
+
+def silent_unseparated_rankings(
+    rankings: Sequence[Mapping[str, Any]], reporter: Any = missing_inputs
+) -> int:
+    """Rankings with a tie or an unordered offer for which `reporter` names no input."""
+    return sum(1 for r in rankings if (r["ties"] or r["unordered"]) and not reporter(r))
+
+
+def measure_missing_inputs() -> dict[str, Any]:
+    rankings = [_t233_rank(case) for case in _t233_cases()]
+    unseparated = [r for r in rankings if r["ties"] or r["unordered"]]
+    return {
+        "rankings_with_unordered_ties_and_no_named_missing_input": silent_unseparated_rankings(
+            rankings
+        ),
+        "unseparated_rankings_at_least": MINIMUM_UNSEPARATED_RANKINGS,
+        "unseparated_rankings_ok": int(len(unseparated) >= MINIMUM_UNSEPARATED_RANKINGS),
+        "silent_when_reporter_is_empty": silent_unseparated_rankings(rankings, lambda _r: []),
+        "inputs_named": sorted({e["input"] for r in rankings for e in missing_inputs(r)}),
+    }
+
+
+def write_missing_inputs_evidence(evidence: Path = DEFAULT_T233_EVIDENCE_PATH) -> dict[str, Any]:
+    measured = measure_missing_inputs()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Measure T18's Pareto frontier.")
     parser.add_argument("evidence", nargs="?", default=str(DEFAULT_EVIDENCE_PATH), type=Path)
@@ -1597,6 +1729,18 @@ def _main(argv: list[str]) -> int:
         or not ordered["violation_detected_when_planted"]
     ):
         print("an offer was ordered by id, or the audit could not rise", file=sys.stderr)
+        return 1
+
+    missing = write_missing_inputs_evidence(args.evidence.parent / "T233.json")
+    if (
+        missing["rankings_with_unordered_ties_and_no_named_missing_input"] != 0
+        or not missing["unseparated_rankings_ok"]
+        or not missing["silent_when_reporter_is_empty"]
+    ):
+        print(
+            "an unseparated ranking named no missing input, or the audit could not rise",
+            file=sys.stderr,
+        )
         return 1
 
     shown = write_exclusion_evidence(args.evidence.parent / "T79.json")

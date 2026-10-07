@@ -314,8 +314,18 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"Fourteen new, six duplicates, and four have closed since last week. I'd look at them ranked rather than as a list, because the order is where the work on your preferences actually shows. Want to see them?"
+"Fourteen new, six duplicates, and four have closed since last week. Here they are ranked rather than as a list, because the order is where the work on your preferences actually shows. I'd start with the top few, because that is where your preferences agree the most. Want to?"
 ```
+
+**The ranked view is the default close (T233): hand straight to step 9 and show it — never ask
+whether they want it ranked.** A question there is a round trip for an answer that is always
+yes. Say this in the candidate's own language, then present. Right after the ranking, run
+`integral.rank.missing_inputs(ranking)`: each entry is an input the order could not use
+(`weights`, `salary`, `preference:<dimension>`, `weight:<dimension>`, or `preferences`), with
+`offers` — how many shown offers are currently not separated — and `answer_would`. Say each
+one: which input is missing and that one answer would separate that many offers, e.g. "These 6
+come out tied because I have no weights from you yet — one choice between two jobs and the
+order moves." An empty list means the data separated them; say nothing about it.
 
 Writes `last_activity`.
 

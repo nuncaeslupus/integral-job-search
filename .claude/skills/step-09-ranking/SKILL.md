@@ -48,6 +48,18 @@ In this step that sounds like:
 - Never show what is unknown about an offer as neutral — an advert silent on hours is not an advert promising good ones.
 - Never assemble the card's prose a paragraph at a time by a model — it is a template filled from the normalised JSON.
 
+## Say what the order could not use (T233)
+
+Step 7 hands here with no question asked; the ranked view is the default. When offers come
+out tied or unordered, say which input is missing and what one answer would change:
+
+```python
+from integral.rank import missing_inputs
+
+for entry in missing_inputs(ranking):   # [] when the data separated every offer
+    say(entry)   # {"input", "offers", "answer_would"}: "6 of these are tied; one choice would price them"
+```
+
 ## Say what is working and what would widen the fit (T209)
 
 Presenting a list and saying nothing of the candidate is half a ranking. After the cards, say

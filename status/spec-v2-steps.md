@@ -660,8 +660,11 @@ updates, expiry marks on offers no longer live at source. The candidate sees a
 count: what arrived, what duplicated, what expired, what was retired.
 
 **Boundary.** *"Fourteen new, six duplicates, and four have closed since last
-week. I'd look at them ranked rather than as a list, because the order is where
-the work on your preferences actually shows. Want to see them?"* Writes
+week. Here they are ranked rather than as a list, because the order is where
+the work on your preferences actually shows. I'd start with the top few,
+because that is where your preferences agree the most. Want to?"* The ranked view follows at once,
+with no question first (T233), and when the data cannot separate offers it says
+which input is missing and what one answer would change. Writes
 `last_activity`.
 
 **Gate.** `offer_schema_violations == 0`, with `dedup_precision >= 0.95` (T13)

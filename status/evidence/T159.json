@@ -100,7 +100,7 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4792
+      "line": 4795
     },
     {
       "module": "gate_detector_states",
@@ -191,6 +191,11 @@
       "module": "question_bank",
       "name": "MINIMUM_PROBES",
       "line": 487
+    },
+    {
+      "module": "rank",
+      "name": "MINIMUM_UNSEPARATED_RANKINGS",
+      "line": 1625
     },
     {
       "module": "reader_notes",
@@ -354,20 +359,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3860,
+      "line": 3861,
       "population": 46
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3890,
+      "line": 3891,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3750,
-      "population": 101
+      "line": 3751,
+      "population": 102
     },
     {
       "module": "freshness",
@@ -683,6 +688,7 @@
     "profile_capture.MINIMUM_SUBJECT_CHECKS",
     "query_capture.MINIMUM_STEERABLE_PACKAGES_CHECKED",
     "question_bank.MINIMUM_PROBES",
+    "rank.MINIMUM_UNSEPARATED_RANKINGS",
     "reach.MINIMUM_FIXTURES",
     "reader_notes.MINIMUM_PROBES",
     "retraction.MINIMUM_SCANNED",
@@ -726,6 +732,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 101,
+  "floors_swept_at_least": 102,
   "floors_arithmetically_checked_at_least": 36
 }
