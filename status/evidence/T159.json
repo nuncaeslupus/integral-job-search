@@ -98,14 +98,19 @@
       "line": 155
     },
     {
+      "module": "fixture_shapes",
+      "name": "MINIMUM_SHAPE_CELLS",
+      "line": 124
+    },
+    {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4799
+      "line": 4801
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4953
+      "line": 4955
     },
     {
       "module": "gate_detector_states",
@@ -255,7 +260,7 @@
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 114
+      "line": 116
     },
     {
       "module": "spec_consistency",
@@ -359,20 +364,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3865,
+      "line": 3866,
       "population": 46
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3895,
+      "line": 3896,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3755,
-      "population": 102
+      "line": 3756,
+      "population": 103
     },
     {
       "module": "freshness",
@@ -542,6 +547,7 @@
     "exclusion_live_round._PER_EXCLUSION",
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
+    "fixture_shapes.SCAN_WINDOW",
     "floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY",
     "floor_sweep.MINIMUM_FLOORS_JUDGED",
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS",
@@ -658,6 +664,7 @@
     "exclusion_live_round.MINIMUM_EXCLUSIONS_TRIPPED",
     "exclusion_live_round.MINIMUM_UNEXCLUDED_SERVED",
     "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR",
+    "fixture_shapes.MINIMUM_SHAPE_CELLS",
     "floor_sweep.MINIMUM_CEILINGS_SET_ASIDE",
     "floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED",
@@ -734,6 +741,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 102,
+  "floors_swept_at_least": 103,
   "floors_arithmetically_checked_at_least": 36
 }

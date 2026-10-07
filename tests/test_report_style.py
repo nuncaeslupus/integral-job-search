@@ -131,6 +131,8 @@ NOT_A_REPORT: dict[Finding, tuple[int, str]] = {
     ("connector_exchange", "_stale_source", WRITES): (1, "writes that page into a fixture"),
     ("connector_health", "<module>", OPENS): (12, "simulated board responses (WAF, 429, a list)"),
     ("exclusion_live_round", "measure_live_round", OPENS): (1, "a served board page, offline"),
+    ("fixture_shapes", "buried", OPENS): (1, "an anchor a refusal fixture is restyled at"),
+    ("fixture_shapes", "named_innocuously", OPENS): (3, "anchors a refusal fixture is retitled at"),
     ("liveness", "<module>", OPENS): (1, "a sample board page the liveness probe parses"),
     ("markup_text", "<module>", OPENS): (1, "hostile markup fed to the text extractor"),
     ("search_terms", "answer", OPENS): (1, "a stubbed board response"),

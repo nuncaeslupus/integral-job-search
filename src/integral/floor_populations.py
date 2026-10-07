@@ -372,6 +372,12 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
         "len(spans)",
         "the confirming matches one dimension carries, counted by `cue_findings`",
     ),
+    "fixture_shapes.MINIMUM_SHAPE_CELLS": (
+        "counted",
+        "fixture_shapes.measure",
+        "compared",
+        "the (sample, shape) cells whose shaping is checked, counted by `measure`",
+    ),
     "floor_sweep.MINIMUM_FLOORS_SWEPT": (
         "counted",
         "floor_sweep._analyse",
