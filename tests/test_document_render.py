@@ -498,7 +498,7 @@ def test_the_pdf_engine_fetches_nothing(
     """Text fields pass through as HTML; the engine must not read files or the network."""
     import socket
 
-    from weasyprint.urls import URLFetcher
+    URLFetcher = importlib.import_module("weasyprint.urls").URLFetcher
 
     fetched: list[str] = []
 
