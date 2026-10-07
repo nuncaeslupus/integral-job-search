@@ -113,12 +113,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "lineno": 4804
+      "lineno": 4806
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "lineno": 4958
+      "lineno": 4960
     },
     {
       "module": "gate_detector_states",
@@ -298,5 +298,5 @@
   ],
   "marker_restatement_scenarios_checked": 58,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 101
+  "scenarios_checked_at_least": 102
 }
