@@ -1586,6 +1586,23 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "below the bound: a minimum on a count, breached by deleting members."
         ),
     ),
+    "document_render.CV_PAGE_BUDGET": (
+        "ceiling",
+        (
+            "`pages > max_pages` refuses a CV that renders longer than its page "
+            "budget: a limit on how many pages the document may take, breached "
+            "by adding content, not by deleting any. It bounds a rendered page "
+            "count from above and counts nothing a deletion could shrink."
+        ),
+    ),
+    "document_render.MINIMUM_CONTRACTS_EVALUATED": (
+        "floor",
+        (
+            "`contracts < MINIMUM_CONTRACTS_EVALUATED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
     "elicit_extract.MINIMUM_CHECKS": (
         "floor",
         (

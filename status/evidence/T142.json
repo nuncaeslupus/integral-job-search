@@ -1,0 +1,31 @@
+{
+  "document_render_defects": 0,
+  "contracts_evaluated_at_least": 30,
+  "parameters": [
+    "page_size",
+    "accent",
+    "margins_mm",
+    "body_size_pt",
+    "language"
+  ],
+  "blocks": [
+    "board",
+    "bullets",
+    "grid",
+    "header",
+    "job",
+    "letter",
+    "project",
+    "section",
+    "sign",
+    "summary",
+    "text",
+    "to"
+  ],
+  "page_sizes": [
+    "A4",
+    "Letter"
+  ],
+  "gate_status": "measured",
+  "defects": []
+}

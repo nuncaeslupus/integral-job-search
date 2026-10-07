@@ -324,6 +324,12 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
         "contracts",
         "the contracts evaluated counted by `measure`",
     ),
+    "document_render.MINIMUM_CONTRACTS_EVALUATED": (
+        "counted",
+        "document_render.measure",
+        "contracts",
+        "the contracts evaluated counted by `measure`",
+    ),
     "elicit_extract.MINIMUM_CHECKS": (
         "counted",
         "elicit_extract._main",

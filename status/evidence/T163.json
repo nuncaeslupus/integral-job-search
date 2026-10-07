@@ -3,7 +3,7 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 56,
+  "unpinnable_floors_cleared_by_marker_restatement": 57,
   "marker_restatement_cleared": [
     {
       "module": "alert_mailbox",
@@ -71,6 +71,11 @@
       "lineno": 86
     },
     {
+      "module": "document_render",
+      "name": "MINIMUM_CONTRACTS_EVALUATED",
+      "lineno": 100
+    },
+    {
       "module": "elicit_extract",
       "name": "MINIMUM_CHECKS",
       "lineno": 739
@@ -103,12 +108,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "lineno": 4799
+      "lineno": 4800
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "lineno": 4953
+      "lineno": 4954
     },
     {
       "module": "gate_detector_states",
@@ -286,7 +291,7 @@
       "lineno": 590
     }
   ],
-  "marker_restatement_scenarios_checked": 56,
+  "marker_restatement_scenarios_checked": 57,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 99
+  "scenarios_checked_at_least": 100
 }

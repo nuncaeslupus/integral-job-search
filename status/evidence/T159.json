@@ -68,6 +68,11 @@
       "line": 86
     },
     {
+      "module": "document_render",
+      "name": "MINIMUM_CONTRACTS_EVALUATED",
+      "line": 100
+    },
+    {
       "module": "elicit_extract",
       "name": "MINIMUM_CHECKS",
       "line": 739
@@ -100,12 +105,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4799
+      "line": 4800
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4953
+      "line": 4954
     },
     {
       "module": "gate_detector_states",
@@ -359,20 +364,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3865,
+      "line": 3866,
       "population": 46
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3895,
+      "line": 3896,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3755,
-      "population": 102
+      "line": 3756,
+      "population": 103
     },
     {
       "module": "freshness",
@@ -535,6 +540,7 @@
     "decline.DECLINES_BEFORE_TOTAL_SILENCE",
     "dedup.SHINGLE_SIZE",
     "document_reader.EXPORT_VERSION",
+    "document_render.CV_PAGE_BUDGET",
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
@@ -650,6 +656,7 @@
     "dedup.MINIMUM_CLUSTER_PAIRS",
     "dedup.MINIMUM_PAIRS",
     "document_reader.MINIMUM_CONTRACTS_EVALUATED",
+    "document_render.MINIMUM_CONTRACTS_EVALUATED",
     "elicit_extract.MINIMUM_CHECKS",
     "employer_boards.MINIMUM_CONFORMING",
     "end_to_end.MINIMUM_REVISIONS_REPLAYED",
@@ -734,6 +741,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 102,
+  "floors_swept_at_least": 103,
   "floors_arithmetically_checked_at_least": 36
 }
