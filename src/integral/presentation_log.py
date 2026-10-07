@@ -57,10 +57,12 @@ from integral.lifecycle import (
     advert_components,
     load_lifecycle_offer,
     read_application_status,
+    save_lifecycle_offer,
     stored_identities,
     stored_posting_keys,
+    track_new_offer,
 )
-from integral.offers import Offer, names_an_employer
+from integral.offers import Offer, is_advert, names_an_employer, open_application
 from integral.profile_standing import Standing
 from integral.same_vacancy import employer_key, same_vacancy
 from integral.sourcing_exclusions import (
@@ -73,6 +75,7 @@ from integral.sourcing_exclusions import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T139.json"
+DEFAULT_T255_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T255.json"
 
 #: One row per batch shown to the candidate. Under `search/` beside the aim,
 #: not under `offers/`: it is a fact about a conversation, not about an advert,
@@ -99,6 +102,8 @@ _RULED_OUT = ("screened_out", "rejected")
 REASON_APPLIED = "ya te presentaste a esta vacante"
 REASON_SHORTLISTED = "ya la tenías en tu lista de interesantes"
 REASON_SHOWN = "el mismo anuncio ya se te mostró"
+#: T255. Not a vacancy: nothing to rank, so it is told about rather than listed.
+REASON_OPEN_APPLICATION = "es una candidatura abierta, no una vacante"
 
 
 class PresentationError(Exception):
@@ -150,6 +155,22 @@ def choose(
     """
     _mark_chosen(store, offer_id)
     return record_decision(store, offer_id, "shortlisted", at=at, reason=reason)
+
+
+def record_open_application(
+    store: ProfileStore, company: str, url: str, form_questions: list[str], *, at: str
+) -> Offer:
+    """T255. Record a CV sent to `company` with no advert, ready for step 11.
+
+    Stored and shortlisted (the candidate chose it by asking), so step 11 and the
+    retention rule see it. It is not an advert: see `offers.is_advert`. Asking
+    twice for the same employer and destination returns the stored record."""
+    offer = open_application(company, url, form_questions, fetched_at=at)
+    try:
+        return load_lifecycle_offer(store, offer.id)[0]
+    except Exception:
+        save_lifecycle_offer(store, offer, track_new_offer(offer, at=at))
+        return choose(store, offer.id, at=at, reason=None).offer
 
 
 def rule_out(store: ProfileStore, offer_id: str, reason: str, *, at: str) -> DecisionResult:
@@ -429,7 +450,9 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
                 ),
                 None,
             )
-        if loaded is not None and loaded[0].status in _RULED_OUT:
+        if loaded is not None and not is_advert(loaded[0]):
+            held.append(Withheld(offer_id, REASON_OPEN_APPLICATION))
+        elif loaded is not None and loaded[0].status in _RULED_OUT:
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
         elif applied_copy is not None:
             held.append(Withheld(offer_id, REASON_APPLIED, applied_copy))
@@ -679,14 +702,152 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+# ---------------------------------------------------------------------------
+# T255 — an open application is not stored as an advert
+#
+# `open_applications_stored_as_adverts` counts the open applications that the four
+# consumers of an advert (liveness, deduplication, ranking, the ruled-out-before
+# check) still treat as a vacancy. The counter is also run over the hand-written
+# shape the first two sessions used (`source: manual`, an invented title, the form
+# as the advert text), and over a real advert: a counter that cannot flag the first
+# or that flags everything counts nothing.
+
+#: (employer, where it is sent, the form's questions): recorded the supported way.
+OPEN_APPLICATIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "Acme Robotics",
+        "https://acme.example/careers/open-application",
+        ("Why us?", "Salary expectation"),
+    ),
+    ("Forja Ejemplo", "https://forja.example/trabaja-con-nosotros", ()),
+    ("  ACME   robotics ", "https://acme.example/careers/open-application?ref=a", ("Why us?",)),
+    ("Fiction Labs", "https://community.example/profile/fiction-labs/apply", ("Tell us more",)),
+)
+
+#: The same shape hand-written as an `Offer`: the defect the task was filed for.
+SYNTHETIC_OPEN_APPLICATIONS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "Acme Robotics",
+        "https://acme.example/careers/open-application",
+        "Open application",
+        "Name\nWhy us?",
+    ),
+    (
+        "Fiction Labs",
+        "https://community.example/profile/fiction-labs/apply",
+        "Candidatura",
+        "Cover note",
+    ),
+    ("Forja Ejemplo", "https://forja.example/trabaja-con-nosotros", "Candidatura abierta", "CV"),
+)
+
+MINIMUM_OPEN_APPLICATION_CASES = 4
+
+_CONSUMERS = ("liveness", "deduplication", "ranking", "ruled-out-before")
+
+
+def treated_as_advert(store: ProfileStore, offer_id: str, twin_id: str) -> list[str]:
+    """Which consumers treat `offer_id` as a vacancy. `twin_id` is a stored advert of the
+    same employer at the same address: the neighbour a vacancy would be joined to, and
+    the one a stored open application must not hold back."""
+    from integral.liveness import needs_source_check
+
+    loaded = _loaded(store, offer_id)
+    if loaded is None:
+        return list(_CONSUMERS)
+    found = []
+    if needs_source_check(loaded[0]):
+        found.append("liveness")
+    components = advert_components(stored_identities(store), stored_posting_keys(store))
+    if twin_id in components.get(offer_id, ()):
+        found.append("deduplication")
+    if offer_id in partition(store, [offer_id])[0]:
+        found.append("ranking")
+    if twin_id not in partition(store, [twin_id])[0]:
+        found.append("ruled-out-before")
+    return found
+
+
+def _advert(company: str, url: str, title: str, text: str) -> Offer:
+    from integral.offers import compute_offer_id
+
+    return Offer(
+        id=compute_offer_id(text), source="manual", url=url, company=company, title=title, text=text
+    )
+
+
+def _store_with_twin(root: Path, company: str, url: str) -> tuple[ProfileStore, str]:
+    from integral.identity import create_profile
+
+    create_profile(root, "Fixture", handle="fixture", language="es", fiction=True)
+    store = ProfileStore(root, "fixture")
+    twin = _advert(company, url, "Backend", f"Backend engineer at {company}")
+    save_lifecycle_offer(store, twin, track_new_offer(twin, at=_AT))
+    return store, twin.id
+
+
+def measure_open_applications() -> dict[str, Any]:
+    """T255's gate: `open_applications_stored_as_adverts`."""
+    import tempfile
+
+    stored: list[str] = []
+    for company, url, questions in OPEN_APPLICATIONS:
+        with tempfile.TemporaryDirectory() as tmp:
+            store, twin = _store_with_twin(Path(tmp), company, url)
+            made = record_open_application(store, company, url, list(questions), at=_AT)
+            if found := treated_as_advert(store, made.id, twin):
+                stored.append(f"{company}: {', '.join(found)}")
+    not_counted = []
+    for company, url, title, text in SYNTHETIC_OPEN_APPLICATIONS:
+        with tempfile.TemporaryDirectory() as tmp:
+            store, twin = _store_with_twin(Path(tmp), company, url)
+            offer = _advert(company, url, title, text)
+            save_lifecycle_offer(store, offer, track_new_offer(offer, at=_AT))
+            choose(store, offer.id, at=_AT)
+            if len(treated_as_advert(store, offer.id, twin)) < len(_CONSUMERS):
+                not_counted.append(company)
+    with tempfile.TemporaryDirectory() as tmp:
+        store, twin = _store_with_twin(Path(tmp), "Acme Robotics", "https://acme.example/jobs/1")
+        advert = _advert(
+            "Acme Robotics", "https://acme.example/jobs/1", "Backend", "Backend, remote"
+        )
+        save_lifecycle_offer(store, advert, track_new_offer(advert, at=_AT))
+        missed = [n for n in _CONSUMERS[:3] if n not in treated_as_advert(store, advert.id, twin)]
+    checked = len(OPEN_APPLICATIONS)
+    measured = checked >= MINIMUM_OPEN_APPLICATION_CASES and not not_counted and not missed
+    return {
+        "open_applications_stored_as_adverts": len(stored) if measured else -1,
+        "open_applications_checked": checked,
+        "synthetic_shapes_not_counted": len(not_counted),
+        "adverts_not_treated_as_adverts": len(missed),
+        "gate_status": "measured" if measured else "unmeasured",
+        "stored_as_adverts": stored,
+    }
+
+
+def write_open_applications_evidence(
+    evidence: Path = DEFAULT_T255_EVIDENCE_PATH,
+) -> dict[str, Any]:
+    measured = measure_open_applications()
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(json.dumps(measured, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return measured
+
+
 def _main() -> int:
     measured = write_evidence()
     print(json.dumps(measured, ensure_ascii=False))
     for failure in measured["failed_contracts"]:
         print(f"  FAILED {failure}", file=sys.stderr)
-    if measured["gate_status"] == "unmeasured":
+    status = (
+        3
+        if measured["gate_status"] == "unmeasured"
+        else int(bool(measured["presentation_defects"]))
+    )
+    opened = write_open_applications_evidence()
+    if opened["gate_status"] != "measured":
         return 3
-    return 1 if measured["presentation_defects"] else 0
+    return 1 if status == 1 or opened["open_applications_stored_as_adverts"] else status
 
 
 if __name__ == "__main__":

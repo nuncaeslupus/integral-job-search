@@ -111,6 +111,16 @@ Why: the first letter this repository generated for a real application was fluen
 
 This is not a template with the candidate's phrases pasted in. Whether the letter can be read aloud without flinching is for the candidate to say, and no gate checks it; the gate checks only the mechanical half, that the package says who wrote each paragraph.
 
+## An open application
+
+A candidate who wants to send a CV to an employer's open form has no advert. Record it with `integral.presentation_log.record_open_application(store, company, url, form_questions, at=...)`, never with a hand-written `Offer`; it is stored shortlisted, so this step accepts it. What differs, pinned verbatim by its test:
+
+```text
+There is no advert to tailor against: select the CV from the store and what the employer's own site says it does, and never claim a requirement nobody stated.
+The employer's own site is the reference for the language, the products and the colours.
+A form answer takes the place of the letter: answer each recorded form question in the candidate's own words, asked for first, edited and harvested exactly as a letter is.
+```
+
 ## Stop rule
 
 A CV and the candidate's letter (edited, with its authorship recorded) exist for this offer and the candidate has approved them, or has parked them. **Hard cap: three regeneration rounds per offer** — each new CV version or fresh round of edits to the letter counts — after which the useful move is to talk about what is wrong rather than generate a fourth.

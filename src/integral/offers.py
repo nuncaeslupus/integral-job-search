@@ -62,12 +62,12 @@ import hashlib
 import json
 import sys
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator
 
 from integral.advert_link import advert_url
 from integral.dimensions import Language
@@ -186,6 +186,24 @@ class LanguageRequirement(Strict):
 #: Where an offer's `source` stands relative to the employer (T75, T172).
 SourceKind = Literal["employer", "aggregator"]
 
+#: What a stored record is (T255). `advert` is a vacancy somebody published;
+#: `open_application` is a CV sent to an employer with no advert at all. The
+#: second has no text to compare, no page to check and nothing to rank, so
+#: liveness, deduplication, ranking and the ruled-out-before check each ask
+#: `is_advert` (one predicate, not four spellings) before treating it as one.
+OfferKind = Literal["advert", "open_application"]
+ADVERT: OfferKind = "advert"
+
+
+def is_advert(record: Offer | Mapping[str, Any]) -> bool:
+    """Whether `record` (an `Offer`, or its raw stored JSON) is a vacancy.
+
+    Anything but the exact word `advert` is not: a record of a kind this code
+    does not know must not be treated as a vacancy, since that is the defect T255
+    exists to count. A stored record with no `kind` predates T255 and is one."""
+    kind = record.kind if isinstance(record, Offer) else record.get("kind", ADVERT)
+    return kind == ADVERT
+
 
 class Offer(Strict):
     """§5.2's normalised offer — the shape every connector emits.
@@ -222,18 +240,36 @@ class Offer(Strict):
     # anything until dedup has looked at it.
     duplicate_of: str | None = None
     status: OfferStatus = "new"
+    # T255. Declared, never inferred from an empty text or a `source` string.
+    kind: OfferKind = "advert"
+    # T255. An open application's form questions, in the form's order; an advert has none.
+    # Declared last and validated by default: the check below reads the fields before it,
+    # and, being a field error rather than a model one, it is reported next to any other
+    # field fault (`salary_period_backfill` repairs only a record whose sole fault is one).
+    form_questions: list[str] = Field(default_factory=list, validate_default=True)
 
-    @field_validator("text")
+    @field_validator("form_questions")
     @classmethod
-    def _text_is_not_blank(cls, value: str) -> str:
+    def _text_matches_kind(cls, questions: list[str], info: ValidationInfo) -> list[str]:
         # `Field(min_length=1)` would accept "   " — three characters, zero
         # content. A whitespace-only paste is refused for the same reason an
         # empty one is: there is nothing here for extraction to find evidence
         # spans in, so storing it would produce an offer nothing downstream
         # can do anything with.
-        if not value.strip():
-            raise ValueError("offer text must not be blank")
-        return value
+        data = info.data
+        kind, text = data.get("kind"), data.get("text", "")
+        company, url = data.get("company"), data.get("url")
+        if kind == "advert":
+            if not text.strip():
+                raise ValueError("offer text must not be blank")
+            if questions:
+                raise ValueError("an advert has no form questions")
+        else:
+            if text:
+                raise ValueError("an open application carries no advert text")
+            if not names_an_employer(company) or not (url or "").strip():
+                raise ValueError("an open application names its employer and where it is sent")
+        return questions
 
 
 def names_an_employer(company: str | None) -> bool:
@@ -306,6 +342,36 @@ def connect_manual(
         )
     except ValidationError as exc:  # pragma: no cover - defensive; see tests
         raise OfferError(f"pasted text did not produce a valid offer: {exc}") from exc
+
+
+def open_application(
+    company: str,
+    url: str,
+    form_questions: list[str] | None = None,
+    *,
+    fetched_at: str | None = None,
+) -> Offer:
+    """T255. The record of a CV sent to `company` through `url` with no advert behind it.
+
+    The one supported way to make one: `kind` is declared, `text` is empty, the
+    form's questions are kept as they are asked, and the id hashes employer and
+    destination (there is no text to address it by). Nothing here is an advert,
+    so nothing downstream may treat it as one (`is_advert`)."""
+    name = " ".join(company.split())
+    where = url.strip()
+    try:
+        return Offer(
+            id=compute_offer_id(f"open application\n{name.casefold()}\n{where}"),
+            source="open_application",
+            url=where,
+            fetched_at=fetched_at,
+            company=name,
+            text="",
+            kind="open_application",
+            form_questions=[q.strip() for q in form_questions or [] if q.strip()],
+        )
+    except ValidationError as exc:
+        raise OfferError(f"not an open application: {exc}") from exc
 
 
 def save_offer(store: ProfileStore, offer: Offer) -> Path:

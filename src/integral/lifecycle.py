@@ -106,7 +106,15 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from integral.advert_identity import identity_query_for, restrict_query
 from integral.dedup import Tombstone, load_tombstones, tombstone_match
 from integral.identity import IdentityError, ProfileStore, create_profile
-from integral.offers import Offer, OfferError, OfferStatus, Strict, connect_manual, load_offer
+from integral.offers import (
+    Offer,
+    OfferError,
+    OfferStatus,
+    Strict,
+    connect_manual,
+    is_advert,
+    load_offer,
+)
 from integral.offers import save_offer as _save_offer_body
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -496,7 +504,9 @@ def advert_identity(url: str | None, source: str) -> str | None:
 
 
 def offer_identity(offer: Offer) -> str | None:
-    return advert_identity(offer.url, offer.source)
+    # T255. An open application's url is the employer's form, which an advert
+    # for the same employer may share; it names no advert.
+    return advert_identity(offer.url, offer.source) if is_advert(offer) else None
 
 
 def _strip_chrome(text: str) -> str:
@@ -678,6 +688,8 @@ def _fields_on_disk(path: Path) -> tuple[str | None, str | None]:
         company = raw.get("company")
     except (OSError, ValueError, AttributeError):
         return (None, None)
+    if not is_advert(raw):  # T255: an open application is the same as no advert
+        return (None, None)
     identity = (
         advert_identity(url, source) if isinstance(url, str) and isinstance(source, str) else None
     )
@@ -835,6 +847,11 @@ def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOu
     writes on a first save, which re-collection repairs. The tombstone check
     runs first so a revived offer's re-sighting still counts (§7.4).
     """
+    if not is_advert(offer):
+        raise LifecycleError(
+            "an open application is not collected like an advert; "
+            "use presentation_log.record_open_application (T255)"
+        )
     tombstones = current_tombstones(store)
     identity = offer_identity(offer)
     matched = tombstones.get(offer.id)

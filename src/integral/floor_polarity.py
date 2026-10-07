@@ -181,6 +181,15 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "this sweep does not trace."
         ),
     ),
+    "presentation_log.MINIMUM_OPEN_APPLICATION_CASES": (
+        "floor",
+        (
+            "A denominator floor: `measure_open_applications` reports `unmeasured` (-1) "
+            "when fewer open applications than this were checked, so deleting a case "
+            "is what breaches it. Its comparand is a `len` of a constant tuple this "
+            "sweep does not trace."
+        ),
+    ),
     "connector_contract._RUN_WINDOW": (
         "ceiling",
         (

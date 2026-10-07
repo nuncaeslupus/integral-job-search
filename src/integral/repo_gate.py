@@ -835,7 +835,10 @@ MINIMUM_FILES_FORMATTED = 300
 #: so any further test file would have turned `make host-gate` red for a reason
 #: unrelated to the change. 200 is 72% of today's 276 (the other floors sit at 66-67%)
 #: and keeps both losses caught: no `src/` leaves 151, no `tests/` leaves 125.
-MINIMUM_PYTHON_FILES_FORMATTED = 200
+#: **Raised to 240 by T255.** The same test needs the floor above the non-`src/` Python
+#: files, which reached exactly 200 (357 - 157) so the `<` held by nothing. 240 is 67% of
+#: today's 357, with 40 files of headroom for the next tests.
+MINIMUM_PYTHON_FILES_FORMATTED = 240
 
 
 def record_formatting(measured: dict[str, Any]) -> dict[str, Any]:

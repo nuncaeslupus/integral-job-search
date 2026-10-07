@@ -123,7 +123,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from integral.offers import Offer, SourceKind, Strict
+from integral.offers import Offer, SourceKind, Strict, is_advert
 
 # §4.6's site: the two-pass shingled Jaccard score, and §4.4's `dedup_precision`.
 METHODS_REF = "METHODS.md#46-near-duplicate-detection--shingled-jaccard-similarity"
@@ -789,6 +789,8 @@ def detect_expired(
         )
     findings: list[ExpiryFinding] = []
     for offer in offers:
+        if not is_advert(offer):  # T255: an open application is not listed anywhere
+            continue
         expired_by_date = False
         if offer.expires_at is not None:
             try:
