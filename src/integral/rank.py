@@ -937,8 +937,10 @@ def missing_inputs(
     is named only when it bears on at least one of them. `salary` (an offer in a
     unit published none) and `unknown:<dim>` (a priced dimension the advert is
     silent on) are the advert's to give. `weights` (L1), `preference:<dim>` and
-    `weight:<dim>` (L2) are the candidate's, and only when the offers in a unit
-    differ on that ranked dimension, so pricing it could move them. Entries are
+    `weight:<dim>` (L2) are the candidate's, and only when every offer in a unit
+    scores that ranked dimension with at least two distinct values and none lacks
+    a salary: otherwise pricing it cannot separate them. A ranked dimension some
+    of them are silent on is the advert's: `unknown:<dim>`. Entries are
     `{"input", "offers", "answer_would", "asked_of"}`, most offers first, where
     `offers` is how many unseparated offers that input bears on. `[]` beside a
     non-empty `unseparated_units` means the offers are level on everything
@@ -951,7 +953,10 @@ def missing_inputs(
     bears: dict[str, set[str]] = {}
     for unit in unseparated_units(ranking):
         members = sorted(unit)
-        if any(ranking["order_basis"][o]["reading"] in ("known_part", "none") for o in members):
+        no_pay = any(
+            ranking["order_basis"][o]["reading"] in ("known_part", "none") for o in members
+        )
+        if no_pay:
             bears.setdefault("salary", set()).update(members)
         silent = {d for o in members for d in ranking["unknown_dimensions"].get(o, ())}
         for name in priced & silent:
@@ -959,13 +964,21 @@ def missing_inputs(
         if len(members) < 2:
             continue
         for name in ranked:
-            if name in priced or len({by_id[o].scores.get(name) for o in members}) < 2:
+            if name in priced:
                 continue
-            if ranking["level"] == "L1":
-                bears.setdefault("weights", set()).update(members)
-            else:
-                kind = "weight" if name in traits else "preference"
-                bears.setdefault(f"{kind}:{name}", set()).update(members)
+            scores = [by_id[o].scores.get(name) for o in members]
+            if any(v is None for v in scores):
+                # The advert's silence is why this axis cannot order them, not a want of the
+                # candidate's answer; all silent means nothing on it differs to ask about, and a
+                # missing salary keeps the axis from deciding either way.
+                if not no_pay and any(v is not None for v in scores):
+                    bears.setdefault(f"unknown:{name}", set()).update(members)
+            elif len(set(scores)) > 1 and not no_pay:
+                if ranking["level"] == "L1":
+                    bears.setdefault("weights", set()).update(members)
+                else:
+                    kind = "weight" if name in traits else "preference"
+                    bears.setdefault(f"{kind}:{name}", set()).update(members)
     entries = []
     for name, offers in bears.items():
         advert = name == "salary" or name.startswith("unknown:")
@@ -1655,12 +1668,12 @@ def write_order_evidence(evidence: Path = DEFAULT_T242_EVIDENCE_PATH) -> dict[st
 
 
 #: T233's floor on constructed rankings that leave offers unseparated: the gate's
-#: zero means nothing over fewer than these. All ten constructed cases of
+#: zero means nothing over fewer than these. All thirteen constructed cases of
 #: `_t233_cases` are unseparated, four of them with nothing missing (the controls
 #: that catch an input named for no reason), so the margin is nil by design:
 #: dropping one is a refusal, not a slack.
-#: arsenal-floor-margin: MINIMUM_UNSEPARATED_RANKINGS value=10
-MINIMUM_UNSEPARATED_RANKINGS = 10
+#: arsenal-floor-margin: MINIMUM_UNSEPARATED_RANKINGS value=13
+MINIMUM_UNSEPARATED_RANKINGS = 13
 
 
 def _t233_cases() -> list[dict[str, Any]]:
@@ -1728,6 +1741,28 @@ def _t233_cases() -> list[dict[str, Any]]:
             "traits": traits,
             "extra_dimensions": ("company_kind",),
         },
+        # B1a: the offers differ on a ranked axis only because one advert is silent on it.
+        {
+            "candidates": offers(("a", 3000.0, {**same, "company_kind": -1.0}), ("b", 3000.0, mix)),
+            "weights": fixed,
+            "extra_dimensions": ("company_kind",),
+        },
+        # B1b: no weights, and one offer is silent on a dimension the other scores.
+        {
+            "candidates": offers(
+                ("a", 3000.0, same), ("b", 3000.0, {"commute": 0.5, "mentoring": 0.5})
+            ),
+            "weights": None,
+        },
+        # B1c: the axis differs on every offer, but one has no salary: only the salary is missing.
+        {
+            "candidates": offers(
+                ("a", 3000.0, {**same, "company_kind": 1.0}),
+                ("b", None, {**mix, "company_kind": -1.0}),
+            ),
+            "weights": fixed,
+            "extra_dimensions": ("company_kind",),
+        },
         # CONTROL: a trait with evidence that neither offer scores. Nothing is missing.
         {
             "candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)),
@@ -1781,34 +1816,44 @@ def _t233_answers(case: Mapping[str, Any], ranking: Mapping[str, Any]) -> dict[s
     candidates = _t233_candidates(case)
     out: dict[str, dict[str, Any]] = {}
     priced = {n for names in ranking["priced_by"].values() for n in names}
+
+    def with_price(base: Mapping[str, Any], name: str) -> dict[str, Any]:
+        if ranking["level"] == "L1":
+            return {**base, "weights": _FIXTURE_WEIGHTS}
+        worths = {
+            **base["weights"]["part_worths"],
+            name: {"utility_per_unit": 0.2, "salary_equivalent_per_month": 300.0},
+        }
+        return {**base, "weights": {**base["weights"], "part_worths": worths}}
+
     if ranking["level"] == "L1":
-        out["weights"] = {**case, "weights": _FIXTURE_WEIGHTS}
+        out["weights"] = with_price(case, "")
     else:
         for name in ranking["dimensions"]:
             if name not in priced and name not in FIT_DIMENSIONS:
-                worths = {
-                    **case["weights"]["part_worths"],
-                    name: {"utility_per_unit": 0.2, "salary_equivalent_per_month": 300.0},
-                }
-                out[f"price:{name}"] = {
-                    **case,
-                    "weights": {**case["weights"], "part_worths": worths},
-                }
-    for name in priced:
+                out[f"price:{name}"] = with_price(case, name)
+    for name in ranking["dimensions"]:
         lacking = [c for c in candidates if name not in c.scores]
-        if lacking:
-            given = {c.offer_id: (1.0 if i % 2 == 0 else -1.0) for i, c in enumerate(lacking)}
-            out[f"unknown:{name}"] = {
-                **case,
-                "candidates": [
-                    replace(
-                        c, scores={**c.scores, name: given[c.offer_id]}, unknown=c.unknown - {name}
-                    )
-                    if c.offer_id in given
-                    else c
-                    for c in candidates
-                ],
-            }
+        # A priced dimension the advert is silent on; or an unpriced ranked one some
+        # but not all are silent on, whose answer only matters once it is priced too.
+        if not lacking or name in FIT_DIMENSIONS:
+            continue
+        if name not in priced and len(lacking) == len(candidates):
+            continue
+        # An answer that differs from every score already given on the axis, so it can matter.
+        present = {c.scores[name] for c in candidates if name in c.scores}
+        free = [v for v in (-1.0, 1.0, 0.0, 0.5, -0.5) if v not in present]
+        given = {c.offer_id: free[i % len(free)] for i, c in enumerate(lacking)}
+        answered = {
+            **case,
+            "candidates": [
+                replace(c, scores={**c.scores, name: given[c.offer_id]}, unknown=c.unknown - {name})
+                if c.offer_id in given
+                else c
+                for c in candidates
+            ],
+        }
+        out[f"unknown:{name}"] = answered if name in priced else with_price(answered, name)
     if any(c.salary_per_month is None for c in candidates):
         out["salary"] = {
             **case,

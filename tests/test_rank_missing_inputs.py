@@ -12,16 +12,19 @@ import pytest
 
 from integral.rank import (
     _FIXTURE_DIMENSIONS,
+    _FIXTURE_WEIGHTS,
     ASKS_EMPLOYER,
     DEFAULT_T233_EVIDENCE_PATH,
     MINIMUM_UNSEPARATED_RANKINGS,
     NON_ORDERING_FIELDS,
+    Candidate,
     _t233_candidates,
     _t233_cases,
     _t233_rank,
     measure_missing_inputs,
     missing_inputs,
     order_readings,
+    point_band,
     t233_discrepancies,
     unseparated_units,
 )
@@ -36,10 +39,13 @@ RANKS = [_t233_rank(c) for c in CASES]
     L2_NO_SALARY,
     BARE,
     TRAIT,
+    SILENT_AXIS_L2,
+    SILENT_AXIS_L1,
+    AXIS_BUT_NO_SALARY,
     TRAIT_UNSCORED,
     GENUINE_TIE,
     FIT_ONLY,
-) = range(10)
+) = range(13)
 
 
 def entries(index: int) -> list[dict[str, Any]]:
@@ -150,8 +156,9 @@ def test_the_measure_is_clean_and_each_direction_can_rise() -> None:
     assert measured["rankings_with_unordered_ties_and_no_named_missing_input"] == 0
     assert measured["inputs_named_that_bear_on_no_unseparated_offer"] == 0
     assert measured["nothing_missing_controls"] == 4
-    assert measured["silent_when_reporter_is_empty"] == 6
+    assert measured["silent_when_reporter_is_empty"] == 9
     assert measured["spurious_when_reporter_always_names_weights"] > 0
+    assert measured["unseparated_rankings"] == len(CASES)
 
 
 def test_a_reporter_reduced_to_one_fallback_is_caught_in_both_directions() -> None:
@@ -232,3 +239,87 @@ def test_the_step_9_section_caps_what_is_said_and_does_not_claim_a_separation() 
 def test_the_step_7_close_puts_the_list_before_the_question() -> None:
     text = TEXTS["step-07"].read_text(encoding="utf-8")
     assert text.index("[the ranked list follows]") < text.index("Want to?")
+
+
+# --- B1: a candidate-priced input is named only when pricing it can separate the unit ----------
+
+
+def test_an_advert_silent_on_an_axis_is_the_adverts_and_not_a_preference() -> None:
+    [entry] = entries(SILENT_AXIS_L2)
+    assert (entry["input"], entry["asked_of"], entry["answer_would"]) == (
+        "unknown:company_kind",
+        "employer",
+        ASKS_EMPLOYER,
+    )
+    [entry] = entries(SILENT_AXIS_L1)
+    assert (entry["input"], entry["asked_of"]) == ("unknown:remote", "employer")
+
+
+def test_a_unit_missing_a_salary_names_the_salary_and_no_candidate_input() -> None:
+    assert names(AXIS_BUT_NO_SALARY) == ["salary"]
+
+
+def test_weights_do_not_count_an_offer_with_no_salary() -> None:
+    a, b, c = (
+        replace(x, salary_per_month=y, pay=point_band(y, "EUR"))
+        for x, y in zip(CASES[L1_NO_SALARY]["candidates"], (3000.0, 3000.0, None), strict=True)
+    )
+    b = replace(b, scores={**b.scores, "remote": 1.0, "commute": 0.0})
+    case = {**CASES[L1_NO_SALARY], "candidates": [a, b, c]}
+    ranking = _t233_rank(case)
+    by_name = {e["input"]: e for e in missing_inputs(ranking, _t233_candidates(case))}
+    assert by_name["salary"]["offers"] == 3
+    assert by_name["weights"]["offers"] == 2
+
+
+def _axis_case(level: str, silence: str, salary: str) -> dict[str, Any]:
+    """One 2-offer ranking: an axis scored by all / silent on one / silent on all, a salary on
+    all / missing on one, under L1 (no weights) or L2 (fixed weights)."""
+    l1 = level == "L1"
+    axis = "remote" if l1 else "company_kind"
+    base = {"remote": 0.5, "commute": 0.5, "mentoring": 0.5}
+    base_b = (
+        {"remote": 0.5, "commute": 0.5, "mentoring": 0.5}
+        if l1
+        else {"remote": 0.75, "commute": -0.25, "mentoring": 0.5}
+    )
+    a = {**base, axis: 0.5 if l1 else 1.0}
+    b = {**base_b, axis: 1.0 if l1 else -1.0}
+    if silence in ("one", "all"):
+        b.pop(axis)
+    if silence == "all":
+        a.pop(axis)
+    cands = [
+        Candidate(
+            offer_id=f"sha256:{n * 64}",
+            salary_per_month=None if (salary == "missing" and n == "b") else 3000.0,
+            scores=sc,
+            unknown=frozenset(_FIXTURE_DIMENSIONS) - set(sc),
+            pay=point_band(None if (salary == "missing" and n == "b") else 3000.0, "EUR"),
+        )
+        for n, sc in (("a", a), ("b", b))
+    ]
+    return {
+        "candidates": cands,
+        "weights": None if l1 else _FIXTURE_WEIGHTS,
+        "extra_dimensions": () if l1 else ("company_kind",),
+    }
+
+
+@pytest.mark.parametrize("level", ["L1", "L2"])
+@pytest.mark.parametrize("salary", ["all", "missing"])
+@pytest.mark.parametrize("silence", ["none", "one", "all"])
+def test_the_reporter_agrees_with_the_counterfactual_over_the_whole_axis(
+    level: str, silence: str, salary: str
+) -> None:
+    case = _axis_case(level, silence, salary)
+    found = t233_discrepancies([case])
+    assert (found["silent"], found["spurious"]) == (0, 0), (level, silence, salary)
+
+
+def test_the_step_7_close_caps_what_is_said_and_does_not_claim_a_separation() -> None:
+    start, end = REGION["step-07"]
+    text = TEXTS["step-07"].read_text(encoding="utf-8")
+    text = " ".join(text[text.index(start) : text.index(end)].split())
+    assert "at most the one or two entries with the most `offers`" in text
+    assert "would separate" not in text
