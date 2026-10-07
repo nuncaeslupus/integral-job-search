@@ -15,12 +15,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3643
+      "line": 3669
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3638
+      "line": 3664
     },
     {
       "module": "arsenal_source",
@@ -68,6 +68,11 @@
       "line": 86
     },
     {
+      "module": "document_render",
+      "name": "MINIMUM_CONTRACTS_EVALUATED",
+      "line": 100
+    },
+    {
       "module": "elicit_extract",
       "name": "MINIMUM_CHECKS",
       "line": 739
@@ -98,9 +103,19 @@
       "line": 155
     },
     {
+      "module": "fixture_shapes",
+      "name": "MINIMUM_SHAPE_CELLS",
+      "line": 124
+    },
+    {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4795
+      "line": 4804
+    },
+    {
+      "module": "floor_sweep",
+      "name": "_MINIMUM_REASON_WORDS",
+      "line": 4958
     },
     {
       "module": "gate_detector_states",
@@ -193,11 +208,6 @@
       "line": 487
     },
     {
-      "module": "rank",
-      "name": "MINIMUM_UNSEPARATED_RANKINGS",
-      "line": 1625
-    },
-    {
       "module": "reader_notes",
       "name": "MINIMUM_PROBES",
       "line": 523
@@ -255,7 +265,7 @@
     {
       "module": "sourcing",
       "name": "MINIMUM_OFFERS_COLLECTED",
-      "line": 110
+      "line": 116
     },
     {
       "module": "spec_consistency",
@@ -347,32 +357,32 @@
     {
       "module": "end_to_end",
       "name": "MINIMUM_REVISIONS_REPLAYED",
-      "line": 699,
+      "line": 707,
       "population": 13
     },
     {
       "module": "end_to_end",
       "name": "MINIMUM_STEPS_REPLAYED",
-      "line": 695,
+      "line": 703,
       "population": 14
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3861,
+      "line": 3868,
       "population": 46
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3891,
+      "line": 3898,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3751,
-      "population": 102
+      "line": 3758,
+      "population": 104
     },
     {
       "module": "freshness",
@@ -500,6 +510,7 @@
     "bodyless_post.MINIMUM_PACKAGES",
     "bulk_filter.PROBE_BATCH",
     "calibration.TWENTY",
+    "claim_trace.FIXTURE_SOURCE_CHARS",
     "connector_contract.MINIMUM_PACKAGES",
     "connector_contract._RUN_WINDOW",
     "connector_contract._RUN_WINDOW_CEILING",
@@ -534,6 +545,7 @@
     "decline.DECLINES_BEFORE_TOTAL_SILENCE",
     "dedup.SHINGLE_SIZE",
     "document_reader.EXPORT_VERSION",
+    "document_render.CV_PAGE_BUDGET",
     "elicit_extract.MAX_ANSWER_CHARS",
     "elicit_extract.MIN_ANSWER_CHARS",
     "elicit_extract.NEGATION_WINDOW_CHARS",
@@ -541,7 +553,9 @@
     "exclusion_live_round._PER_EXCLUSION",
     "extraction.MIN_EVALUATION_LABELS_PER_DIMENSION",
     "extraction._NEGATION_WINDOW",
+    "fixture_shapes.SCAN_WINDOW",
     "floor_sweep.MINIMUM_BOUNDS_READ_FOR_POLARITY",
+    "floor_sweep.MINIMUM_FLOORS_JUDGED",
     "floor_sweep.MINIMUM_PROSE_MUTATION_SCENARIOS",
     "floor_sweep._MAX_DELEGATION_DEPTH",
     "freshness.DEFAULT_ELAPSED_DAYS",
@@ -581,6 +595,7 @@
     "process_spec.MIN_ITEM_WORDS",
     "profile._ID_WIDTH",
     "profile_standing.MAX_ITEMS",
+    "rank.MINIMUM_UNSEPARATED_RANKINGS",
     "repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED",
     "repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED",
     "repo_gate.MINIMUM_FILES_FORMATTED",
@@ -648,6 +663,7 @@
     "dedup.MINIMUM_CLUSTER_PAIRS",
     "dedup.MINIMUM_PAIRS",
     "document_reader.MINIMUM_CONTRACTS_EVALUATED",
+    "document_render.MINIMUM_CONTRACTS_EVALUATED",
     "elicit_extract.MINIMUM_CHECKS",
     "employer_boards.MINIMUM_CONFORMING",
     "end_to_end.MINIMUM_REVISIONS_REPLAYED",
@@ -656,11 +672,13 @@
     "exclusion_live_round.MINIMUM_EXCLUSIONS_TRIPPED",
     "exclusion_live_round.MINIMUM_UNEXCLUDED_SERVED",
     "extraction._CONFIRMING_MATCHES_FOR_BIPOLAR",
+    "fixture_shapes.MINIMUM_SHAPE_CELLS",
     "floor_sweep.MINIMUM_CEILINGS_SET_ASIDE",
     "floor_sweep.MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED",
     "floor_sweep.MINIMUM_FLOORS_SWEPT",
     "floor_sweep.MINIMUM_POLARITY_CASES",
+    "floor_sweep._MINIMUM_REASON_WORDS",
     "freshness.MINIMUM_OFFERS",
     "gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED",
     "gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES",
@@ -688,7 +706,6 @@
     "profile_capture.MINIMUM_SUBJECT_CHECKS",
     "query_capture.MINIMUM_STEERABLE_PACKAGES_CHECKED",
     "question_bank.MINIMUM_PROBES",
-    "rank.MINIMUM_UNSEPARATED_RANKINGS",
     "reach.MINIMUM_FIXTURES",
     "reader_notes.MINIMUM_PROBES",
     "retraction.MINIMUM_SCANNED",
@@ -732,6 +749,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 102,
+  "floors_swept_at_least": 104,
   "floors_arithmetically_checked_at_least": 36
 }

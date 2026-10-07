@@ -1131,6 +1131,23 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "refusal-shaped consumer, so the AST rule abstains."
         ),
     ),
+    "fixture_shapes.SCAN_WINDOW": (
+        "neither",
+        (
+            "A character distance, `marker offset after >= offset before + SCAN_WINDOW`: "
+            "the size of the scan truncation a burial must clear. It measures a shift "
+            "in text, not a count of anything a deletion could shrink."
+        ),
+    ),
+    "fixture_shapes.MINIMUM_SHAPE_CELLS": (
+        "floor",
+        (
+            'Read as `"measured" if compared >= FLOOR else "unmeasured"`: the gate '
+            "reports measured only when the (marker-bearing sample x shape) product "
+            "reaches it, so deleting a sample or a shape breaches it. A conditional "
+            "expression is not a refusal-shaped consumer, so the AST rule abstains."
+        ),
+    ),
     "connector_health.MINIMUM_PROBES_COMPARED": (
         "floor",
         (
@@ -1331,6 +1348,22 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "set aside, breached by deleting one."
         ),
     ),
+    "floor_sweep._MINIMUM_REASON_WORDS": (
+        "floor",
+        (
+            "`len(description.split()) < _MINIMUM_REASON_WORDS` rejects a declaration "
+            "or a ruling whose text is shorter than three words: a minimum length of "
+            "one string."
+        ),
+    ),
+    "floor_sweep.MINIMUM_FLOORS_JUDGED": (
+        "floor",
+        (
+            '`"measured" if len(universe) >= MINIMUM_FLOORS_JUDGED else "unmeasured"` '
+            "in `measure_declarations`: a lower bound on how many floor-shaped constants "
+            "the declaration gate read, breached by the sweep ceasing to find one."
+        ),
+    ),
     "floor_sweep.MINIMUM_FLOORS_EVIDENCE_PINNED": (
         "floor",
         (
@@ -1488,6 +1521,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "below the bound: a minimum on a count, breached by deleting members."
         ),
     ),
+    "claim_trace.FIXTURE_SOURCE_CHARS": (
+        "ceiling",
+        (
+            "`len(text) > FIXTURE_SOURCE_CHARS` raises: the fixed width of the "
+            "stored source a probe master's span points at, an upper limit on how "
+            "much fixture text it may hold, never a minimum on a measured count."
+        ),
+    ),
     "connector_procedure.MINIMUM_CASES": (
         "floor",
         (
@@ -1563,6 +1604,23 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
         ),
     ),
     "document_reader.MINIMUM_CONTRACTS_EVALUATED": (
+        "floor",
+        (
+            "`contracts < MINIMUM_CONTRACTS_EVALUATED` refuses the run (reports it "
+            "unmeasured and exits non-zero) when the measured population falls "
+            "below the bound: a minimum on a count, breached by deleting members."
+        ),
+    ),
+    "document_render.CV_PAGE_BUDGET": (
+        "ceiling",
+        (
+            "`pages > max_pages` refuses a CV that renders longer than its page "
+            "budget: a limit on how many pages the document may take, breached "
+            "by adding content, not by deleting any. It bounds a rendered page "
+            "count from above and counts nothing a deletion could shrink."
+        ),
+    ),
+    "document_render.MINIMUM_CONTRACTS_EVALUATED": (
         "floor",
         (
             "`contracts < MINIMUM_CONTRACTS_EVALUATED` refuses the run (reports it "

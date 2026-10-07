@@ -901,46 +901,83 @@ def order_readings(
     }
 
 
-def missing_inputs(ranking: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """T233: the inputs whose absence leaves offers unseparated, and what one answer would change.
+#: T233. The fields `order_readings` publishes that say offers are NOT ordered.
+#: `unseparated_units` reads every one of them through `_UNIT_READERS`, so a field
+#: listed here without a reader is a KeyError, and `order_readings` publishing one
+#: that is not listed here fails `tests/test_rank_missing_inputs.py`.
+NON_ORDERING_FIELDS = ("ties", "incomparable", "unordered")
 
-    Derived only from fields `rank` already publishes: `ties` and `unordered`
-    say which offers the data does not separate, `level` says whether any weight
-    priced anything, `unpriced_trait_dimensions` names what the candidate said
-    that the order cannot move on, and `dimensions` against `priced_by` names a
-    ranked axis the candidate has no price on. Each entry is `{"input", "offers",
-    "answer_would"}`: `offers` is how many shown offers are currently unseparated,
-    the number one answer can move. Nothing is reported when every offer is
-    separated, and a tie nothing above explains still names `preferences` — a tied
-    order is never left silent. The session says these to the candidate (step 9).
+_UNIT_READERS: dict[str, Any] = {
+    "ties": lambda tied: [
+        frozenset(pair) for tie in tied for pair in combinations(tie["offer_ids"], 2)
+    ],
+    "incomparable": lambda marks: [
+        frozenset((m["offer_id"], other)) for m in marks for other in m["cannot_be_ordered_against"]
+    ],
+    "unordered": lambda ids: [frozenset((offer_id,)) for offer_id in ids],
+}
+
+
+def unseparated_units(ranking: Mapping[str, Any]) -> set[frozenset[str]]:
+    """T233: every pair (or lone unordered offer) the ranking does not put in an order."""
+    return {unit for f in NON_ORDERING_FIELDS for unit in _UNIT_READERS[f](ranking[f])}
+
+
+#: An advert's silence is the employer's to break, so it is never put to the
+#: candidate as a question; a price is the candidate's own to give.
+ASKS_EMPLOYER = "advert_silent_ask_employer_ranked_apart_until_then"
+
+
+def missing_inputs(
+    ranking: Mapping[str, Any], candidates: Sequence[Candidate]
+) -> list[dict[str, Any]]:
+    """T233: the inputs that would change how unseparated offers sit, and who can give them.
+
+    `unseparated_units` says which offers the ranking does not order. An input
+    is named only when it bears on at least one of them. `salary` (an offer in a
+    unit published none) and `unknown:<dim>` (a priced dimension the advert is
+    silent on) are the advert's to give. `weights` (L1), `preference:<dim>` and
+    `weight:<dim>` (L2) are the candidate's, and only when the offers in a unit
+    differ on that ranked dimension, so pricing it could move them. Entries are
+    `{"input", "offers", "answer_would", "asked_of"}`, most offers first, where
+    `offers` is how many unseparated offers that input bears on. `[]` beside a
+    non-empty `unseparated_units` means the offers are level on everything
+    asked: nothing is missing, and the session says they are level.
     """
-    unseparated = {o for tie in ranking["ties"] for o in tie["offer_ids"]} | set(
-        ranking["unordered"]
-    )
-    if not unseparated:
-        return []
-    n = len(unseparated)
-    out: list[dict[str, Any]] = []
-    if ranking["level"] == "L1":
-        out.append({"input": "weights", "offers": n, "answer_would": "price_dimensions"})
-    if ranking["unordered"]:
-        out.append(
-            {"input": "salary", "offers": len(ranking["unordered"]), "answer_would": "order_offers"}
-        )
+    by_id = {c.offer_id: c for c in candidates}
     priced = {name for names in ranking["priced_by"].values() for name in names}
-    unpriced = set(ranking["unpriced_trait_dimensions"]["dimensions"])
-    if ranking["level"] != "L1":
-        # A fit axis is read from the CV, not asked of the candidate.
-        bare = sorted(set(ranking["dimensions"]) - priced - unpriced - set(FIT_DIMENSIONS))
-        out += [
-            {"input": f"preference:{name}", "offers": n, "answer_would": "price_dimension"}
-            for name in bare
-        ]
-    out += [
-        {"input": f"weight:{name}", "offers": n, "answer_would": "price_dimension"}
-        for name in sorted(unpriced)
-    ]
-    return out or [{"input": "preferences", "offers": n, "answer_would": "separate_offers"}]
+    traits = set(ranking["unpriced_trait_dimensions"]["dimensions"])
+    ranked = [d for d in ranking["dimensions"] if d not in FIT_DIMENSIONS]
+    bears: dict[str, set[str]] = {}
+    for unit in unseparated_units(ranking):
+        members = sorted(unit)
+        if any(ranking["order_basis"][o]["reading"] in ("known_part", "none") for o in members):
+            bears.setdefault("salary", set()).update(members)
+        silent = {d for o in members for d in ranking["unknown_dimensions"].get(o, ())}
+        for name in priced & silent:
+            bears.setdefault(f"unknown:{name}", set()).update(members)
+        if len(members) < 2:
+            continue
+        for name in ranked:
+            if name in priced or len({by_id[o].scores.get(name) for o in members}) < 2:
+                continue
+            if ranking["level"] == "L1":
+                bears.setdefault("weights", set()).update(members)
+            else:
+                kind = "weight" if name in traits else "preference"
+                bears.setdefault(f"{kind}:{name}", set()).update(members)
+    entries = []
+    for name, offers in bears.items():
+        advert = name == "salary" or name.startswith("unknown:")
+        entries.append(
+            {
+                "input": name,
+                "offers": len(offers),
+                "answer_would": ASKS_EMPLOYER if advert else "price_dimensions",
+                "asked_of": "employer" if advert else "candidate",
+            }
+        )
+    return sorted(entries, key=lambda e: (-e["offers"], e["input"]))
 
 
 def _reference_interval(candidate: Candidate, priced: Mapping[str, float]) -> tuple[float, float]:
@@ -1617,16 +1654,17 @@ def write_order_evidence(evidence: Path = DEFAULT_T242_EVIDENCE_PATH) -> dict[st
     return measured
 
 
-#: T233's floor on constructed rankings that are not separated by data: the
-#: gate's zero means nothing over fewer than these. The population is the five
-#: constructed cases of `_t233_cases`, four of them unseparated, so the margin is
-#: nil by design: dropping one is a refusal, not a slack.
-#: arsenal-floor-margin: MINIMUM_UNSEPARATED_RANKINGS value=4
-MINIMUM_UNSEPARATED_RANKINGS = 4
+#: T233's floor on constructed rankings that leave offers unseparated: the gate's
+#: zero means nothing over fewer than these. All ten constructed cases of
+#: `_t233_cases` are unseparated, four of them with nothing missing (the controls
+#: that catch an input named for no reason), so the margin is nil by design:
+#: dropping one is a refusal, not a slack.
+#: arsenal-floor-margin: MINIMUM_UNSEPARATED_RANKINGS value=10
+MINIMUM_UNSEPARATED_RANKINGS = 10
 
 
 def _t233_cases() -> list[dict[str, Any]]:
-    """Constructed rankings, each left unseparated by a different missing input."""
+    """Constructed rankings: each left unseparated, by a different input or by none."""
 
     def offers(*specs: tuple[str, float | None, dict[str, float]]) -> list[Candidate]:
         return [
@@ -1641,36 +1679,91 @@ def _t233_cases() -> list[dict[str, Any]]:
         ]
 
     same = {"remote": 0.5, "commute": 0.5, "mentoring": 0.5}
-    bare = {"remote": 0.5}
+    # Same salary-equivalent total as `same` (450) by a different mix, so neither dominates.
+    mix = {"remote": 0.75, "commute": -0.25, "mentoring": 0.5}
+    lean = {"remote": 1.0, "commute": 0.0, "mentoring": 0.5}
     traits = {"dimensions": {"company_kind": {"evidence_count": 3}}}
+    fixed = _FIXTURE_WEIGHTS
     return [
+        # Nothing separates them and nothing could: identical offers, no weights.
         {"candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)), "weights": None},
+        # Weights would: the same pay, a different mix.
+        {"candidates": offers(("a", 3000.0, same), ("b", 3000.0, lean)), "weights": None},
+        # Only the salary is missing, on one of three.
         {
-            "candidates": offers(("a", None, bare), ("b", None, bare)),
-            "weights": _FIXTURE_WEIGHTS,
+            "candidates": offers(("a", 3000.0, same), ("b", 3500.0, same), ("c", None, same)),
+            "weights": None,
+        },
+        # An unknown priced dimension overlaps the interval of the other offer.
+        {
+            "candidates": offers(
+                ("a", 3000.0, same), ("b", 3100.0, {"commute": 0.5, "mentoring": 0.5})
+            ),
+            "weights": fixed,
+        },
+        # An unpublished salary beside a published one.
+        {
+            "candidates": offers(
+                ("a", 3000.0, same),
+                ("b", None, {"remote": 1.0, "commute": 0.0, "mentoring": 0.2}),
+            ),
+            "weights": fixed,
+        },
+        # A ranked dimension the offers differ on and nothing prices.
+        {
+            "candidates": offers(
+                ("a", 3000.0, {**same, "company_kind": 1.0}),
+                ("b", 3000.0, {**mix, "company_kind": -1.0}),
+            ),
+            "weights": fixed,
             "extra_dimensions": ("company_kind",),
         },
+        # The same, but the candidate has said something about it: a weight, not a preference.
         {
-            "candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)),
-            "weights": _FIXTURE_WEIGHTS,
-            "extra_dimensions": ("fit_stack",),  # read from the CV: never asked of the candidate
-        },
-        {
-            "candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)),
-            "weights": _FIXTURE_WEIGHTS,
+            "candidates": offers(
+                ("a", 3000.0, {**same, "company_kind": 1.0}),
+                ("b", 3000.0, {**mix, "company_kind": -1.0}),
+            ),
+            "weights": fixed,
             "traits": traits,
             "extra_dimensions": ("company_kind",),
         },
-        {"candidates": offers(("a", 3000.0, same), ("b", 3500.0, same)), "weights": None},
+        # CONTROL: a trait with evidence that neither offer scores. Nothing is missing.
+        {
+            "candidates": offers(("a", 3000.0, same), ("b", 3000.0, same)),
+            "weights": fixed,
+            "traits": traits,
+            "extra_dimensions": ("company_kind",),
+        },
+        # CONTROL: a real tie on equal totals, every dimension priced and known.
+        {
+            "candidates": offers(
+                ("a", 3000.0, {"remote": 1.0, "commute": 0.5, "mentoring": 0.5}),
+                ("b", 3600.0, {"remote": 0.0, "commute": 0.5, "mentoring": 0.5}),
+            ),
+            "weights": fixed,
+        },
+        # CONTROL: they differ only on an axis read from the CV, never asked.
+        {
+            "candidates": offers(
+                ("a", 3000.0, {**same, "fit_stack": 1.0}), ("b", 3000.0, {**mix, "fit_stack": 0.0})
+            ),
+            "weights": fixed,
+            "extra_dimensions": ("fit_stack",),
+        },
     ]
 
 
+def _t233_candidates(case: Mapping[str, Any]) -> list[Candidate]:
+    extra = frozenset(case.get("extra_dimensions", ()))
+    return [replace(c, unknown=c.unknown | (extra - set(c.scores))) for c in case["candidates"]]
+
+
 def _t233_rank(case: Mapping[str, Any]) -> dict[str, Any]:
-    extra = case.get("extra_dimensions", ())
-    candidates = [replace(c, unknown=c.unknown | frozenset(extra)) for c in case["candidates"]]
+    candidates = _t233_candidates(case)
     return rank(
         candidates,
-        dimensions=(*_FIXTURE_DIMENSIONS, *extra),
+        dimensions=(*_FIXTURE_DIMENSIONS, *case.get("extra_dimensions", ())),
         revision=ProfileRevision(rows=len(candidates), sha256="0" * 64),
         weights=case["weights"],
         traits=case.get("traits"),
@@ -1678,25 +1771,118 @@ def _t233_rank(case: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
-def silent_unseparated_rankings(
-    rankings: Sequence[Mapping[str, Any]], reporter: Any = missing_inputs
-) -> int:
-    """Rankings with a tie or an unordered offer for which `reporter` names no input."""
-    return sum(1 for r in rankings if (r["ties"] or r["unordered"]) and not reporter(r))
+def _t233_answers(case: Mapping[str, Any], ranking: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Every single answer that could be given, each as the case with that answer in.
+
+    Derived from the case and the ranking's dimensions, not from `missing_inputs`:
+    this is the ground truth the reporter is measured against. Keys: `weights`
+    (L1), `price:<dim>`, `unknown:<dim>`, `salary`.
+    """
+    candidates = _t233_candidates(case)
+    out: dict[str, dict[str, Any]] = {}
+    priced = {n for names in ranking["priced_by"].values() for n in names}
+    if ranking["level"] == "L1":
+        out["weights"] = {**case, "weights": _FIXTURE_WEIGHTS}
+    else:
+        for name in ranking["dimensions"]:
+            if name not in priced and name not in FIT_DIMENSIONS:
+                worths = {
+                    **case["weights"]["part_worths"],
+                    name: {"utility_per_unit": 0.2, "salary_equivalent_per_month": 300.0},
+                }
+                out[f"price:{name}"] = {**case, "weights": {**case["weights"], "part_worths": worths}}
+    for name in priced:
+        lacking = [c for c in candidates if name not in c.scores]
+        if lacking:
+            given = {
+                c.offer_id: (1.0 if i % 2 == 0 else -1.0) for i, c in enumerate(lacking)
+            }
+            out[f"unknown:{name}"] = {
+                **case,
+                "candidates": [
+                    replace(c, scores={**c.scores, name: given[c.offer_id]}, unknown=c.unknown - {name})
+                    if c.offer_id in given
+                    else c
+                    for c in candidates
+                ],
+            }
+    if any(c.salary_per_month is None for c in candidates):
+        out["salary"] = {
+            **case,
+            "candidates": [
+                c
+                if c.salary_per_month is not None
+                else replace(c, salary_per_month=2000.0 + 100 * i, pay=point_band(2000.0 + 100 * i, "EUR"))
+                for i, c in enumerate(candidates)
+            ],
+        }
+    return out
+
+
+def _t233_key(name: str) -> str:
+    return "price:" + name.split(":", 1)[1] if name.startswith(("preference:", "weight:")) else name
+
+
+def _t233_effective(case: Mapping[str, Any]) -> set[str]:
+    """The answers that, actually given, leave fewer pairs unordered."""
+
+    def pairs(ranking: Mapping[str, Any]) -> int:
+        return sum(1 for unit in unseparated_units(ranking) if len(unit) == 2)
+
+    ranking = _t233_rank(case)
+    before = pairs(ranking)
+    return {
+        key
+        for key, answered in _t233_answers(case, ranking).items()
+        if pairs(_t233_rank(answered)) < before
+    }
+
+
+def t233_discrepancies(
+    cases: Sequence[Mapping[str, Any]], reporter: Any = missing_inputs
+) -> dict[str, int]:
+    """Both directions, per ranking left unseparated.
+
+    `silent`: an answer exists that would separate some offers and the reporter
+    does not name it. `spurious`: the reporter names an input whose answer, given,
+    separates nothing.
+    """
+    silent = spurious = controls = 0
+    for case in cases:
+        ranking = _t233_rank(case)
+        if not unseparated_units(ranking):
+            continue
+        truth = _t233_effective(case)
+        named = {_t233_key(e["input"]) for e in reporter(ranking, _t233_candidates(case))}
+        silent += bool(truth - named)
+        spurious += bool(named - truth)
+        controls += not truth
+    return {"silent": silent, "spurious": spurious, "nothing_missing_controls": controls}
 
 
 def measure_missing_inputs() -> dict[str, Any]:
-    rankings = [_t233_rank(case) for case in _t233_cases()]
-    unseparated = [r for r in rankings if r["ties"] or r["unordered"]]
-    return {
-        "rankings_with_unordered_ties_and_no_named_missing_input": silent_unseparated_rankings(
-            rankings
-        ),
+    cases = _t233_cases()
+    rankings = [_t233_rank(case) for case in cases]
+    found = t233_discrepancies(cases)
+    out: dict[str, Any] = {
+        "rankings_with_unordered_ties_and_no_named_missing_input": found["silent"],
+        "inputs_named_that_bear_on_no_unseparated_offer": found["spurious"],
+        "unseparated_rankings": sum(1 for r in rankings if unseparated_units(r)),
         "unseparated_rankings_at_least": MINIMUM_UNSEPARATED_RANKINGS,
-        "unseparated_rankings_ok": int(len(unseparated) >= MINIMUM_UNSEPARATED_RANKINGS),
-        "silent_when_reporter_is_empty": silent_unseparated_rankings(rankings, lambda _r: []),
-        "inputs_named": sorted({e["input"] for r in rankings for e in missing_inputs(r)}),
+        "nothing_missing_controls": found["nothing_missing_controls"],
+        "silent_when_reporter_is_empty": t233_discrepancies(cases, lambda _r, _c: [])["silent"],
+        "spurious_when_reporter_always_names_weights": t233_discrepancies(
+            cases, lambda _r, _c: [{"input": "weights"}]
+        )["spurious"],
+        "inputs_named": sorted(
+            {e["input"] for r, c in zip(rankings, cases, strict=True)
+             for e in missing_inputs(r, _t233_candidates(c))}
+        ),
     }
+    out["unseparated_rankings_ok"] = int(
+        out["unseparated_rankings"] >= MINIMUM_UNSEPARATED_RANKINGS
+    )
+    return out
 
 
 def write_missing_inputs_evidence(evidence: Path = DEFAULT_T233_EVIDENCE_PATH) -> dict[str, Any]:
@@ -1734,11 +1920,14 @@ def _main(argv: list[str]) -> int:
     missing = write_missing_inputs_evidence(args.evidence.parent / "T233.json")
     if (
         missing["rankings_with_unordered_ties_and_no_named_missing_input"] != 0
+        or missing["inputs_named_that_bear_on_no_unseparated_offer"] != 0
         or not missing["unseparated_rankings_ok"]
+        or not missing["nothing_missing_controls"]
         or not missing["silent_when_reporter_is_empty"]
+        or not missing["spurious_when_reporter_always_names_weights"]
     ):
         print(
-            "an unseparated ranking named no missing input, or the audit could not rise",
+            "an unseparated ranking named a wrong or no missing input, or the audit could not rise",
             file=sys.stderr,
         )
         return 1

@@ -314,18 +314,23 @@ offered at the end of every first-run step exactly as that section requires.
 What the tool says out loud when the step ends, verbatim — the settled example from the spec:
 
 ```text
-"Fourteen new, six duplicates, and four have closed since last week. Here they are ranked rather than as a list, because the order is where the work on your preferences actually shows. I'd start with the top few, because that is where your preferences agree the most. Want to?"
+"Fourteen new, six duplicates, and four have closed since last week. Here they are ranked rather than as a list, because the order is where the work on your preferences actually shows. [the ranked list follows] I'd start with the top few, because that is where your preferences agree the most. Want to?"
 ```
 
-**The ranked view is the default close (T233): hand straight to step 9 and show it — never ask
-whether they want it ranked.** A question there is a round trip for an answer that is always
-yes. Say this in the candidate's own language, then present. Right after the ranking, run
-`integral.rank.missing_inputs(ranking)`: each entry is an input the order could not use
-(`weights`, `salary`, `preference:<dimension>`, `weight:<dimension>`, or `preferences`), with
-`offers` — how many shown offers are currently not separated — and `answer_would`. Say each
-one: which input is missing and that one answer would separate that many offers, e.g. "These 6
-come out tied because I have no weights from you yet — one choice between two jobs and the
-order moves." An empty list means the data separated them; say nothing about it.
+**The ranked view is the default close (T233): hand straight to step 9 and show it in this same
+turn — never ask whether they want it ranked.** A question there is a round trip for an answer
+that is always yes. Say this in the candidate's own language: the first two sentences, then the
+ranked list, and only after the list the recommendation and its "Want to?" — the question
+comes last, so nothing waits on an answer before the ranking is on screen. Right after the
+ranking, run `integral.rank.missing_inputs(ranking, candidates)` and say at most the one or
+two entries with the most `offers`, never the whole list. An entry whose `asked_of` is
+`candidate` (`weights`, `preference:<dimension>`, `weight:<dimension>`) is a question for them:
+"These 6 are not separated yet because I have no weights from you; one choice between two
+jobs could change that." An entry whose `asked_of` is `employer` (`salary`,
+`unknown:<dimension>`) is not theirs to answer: say the advert does not publish it and that
+those offers are ranked apart until it does. An empty list while
+`integral.rank.unseparated_units(ranking)` is not empty means the offers are level on
+everything you hold: say they are level on the data. Both empty: say nothing.
 
 Writes `last_activity`.
 
