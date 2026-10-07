@@ -162,8 +162,12 @@ class RenderParams:
 
     def checked(self) -> RenderParams:
         """These parameters, normalised, or a :class:`RenderError` naming the first fault."""
-        if self.page_size not in _PAGE_MM:
+        if not isinstance(self.page_size, str) or self.page_size not in _PAGE_MM:
             raise RenderError(f"page_size {self.page_size!r} is not one of {PAGE_SIZES}")
+        for name in ("margins_mm", "body_size_pt"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise RenderError(f"{name} {value!r} is not a number")
         if not (MARGIN_MM[0] <= self.margins_mm <= MARGIN_MM[1]):
             raise RenderError(f"margins_mm {self.margins_mm!r} is outside {MARGIN_MM}")
         if not (BODY_PT[0] <= self.body_size_pt <= BODY_PT[1]):
@@ -328,7 +332,8 @@ def validate(document: Mapping[str, Any]) -> str:
         raise RenderError("a document needs at least one block")
     kinds: set[str] = set()
     for n, block in enumerate(blocks):
-        if not isinstance(block, Mapping) or block.get("type") not in BLOCKS:
+        kind = block.get("type") if isinstance(block, Mapping) else None
+        if not isinstance(kind, str) or kind not in BLOCKS:
             raise RenderError(f"block {n} is not one of {sorted(BLOCKS)}")
         spec = BLOCKS[block["type"]]
         keys = set(block) - {"type"}
@@ -426,6 +431,36 @@ def render(
         raise RenderError(str(exc)) from exc
 
 
+def _refuse_every_url(url: str, *_args: Any, **_kwargs: Any) -> Any:
+    """A WeasyPrint ``url_fetcher`` that fetches nothing.
+
+    The page is self-contained, so the engine has nothing legitimate to load. Its
+    default fetcher reads ``file:`` and the network: ``<a rel="attachment">`` embeds
+    the target in the PDF and ``<svg><image href>`` is fetched, and the engine
+    ignores the page's CSP. Text fields pass through as HTML, so an advert's string
+    could otherwise put a local file into a PDF sent to an employer.
+    """
+    raise ValueError(f"the renderer fetches nothing: {url!r}")
+
+
+def _refusing_fetcher() -> Any:
+    """The refusing fetcher in the shape the installed WeasyPrint expects.
+
+    Recent engines read ``_fail_on_errors`` off the fetcher, so it must be a
+    ``URLFetcher``; older engines call a plain function.
+    """
+    try:
+        from weasyprint.urls import URLFetcher  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return _refuse_every_url
+
+    class _Refusing(URLFetcher):  # type: ignore[misc,unused-ignore]
+        def fetch(self, url: str, headers: Any = None) -> Any:
+            return _refuse_every_url(url)
+
+    return _Refusing()
+
+
 def render_pdf(page_html: str, *, max_pages: int | None = None) -> tuple[bytes, int]:
     """``(pdf bytes, page count)``; needs the optional ``pdf`` extra (WeasyPrint).
 
@@ -438,7 +473,7 @@ def render_pdf(page_html: str, *, max_pages: int | None = None) -> tuple[bytes, 
         raise RenderError(
             "PDF output needs the optional 'pdf' extra (WeasyPrint): `uv sync --extra pdf`"
         ) from exc
-    rendered = weasyprint.HTML(string=page_html).render()
+    rendered = weasyprint.HTML(string=page_html, url_fetcher=_refusing_fetcher()).render()
     pages = len(rendered.pages)
     if max_pages is not None and pages > max_pages:
         raise RenderError(f"the document renders to {pages} pages; the budget is {max_pages}")
@@ -906,13 +941,15 @@ def _main(argv: Sequence[str] | None = None) -> int:
             if getattr(args, key) is not None:
                 chosen[key] = getattr(args, key)
         try:
+            document = json.loads(args.document.read_text(encoding="utf-8"))
             page = render(
-                json.loads(args.document.read_text(encoding="utf-8")),
+                document,
                 RenderParams.for_recipient(args.country, None, **chosen),
             )
             args.output.write_text(page, encoding="utf-8")
             if args.pdf is not None:
-                args.pdf.write_bytes(render_pdf(page)[0])
+                budget = CV_PAGE_BUDGET if validate(document) == "cv" else None
+                args.pdf.write_bytes(render_pdf(page, max_pages=budget)[0])
         except (RenderError, ValueError, OSError) as exc:
             print(str(exc), file=sys.stderr)
             return 2

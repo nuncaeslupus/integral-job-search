@@ -471,6 +471,102 @@ def test_a_cv_that_outgrows_its_budget_fails_loudly() -> None:
         dr.render_pdf(dr.render(doc), max_pages=dr.CV_PAGE_BUDGET)
 
 
+def _pdf_with_text(text: str) -> bytes:
+    doc = dr.sample_cv()
+    doc["blocks"] = [{"type": "summary", "text": text}, *doc["blocks"]]
+    return dr.render_pdf(dr.render(doc))[0]
+
+
+def _streams(pdf: bytes) -> bytes:
+    """Every stream of the PDF, Flate-decoded where it decodes, concatenated."""
+    import zlib
+
+    out = b""
+    for raw in re.findall(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.DOTALL):
+        try:
+            out += zlib.decompress(raw)
+        except zlib.error:
+            out += raw
+    return out
+
+
+@needs_engine
+@pytest.mark.parametrize("kind", ["attachment", "svg-file", "svg-http"])
+def test_the_pdf_engine_fetches_nothing(
+    tmp_path: Path, kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Text fields pass through as HTML; the engine must not read files or the network."""
+    import socket
+
+    from weasyprint.urls import URLFetcher
+
+    fetched: list[str] = []
+
+    def spy(self: Any, url: str, headers: Any = None) -> Any:
+        fetched.append(url)
+        raise ValueError("spy")
+
+    monkeypatch.setattr(URLFetcher, "fetch", spy)  # the engine's own fetching
+    canary = tmp_path / "canary.txt"
+    canary.write_bytes(b"CANARY-SECRET-0451")
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    listener.setblocking(False)
+    port = listener.getsockname()[1]
+    text = {
+        "attachment": f'<a rel="attachment" href="file://{canary}">x</a>',
+        "svg-file": f'<svg width="10" height="10"><image href="file://{canary}" '
+        'width="10" height="10"/></svg>',
+        "svg-http": f'<svg width="10" height="10"><image href="http://127.0.0.1:{port}/x.png" '
+        'width="10" height="10"/></svg>',
+    }[kind]
+    try:
+        pdf = _pdf_with_text(text)
+        with pytest.raises(BlockingIOError):
+            listener.accept()  # nothing connected
+    finally:
+        listener.close()
+    assert fetched == []
+    assert b"CANARY-SECRET-0451" not in pdf
+    assert b"CANARY-SECRET-0451" not in _streams(pdf)
+    assert b"/EmbeddedFile" not in pdf and b"/EmbeddedFile" not in _streams(pdf)
+
+
+@needs_engine
+def test_the_cli_refuses_an_over_budget_cv(tmp_path: Path) -> None:
+    doc = dr.sample_cv()
+    doc["blocks"] += [{"type": "bullets", "items": ["line " * 12] * 12} for _ in range(8)]
+    source = tmp_path / "cv.json"
+    source.write_text(json.dumps(doc), encoding="utf-8")
+    args = ["render", str(source), "--output", str(tmp_path / "o.html")]
+    assert dr._main([*args, "--pdf", str(tmp_path / "o.pdf")]) == 2
+    assert not (tmp_path / "o.pdf").exists()
+
+
+@pytest.mark.parametrize(
+    "block", [{"type": ["x"]}, {"type": {"a": 1}}, {"type": 3}, {"type": None}]
+)
+def test_a_non_text_block_type_is_a_refusal_not_a_traceback(block: dict[str, Any]) -> None:
+    with pytest.raises(dr.RenderError):
+        dr.validate({"title": "t", "blocks": [block]})
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        dr.RenderParams(margins_mm="22"),  # type: ignore[arg-type]
+        dr.RenderParams(body_size_pt="10"),  # type: ignore[arg-type]
+        dr.RenderParams(margins_mm=None),  # type: ignore[arg-type]
+        dr.RenderParams(margins_mm=True),
+        dr.RenderParams(page_size=["A4"]),  # type: ignore[arg-type]
+    ],
+)
+def test_parameters_of_the_wrong_type_are_a_refusal(params: dr.RenderParams) -> None:
+    with pytest.raises(dr.RenderError):
+        params.checked()
+
+
 @needs_engine
 def test_the_pdf_page_size_is_the_one_asked_for() -> None:
     import io
