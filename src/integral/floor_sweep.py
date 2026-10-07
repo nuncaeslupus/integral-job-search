@@ -3754,8 +3754,10 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: **102 with T164**, whose `_MINIMUM_REASON_WORDS` joined the population.
 #: **103 with T177**, whose `fixture_shapes.MINIMUM_SHAPE_CELLS` is one more.
 #: **104 with T142**, whose `document_render` declares one floor
-#: (`MINIMUM_CONTRACTS_EVALUATED`). Still zero slack.
-MINIMUM_FLOORS_SWEPT = 104
+#: (`MINIMUM_CONTRACTS_EVALUATED`).
+#: **105 with T105**: `connector_contract.MINIMUM_NON_CANONICAL_CAPTURE_DATES` is one more.
+#: Still zero slack.
+MINIMUM_FLOORS_SWEPT = 105
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3864,7 +3866,7 @@ MINIMUM_FLOORS_SWEPT = 104
 #: seven points of slack.
 #: **46 with T149**: `end_to_end`'s two floors are in-source literal counts, two more
 #: arithmetically checked; the floor stays 36, ten points of slack.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=46
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=47
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -4230,8 +4232,8 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: **99 with T164**: `_MINIMUM_REASON_WORDS` carries a marker and joins the battery.
 #: **100 with T177**: `fixture_shapes.MINIMUM_SHAPE_CELLS` carries a marker, one scenario more.
 #: **101 with T142**: `document_render`'s one floor carries its own comment block and marker.
-#: Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 101
+#: **102 with T105**: `connector_contract`'s one new floor is one scenario more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 102
 
 
 def measure_prose_clearance() -> dict[str, Any]:

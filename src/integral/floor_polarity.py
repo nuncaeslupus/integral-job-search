@@ -172,6 +172,15 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "this sweep does not trace."
         ),
     ),
+    "connector_contract.MINIMUM_NON_CANONICAL_CAPTURE_DATES": (
+        "floor",
+        (
+            "A denominator floor: `measure_capture_dates` reports `unmeasured` (-1) "
+            "when fewer non-canonical controls than this were checked, so deleting a "
+            "control is what breaches it. Its comparand is a `len` of a constant tuple "
+            "this sweep does not trace."
+        ),
+    ),
     "connector_contract._RUN_WINDOW": (
         "ceiling",
         (
