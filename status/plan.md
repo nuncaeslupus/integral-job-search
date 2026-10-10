@@ -524,6 +524,88 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T253 | `OFFER_CEILING` is per board and counted after the reach constraint — a worldwide board fills the run's ceiling with adverts outside the candidate's reach (from #688 bullet 2, test-mode 453a5c19) | 5 | M | T251 | `offers_outside_reach_counted_against_the_ceiling == 0` | `tests/test_source_offer_ceiling.py` — constructed boards labelled by construction; rows outside reach neither counted nor collected, per-board share, capped boards named. Delivered: share is `OFFER_CEILING // boards` (no redistribution); no evidence file for the T251/T253 metrics (deferred) | ☑ |
 | T254 | talent_es still reads the advert body with a stale build-hash selector (from T234; needs egress to talent.com) | 10 | S | T234 | `talent_es_detail_selectors_on_a_generated_class == 0` | gate set in its own PR | ☑ |
 | T255 | An application to an employer with no advert has no record of its own (from a candidate session) | 5 | M | — | `open_applications_stored_as_adverts == 0` | `tests/test_open_application.py` (the hand-written shapes refused, the predicate read by liveness, identity, dedup and the partition hold, the gate measured and unmeasured under its floor, the skill rule verbatim) and `status/evidence/T255.json` over four constructed open applications with the synthetic shapes and a real advert as controls | ☑ |
+| T256 | the dimension model does not cover the English corpus — 0.8423 against a 0.85 per-language floor | 5 | M | — | `ontology_hit_rate_worst_language >= 0.85` | gate set in its own PR | ☐ |
+| T257 | 28 adverts from a robots-blocked board are reachable as elicitation stimuli | 5 | M | — | `blocked_source_adverts_reachable_as_stimuli == 0` | gate set in its own PR | ☐ |
+| T258 | build_list_urls ignores pagination.start with no test noticing — a 0-indexed board's URLs silently start at page 1 | 5 | M | — | `list_urls_ignoring_the_declared_pagination_start == 0` | gate set in its own PR | ☐ |
+| T259 | Sourcing fetches list pages only, so two of six Spanish boards contribute nothing | 5 | M | — | `spanish_boards_contributing_no_offers_from_list_only_fetching == 0` | gate set in its own PR | ☐ |
+| T260 | A contribution PR that also edits src/ should fail CI, not review | 5 | M | — | `contribution_prs_editing_src_that_pass_ci == 0` | gate set in its own PR | ☐ |
+| T261 | A selector cannot take part of a text node, so arbeitsagentur.de titles arrive with a rendering artefact | 5 | M | — | `arbeitsagentur_titles_carrying_a_rendering_artefact == 0` | gate set in its own PR | ☐ |
+| T262 | No connector can exist for DE, FR, IT, NL or PT: Language is a Literal of en/es/ca | 5 | M | — | `countries_without_a_connector_for_want_of_a_language_literal == 0` | gate set in its own PR | ☐ |
+| T263 | open_task_pr.sh's gate ordering makes a task whose own gate runs `make evidence` red on one side or the other by construction | 5 | M | — | `task_gates_red_by_construction_on_one_side_of_the_archive == 0` | gate set in its own PR | ☐ |
+| T264 | excerpt_fixture locates a body span by <div> only, and an unmatched span is left whole | 5 | M | — | `body_spans_excerpted_by_div_only_or_left_whole == 0` | gate set in its own PR | ☐ |
+| T265 | The site census's byte offset is not stable across an edit, so two sites can still cancel | 5 | M | — | `site_census_offsets_unstable_across_an_edit == 0` | gate set in its own PR | ☐ |
+| T266 | One half of the seeding vocabulary still compares raw, so a respelt requester key leaks its city | 5 | M | — | `requester_keys_leaking_a_city_through_raw_comparison == 0` | gate set in its own PR | ☐ |
+| T267 | The capture-byte floor permits dropping half the library, and the vocabulary's non-vacuity guard cannot fire | 5 | M | — | `capture_byte_floors_permitting_half_the_library_dropped == 0` | gate set in its own PR | ☐ |
+| T268 | Sourcing: OFFER_CEILING is global, so worldwide boards are never asked | 5 | M | — | `worldwide_boards_never_asked_under_the_global_offer_ceiling == 0` | gate set in its own PR | ☐ |
+| T269 | Liveness: an interrogative closure marker reads as a closure, killing live adverts | 5 | M | — | `interrogative_closure_markers_killing_live_adverts == 0` | gate set in its own PR | ☐ |
+| T270 | Offers: stored offers with an unvalidatable salary.period survive #538's backfill | 5 | M | — | `stored_offers_with_an_unvalidatable_salary_period_after_backfill == 0` | gate set in its own PR | ☐ |
+| T271 | Liveness: the page-identity check withholds live adverts on a composed title and on a canonical redirect | 5 | M | — | `live_adverts_withheld_by_the_page_identity_check == 0` | gate set in its own PR | ☐ |
+| T272 | matches_aim reads a title on some boards and a whole description on others | 5 | M | — | `boards_where_matches_aim_reads_a_different_span_than_elsewhere == 0` | gate set in its own PR | ☐ |
+| T273 | The advert page is fetched only when the list row fails, so a teaser-carrying board loses its whole detail block | 5 | M | — | `teaser_boards_losing_the_detail_block_because_the_row_did_not_fail == 0` | gate set in its own PR | ☐ |
+| T274 | No reach filter over stored offers, and the obvious one rejects an offer for an absent location field | 5 | M | — | `offers_rejected_on_an_absent_location_field == 0` | gate set in its own PR | ☐ |
+| T275 | A conjoint can price dimensions adverts never state, and the ranking then degenerates to id order in silence | 5 | M | — | `rankings_pricing_dimensions_the_adverts_never_state == 0` | gate set in its own PR | ☐ |
+| T276 | Deduplication does not fire: the same advert is stored four times from one board | 5 | M | — | `stored_offers_sharing_title_company_and_source == 0` | gate set in its own PR | ☐ |
+| T277 | Space-grouped thousands defeat `_numbers_in`, so a published band reads as no salary | 5 | M | — | `space_grouped_salary_bands_read_as_no_salary == 0` | gate set in its own PR | ☐ |
+| T278 | An offer with no salary is ordered by nothing at L2, even with every priced dimension settled | 5 | M | — | `salaryless_offers_ordered_by_nothing_at_l2 == 0` | gate set in its own PR | ☐ |
+| T279 | A 'not stated' score cannot cite evidence, so absence is recorded with a quote that means nothing | 5 | M | — | `not_stated_scores_citing_a_meaningless_quote == 0` | gate set in its own PR | ☐ |
+| T280 | A stored body can carry another advert's text, so any body-level parse can attribute it to this vacancy | 5 | M | — | `stored_bodies_carrying_another_adverts_text == 0` | gate set in its own PR | ☐ |
+| T281 | Reactions are blocked on stored offers: 1,281 of 1,314 carry `fetched_at: null`, and `build_offer` has no such parameter | 5 | M | — | `stored_offers_with_a_null_fetched_at_blocking_reactions == 0` | gate set in its own PR | ☐ |
+| T282 | 68 stored offers still fail `Offer` validation on `salary.period` — the T170 backfill (f806c8e5) left six raw spellings behind | 5 | M | — | `stored_offers_failing_offer_validation_on_salary_period == 0` | gate set in its own PR | ☐ |
+| T283 | A salary in another currency is never compared, so the foreign boards the candidate wants are ranked with their pay ignored | 5 | M | — | `offers_presented_with_an_uncompared_salary_and_no_such_notice == 0` | gate set in its own PR | ☐ |
+| T284 | A candidate willing to relocate is shown only their own country, because relocate is pinned out of the foreign bucket | 5 | M | — | `reach_modes_reaching_no_board_beyond_the_candidates_own_country == 0` | gate set in its own PR | ☐ |
+| T285 | The profile guard exits 1 (lets the call through) on an undecodable active-handle marker | 5 | M | — | `profile_guard_exits_letting_through_an_undecodable_handle_marker == 0` | gate set in its own PR | ☐ |
+| T286 | Retraction still leaks into advice and drafts: held-skill gaps, ATS keywords, draft rendering, and the episodes probe | 5 | M | — | `retraction_leaks_into_advice_and_drafts == 0` | gate set in its own PR | ☐ |
+| T287 | Salary currency bound follow-ups: per-day working time, unsourced rate comment, a test that dirties T200.json, loose rate pins | 5 | M | — | `salary_currency_bound_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T288 | T183 follow-up: full-page background raster passes the photo floors; veto flow not wired | 5 | M | — | `full_page_background_rasters_passing_the_photo_floors == 0` | gate set in its own PR | ☐ |
+| T289 | Exclusion backfill skips advert-tied refusals, so steps 5 and 10 surface almost nothing | 5 | M | — | `advert_tied_refusals_skipped_by_the_exclusion_backfill == 0` | gate set in its own PR | ☐ |
+| T290 | second_reader keeps a bare % raw in robots rules; robots.py reads it as %25 — 94 matcher disagreements | 5 | M | — | `robots_matcher_disagreements_on_a_bare_percent == 0` | gate set in its own PR | ☐ |
+| T291 | State-home backup and OS defaults: follow-ups deferred from T193 (#675) | 5 | M | — | `state_home_backup_and_os_default_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T292 | Candidate state sync: cloud bootstrap, pull on local start, refuse divergence | 5 | M | — | `candidate_state_sync_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T293 | T180 follow-ups: closed rule for skill authorship prose, drop EDITED_KEEPS proxy | 5 | M | — | `skill_authorship_prose_without_a_closed_rule == 0` | gate set in its own PR | ☐ |
+| T294 | Pay reading: one-ended bands become points; bare $ and CAD misread (follow-up to #682) | 5 | M | — | `pay_readings_turning_a_one_ended_band_into_a_point == 0` | gate set in its own PR | ☐ |
+| T295 | Stated pricing: audit should compare currencies; drivers_for should resolve stated weights (follow-up to #681) | 5 | M | — | `stated_pricing_audits_comparing_across_currencies_unresolved == 0` | gate set in its own PR | ☐ |
+| T296 | Voice preferences: check carta.md; narrow invisible-char withholding (follow-up to #680) | 5 | M | — | `voice_preference_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T297 | T246 follow-ups: planted-detection evidence keys are hard-codable; L1 USD ranking reports currency None | 5 | M | — | `t246_planted_detection_evidence_keys_hard_codable == 0` | gate set in its own PR | ☐ |
+| T298 | T230 follow-ups: run the period backfill on the real store; a systematic failure in load_offers reads as zero offers | 5 | M | — | `load_offers_systematic_failures_reading_as_zero_offers == 0` | gate set in its own PR | ☐ |
+| T299 | T224 follow-ups: optional findings from the #697 second read | 5 | M | — | `t224_second_read_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T300 | T244 follow-ups: optional findings from the #693 second read | 5 | M | — | `t244_second_read_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T301 | T237 follow-ups: dead n=0 past-the-end case; summary should name next offset | 5 | M | — | `t237_pagination_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T302 | T225 follow-ups: unmeasured plan metric, purge drops hold-back, over-merge risk | 5 | M | — | `t225_purge_hold_back_and_over_merge_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T303 | T236 follow-ups: gap may name any open task; sourcing fills employer only on falsy company; MINIMUM_GAPS | 5 | M | — | `t236_gap_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T304 | T252 follow-ups: only N1 (`;` in an early segment), N2 (Offer-level rule) and the O2 remainder (boards.eu.greenhouse.io, Workday `apply/applyManually`, Recruitee `/c/new`) remain; the hosted Greenhouse page is accepted as the advert (owner decision 2026-10-06) | 5 | M | — | `t252_hosted_greenhouse_followups_left_open == 0` | gate set in its own PR | ☐ |
+| T305 | Follow-ups from T235 (#708): foorilla location markers and truncated place lists | 5 | M | — | `foorilla_location_marker_and_truncation_defects == 0` | gate set in its own PR | ☐ |
+| T306 | Follow-ups from T231 (#711): session-kind rule test gaps | 5 | M | — | `session_kind_rule_test_gaps == 0` | gate set in its own PR | ☐ |
+| T307 | Follow-ups from #714 (T234) second-reader rounds | 5 | M | — | `t234_second_reader_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T308 | Follow-ups from #716 (T250) same-vacancy matching | 5 | M | — | `t250_same_vacancy_matching_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T309 | Follow-ups from #717 (T238 robots retry): optional review findings | 5 | M | — | `t238_robots_retry_review_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T310 | Follow-ups from #720 (T253 per-board ceiling): optional findings and an owner decision; owner decision (2026-10-06): split a board's share into a fixed share per term (not round-robin) | 5 | M | — | `t253_per_board_ceiling_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T311 | Follow-ups from #724 (T232): multiple-download warning test edges | 5 | M | — | `t232_multiple_download_warning_test_edges == 0` | gate set in its own PR | ☐ |
+| T312 | make evidence runs 118 modules serially, one `uv run` process each — parallelise it | 5 | M | — | `make_evidence_modules_run_serially == 0` | gate set in its own PR | ☐ |
+| T313 | Step 11 never links a candidate's own public projects (premise of T208 was false) | 5 | M | — | `candidate_public_projects_never_linked_at_step_11 == 0` | gate set in its own PR | ☐ |
+| T314 | Follow-ups from #725 (T208): step-3 public-work bullet | 5 | M | — | `t208_step_3_public_work_bullet_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T315 | T248 follow-ups: optional findings from the #722 second-reader rounds | 5 | M | — | `t248_second_reader_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T316 | T241 follow-ups: page-shell scan gaps left open by #729 | 5 | M | — | `t241_page_shell_scan_gaps == 0` | gate set in its own PR | ☐ |
+| T317 | T210 follow-ups: optional findings from the #734 second reader | 5 | M | — | `t210_second_reader_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T318 | T212 follow-ups: optional findings from the #733 second reader | 5 | M | — | `t212_second_reader_findings_left_open == 0` | gate set in its own PR | ☐ |
+| T319 | T228 follow-up: employer-key gaps (Catalan forms, unspaced S.Coop, cooperativa) and live-round name match | 5 | M | — | `t228_employer_key_gaps == 0` | gate set in its own PR | ☐ |
+| T320 | T187 follow-up: fallback-section pin should assert a single heading | 5 | M | — | `t187_fallback_section_pins_asserting_more_than_one_heading == 0` | gate set in its own PR | ☐ |
+| T321 | D-29 follow-ups: document milestone-row removal on archive; pin done-vs-open | 5 | M | — | `d29_milestone_row_removal_on_archive_undocumented == 0` | gate set in its own PR | ☐ |
+| T322 | T226 follow-ups: tombstone of an undecided offer hides a flagged discard | 5 | M | — | `t226_tombstones_hiding_a_flagged_discard == 0` | gate set in its own PR | ☐ |
+| T323 | step-00 opening: confusable names, accent-insensitive match, stateless --confirmed (follow-up to #746) | 5 | M | — | `step_00_opening_confusable_name_and_confirmation_gaps == 0` | gate set in its own PR | ☐ |
+| T324 | Skill readings: unrecognised alias spellings, atomic store, unread-advert count (follow-up to #745) | 5 | M | — | `skill_reading_alias_store_and_unread_count_gaps == 0` | gate set in its own PR | ☐ |
+| T325 | Follow-up for #749: T209 recommendation-gate residuals | 5 | M | — | `t209_recommendation_gate_residuals == 0` | gate set in its own PR | ☐ |
+| T326 | Follow-up for #751: prior-documents digest residuals | 5 | M | — | `prior_documents_digest_residuals == 0` | gate set in its own PR | ☐ |
+| T327 | T190 follow-up: paste-shape detection residuals (#754) | 5 | M | — | `t190_paste_shape_detection_residuals == 0` | gate set in its own PR | ☐ |
+| T328 | T239 follow-ups: lesson triage residuals from #756 review | 5 | M | — | `t239_lesson_triage_residuals == 0` | gate set in its own PR | ☐ |
+| T329 | T240 follow-ups: applications board residuals from #758 review | 5 | M | — | `t240_applications_board_residuals == 0` | gate set in its own PR | ☐ |
+| T330 | T227 follow-up: an employer heading with any separator ends a perks skip | 5 | M | — | `t227_employer_headings_with_a_separator_ending_a_perks_skip == 0` | gate set in its own PR | ☐ |
+| T331 | A paginated list fetch that 404s past the last page: end of pages or failed fetch? | 5 | M | — | `paginated_fetches_that_lose_page_one_to_a_404_on_a_later_page == 0` | gate set in its own PR | ☐ |
+| T332 | python.org answers gzip to a request that sent no Accept-Encoding | 5 | M | — | `encoded_bodies_parsed_as_zero_adverts == 0` | gate set in its own PR | ☐ |
+| T333 | Fixture tools do not understand an after_text selector | 5 | M | — | `connector_packages_the_fixture_tools_cannot_process == 0` | gate set in its own PR | ☐ |
+| T334 | Step 7 calls alert_mailbox.refusal before reading any job-alert email | 5 | M | — | `step_7_refusals_called_before_reading_any_alert_email == 0` | gate set in its own PR | ☐ |
+| T335 | A connector's first issued request is the board's first page, library-wide | 5 | M | — | `connectors_whose_first_issued_request_is_not_the_boards_first_page == 0` | gate set in its own PR | ☐ |
+| T336 | foorilla_en page 2 is reached by hx-get and was never measured | 5 | M | — | `foorilla_en_page_2_unmeasured == 0` | gate set in its own PR | ☐ |
+| T337 | usajobs_en stops at page 2 of 3 | 5 | M | — | `usajobs_en_pages_not_reached == 0` | gate set in its own PR | ☐ |
 
 ### Divergences
 
@@ -569,12 +651,12 @@ from `arsenal/tasks/_history/`, never from the plan's own ticks.
 
 | milestone | delivers | tasks |
 |-----------|----------|-------|
-| **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed | |
-| **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T15, T59, T91, T199, T202 |
-| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T20, T69, T145, T249 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | T29, D-26, T143, T148, T191, T211 |
-| **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | D-23, D-25, T112, T106, T189 |
-| **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | T115, T119, T213 |
+| **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed |, T285, T291, T292, T323, T327 |
+| **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T15, T59, T91, T199, T202, T256, T268, T270, T272, T274, T277, T278, T279, T282, T283, T284, T287, T294, T297, T298, T300, T301, T310, T315, T322, T330, T334 |
+| **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T20, T69, T145, T249, T257, T275, T281, T289, T295, T314, T324 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | T29, D-26, T143, T148, T191, T211, T255, T286, T288, T296, T313, T325, T326, T329 |
+| **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | D-23, D-25, T112, T106, T189, T258, T259, T261, T262, T269, T271, T273, T276, T280, T290, T299, T302, T304, T305, T307, T308, T309, T319, T331, T332, T335, T336, T337 |
+| **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | T115, T119, T213, T260, T263, T264, T265, T266, T267, T293, T303, T306, T311, T312, T316, T317, T318, T320, T321, T328, T333 |
 
 **S7 is deliberately not first.** The handover recommended it as the next task,
 and it is the task that turns the specification into something that runs — but
