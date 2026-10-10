@@ -342,8 +342,31 @@ def features() -> list[str]:
     return out
 
 
+#: claude-arsenal's own logo, for the "powered by" stamp on the frame.
+ARSENAL_LOGO = ROOT / "docs" / "claude-arsenal-logo.svg"
+
+
+def powered_by() -> list[str]:
+    """A "powered by claude-arsenal" stamp breaking the frame's bottom edge, on the 2|1 tick."""
+    src = ARSENAL_LOGO.read_text().strip()
+    inner = src[src.index(">") + 1 : src.rindex("</svg>")]
+    label, size, tile, pad = "powered by claude-arsenal", 7.5, 12, 6
+    width = pad + tile + 5 + len(label) * size * 0.602 + pad
+    cx, cy = 30 + 7 * (W - 60) / 8, H - 30
+    x = cx - width / 2
+    return [
+        f'<rect x="{x:.1f}" y="{cy - 8}" width="{width:.1f}" height="16" rx="8" '
+        f'fill="{PAPER}" stroke="{FRAME}"/>',
+        f'<svg x="{x + pad:.1f}" y="{cy - tile / 2}" width="{tile}" height="{tile}" '
+        f'viewBox="0 0 64 64">{inner}</svg>',
+        f'<text x="{x + pad + tile + 5:.1f}" y="{cy + 2.7}" font-family="{MONO}" '
+        f'font-size="{size}" fill="{DIM}">{label}</text>',
+    ]
+
+
 def svg() -> str:
     parts = sheet() + logo() + wordmark() + title_block() + story() + figure() + features()
+    parts += powered_by()
     body = "\n  ".join(parts)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
