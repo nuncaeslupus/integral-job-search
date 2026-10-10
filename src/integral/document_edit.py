@@ -347,11 +347,11 @@ def _contract_drop_addressee() -> list[str]:
 
 
 def _contract_text_identical() -> list[str]:
-    before = {
+    before: dict[str, Any] = {
         "title": "t",
         "blocks": [{"type": "project", "name": "n", "text": "x", "href": "https://a.test/"}],
     }
-    after = {
+    after: dict[str, Any] = {
         "title": "t",
         "blocks": [{"type": "project", "name": "n", "text": "x", "href": "https://b.test/"}],
     }
@@ -385,7 +385,7 @@ def _contract_caller_built() -> list[str]:
     a = {"type": "text", "text": "A"}
     b = {"type": "text", "text": "B"}
     swapped = {**letter, "blocks": [*letter["blocks"][:3], b, *letter["blocks"][4:]]}
-    cases = (
+    cases: list[tuple[str, list[Change], list[Insert], int, dict[str, Any], str]] = [
         ("duplicate name", [Change(3, text3, a), Change(3, text3, b)], [], 0, swapped, "twice"),
         ("wrong replacement", [Change(3, text3, a)], [], 0, swapped, "replacement"),
         (
@@ -397,14 +397,18 @@ def _contract_caller_built() -> list[str]:
             "inserted block",
         ),
         ("insert out of range", [], [Insert(99, a)], 1, letter, "position"),
-    )
+    ]
     for label, changes, inserts, delta, after, needle in cases:
-        if not _refused_with(
-            lambda changes=changes, inserts=inserts, delta=delta, after=after: verify_edit(
-                letter, after, changes, inserts, count_change=delta
-            ),
-            needle,
-        ):
+
+        def run(
+            changes: list[Change] = changes,
+            inserts: list[Insert] = inserts,
+            delta: int = delta,
+            after: dict[str, Any] = after,
+        ) -> None:
+            verify_edit(letter, after, changes, inserts, count_change=delta)
+
+        if not _refused_with(run, needle):
             found.append(f"{label} was not refused by its own check")
     return found
 
