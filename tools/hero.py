@@ -318,28 +318,24 @@ def story() -> list[str]:
 #: What the conversation keeps around the figure: the parts a search needs between steps.
 FEATURES = [
     ("profile", "every answer kept, yours to edit"),
+    ("profiles", "one install, several people"),
     ("measured", "each step ends on a checkpoint"),
     ("learns", "your verdicts revise the profile"),
-    ("new offers", "searched again on a schedule"),
-    ("profiles", "one install, several people"),
     ("applications", "tracked from draft to reply"),
-    ("interviews", "rehearsed on your own stories"),
-    ("next steps", "courses and prep, if they help"),
 ]
 
 
 def features() -> list[str]:
-    x0, y0, w, h, gap = 64, 512, 279, 40, 11
+    x0, y, w, h, gap = 64, 528, 218, 52, 15
     out = []
     for i, (name, sub) in enumerate(FEATURES):
-        x = x0 + (i % 4) * (w + gap)
-        y = y0 + (i // 4) * (h + 8)
+        x = x0 + i * (w + gap)
         out += [
             f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="#ebe4d6" '
             f'stroke="{FRAME}" stroke-width="0.8"/>',
             f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{TEAL}"/>',
-            text(x + 14, y + 25, name, size=12.5, weight=700, family=MONO, fill=TEAL),
-            text(x + 14 + len(name) * 7.6 + 10, y + 25, sub, size=12, fill="#3b4652"),
+            text(x + 16, y + 22, name, size=13, weight=700, family=MONO, fill=TEAL),
+            text(x + 16, y + 40, sub, size=12, fill="#3b4652"),
         ]
     return out
 
