@@ -18,12 +18,14 @@ Usage, from the repository root:
 
 from __future__ import annotations
 
+import importlib
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -337,6 +339,26 @@ def chromium() -> str:
     sys.exit("hero: no Chromium found; set CHROMIUM=/path/to/chrome")
 
 
+def save_without_address_literals(frame: Any) -> None:
+    """Write the PNG at the first zlib level whose bytes the IP-literal gate passes.
+
+    `test_no_committed_file_carries_an_ip_address` reads every listed file as
+    latin-1 text, whatever its extension, and compressed image bytes can spell
+    an address by chance (the first render of this banner held an IPv6 one). The gate
+    is right to read everything, so the banner adapts to it: each compression
+    level yields different bytes for the same pixels, and the gate's own scan
+    (`_quads_in` over what git lists) decides which one ships."""
+    sys.path.insert(0, str(ROOT / "tests"))
+    contract = importlib.import_module("test_connector_contract")
+    name = str(OUT_PNG.relative_to(ROOT))
+    for level in range(9, -1, -1):
+        frame.save(OUT_PNG, compress_level=level)
+        found = contract._quads_in(ROOT, contract._listed_files(ROOT))
+        if not [key for key in found if key[0] == name]:
+            return
+    sys.exit(f"hero: every compression level of {name} spells an IP literal")
+
+
 def main() -> None:
     OUT_SVG.write_text(svg())
     with tempfile.TemporaryDirectory() as tmp:
@@ -360,7 +382,8 @@ def main() -> None:
     from PIL import Image  # type: ignore[import-not-found, unused-ignore]
 
     with Image.open(OUT_PNG) as shot:
-        shot.crop((0, 0, W * 2, H * 2)).save(OUT_PNG, optimize=True)
+        frame = shot.crop((0, 0, W * 2, H * 2))
+    save_without_address_literals(frame)
     print(f"wrote {OUT_SVG.relative_to(ROOT)} and {OUT_PNG.relative_to(ROOT)}")
 
 
