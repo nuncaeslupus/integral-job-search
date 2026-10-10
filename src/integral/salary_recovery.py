@@ -131,7 +131,7 @@ from typing import Any, Literal
 from integral.connectors import _as_float
 from integral.corpus import load_ads
 from integral.dedup import find_duplicates
-from integral.offers import Offer, Salary, SalaryPeriod, compute_offer_id
+from integral.offers import Offer, Salary, SalaryPeriod, compute_offer_id, is_advert
 from integral.presentation import ESTIMATED_MARKER, _salary
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -891,7 +891,11 @@ def recover_all(
 ) -> RecoveryReport:
     """Run every lookup over a batch, once. Duplicate pairs and the
     house-estimate spread are both batch-wide facts, so both are computed here
-    rather than per offer."""
+    rather than per offer.
+
+    T255: an open application has no advert to be silent about pay in, so it is
+    not part of the batch."""
+    offers = [offer for offer in offers if is_advert(offer)]
     # A donor's band counts whether it arrived in the `salary` field or in the
     # body of its own advert. The task's case is a connector that left `salary`
     # unmapped on *both* copies while one of them prints the band in its text:

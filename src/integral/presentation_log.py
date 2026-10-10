@@ -164,13 +164,19 @@ def record_open_application(
 
     Stored and shortlisted (the candidate chose it by asking), so step 11 and the
     retention rule see it. It is not an advert: see `offers.is_advert`. Asking
-    twice for the same employer and destination returns the stored record."""
+    twice for the same employer and destination returns the stored record, unless it
+    was ruled out: that is refused by name, since the record is not ready for step 11.
+    A stored record that cannot be read is an error, never overwritten."""
     offer = open_application(company, url, form_questions, fetched_at=at)
-    try:
-        return load_lifecycle_offer(store, offer.id)[0]
-    except Exception:
+    if not store.exists("offers", f"{offer.id}.json"):
         save_lifecycle_offer(store, offer, track_new_offer(offer, at=at))
         return choose(store, offer.id, at=at, reason=None).offer
+    stored, lifecycle = load_lifecycle_offer(store, offer.id)
+    if lifecycle.current_status == "screened_out":
+        raise PresentationError(
+            f"{offer.id}: this open application was ruled out; it is not ready for step 11"
+        )
+    return stored
 
 
 def rule_out(store: ProfileStore, offer_id: str, reason: str, *, at: str) -> DecisionResult:
@@ -741,9 +747,51 @@ SYNTHETIC_OPEN_APPLICATIONS: tuple[tuple[str, str, str, str], ...] = (
     ("Forja Ejemplo", "https://forja.example/trabaja-con-nosotros", "Candidatura abierta", "CV"),
 )
 
+#: Floor on the recorded open applications checked: emptying the population must make the
+#: gate `unmeasured`, since with none of it the counter has counted nothing.
 MINIMUM_OPEN_APPLICATION_CASES = 4
 
+#: Floor on the hand-written shapes: with none, nothing shows the counter can count one.
+MINIMUM_SYNTHETIC_SHAPES = 3
+
+#: Floor on the plain-advert controls: with none, nothing shows it does not flag everything.
+MINIMUM_ADVERT_CONTROLS = 1
+
+#: A plain advert, kept shortlisted like the others: every consumer must claim it.
+ADVERT_CONTROLS: tuple[tuple[str, str, str, str], ...] = (
+    ("Acme Robotics", "https://acme.example/jobs/1", "Backend", "Backend, remote"),
+)
+
 _CONSUMERS = ("liveness", "deduplication", "ranking", "ruled-out-before")
+
+
+def _ranked(offer: Offer) -> bool:
+    """Whether the real ranking door (`pay_normalise.candidate_for`, then `rank.rank`
+    and the page `presentation.page_ids` shows) takes `offer` in. Not `partition`, which
+    is the presentation hold and a different function."""
+    from integral.extraction import OfferExtraction
+    from integral.pay_normalise import PayNormaliseError, RateTable, candidate_for
+    from integral.presentation import page_ids
+    from integral.profile import ProfileRevision
+    from integral.rank import rank
+
+    try:
+        candidate, _ = candidate_for(
+            offer,
+            OfferExtraction(offer_id=offer.id, language="es", unsettled=["remote"]),
+            dimensions=("remote",),
+            table=RateTable("EUR"),
+        )
+    except PayNormaliseError:
+        return False
+    ranking = rank(
+        [candidate],
+        dimensions=("remote",),
+        revision=ProfileRevision(rows=1, sha256="0" * 64),
+        weights=None,
+        at=_AT,
+    )
+    return offer.id in page_ids(ranking)
 
 
 def treated_as_advert(store: ProfileStore, offer_id: str, twin_id: str) -> list[str]:
@@ -761,7 +809,7 @@ def treated_as_advert(store: ProfileStore, offer_id: str, twin_id: str) -> list[
     components = advert_components(stored_identities(store), stored_posting_keys(store))
     if twin_id in components.get(offer_id, ()):
         found.append("deduplication")
-    if offer_id in partition(store, [offer_id])[0]:
+    if _ranked(loaded[0]):
         found.append("ranking")
     if twin_id not in partition(store, [twin_id])[0]:
         found.append("ruled-out-before")
@@ -806,18 +854,27 @@ def measure_open_applications() -> dict[str, Any]:
             choose(store, offer.id, at=_AT)
             if len(treated_as_advert(store, offer.id, twin)) < len(_CONSUMERS):
                 not_counted.append(company)
-    with tempfile.TemporaryDirectory() as tmp:
-        store, twin = _store_with_twin(Path(tmp), "Acme Robotics", "https://acme.example/jobs/1")
-        advert = _advert(
-            "Acme Robotics", "https://acme.example/jobs/1", "Backend", "Backend, remote"
-        )
-        save_lifecycle_offer(store, advert, track_new_offer(advert, at=_AT))
-        missed = [n for n in _CONSUMERS[:3] if n not in treated_as_advert(store, advert.id, twin)]
+    missed: list[str] = []
+    for company, url, title, text in ADVERT_CONTROLS:
+        with tempfile.TemporaryDirectory() as tmp:
+            store, twin = _store_with_twin(Path(tmp), company, url)
+            advert = _advert(company, url, title, text)
+            save_lifecycle_offer(store, advert, track_new_offer(advert, at=_AT))
+            choose(store, advert.id, at=_AT)
+            found = treated_as_advert(store, advert.id, twin)
+            missed.extend(n for n in _CONSUMERS if n not in found)
     checked = len(OPEN_APPLICATIONS)
-    measured = checked >= MINIMUM_OPEN_APPLICATION_CASES and not not_counted and not missed
+    measured = (
+        checked >= MINIMUM_OPEN_APPLICATION_CASES
+        and len(SYNTHETIC_OPEN_APPLICATIONS) >= MINIMUM_SYNTHETIC_SHAPES
+        and len(ADVERT_CONTROLS) >= MINIMUM_ADVERT_CONTROLS
+        and not not_counted
+        and not missed
+    )
     return {
         "open_applications_stored_as_adverts": len(stored) if measured else -1,
-        "open_applications_checked": checked,
+        # A floor, never the count of the day (T100, T150).
+        "open_applications_checked_at_least": MINIMUM_OPEN_APPLICATION_CASES,
         "synthetic_shapes_not_counted": len(not_counted),
         "adverts_not_treated_as_adverts": len(missed),
         "gate_status": "measured" if measured else "unmeasured",

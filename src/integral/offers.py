@@ -267,6 +267,11 @@ class Offer(Strict):
         else:
             if text:
                 raise ValueError("an open application carries no advert text")
+            for field in ("title", "expires_at", "duplicate_of"):
+                if data.get(field) is not None:
+                    raise ValueError(f"an open application has no {field}: there is no advert")
+            if any(not q.strip() for q in questions):
+                raise ValueError("a form question must not be blank")
             if not names_an_employer(company) or not (url or "").strip():
                 raise ValueError("an open application names its employer and where it is sent")
         return questions
