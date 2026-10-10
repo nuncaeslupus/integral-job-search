@@ -164,8 +164,12 @@ def sheet() -> list[str]:
 
 
 LOGO_SVG = ROOT / "docs" / "logo.svg"
-LOGO_X, LOGO_Y, LOGO_SIZE = 64, 56, 84
-TEXT_X = LOGO_X + LOGO_SIZE + 22
+#: One rule in every hero: the logo tile is 0.95 x the wordmark's font size, centred on
+#: its capital band (baseline to cap height, 0.727 em), with a quarter-em gap before it.
+WORD_SIZE, WORD_BASE, LOGO_X = 70, 122, 64
+LOGO_SIZE = round(0.95 * WORD_SIZE)
+LOGO_Y = round(WORD_BASE - 0.727 * WORD_SIZE / 2 - LOGO_SIZE / 2)
+TEXT_X = LOGO_X + LOGO_SIZE + round(0.25 * WORD_SIZE)
 
 
 def logo() -> list[str]:
@@ -174,18 +178,22 @@ def logo() -> list[str]:
     assert inner, "docs/logo.svg has no <svg> element"
     return [
         f'<svg x="{LOGO_X}" y="{LOGO_Y}" width="{LOGO_SIZE}" height="{LOGO_SIZE}" '
-        f'viewBox="0 0 64 64">{inner.group(1)}</svg>'
+        f'viewBox="0 0 64 64">{inner.group(1)}'
+        # The tile is the sheet's own cream, so an outline keeps it the same size as the others.
+        f'<rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" '
+        f'stroke="{FRAME}" stroke-width="1"/></svg>'
     ]
 
 
 def wordmark() -> list[str]:
     return [
-        f'<text x="{TEXT_X}" y="122" font-family="{DISPLAY}" font-size="70" font-weight="800" '
+        f'<text x="{TEXT_X}" y="{WORD_BASE}" font-family="{DISPLAY}" '
+        f'font-size="{WORD_SIZE}" font-weight="800" '
         f'letter-spacing="-2"><tspan fill="{INK}">integral</tspan>'
         f'<tspan fill="{TEAL}">-job-search</tspan></text>',
-        text(TEXT_X + 4, 164, "One dimension model, carried end to end.", size=25, fill="#3b4652"),
+        text(LOGO_X + 4, 164, "One dimension model, carried end to end.", size=25, fill="#3b4652"),
         text(
-            TEXT_X + 4,
+            LOGO_X + 4,
             192,
             "A candidate-centred job search, run as a conversation. Every step measured.",
             size=15,
