@@ -148,7 +148,8 @@
   <circle cx="48" cy="592" r="7" fill="none" stroke="#0f6e66"/>
   <line x1="37" y1="592" x2="59" y2="592" stroke="#0f6e66"/>
   <line x1="48" y1="581" x2="48" y2="603" stroke="#0f6e66"/>
-  <text x="64" y="122" font-family="'Inter Display', Inter, sans-serif" font-size="70" font-weight="800" letter-spacing="-2"><tspan fill="#1d2733">integral</tspan><tspan fill="#0f6e66">-job-search</tspan></text>
+  <svg x="64" y="64" width="66" height="66" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#f3eee3"/><path d="M40 39 L48.5 47.5" stroke="#0f6e66" stroke-width="6.5" stroke-linecap="round"/><circle cx="28" cy="27" r="15" fill="none" stroke="#0f6e66" stroke-width="4"/><circle cx="28" cy="23" r="4.5" fill="#c2552f"/><path d="M19.5 36 C21 31 24 29.5 28 29.5 C32 29.5 35 31 36.5 36" fill="#c2552f"/><rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" stroke="#9a958a" stroke-width="1"/></svg>
+  <text x="148" y="122" font-family="'Inter Display', Inter, sans-serif" font-size="70" font-weight="800" letter-spacing="-2"><tspan fill="#1d2733">integral</tspan><tspan fill="#0f6e66">-job-search</tspan></text>
   <text x="68" y="164" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="25" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">One dimension model, carried end to end.</text>
   <text x="68" y="192" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="15" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="0" xml:space="preserve">A candidate-centred job search, run as a conversation. Every step measured.</text>
   <rect x="842" y="62" width="376" height="64" fill="#f3eee3" stroke="#9a958a" stroke-width="1.2"/>

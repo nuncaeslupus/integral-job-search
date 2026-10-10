@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -162,14 +163,37 @@ def sheet() -> list[str]:
     return out
 
 
+LOGO_SVG = ROOT / "docs" / "logo.svg"
+#: One rule in every hero: the logo tile is 0.95 x the wordmark's font size, centred on
+#: its capital band (baseline to cap height, 0.727 em), with a quarter-em gap before it.
+WORD_SIZE, WORD_BASE, LOGO_X = 70, 122, 64
+LOGO_SIZE = round(0.95 * WORD_SIZE)
+LOGO_Y = round(WORD_BASE - 0.727 * WORD_SIZE / 2 - LOGO_SIZE / 2)
+TEXT_X = LOGO_X + LOGO_SIZE + round(0.25 * WORD_SIZE)
+
+
+def logo() -> list[str]:
+    """The approved logo, nested inline so the hero stays one self-contained SVG."""
+    inner = re.search(r"<svg[^>]*>(.*)</svg>", LOGO_SVG.read_text(), re.S)
+    assert inner, "docs/logo.svg has no <svg> element"
+    return [
+        f'<svg x="{LOGO_X}" y="{LOGO_Y}" width="{LOGO_SIZE}" height="{LOGO_SIZE}" '
+        f'viewBox="0 0 64 64">{inner.group(1)}'
+        # The tile is the sheet's own cream, so an outline keeps it the same size as the others.
+        f'<rect x="0.5" y="0.5" width="63" height="63" rx="13.5" fill="none" '
+        f'stroke="{FRAME}" stroke-width="1"/></svg>'
+    ]
+
+
 def wordmark() -> list[str]:
     return [
-        f'<text x="64" y="122" font-family="{DISPLAY}" font-size="70" font-weight="800" '
+        f'<text x="{TEXT_X}" y="{WORD_BASE}" font-family="{DISPLAY}" '
+        f'font-size="{WORD_SIZE}" font-weight="800" '
         f'letter-spacing="-2"><tspan fill="{INK}">integral</tspan>'
         f'<tspan fill="{TEAL}">-job-search</tspan></text>',
-        text(68, 164, "One dimension model, carried end to end.", size=25, fill="#3b4652"),
+        text(LOGO_X + 4, 164, "One dimension model, carried end to end.", size=25, fill="#3b4652"),
         text(
-            68,
+            LOGO_X + 4,
             192,
             "A candidate-centred job search, run as a conversation. Every step measured.",
             size=15,
@@ -319,7 +343,7 @@ def features() -> list[str]:
 
 
 def svg() -> str:
-    parts = sheet() + wordmark() + title_block() + story() + figure() + features()
+    parts = sheet() + logo() + wordmark() + title_block() + story() + figure() + features()
     body = "\n  ".join(parts)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
