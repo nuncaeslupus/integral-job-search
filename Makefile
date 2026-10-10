@@ -1,4 +1,4 @@
-.PHONY: help sync build lint format test gate evidence verify-gates host-gate ci reader reader-process reader-steps clean
+.PHONY: help sync build lint format test gate evidence verify-gates host-gate ci reader reader-process reader-steps clean hero
 
 help:  ## list available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -135,6 +135,9 @@ labelling-round:  ## build the labelling page for just the adverts this round mu
 	uv run python tools/labelling_page.py \
 		--only "$$(uv run python tools/labelling_round.py --dimensions "$(DIMENSIONS)" --ids)" \
 		--out corpus/labelled/round-$(ROUND).html
+
+hero:  ## redraw the README banner, docs/hero.svg and docs/hero.png (needs Chromium)
+	uv run --with pillow python tools/hero.py
 
 clean:  ## remove build and tool caches
 	rm -rf dist build .pytest_cache .mypy_cache .ruff_cache *.egg-info
