@@ -169,7 +169,7 @@ def wordmark() -> list[str]:
         text(
             68,
             192,
-            "A candidate-centred job search, run as a conversation in Claude Code.",
+            "A candidate-centred job search, run as a conversation. Every step measured.",
             size=15,
             fill=DIM,
         ),
@@ -203,7 +203,7 @@ def title_block() -> list[str]:
 def figure() -> list[str]:
     left, label_w = 64, 190
     cols = [left + label_w + 90 + i * 200 for i in range(len(STAGES))]
-    top, row_h = 282, 47
+    top, row_h = 272, 45
     out = [
         text(
             left,
@@ -267,33 +267,85 @@ def chip_at(cx: float, y: float, chip: str, colour: str, *, rank: bool, quote: b
     return out
 
 
+#: One story-bank episode: kept verbatim, tagged to dimensions, used only with leave.
+STORY = (
+    "“The export broke a client audit. I owned it,",
+    "rebuilt it over a weekend, and wrote the check.”",
+)
+STORY_TAGS = ["failure, then fix", "technical depth"]
+
+
+def story() -> list[str]:
+    x, y, w, h = 842, 134, 376, 92
+    out = [
+        f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" fill="#faf7f0" '
+        f'stroke="{TEAL}" stroke-width="1.2"/>',
+        text(
+            x + 14,
+            y + 17,
+            "YOUR STORIES, GIVEN THEIR WEIGHT",
+            size=9,
+            fill=TEAL,
+            family=MONO,
+            spacing=1.5,
+        ),
+    ]
+    for i, line in enumerate(STORY):
+        out.append(text(x + 14, y + 37 + i * 17, line, size=13, fill=INK, italic=True))
+    cx = x + 14
+    for tag in STORY_TAGS:
+        cw = len(tag) * 5.8 + 18
+        out += [
+            f'<rect x="{cx}" y="{y + 64}" width="{cw}" height="20" rx="10" fill="{PAPER}" '
+            f'stroke="{FRAME}"/>',
+            text(cx + cw / 2, y + 78, tag, size=11, fill="#3b4652", anchor="middle"),
+        ]
+        cx += cw + 6
+    out.append(
+        text(
+            x + w - 14,
+            y + 78,
+            "used with your leave",
+            size=11,
+            fill=TEAL,
+            anchor="end",
+            italic=True,
+        )
+    )
+    return out
+
+
 #: What the conversation keeps around the figure: the parts a search needs between steps.
 FEATURES = [
     ("profile", "every answer kept, yours to edit"),
+    ("measured", "each step ends on a checkpoint"),
+    ("learns", "your verdicts revise the profile"),
+    ("new offers", "searched again on a schedule"),
     ("profiles", "one install, several people"),
     ("applications", "tracked from draft to reply"),
     ("interviews", "rehearsed on your own stories"),
-    ("sessions", "stop any time, carry on later"),
+    ("next steps", "courses and prep, if they help"),
 ]
 
 
 def features() -> list[str]:
-    x0, y, w, h, gap = 64, 536, 218, 50, 15
+    x0, y0, w, h, gap = 64, 512, 279, 40, 11
     out = []
     for i, (name, sub) in enumerate(FEATURES):
-        x = x0 + i * (w + gap)
+        x = x0 + (i % 4) * (w + gap)
+        y = y0 + (i // 4) * (h + 8)
         out += [
             f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="#ebe4d6" '
             f'stroke="{FRAME}" stroke-width="0.8"/>',
             f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{TEAL}"/>',
-            text(x + 16, y + 21, name, size=13, weight=700, family=MONO, fill=TEAL),
-            text(x + 16, y + 39, sub, size=12, fill="#3b4652"),
+            text(x + 14, y + 25, name, size=12.5, weight=700, family=MONO, fill=TEAL),
+            text(x + 14 + len(name) * 7.6 + 10, y + 25, sub, size=12, fill="#3b4652"),
         ]
     return out
 
 
 def svg() -> str:
-    parts = sheet() + wordmark() + title_block() + figure() + features()
+    parts = sheet() + wordmark() + title_block() + story() + figure() + features()
     body = "\n  ".join(parts)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '

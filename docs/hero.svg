@@ -150,7 +150,7 @@
   <line x1="48" y1="581" x2="48" y2="603" stroke="#0f6e66"/>
   <text x="64" y="122" font-family="'Inter Display', Inter, sans-serif" font-size="70" font-weight="800" letter-spacing="-2"><tspan fill="#1d2733">integral</tspan><tspan fill="#0f6e66">-job-search</tspan></text>
   <text x="68" y="164" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="25" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">One dimension model, carried end to end.</text>
-  <text x="68" y="192" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="15" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="0" xml:space="preserve">A candidate-centred job search, run as a conversation in Claude Code.</text>
+  <text x="68" y="192" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="15" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="0" xml:space="preserve">A candidate-centred job search, run as a conversation. Every step measured.</text>
   <rect x="842" y="62" width="376" height="64" fill="#f3eee3" stroke="#9a958a" stroke-width="1.2"/>
   <line x1="842" y1="98.0" x2="1218" y2="98.0" stroke="#9a958a"/>
   <text x="852" y="76" font-family="'DejaVu Sans Mono', monospace" font-size="8" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="1.5" xml:space="preserve">PROJECT</text>
@@ -160,98 +160,119 @@
   <text x="852.0" y="123" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" xml:space="preserve">Claude Code</text>
   <text x="1020.0" y="109" font-family="'DejaVu Sans Mono', monospace" font-size="8" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="1.5" xml:space="preserve">YOUR DATA</text>
   <text x="1020.0" y="123" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">~/.integral-job-search</text>
-  <text x="64" y="230" font-family="'DejaVu Sans Mono', monospace" font-size="10" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="2" xml:space="preserve">THE SAME TERMS AT EVERY STEP</text>
-  <text x="344" y="252" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">YOU</text>
-  <text x="344" y="268" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">what you need</text>
-  <line x1="344" y1="278" x2="344" y2="503" stroke="#9a958a" stroke-dasharray="2 4"/>
-  <text x="544" y="252" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">THE ADVERT</text>
-  <text x="544" y="268" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">evidence, quoted</text>
-  <line x1="544" y1="278" x2="544" y2="503" stroke="#9a958a" stroke-dasharray="2 4"/>
-  <text x="744" y="252" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">RANKING</text>
-  <text x="744" y="268" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">Pareto, no single score</text>
-  <line x1="744" y1="278" x2="744" y2="503" stroke="#9a958a" stroke-dasharray="2 4"/>
-  <text x="944" y="252" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">CV &amp; LETTER</text>
-  <text x="944" y="268" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">written in the same terms</text>
-  <line x1="944" y1="278" x2="944" y2="503" stroke="#9a958a" stroke-dasharray="2 4"/>
-  <text x="1144" y="252" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">INTERVIEW</text>
-  <text x="1144" y="268" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">what is left to ask</text>
-  <line x1="1144" y1="278" x2="1144" y2="503" stroke="#9a958a" stroke-dasharray="2 4"/>
-  <text x="64" y="304" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">remote arrangement</text>
-  <line x1="250" y1="300" x2="1234" y2="300" stroke="#0f6e66" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
-  <rect x="312.0" y="288" width="64.0" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
-  <text x="344" y="304.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">hybrid</text>
-  <rect x="463.8" y="288" width="160.4" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
-  <text x="544" y="304.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“2 days in the office”</text>
-  <rect x="712.0" y="288" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
-  <text x="744" y="304.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
-  <rect x="873.1" y="288" width="141.8" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
-  <text x="944" y="304.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">remote track record</text>
-  <rect x="1085.5" y="288" width="117.0" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
-  <text x="1144" y="304.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">which two days?</text>
-  <text x="64" y="351" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#7a4fa0" text-anchor="start" letter-spacing="0" xml:space="preserve">schedule flexibility</text>
-  <line x1="250" y1="347" x2="1234" y2="347" stroke="#7a4fa0" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
-  <rect x="273.1" y="335" width="141.8" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
-  <text x="344" y="351.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">school run at 16:30</text>
-  <rect x="482.4" y="335" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
-  <text x="544" y="351.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“flexible hours”</text>
-  <rect x="712.0" y="335" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
-  <text x="744" y="351.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
-  <rect x="888.6" y="335" width="110.8" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
-  <text x="944" y="351.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">async delivery</text>
-  <rect x="1097.9" y="335" width="92.2" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
-  <text x="1144" y="351.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">core hours?</text>
-  <text x="64" y="398" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#c2552f" text-anchor="start" letter-spacing="0" xml:space="preserve">commute burden</text>
-  <line x1="250" y1="394" x2="1234" y2="394" stroke="#c2552f" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
-  <rect x="266.9" y="382" width="154.20000000000002" height="24" rx="12" fill="#f3eee3" stroke="#c2552f" stroke-width="1.4"/>
-  <text x="344" y="398.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">≤ 40 min door to door</text>
-  <rect x="463.8" y="382" width="160.4" height="24" rx="12" fill="#f3eee3" stroke="#c2552f" stroke-width="1.4"/>
-  <text x="544" y="398.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“office in the centre”</text>
-  <rect x="707.2" y="382" width="73.6" height="24" rx="12" fill="#b7791f" stroke="#b7791f" stroke-width="1.4"/>
-  <text x="744" y="398.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">~ 35 min</text>
-  <circle cx="944" cy="394" r="3.5" fill="#f3eee3" stroke="#c2552f" stroke-width="1.6"/>
-  <circle cx="1144" cy="394" r="3.5" fill="#f3eee3" stroke="#c2552f" stroke-width="1.6"/>
-  <text x="64" y="445" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#2f6fb0" text-anchor="start" letter-spacing="0" xml:space="preserve">collaboration mode</text>
-  <line x1="250" y1="441" x2="1234" y2="441" stroke="#2f6fb0" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
-  <rect x="301.0" y="429" width="86.0" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
-  <text x="344" y="445.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">small team</text>
-  <rect x="488.6" y="429" width="110.8" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
-  <text x="544" y="445.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“team of four”</text>
-  <rect x="712.0" y="429" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
-  <text x="744" y="445.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
-  <rect x="882.4" y="429" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
-  <text x="944" y="445.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">pairing, reviews</text>
-  <rect x="1082.4" y="429" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
-  <text x="1144" y="445.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">how do you pair?</text>
-  <text x="64" y="492" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#8a6d1f" text-anchor="start" letter-spacing="0" xml:space="preserve">career progression</text>
-  <line x1="250" y1="488" x2="1234" y2="488" stroke="#8a6d1f" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
-  <rect x="266.9" y="476" width="154.20000000000002" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
-  <text x="344" y="492.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">lead within two years</text>
-  <rect x="501.0" y="476" width="86.0" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
-  <text x="544" y="492.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">not stated</text>
-  <rect x="704.1" y="476" width="79.80000000000001" height="24" rx="12" fill="#8a8f99" stroke="#8a8f99" stroke-width="1.4"/>
-  <text x="744" y="492.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">? unknown</text>
-  <rect x="885.5" y="476" width="117.0" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
-  <text x="944" y="492.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">mentoring shown</text>
-  <rect x="1079.3" y="476" width="129.4" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
-  <text x="1144" y="492.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">what is the path?</text>
-  <rect x="64" y="536" width="218" height="50" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
-  <rect x="64" y="536" width="4" height="50" rx="2" fill="#0f6e66"/>
-  <text x="80" y="557" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">profile</text>
-  <text x="80" y="575" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">every answer kept, yours to edit</text>
-  <rect x="297" y="536" width="218" height="50" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
-  <rect x="297" y="536" width="4" height="50" rx="2" fill="#0f6e66"/>
-  <text x="313" y="557" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">profiles</text>
-  <text x="313" y="575" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">one install, several people</text>
-  <rect x="530" y="536" width="218" height="50" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
-  <rect x="530" y="536" width="4" height="50" rx="2" fill="#0f6e66"/>
-  <text x="546" y="557" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">applications</text>
-  <text x="546" y="575" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">tracked from draft to reply</text>
-  <rect x="763" y="536" width="218" height="50" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
-  <rect x="763" y="536" width="4" height="50" rx="2" fill="#0f6e66"/>
-  <text x="779" y="557" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">interviews</text>
-  <text x="779" y="575" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">rehearsed on your own stories</text>
-  <rect x="996" y="536" width="218" height="50" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
-  <rect x="996" y="536" width="4" height="50" rx="2" fill="#0f6e66"/>
-  <text x="1012" y="557" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">sessions</text>
-  <text x="1012" y="575" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">stop any time, carry on later</text>
+  <rect x="842" y="134" width="376" height="92" rx="6" fill="#faf7f0" stroke="#0f6e66" stroke-width="1.2"/>
+  <text x="856" y="151" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="1.5" xml:space="preserve">YOUR STORIES, GIVEN THEIR WEIGHT</text>
+  <text x="856" y="171" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="13" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" font-style="italic" xml:space="preserve">“The export broke a client audit. I owned it,</text>
+  <text x="856" y="188" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="13" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" font-style="italic" xml:space="preserve">rebuilt it over a weekend, and wrote the check.”</text>
+  <rect x="856" y="198" width="116.6" height="20" rx="10" fill="#f3eee3" stroke="#9a958a"/>
+  <text x="914.3" y="212" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#3b4652" text-anchor="middle" letter-spacing="0" xml:space="preserve">failure, then fix</text>
+  <rect x="978.6" y="198" width="105.0" height="20" rx="10" fill="#f3eee3" stroke="#9a958a"/>
+  <text x="1031.1" y="212" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#3b4652" text-anchor="middle" letter-spacing="0" xml:space="preserve">technical depth</text>
+  <text x="1204" y="212" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#0f6e66" text-anchor="end" letter-spacing="0" font-style="italic" xml:space="preserve">used with your leave</text>
+  <text x="64" y="220" font-family="'DejaVu Sans Mono', monospace" font-size="10" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="2" xml:space="preserve">THE SAME TERMS AT EVERY STEP</text>
+  <text x="344" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">YOU</text>
+  <text x="344" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">what you need</text>
+  <line x1="344" y1="268" x2="344" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="544" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">THE ADVERT</text>
+  <text x="544" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">evidence, quoted</text>
+  <line x1="544" y1="268" x2="544" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="744" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">RANKING</text>
+  <text x="744" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">Pareto, no single score</text>
+  <line x1="744" y1="268" x2="744" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="944" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">CV &amp; LETTER</text>
+  <text x="944" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">written in the same terms</text>
+  <line x1="944" y1="268" x2="944" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="1144" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">INTERVIEW</text>
+  <text x="1144" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">what is left to ask</text>
+  <line x1="1144" y1="268" x2="1144" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="64" y="294" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">remote arrangement</text>
+  <line x1="250" y1="290" x2="1234" y2="290" stroke="#0f6e66" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="312.0" y="278" width="64.0" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="344" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">hybrid</text>
+  <rect x="463.8" y="278" width="160.4" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="544" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“2 days in the office”</text>
+  <rect x="712.0" y="278" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
+  <text x="744" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
+  <rect x="873.1" y="278" width="141.8" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="944" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">remote track record</text>
+  <rect x="1085.5" y="278" width="117.0" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="1144" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">which two days?</text>
+  <text x="64" y="339" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#7a4fa0" text-anchor="start" letter-spacing="0" xml:space="preserve">schedule flexibility</text>
+  <line x1="250" y1="335" x2="1234" y2="335" stroke="#7a4fa0" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="273.1" y="323" width="141.8" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="344" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">school run at 16:30</text>
+  <rect x="482.4" y="323" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="544" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“flexible hours”</text>
+  <rect x="712.0" y="323" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
+  <text x="744" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
+  <rect x="888.6" y="323" width="110.8" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="944" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">async delivery</text>
+  <rect x="1097.9" y="323" width="92.2" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="1144" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">core hours?</text>
+  <text x="64" y="384" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#c2552f" text-anchor="start" letter-spacing="0" xml:space="preserve">commute burden</text>
+  <line x1="250" y1="380" x2="1234" y2="380" stroke="#c2552f" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="266.9" y="368" width="154.20000000000002" height="24" rx="12" fill="#f3eee3" stroke="#c2552f" stroke-width="1.4"/>
+  <text x="344" y="384.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">≤ 40 min door to door</text>
+  <rect x="463.8" y="368" width="160.4" height="24" rx="12" fill="#f3eee3" stroke="#c2552f" stroke-width="1.4"/>
+  <text x="544" y="384.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“office in the centre”</text>
+  <rect x="707.2" y="368" width="73.6" height="24" rx="12" fill="#b7791f" stroke="#b7791f" stroke-width="1.4"/>
+  <text x="744" y="384.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">~ 35 min</text>
+  <circle cx="944" cy="380" r="3.5" fill="#f3eee3" stroke="#c2552f" stroke-width="1.6"/>
+  <circle cx="1144" cy="380" r="3.5" fill="#f3eee3" stroke="#c2552f" stroke-width="1.6"/>
+  <text x="64" y="429" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#2f6fb0" text-anchor="start" letter-spacing="0" xml:space="preserve">collaboration mode</text>
+  <line x1="250" y1="425" x2="1234" y2="425" stroke="#2f6fb0" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="301.0" y="413" width="86.0" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="344" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">small team</text>
+  <rect x="488.6" y="413" width="110.8" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="544" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“team of four”</text>
+  <rect x="712.0" y="413" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
+  <text x="744" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
+  <rect x="882.4" y="413" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="944" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">pairing, reviews</text>
+  <rect x="1082.4" y="413" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="1144" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">how do you pair?</text>
+  <text x="64" y="474" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#8a6d1f" text-anchor="start" letter-spacing="0" xml:space="preserve">career progression</text>
+  <line x1="250" y1="470" x2="1234" y2="470" stroke="#8a6d1f" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="266.9" y="458" width="154.20000000000002" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="344" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">lead within two years</text>
+  <rect x="501.0" y="458" width="86.0" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="544" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">not stated</text>
+  <rect x="704.1" y="458" width="79.80000000000001" height="24" rx="12" fill="#8a8f99" stroke="#8a8f99" stroke-width="1.4"/>
+  <text x="744" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">? unknown</text>
+  <rect x="885.5" y="458" width="117.0" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="944" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">mentoring shown</text>
+  <rect x="1079.3" y="458" width="129.4" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="1144" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">what is the path?</text>
+  <rect x="64" y="512" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="64" y="512" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="78" y="537" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">profile</text>
+  <text x="141.2" y="537" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">every answer kept, yours to edit</text>
+  <rect x="354" y="512" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="354" y="512" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="368" y="537" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">measured</text>
+  <text x="438.8" y="537" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">each step ends on a checkpoint</text>
+  <rect x="644" y="512" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="644" y="512" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="658" y="537" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">learns</text>
+  <text x="713.6" y="537" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">your verdicts revise the profile</text>
+  <rect x="934" y="512" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="934" y="512" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="948" y="537" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">new offers</text>
+  <text x="1034.0" y="537" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">searched again on a schedule</text>
+  <rect x="64" y="560" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="64" y="560" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="78" y="585" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">profiles</text>
+  <text x="148.8" y="585" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">one install, several people</text>
+  <rect x="354" y="560" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="354" y="560" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="368" y="585" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">applications</text>
+  <text x="469.2" y="585" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">tracked from draft to reply</text>
+  <rect x="644" y="560" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="644" y="560" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="658" y="585" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">interviews</text>
+  <text x="744.0" y="585" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">rehearsed on your own stories</text>
+  <rect x="934" y="560" width="279" height="40" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="934" y="560" width="4" height="40" rx="2" fill="#0f6e66"/>
+  <text x="948" y="585" font-family="'DejaVu Sans Mono', monospace" font-size="12.5" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">next steps</text>
+  <text x="1034.0" y="585" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">courses and prep, if they help</text>
 </svg>
