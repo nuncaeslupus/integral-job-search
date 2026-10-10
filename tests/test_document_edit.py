@@ -136,3 +136,94 @@ def test_a_dropped_last_block_and_an_appended_block_are_refused() -> None:
     for after in (short, longer):
         with pytest.raises(de.EditRefused):
             de.verify_edit(letter, after)
+
+
+def test_stale_index_is_refused_by_verify_edit_itself() -> None:
+    letter = _letter()
+    gone = de.apply_edit(
+        letter, [de.Change(2, de.block_text(_blocks(letter)[2]), None)], count_change=-1
+    )
+    dup = {"type": "text", "text": "Duplicate."}
+    written = {**gone, "blocks": [*_blocks(gone)[:4], dup, *_blocks(gone)[5:]]}
+    with pytest.raises(de.EditRefused, match="index moved"):
+        de.verify_edit(gone, written, [de.Change(4, "The leap of faith.", dup)])
+
+
+def test_same_count_overwrite_of_unnamed_blocks_names_the_first_one() -> None:
+    letter = _letter()
+    blocks = _blocks(letter)
+    blocks[4], blocks[5] = blocks[2], blocks[3]
+    with pytest.raises(de.EditRefused, match="block 4"):
+        de.verify_edit(_letter(), {**letter, "blocks": blocks})
+
+
+def test_dropping_only_the_addressee_names_block_one() -> None:
+    letter = _letter()
+    blocks = [b for b in _blocks(letter) if b["type"] != "to"]
+    with pytest.raises(de.EditRefused, match="block 1"):
+        de.verify_edit(letter, {**letter, "blocks": blocks})
+
+
+def test_duplicate_names_are_refused_by_their_own_guard() -> None:
+    letter = _letter()
+    text3 = de.block_text(_blocks(letter)[3])
+    a, b = {"type": "text", "text": "A"}, {"type": "text", "text": "B"}
+    after = {**letter, "blocks": [*_blocks(letter)[:3], b, *_blocks(letter)[4:]]}
+    with pytest.raises(de.EditRefused, match="twice"):
+        de.verify_edit(letter, after, [de.Change(3, text3, a), de.Change(3, text3, b)])
+
+
+def test_insert_position_out_of_range_is_refused() -> None:
+    letter = _letter()
+    with pytest.raises(de.EditRefused, match="position"):
+        de.apply_edit(letter, [], [de.Insert(99, {"type": "text", "text": "x"})], count_change=1)
+
+
+def test_a_named_replacement_that_is_not_the_requested_block_is_refused() -> None:
+    letter = _letter()
+    text3 = de.block_text(_blocks(letter)[3])
+    other = {
+        **letter,
+        "blocks": [*_blocks(letter)[:3], {"type": "text", "text": "B"}, *_blocks(letter)[4:]],
+    }
+    with pytest.raises(de.EditRefused, match="replacement"):
+        de.verify_edit(letter, other, [de.Change(3, text3, {"type": "text", "text": "A"})])
+
+
+def test_an_inserted_block_that_is_not_the_requested_one_is_refused() -> None:
+    letter = _letter()
+    other = {
+        **letter,
+        "blocks": [*_blocks(letter)[:2], {"type": "text", "text": "B"}, *_blocks(letter)[2:]],
+    }
+    with pytest.raises(de.EditRefused, match="inserted block"):
+        de.verify_edit(
+            letter, other, [], [de.Insert(2, {"type": "text", "text": "A"})], count_change=1
+        )
+
+
+def test_a_changed_title_or_extra_top_level_key_is_refused() -> None:
+    letter = _letter()
+    with pytest.raises(de.EditRefused, match="top-level"):
+        de.verify_edit(letter, {**letter, "title": "Other"})
+    with pytest.raises(de.EditRefused, match="top-level"):
+        de.verify_edit(letter, {**letter, "extra": 1})
+
+
+def test_an_unrenderable_result_is_refused_by_render_validation() -> None:
+    letter = _letter()
+    change = de.Change(3, de.block_text(_blocks(letter)[3]), {"type": "nope"})
+    with pytest.raises(de.EditRefused, match="cannot be rendered"):
+        de.apply_edit(letter, [change])
+
+
+def test_every_required_contract_is_registered_and_reports_a_defect_when_blind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = dict(de._CONTRACTS)
+    for name in de.REQUIRED_CONTRACTS:
+        assert name in original
+        patched = dict(original)
+        patched[name] = lambda: ["sentinel"]
+        monkeypatch.setattr(de, "_CONTRACTS", patched)
+        assert de.measure()["document_edit_defects"] == 1

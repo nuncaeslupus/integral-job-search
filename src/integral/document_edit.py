@@ -50,6 +50,14 @@ REQUIRED_CONTRACTS = (
     "legitimate replace is allowed",
     "legitimate removal is allowed",
     "undeclared count change is refused",
+    "stale index through verify_edit is refused",
+    "same-count overwrite of unnamed blocks is refused",
+    "dropping only the addressee is refused",
+    "text-identical but different unnamed block is refused",
+    "trailing extra block is refused",
+    "unrenderable result is refused",
+    "caller-built mismatches are refused",
+    "changed title is refused",
 )
 
 
@@ -122,6 +130,16 @@ def verify_edit(
         raise EditRefused("an edit names a block the document does not have")
     if any(not 0 <= i.index <= len(old) for i in inserts):
         raise EditRefused("an insert names a position the document does not have")
+    for c in changes:
+        if block_text(old[c.index]) != c.expect:
+            raise EditRefused(
+                f"block {c.index} reads {block_text(old[c.index])!r}, not the {c.expect!r} "
+                "the edit expected: the index moved or the block changed"
+            )
+    if {k: v for k, v in before.items() if k != "blocks"} != {
+        k: v for k, v in after.items() if k != "blocks"
+    }:
+        raise EditRefused("the title or another top-level field changed; the edit did not name it")
     removed = sum(1 for c in changes if c.block is None)
     implied = len(inserts) - removed
     if implied != count_change:
@@ -226,6 +244,15 @@ def _refused(run: Callable[[], object]) -> bool:
     return False
 
 
+def _refused_with(run: Callable[[], object], needle: str) -> bool:
+    """True only when the refusal came from the check named by ``needle``."""
+    try:
+        run()
+    except EditRefused as exc:
+        return needle in str(exc)
+    return False
+
+
 def _contract_stale_index() -> list[str]:
     """Defect 1: remove a paragraph, then edit by the indexes of before the removal."""
     letter = _letter()
@@ -289,7 +316,115 @@ def _contract_undeclared_count() -> list[str]:
     return found
 
 
+def _contract_stale_verify() -> list[str]:
+    """Defect 1 through ``verify_edit``: the pair was built without ``apply_edit``."""
+    letter = _letter()
+    gone = apply_edit(letter, [Change(2, block_text(letter["blocks"][2]), None)], count_change=-1)
+    dup = {"type": "text", "text": "Duplicate."}
+    written = {**gone, "blocks": [*gone["blocks"][:4], dup, *gone["blocks"][5:]]}
+    stale = Change(4, "The leap of faith.", dup)
+    if not _refused_with(lambda: verify_edit(gone, written, [stale]), "index moved"):
+        return ["a stale-index overwrite was accepted by verify_edit"]
+    return []
+
+
+def _contract_same_count_overwrite() -> list[str]:
+    """Defect 1 literally: two unnamed paragraphs become duplicates of two others."""
+    letter = _letter()
+    blocks = list(letter["blocks"])
+    blocks[4], blocks[5] = blocks[2], blocks[3]
+    if not _refused_with(lambda: verify_edit(letter, {**letter, "blocks": blocks}), "block 4"):
+        return ["unnamed blocks were overwritten with duplicates and the count held"]
+    return []
+
+
+def _contract_drop_addressee() -> list[str]:
+    letter = _letter()
+    blocks = [b for b in letter["blocks"] if b["type"] != "to"]
+    if not _refused_with(lambda: verify_edit(letter, {**letter, "blocks": blocks}), "block 1"):
+        return ["a letter with only its 'to' block dropped was accepted"]
+    return []
+
+
+def _contract_text_identical() -> list[str]:
+    before = {
+        "title": "t",
+        "blocks": [{"type": "project", "name": "n", "text": "x", "href": "https://a.test/"}],
+    }
+    after = {
+        "title": "t",
+        "blocks": [{"type": "project", "name": "n", "text": "x", "href": "https://b.test/"}],
+    }
+    if block_text(before["blocks"][0]) != block_text(after["blocks"][0]):
+        return ["the fixture no longer has identical text, so it replays nothing"]
+    if not _refused_with(lambda: verify_edit(before, after), "block 0"):
+        return ["an unnamed block changed outside the text layer and was accepted"]
+    return []
+
+
+def _contract_trailing_extra() -> list[str]:
+    letter = _letter()
+    longer = {**letter, "blocks": [*letter["blocks"], {"type": "text", "text": "stray"}]}
+    if not _refused_with(lambda: verify_edit(letter, longer, count_change=0), "did not name"):
+        return ["a stray appended block was accepted"]
+    return []
+
+
+def _contract_unrenderable() -> list[str]:
+    letter = _letter()
+    change = Change(3, block_text(letter["blocks"][3]), {"type": "nope"})
+    if not _refused_with(lambda: apply_edit(letter, [change]), "cannot be rendered"):
+        return ["an edit that left an unrenderable document was accepted"]
+    return []
+
+
+def _contract_caller_built() -> list[str]:
+    letter = _letter()
+    found = []
+    text3 = block_text(letter["blocks"][3])
+    a = {"type": "text", "text": "A"}
+    b = {"type": "text", "text": "B"}
+    swapped = {**letter, "blocks": [*letter["blocks"][:3], b, *letter["blocks"][4:]]}
+    cases = (
+        ("duplicate name", [Change(3, text3, a), Change(3, text3, b)], [], 0, swapped, "twice"),
+        ("wrong replacement", [Change(3, text3, a)], [], 0, swapped, "replacement"),
+        (
+            "wrong insert",
+            [],
+            [Insert(2, a)],
+            1,
+            {**letter, "blocks": [*letter["blocks"][:2], b, *letter["blocks"][2:]]},
+            "inserted block",
+        ),
+        ("insert out of range", [], [Insert(99, a)], 1, letter, "position"),
+    )
+    for label, changes, inserts, delta, after, needle in cases:
+        if not _refused_with(
+            lambda changes=changes, inserts=inserts, delta=delta, after=after: verify_edit(
+                letter, after, changes, inserts, count_change=delta
+            ),
+            needle,
+        ):
+            found.append(f"{label} was not refused by its own check")
+    return found
+
+
+def _contract_title() -> list[str]:
+    letter = _letter()
+    if not _refused_with(lambda: verify_edit(letter, {**letter, "title": "Other"}), "top-level"):
+        return ["a changed title was accepted"]
+    return []
+
+
 _CONTRACTS: dict[str, Callable[[], list[str]]] = {
+    "stale index through verify_edit is refused": _contract_stale_verify,
+    "same-count overwrite of unnamed blocks is refused": _contract_same_count_overwrite,
+    "dropping only the addressee is refused": _contract_drop_addressee,
+    "text-identical but different unnamed block is refused": _contract_text_identical,
+    "trailing extra block is refused": _contract_trailing_extra,
+    "unrenderable result is refused": _contract_unrenderable,
+    "caller-built mismatches are refused": _contract_caller_built,
+    "changed title is refused": _contract_title,
     "stale index is refused": _contract_stale_index,
     "dropped block is refused": _contract_dropped_block,
     "legitimate replace is allowed": _contract_replace,

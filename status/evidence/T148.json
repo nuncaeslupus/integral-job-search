@@ -1,11 +1,19 @@
 {
   "document_edit_defects": 0,
   "contracts_run": [
+    "caller-built mismatches are refused",
+    "changed title is refused",
     "dropped block is refused",
+    "dropping only the addressee is refused",
     "legitimate removal is allowed",
     "legitimate replace is allowed",
+    "same-count overwrite of unnamed blocks is refused",
     "stale index is refused",
-    "undeclared count change is refused"
+    "stale index through verify_edit is refused",
+    "text-identical but different unnamed block is refused",
+    "trailing extra block is refused",
+    "undeclared count change is refused",
+    "unrenderable result is refused"
   ],
   "gate_status": "measured",
   "defects": []
