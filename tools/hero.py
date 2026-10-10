@@ -268,51 +268,27 @@ def chip_at(cx: float, y: float, chip: str, colour: str, *, rank: bool, quote: b
 
 
 #: One story-bank episode: kept verbatim, tagged to dimensions, used only with leave.
-STORY = (
-    "“The export broke a client audit. I owned it,",
-    "rebuilt it over a weekend, and wrote the check.”",
-)
-STORY_TAGS = ["failure, then fix", "technical depth"]
+STORY = "“I owned the failure, and fixed it over a weekend.”"
 
 
 def story() -> list[str]:
     x, y, w, h = 842, 134, 376, 92
-    out = [
+    return [
         f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" fill="#faf7f0" '
         f'stroke="{TEAL}" stroke-width="1.2"/>',
+        f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{TEAL}"/>',
         text(
-            x + 14,
-            y + 17,
+            x + 18,
+            y + 22,
             "YOUR STORIES, GIVEN THEIR WEIGHT",
             size=9,
             fill=TEAL,
             family=MONO,
             spacing=1.5,
         ),
+        text(x + 18, y + 50, STORY, size=14, fill=INK, italic=True),
+        text(x + 18, y + 74, "kept in your words · used only with your leave", size=11.5, fill=DIM),
     ]
-    for i, line in enumerate(STORY):
-        out.append(text(x + 14, y + 37 + i * 17, line, size=13, fill=INK, italic=True))
-    cx = x + 14
-    for tag in STORY_TAGS:
-        cw = len(tag) * 5.8 + 18
-        out += [
-            f'<rect x="{cx}" y="{y + 64}" width="{cw}" height="20" rx="10" fill="{PAPER}" '
-            f'stroke="{FRAME}"/>',
-            text(cx + cw / 2, y + 78, tag, size=11, fill="#3b4652", anchor="middle"),
-        ]
-        cx += cw + 6
-    out.append(
-        text(
-            x + w - 14,
-            y + 78,
-            "used with your leave",
-            size=11,
-            fill=TEAL,
-            anchor="end",
-            italic=True,
-        )
-    )
-    return out
 
 
 #: What the conversation keeps around the figure: the parts a search needs between steps.

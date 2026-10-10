@@ -161,14 +161,10 @@
   <text x="1020.0" y="109" font-family="'DejaVu Sans Mono', monospace" font-size="8" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="1.5" xml:space="preserve">YOUR DATA</text>
   <text x="1020.0" y="123" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">~/.integral-job-search</text>
   <rect x="842" y="134" width="376" height="92" rx="6" fill="#faf7f0" stroke="#0f6e66" stroke-width="1.2"/>
-  <text x="856" y="151" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="1.5" xml:space="preserve">YOUR STORIES, GIVEN THEIR WEIGHT</text>
-  <text x="856" y="171" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="13" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" font-style="italic" xml:space="preserve">“The export broke a client audit. I owned it,</text>
-  <text x="856" y="188" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="13" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" font-style="italic" xml:space="preserve">rebuilt it over a weekend, and wrote the check.”</text>
-  <rect x="856" y="198" width="116.6" height="20" rx="10" fill="#f3eee3" stroke="#9a958a"/>
-  <text x="914.3" y="212" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#3b4652" text-anchor="middle" letter-spacing="0" xml:space="preserve">failure, then fix</text>
-  <rect x="978.6" y="198" width="105.0" height="20" rx="10" fill="#f3eee3" stroke="#9a958a"/>
-  <text x="1031.1" y="212" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#3b4652" text-anchor="middle" letter-spacing="0" xml:space="preserve">technical depth</text>
-  <text x="1204" y="212" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#0f6e66" text-anchor="end" letter-spacing="0" font-style="italic" xml:space="preserve">used with your leave</text>
+  <rect x="842" y="134" width="4" height="92" rx="2" fill="#0f6e66"/>
+  <text x="860" y="156" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="1.5" xml:space="preserve">YOUR STORIES, GIVEN THEIR WEIGHT</text>
+  <text x="860" y="184" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="14" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" font-style="italic" xml:space="preserve">“I owned the failure, and fixed it over a weekend.”</text>
+  <text x="860" y="208" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11.5" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="0" xml:space="preserve">kept in your words · used only with your leave</text>
   <text x="64" y="220" font-family="'DejaVu Sans Mono', monospace" font-size="10" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="2" xml:space="preserve">THE SAME TERMS AT EVERY STEP</text>
   <text x="344" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">YOU</text>
   <text x="344" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">what you need</text>
