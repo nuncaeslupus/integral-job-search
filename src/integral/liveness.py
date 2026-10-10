@@ -45,7 +45,7 @@ from typing import Any, Literal
 from integral.connector_health import BLOCK_PAGE_MARKERS
 from integral.connectors import SEARCH_SOURCE
 from integral.gate_exit import worst
-from integral.offers import Offer
+from integral.offers import Offer, is_advert
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-18.json"
@@ -366,6 +366,10 @@ def presentable(
     shown: list[Offer] = []
     withheld: list[SourceCheck] = []
     for offer in offers:
+        if not is_advert(offer):
+            # T255. An open application has no advert page whose liveness could be checked.
+            shown.append(offer)
+            continue
         check = checks.get(offer.id) or SourceCheck(
             offer.id, "unverified", "no liveness check was run against the advert's own page"
         )
@@ -392,8 +396,11 @@ def needs_source_check(offer: Offer) -> bool:
     the tempting exception is "a connector fetched it, so it was live" — but a
     connector reads a listing page, and a listing page is an index too, just a
     smaller one. `web_search` (D-16) is the loudest case, not the only one.
+
+    The one exception is a record that is not an advert (T255): an open
+    application has no advert page to verify.
     """
-    return True
+    return is_advert(offer)
 
 
 def index_sourced(offer: Offer) -> bool:

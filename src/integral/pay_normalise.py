@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from integral.extraction import OfferExtraction
-from integral.offers import Offer, Salary, compute_offer_id
+from integral.offers import Offer, Salary, compute_offer_id, is_advert
 from integral.profile import ProfileRevision
 from integral.rank import Candidate, PayBand, RankingError, from_extraction, rank
 from integral.salary_recovery import band_in_text
@@ -216,7 +216,12 @@ def candidate_for(
     dimensions: Sequence[str],
     table: RateTable,
 ) -> tuple[Candidate, PayReading]:
-    """The ranking's candidate for `offer`: the one door pay goes through."""
+    """The ranking's candidate for `offer`: the one door pay goes through.
+
+    T255: only a vacancy has a place in a ranking. An open application is refused
+    here, so nothing downstream (`rank`, `write_ranking`, a page) can order it."""
+    if not is_advert(offer):
+        raise PayNormaliseError(f"{offer.id}: an open application is not ranked")
     reading = read_pay(offer, table)
     candidate = from_extraction(extraction, dimensions=dimensions, salary_per_month=None)
     return replace(candidate, salary_per_month=reading.per_month, pay=reading.band), reading
