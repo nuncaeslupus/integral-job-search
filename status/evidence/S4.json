@@ -17,9 +17,7 @@
       "forced_missing": {
         "status": "unavailable"
       },
-      "installed": {
-        "status": "corrupt"
-      }
+      "installed": null
     }
   },
   "build_from_nothing": {
@@ -34,6 +32,6 @@
       "experience[0]: no provenance recorded"
     ]
   },
-  "checks_run": 23,
+  "checks_run": 22,
   "failures": []
 }
