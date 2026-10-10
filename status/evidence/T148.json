@@ -1,0 +1,12 @@
+{
+  "document_edit_defects": 0,
+  "contracts_run": [
+    "dropped block is refused",
+    "legitimate removal is allowed",
+    "legitimate replace is allowed",
+    "stale index is refused",
+    "undeclared count change is refused"
+  ],
+  "gate_status": "measured",
+  "defects": []
+}
