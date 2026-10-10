@@ -1,0 +1,262 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#f3eee3"/>
+  <line x1="0" y1="0" x2="0" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="20" y1="0" x2="20" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="40" y1="0" x2="40" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="60" y1="0" x2="60" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="80" y1="0" x2="80" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="100" y1="0" x2="100" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="120" y1="0" x2="120" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="140" y1="0" x2="140" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="160" y1="0" x2="160" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="180" y1="0" x2="180" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="200" y1="0" x2="200" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="220" y1="0" x2="220" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="240" y1="0" x2="240" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="260" y1="0" x2="260" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="280" y1="0" x2="280" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="300" y1="0" x2="300" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="320" y1="0" x2="320" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="340" y1="0" x2="340" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="360" y1="0" x2="360" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="380" y1="0" x2="380" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="400" y1="0" x2="400" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="420" y1="0" x2="420" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="440" y1="0" x2="440" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="460" y1="0" x2="460" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="480" y1="0" x2="480" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="500" y1="0" x2="500" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="520" y1="0" x2="520" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="540" y1="0" x2="540" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="560" y1="0" x2="560" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="580" y1="0" x2="580" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="600" y1="0" x2="600" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="620" y1="0" x2="620" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="640" y1="0" x2="640" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="660" y1="0" x2="660" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="680" y1="0" x2="680" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="700" y1="0" x2="700" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="720" y1="0" x2="720" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="740" y1="0" x2="740" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="760" y1="0" x2="760" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="780" y1="0" x2="780" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="800" y1="0" x2="800" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="820" y1="0" x2="820" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="840" y1="0" x2="840" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="860" y1="0" x2="860" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="880" y1="0" x2="880" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="900" y1="0" x2="900" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="920" y1="0" x2="920" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="940" y1="0" x2="940" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="960" y1="0" x2="960" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="980" y1="0" x2="980" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1000" y1="0" x2="1000" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="1020" y1="0" x2="1020" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1040" y1="0" x2="1040" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1060" y1="0" x2="1060" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1080" y1="0" x2="1080" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1100" y1="0" x2="1100" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="1120" y1="0" x2="1120" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1140" y1="0" x2="1140" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1160" y1="0" x2="1160" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1180" y1="0" x2="1180" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1200" y1="0" x2="1200" y2="640" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="1220" y1="0" x2="1220" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1240" y1="0" x2="1240" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="1260" y1="0" x2="1260" y2="640" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="0" x2="1280" y2="0" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="0" y1="20" x2="1280" y2="20" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="40" x2="1280" y2="40" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="60" x2="1280" y2="60" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="80" x2="1280" y2="80" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="100" x2="1280" y2="100" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="0" y1="120" x2="1280" y2="120" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="140" x2="1280" y2="140" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="160" x2="1280" y2="160" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="180" x2="1280" y2="180" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="200" x2="1280" y2="200" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="0" y1="220" x2="1280" y2="220" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="240" x2="1280" y2="240" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="260" x2="1280" y2="260" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="280" x2="1280" y2="280" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="300" x2="1280" y2="300" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="0" y1="320" x2="1280" y2="320" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="340" x2="1280" y2="340" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="360" x2="1280" y2="360" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="380" x2="1280" y2="380" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="400" x2="1280" y2="400" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="0" y1="420" x2="1280" y2="420" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="440" x2="1280" y2="440" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="460" x2="1280" y2="460" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="480" x2="1280" y2="480" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="500" x2="1280" y2="500" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="0" y1="520" x2="1280" y2="520" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="540" x2="1280" y2="540" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="560" x2="1280" y2="560" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="580" x2="1280" y2="580" stroke="#e4ddcd" stroke-width="0.4"/>
+  <line x1="0" y1="600" x2="1280" y2="600" stroke="#e4ddcd" stroke-width="0.9"/>
+  <line x1="0" y1="620" x2="1280" y2="620" stroke="#e4ddcd" stroke-width="0.4"/>
+  <rect x="16" y="16" width="1248" height="608" fill="none" stroke="#e4ddcd"/>
+  <rect x="30" y="30" width="1220" height="580" fill="none" stroke="#9a958a" stroke-width="1.5"/>
+  <text x="106.25" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">8</text>
+  <text x="106.25" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">8</text>
+  <line x1="182.5" y1="16" x2="182.5" y2="30" stroke="#9a958a"/>
+  <line x1="182.5" y1="610" x2="182.5" y2="624" stroke="#9a958a"/>
+  <text x="258.75" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">7</text>
+  <text x="258.75" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">7</text>
+  <line x1="335.0" y1="16" x2="335.0" y2="30" stroke="#9a958a"/>
+  <line x1="335.0" y1="610" x2="335.0" y2="624" stroke="#9a958a"/>
+  <text x="411.25" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">6</text>
+  <text x="411.25" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">6</text>
+  <line x1="487.5" y1="16" x2="487.5" y2="30" stroke="#9a958a"/>
+  <line x1="487.5" y1="610" x2="487.5" y2="624" stroke="#9a958a"/>
+  <text x="563.75" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">5</text>
+  <text x="563.75" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">5</text>
+  <line x1="640.0" y1="16" x2="640.0" y2="30" stroke="#9a958a"/>
+  <line x1="640.0" y1="610" x2="640.0" y2="624" stroke="#9a958a"/>
+  <text x="716.25" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">4</text>
+  <text x="716.25" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">4</text>
+  <line x1="792.5" y1="16" x2="792.5" y2="30" stroke="#9a958a"/>
+  <line x1="792.5" y1="610" x2="792.5" y2="624" stroke="#9a958a"/>
+  <text x="868.75" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">3</text>
+  <text x="868.75" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">3</text>
+  <line x1="945.0" y1="16" x2="945.0" y2="30" stroke="#9a958a"/>
+  <line x1="945.0" y1="610" x2="945.0" y2="624" stroke="#9a958a"/>
+  <text x="1021.25" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">2</text>
+  <text x="1021.25" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">2</text>
+  <line x1="1097.5" y1="16" x2="1097.5" y2="30" stroke="#9a958a"/>
+  <line x1="1097.5" y1="610" x2="1097.5" y2="624" stroke="#9a958a"/>
+  <text x="1173.75" y="27" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">1</text>
+  <text x="1173.75" y="621" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">1</text>
+  <text x="23" y="105.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">A</text>
+  <text x="1257" y="105.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">A</text>
+  <line x1="16" y1="175.0" x2="30" y2="175.0" stroke="#9a958a"/>
+  <line x1="1250" y1="175.0" x2="1264" y2="175.0" stroke="#9a958a"/>
+  <text x="23" y="250.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">B</text>
+  <text x="1257" y="250.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">B</text>
+  <line x1="16" y1="320.0" x2="30" y2="320.0" stroke="#9a958a"/>
+  <line x1="1250" y1="320.0" x2="1264" y2="320.0" stroke="#9a958a"/>
+  <text x="23" y="395.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">C</text>
+  <text x="1257" y="395.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">C</text>
+  <line x1="16" y1="465.0" x2="30" y2="465.0" stroke="#9a958a"/>
+  <line x1="1250" y1="465.0" x2="1264" y2="465.0" stroke="#9a958a"/>
+  <text x="23" y="540.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">D</text>
+  <text x="1257" y="540.5" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" xml:space="preserve">D</text>
+  <circle cx="48" cy="48" r="7" fill="none" stroke="#0f6e66"/>
+  <line x1="37" y1="48" x2="59" y2="48" stroke="#0f6e66"/>
+  <line x1="48" y1="37" x2="48" y2="59" stroke="#0f6e66"/>
+  <circle cx="48" cy="592" r="7" fill="none" stroke="#0f6e66"/>
+  <line x1="37" y1="592" x2="59" y2="592" stroke="#0f6e66"/>
+  <line x1="48" y1="581" x2="48" y2="603" stroke="#0f6e66"/>
+  <text x="64" y="122" font-family="'Inter Display', Inter, sans-serif" font-size="70" font-weight="800" letter-spacing="-2"><tspan fill="#1d2733">integral</tspan><tspan fill="#0f6e66">-job-search</tspan></text>
+  <text x="68" y="164" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="25" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">One dimension model, carried end to end.</text>
+  <text x="68" y="192" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="15" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="0" xml:space="preserve">A candidate-centred job search, run as a conversation. Every step measured.</text>
+  <rect x="842" y="62" width="376" height="64" fill="#f3eee3" stroke="#9a958a" stroke-width="1.2"/>
+  <line x1="842" y1="98.0" x2="1218" y2="98.0" stroke="#9a958a"/>
+  <text x="852" y="76" font-family="'DejaVu Sans Mono', monospace" font-size="8" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="1.5" xml:space="preserve">PROJECT</text>
+  <text x="852" y="92" font-family="'DejaVu Sans Mono', monospace" font-size="14" font-weight="700" fill="#1d2733" text-anchor="start" letter-spacing="0" xml:space="preserve">integral-job-search</text>
+  <line x1="1010.0" y1="98.0" x2="1010.0" y2="126" stroke="#9a958a"/>
+  <text x="852.0" y="109" font-family="'DejaVu Sans Mono', monospace" font-size="8" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="1.5" xml:space="preserve">RUNS IN</text>
+  <text x="852.0" y="123" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" xml:space="preserve">Claude Code</text>
+  <text x="1020.0" y="109" font-family="'DejaVu Sans Mono', monospace" font-size="8" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="1.5" xml:space="preserve">YOUR DATA</text>
+  <text x="1020.0" y="123" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">~/.integral-job-search</text>
+  <rect x="842" y="134" width="376" height="92" rx="6" fill="#faf7f0" stroke="#0f6e66" stroke-width="1.2"/>
+  <rect x="842" y="134" width="4" height="92" rx="2" fill="#0f6e66"/>
+  <text x="860" y="156" font-family="'DejaVu Sans Mono', monospace" font-size="9" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="1.5" xml:space="preserve">YOUR STORIES, GIVEN THEIR WEIGHT</text>
+  <text x="860" y="184" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="14" font-weight="400" fill="#1d2733" text-anchor="start" letter-spacing="0" font-style="italic" xml:space="preserve">“I owned the failure, and fixed it over a weekend.”</text>
+  <text x="860" y="208" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11.5" font-weight="400" fill="#6b6f76" text-anchor="start" letter-spacing="0" xml:space="preserve">kept in your words · used only with your leave</text>
+  <text x="64" y="220" font-family="'DejaVu Sans Mono', monospace" font-size="10" font-weight="400" fill="#0f6e66" text-anchor="start" letter-spacing="2" xml:space="preserve">THE SAME TERMS AT EVERY STEP</text>
+  <text x="344" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">YOU</text>
+  <text x="344" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">what you need</text>
+  <line x1="344" y1="268" x2="344" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="544" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">THE ADVERT</text>
+  <text x="544" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">evidence, quoted</text>
+  <line x1="544" y1="268" x2="544" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="744" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">RANKING</text>
+  <text x="744" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">Pareto, no single score</text>
+  <line x1="744" y1="268" x2="744" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="944" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">CV &amp; LETTER</text>
+  <text x="944" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">written in the same terms</text>
+  <line x1="944" y1="268" x2="944" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="1144" y="242" font-family="'DejaVu Sans Mono', monospace" font-size="11" font-weight="700" fill="#1d2733" text-anchor="middle" letter-spacing="1.5" xml:space="preserve">INTERVIEW</text>
+  <text x="1144" y="258" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="11" font-weight="400" fill="#6b6f76" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">what is left to ask</text>
+  <line x1="1144" y1="268" x2="1144" y2="483" stroke="#9a958a" stroke-dasharray="2 4"/>
+  <text x="64" y="294" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">remote arrangement</text>
+  <line x1="250" y1="290" x2="1234" y2="290" stroke="#0f6e66" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="312.0" y="278" width="64.0" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="344" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">hybrid</text>
+  <rect x="463.8" y="278" width="160.4" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="544" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“2 days in the office”</text>
+  <rect x="712.0" y="278" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
+  <text x="744" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
+  <rect x="873.1" y="278" width="141.8" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="944" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">remote track record</text>
+  <rect x="1085.5" y="278" width="117.0" height="24" rx="12" fill="#f3eee3" stroke="#0f6e66" stroke-width="1.4"/>
+  <text x="1144" y="294.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">which two days?</text>
+  <text x="64" y="339" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#7a4fa0" text-anchor="start" letter-spacing="0" xml:space="preserve">schedule flexibility</text>
+  <line x1="250" y1="335" x2="1234" y2="335" stroke="#7a4fa0" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="273.1" y="323" width="141.8" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="344" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">school run at 16:30</text>
+  <rect x="482.4" y="323" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="544" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“flexible hours”</text>
+  <rect x="712.0" y="323" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
+  <text x="744" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
+  <rect x="888.6" y="323" width="110.8" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="944" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">async delivery</text>
+  <rect x="1097.9" y="323" width="92.2" height="24" rx="12" fill="#f3eee3" stroke="#7a4fa0" stroke-width="1.4"/>
+  <text x="1144" y="339.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">core hours?</text>
+  <text x="64" y="384" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#c2552f" text-anchor="start" letter-spacing="0" xml:space="preserve">commute burden</text>
+  <line x1="250" y1="380" x2="1234" y2="380" stroke="#c2552f" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="266.9" y="368" width="154.20000000000002" height="24" rx="12" fill="#f3eee3" stroke="#c2552f" stroke-width="1.4"/>
+  <text x="344" y="384.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">≤ 40 min door to door</text>
+  <rect x="463.8" y="368" width="160.4" height="24" rx="12" fill="#f3eee3" stroke="#c2552f" stroke-width="1.4"/>
+  <text x="544" y="384.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“office in the centre”</text>
+  <rect x="707.2" y="368" width="73.6" height="24" rx="12" fill="#b7791f" stroke="#b7791f" stroke-width="1.4"/>
+  <text x="744" y="384.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">~ 35 min</text>
+  <circle cx="944" cy="380" r="3.5" fill="#f3eee3" stroke="#c2552f" stroke-width="1.6"/>
+  <circle cx="1144" cy="380" r="3.5" fill="#f3eee3" stroke="#c2552f" stroke-width="1.6"/>
+  <text x="64" y="429" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#2f6fb0" text-anchor="start" letter-spacing="0" xml:space="preserve">collaboration mode</text>
+  <line x1="250" y1="425" x2="1234" y2="425" stroke="#2f6fb0" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="301.0" y="413" width="86.0" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="344" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">small team</text>
+  <rect x="488.6" y="413" width="110.8" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="544" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">“team of four”</text>
+  <rect x="712.0" y="413" width="64.0" height="24" rx="12" fill="#2f7d4f" stroke="#2f7d4f" stroke-width="1.4"/>
+  <text x="744" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">✓ fits</text>
+  <rect x="882.4" y="413" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="944" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">pairing, reviews</text>
+  <rect x="1082.4" y="413" width="123.2" height="24" rx="12" fill="#f3eee3" stroke="#2f6fb0" stroke-width="1.4"/>
+  <text x="1144" y="429.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">how do you pair?</text>
+  <text x="64" y="474" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="600" fill="#8a6d1f" text-anchor="start" letter-spacing="0" xml:space="preserve">career progression</text>
+  <line x1="250" y1="470" x2="1234" y2="470" stroke="#8a6d1f" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/>
+  <rect x="266.9" y="458" width="154.20000000000002" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="344" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">lead within two years</text>
+  <rect x="501.0" y="458" width="86.0" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="544" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" font-style="italic" xml:space="preserve">not stated</text>
+  <rect x="704.1" y="458" width="79.80000000000001" height="24" rx="12" fill="#8a8f99" stroke="#8a8f99" stroke-width="1.4"/>
+  <text x="744" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle" letter-spacing="0" xml:space="preserve">? unknown</text>
+  <rect x="885.5" y="458" width="117.0" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="944" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">mentoring shown</text>
+  <rect x="1079.3" y="458" width="129.4" height="24" rx="12" fill="#f3eee3" stroke="#8a6d1f" stroke-width="1.4"/>
+  <text x="1144" y="474.5" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#1d2733" text-anchor="middle" letter-spacing="0" xml:space="preserve">what is the path?</text>
+  <rect x="64" y="528" width="218" height="52" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="64" y="528" width="4" height="52" rx="2" fill="#0f6e66"/>
+  <text x="80" y="550" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">profile</text>
+  <text x="80" y="568" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">every answer kept, yours to edit</text>
+  <rect x="297" y="528" width="218" height="52" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="297" y="528" width="4" height="52" rx="2" fill="#0f6e66"/>
+  <text x="313" y="550" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">profiles</text>
+  <text x="313" y="568" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">one install, several people</text>
+  <rect x="530" y="528" width="218" height="52" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="530" y="528" width="4" height="52" rx="2" fill="#0f6e66"/>
+  <text x="546" y="550" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">measured</text>
+  <text x="546" y="568" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">each step ends on a checkpoint</text>
+  <rect x="763" y="528" width="218" height="52" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="763" y="528" width="4" height="52" rx="2" fill="#0f6e66"/>
+  <text x="779" y="550" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">learns</text>
+  <text x="779" y="568" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">your verdicts revise the profile</text>
+  <rect x="996" y="528" width="218" height="52" rx="4" fill="#ebe4d6" stroke="#9a958a" stroke-width="0.8"/>
+  <rect x="996" y="528" width="4" height="52" rx="2" fill="#0f6e66"/>
+  <text x="1012" y="550" font-family="'DejaVu Sans Mono', monospace" font-size="13" font-weight="700" fill="#0f6e66" text-anchor="start" letter-spacing="0" xml:space="preserve">applications</text>
+  <text x="1012" y="568" font-family="Inter, 'DejaVu Sans', sans-serif" font-size="12" font-weight="400" fill="#3b4652" text-anchor="start" letter-spacing="0" xml:space="preserve">tracked from draft to reply</text>
+</svg>

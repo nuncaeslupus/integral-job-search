@@ -1,5 +1,9 @@
 # integral-job-search
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nuncaeslupus/integral-job-search/main/docs/hero.png" width="100%" alt="integral-job-search: five dimensions such as remote arrangement and commute burden drawn as lines through five stages, from what you need, through the advert's quoted evidence, the ranking, the CV and the interview, each stage written in the same terms">
+</p>
+
 [![CI](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
