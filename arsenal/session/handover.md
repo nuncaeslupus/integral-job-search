@@ -1,5 +1,22 @@
 # Session handover
 
+## 00022. Cloud run: T255 (#797, supersedes #792) and T148 (#798) merged
+
+- **Merged:** T255 (#797: #792's work with `main` merged in and fixes for its BLOCK findings B1-B3, N4, N5),
+  T148 (#798, `document_edit.verify_edit`; BLOCK on the first head, CLEAR after the fixes). Each: Opus
+  second reader CLEAR on the PR, CI green, `verified_gate.sh` PASS block on the merged head.
+- **#792 is still open.** The session could not close it (the write was refused); close it as superseded by #797.
+- **`review_reader check` reports `blocked` on every cloud PR**: the PR author and the second reader both
+  post as `nuncaeslupus`, so the author rule cannot be satisfied from one account. Both merges went ahead on
+  an independent second-reader session's report, as earlier runs did. Owner decision needed: a second
+  identity for readers, or a recorded exception.
+- **Never `uv sync --all-extras` before `make evidence`.** With weasyprint installed `S4.json` measures
+  differently and CI's "evidence is current" goes red (hit on #797). Use `UV_PYTHON=3.12 uv sync --exact`.
+- **`verified_gate.sh` takes ~30 min here.** Run it with a background timeout of 90 min or more; 30 min kills it.
+- **Follow-ups noted, not filed:** T255 R1 (the gate's ranking consumer can revert to `partition` with the
+  tests still green), R2 (the step-9 skill does not say `candidate_for` refuses an open application),
+  #792's N1-N3, N6, N7; T148: the contract registration test checks names, not behaviour.
+
 ## 00021. Cloud run: T117, T149, T146, T164, T177, T142 merged
 
 - **Merged:** T117 (#779), T149 (#775), T146 (#780, generated denials banned; candidate-authored
