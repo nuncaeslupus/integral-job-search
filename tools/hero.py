@@ -203,7 +203,7 @@ def title_block() -> list[str]:
 def figure() -> list[str]:
     left, label_w = 64, 190
     cols = [left + label_w + 90 + i * 200 for i in range(len(STAGES))]
-    top, row_h = 290, 54
+    top, row_h = 282, 47
     out = [
         text(
             left,
@@ -267,8 +267,33 @@ def chip_at(cx: float, y: float, chip: str, colour: str, *, rank: bool, quote: b
     return out
 
 
+#: What the conversation keeps around the figure: the parts a search needs between steps.
+FEATURES = [
+    ("profile", "every answer kept, yours to edit"),
+    ("profiles", "one install, several people"),
+    ("applications", "tracked from draft to reply"),
+    ("interviews", "rehearsed on your own stories"),
+    ("sessions", "stop any time, carry on later"),
+]
+
+
+def features() -> list[str]:
+    x0, y, w, h, gap = 64, 536, 218, 50, 15
+    out = []
+    for i, (name, sub) in enumerate(FEATURES):
+        x = x0 + i * (w + gap)
+        out += [
+            f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="#ebe4d6" '
+            f'stroke="{FRAME}" stroke-width="0.8"/>',
+            f'<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{TEAL}"/>',
+            text(x + 16, y + 21, name, size=13, weight=700, family=MONO, fill=TEAL),
+            text(x + 16, y + 39, sub, size=12, fill="#3b4652"),
+        ]
+    return out
+
+
 def svg() -> str:
-    parts = sheet() + wordmark() + title_block() + figure()
+    parts = sheet() + wordmark() + title_block() + figure() + features()
     body = "\n  ".join(parts)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
