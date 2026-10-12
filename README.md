@@ -9,6 +9,11 @@
 
 Candidate-centred integral job search: one dimension model, carried end to end.
 
+For job seekers who want every offer judged — and every CV, letter and interview
+written — in terms of what they actually need, as a conversation in Claude Code.
+Quick start: `git clone https://github.com/nuncaeslupus/integral-job-search.git && cd integral-job-search && claude`
+([details](#using-it)).
+
 Job tools match skills against requirements and stop. This one carries a single
 vocabulary — how social the office is, whether "remote" means remote, whether the
 schedule survives a school run — across every stage: the questions asked, the
@@ -64,6 +69,17 @@ make help     # every target
 - [docs/distribution.md](docs/distribution.md) — how it is installed and where state lives
 
 MIT licensed.
+
+## Related projects
+
+Built with [claude-arsenal](https://github.com/nuncaeslupus/claude-arsenal), the
+spec-driven Claude Code workflow and gated task queue this repo is developed on.
+Same author:
+
+- [claude-arsenal](https://github.com/nuncaeslupus/claude-arsenal) — a Claude Code skill and plugin marketplace: specs before code, failing tests first, gates with numbers.
+- [drawspec](https://github.com/nuncaeslupus/drawspec) — declarative diagram spec → clean, themeable SVG; JSON with no coordinates, so an LLM can write it.
+- [literary-critic](https://github.com/nuncaeslupus/literary-critic) — lets an LLM index, analyse and advise on a full novel manuscript the way a professional editor would.
+- [doc-control](https://github.com/nuncaeslupus/doc-control) — a deterministic tool for AI agents to edit Word documents as tracked changes (in development).
 
 ## Acknowledgements
 
