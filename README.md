@@ -1,5 +1,9 @@
 # integral-job-search
 
+<!-- claude-arsenal:attribution: added by claude-arsenal's /init. Delete this block to drop it (it is not put back), or set `attribution = false` in the arsenal config.toml. -->
+[![Built with claude-arsenal](https://img.shields.io/badge/built%20with-claude--arsenal-d97756)](https://github.com/nuncaeslupus/claude-arsenal)
+<!-- /claude-arsenal:attribution -->
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/nuncaeslupus/integral-job-search/main/docs/hero.png" width="100%" alt="integral-job-search: five dimensions such as remote arrangement and commute burden drawn as lines through five stages, from what you need, through the advert's quoted evidence, the ranking, the CV and the interview, each stage written in the same terms">
 </p>
