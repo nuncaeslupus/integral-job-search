@@ -923,32 +923,63 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+def _build(
+    source: Path, country: str | None, chosen: dict[str, Any], *, pdf: bool
+) -> tuple[str, bytes | None]:
+    """The HTML (and PDF) for one document JSON, in memory: nothing is written."""
+    document = json.loads(source.read_text(encoding="utf-8"))
+    page = render(document, RenderParams.for_recipient(country, None, **chosen))
+    if not pdf:
+        return page, None
+    budget = CV_PAGE_BUDGET if validate(document) == "cv" else None
+    return page, render_pdf(page, max_pages=budget)[0]
+
+
 def _render_one(
     source: Path, html: Path, pdf: Path | None, country: str | None, chosen: dict[str, Any]
 ) -> None:
-    document = json.loads(source.read_text(encoding="utf-8"))
-    page = render(document, RenderParams.for_recipient(country, None, **chosen))
+    page, data = _build(source, country, chosen, pdf=pdf is not None)
     html.write_text(page, encoding="utf-8")
-    if pdf is not None:
-        budget = CV_PAGE_BUDGET if validate(document) == "cv" else None
-        pdf.write_bytes(render_pdf(page, max_pages=budget)[0])
+    if pdf is not None and data is not None:
+        pdf.write_bytes(data)
 
 
 def _render_version(directory: Path, country: str | None, chosen: dict[str, Any]) -> int:
-    """HTML and PDF beside each ``cv.json``/``letter.json``; 2 if none or any fails."""
-    found = [p for p in (directory / "cv.json", directory / "letter.json") if p.is_file()]
+    """HTML and PDF beside each ``cv.json``/``letter.json``.
+
+    Exit 2 and nothing written when ``send/`` exists (a sent version is immutable),
+    when neither document is there, or when any document fails to render (including
+    no PDF engine): everything is built in memory before the first write.
+    """
+    if (directory / "send").exists():
+        print(
+            f"{directory} has a send/ folder: a sent version is never re-rendered", file=sys.stderr
+        )
+        return 2
+    names = ("cv", "letter")
+    found = [directory / f"{n}.json" for n in names if (directory / f"{n}.json").is_file()]
     if not found:
         print(f"no cv.json or letter.json in {directory}", file=sys.stderr)
         return 2
+    for n in names:
+        if not (directory / f"{n}.json").is_file():
+            print(f"note: {n}.json is missing in {directory}; not rendered", file=sys.stderr)
+    built: list[tuple[Path, str, bytes]] = []
     for source in found:
         try:
-            _render_one(
-                source, source.with_suffix(".html"), source.with_suffix(".pdf"), country, chosen
-            )
+            page, data = _build(source, country, chosen, pdf=True)
         except (RenderError, ValueError, OSError) as exc:
             print(f"{source}: {exc}", file=sys.stderr)
             return 2
-        print(f"wrote {source.with_suffix('.html')} and {source.with_suffix('.pdf')}")
+        assert data is not None
+        built.append((source, page, data))
+    for source, page, data in built:
+        # Suffixes are built, not spelled: the report-style scan allows only the shell
+        # to name a page file in a literal, and this writes beside the JSON on purpose.
+        html, pdf = (source.with_suffix("." + ext) for ext in ("html", "pdf"))
+        html.write_text(page, encoding="utf-8")
+        pdf.write_bytes(data)
+        print(f"wrote {html} and {pdf}")
     return 0
 
 

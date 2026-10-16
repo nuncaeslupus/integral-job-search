@@ -52,6 +52,19 @@ If this task is picked up with nobody present to supply that pointer, say so in 
 file and hold rather than fabricate or guess profile data — and never read a profile
 without its own owner's go-ahead.
 
+## Resolution notes
+
+- The shared renderer already existed as `integral.document_render` (T142), so nothing
+  was copied out of the Grafana v13 directory. What shipped is `document_render version
+  <cv/generated/<offer_id>/v<N>>`, which renders `cv.json` and `letter.json` to HTML and
+  PDF beside them, and the step-11 skill text that tells a session to use it.
+- The handle + offer id + version wrapper was replaced by a version-directory path: the
+  path already identifies the candidate store and the offer. It refuses a directory that
+  has a `send/` folder, and writes nothing unless every document and PDF rendered.
+- The real-data run (Bolt.new's documents) was NOT done: the profile's owner was not
+  present, and a profile is never read without their go-ahead. It is still owed. The
+  gate below exercises constructed fixtures only.
+
 ## Acceptance gate
 
 ```bash
