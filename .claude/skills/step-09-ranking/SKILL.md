@@ -213,6 +213,8 @@ a sentence never decides what the ranking is denominated in.
 
 ## Record what was shown, and say what was held back
 
+**Brief the employer before the offer is shown for a decision (T344).** An aggregator re-posts adverts under its own name and a posting can be closed at the source while still listed. For each offer in `show`, resolve the real employer (apply link, then the advert's wording), find the employer's own copy and whether it is still live, what they do and their sector, published pay or the source of an estimate, and whether they hire in the candidate's country; fetch only what `integral.robots.Robots().allows(url)` permits. Record it with `python -m integral.employer_brief record --id <handle> --offer <id> …` (it compares the real employer against the candidate's exclusions itself). An offer closed at the source is moved to `expired`, not shown. `python -m integral.employer_brief missing --id <handle>` must list nothing.
+
 Showing a batch is itself a fact, and it is the one that later turns into a
 question worth asking. Two calls, around the list:
 

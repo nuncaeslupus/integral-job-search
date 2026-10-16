@@ -2,7 +2,7 @@
 id: t-cb7f9c44
 title: "T344: An offer reaches the candidate's decision with no brief on the real employer or whether it is still open"
 priority: 5
-requires: [human:gate]
+status: merged
 ---
 
 Promoted from the candidate sessions of 2026-09-06..2026-10-16: a practice the assistant ran by hand (scratch scripts or profile conventions) that any candidate needs.
@@ -15,9 +15,8 @@ Suggested gate: `offers_presented_for_decision_without_an_employer_brief == 0`.
 
 ## Acceptance gate
 
-<!-- Write a real check below, then DELETE the `requires: [human:gate]` line. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
+uv run pytest tests/test_employer_brief.py -q
 ```
+
+Notes: "presented" is `search/presentations.jsonl` (`presentation_log.present`), joined on `offer_ids`; briefs live at `offers/briefs/<id>.json`. An offer with `live_at_source=false` counts as briefed only when its lifecycle status is `expired`; a brief is stale when an exclusion was stated after it was written.
