@@ -55,7 +55,7 @@ from typing import Any
 
 from integral.application_authorship import TRACE_FILE
 from integral.approval import Approvals, _normalised_equal
-from integral.generate import _HEADINGS, Manifest, _claim_lines
+from integral.generate import _HEADINGS, Manifest, _claim_lines, is_employer_alias
 from integral.identity import IdentityError, ProfileLeak, ProfileStore
 from integral.offers import OfferError, load_offer
 from integral.state_home import StateHomeRefused, ensure_outside_a_work_tree, profiles_root
@@ -220,6 +220,8 @@ def digest(store: ProfileStore) -> Digest:
         skipped.append(Skipped("cv/generated", f"{type(exc).__name__}: {exc}"))
     for offer_dir in entries:
         rel = f"cv/generated/{offer_dir.name}"
+        if is_employer_alias(offer_dir):
+            continue  # the offer it names is read under its own id
         if not offer_dir.is_dir() or offer_dir.is_symlink():
             skipped.append(Skipped(rel, "not an offer directory"))
             continue

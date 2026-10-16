@@ -954,9 +954,9 @@ the text to paste into the employer's form, or an email left in drafts. The
 candidate presses send.
 
 **Stop rule.** A CV and a letter exist for this offer and the candidate has
-approved them, or has parked them. Hard cap: three regeneration rounds per
-offer, after which the useful move is to talk about what is wrong rather than
-generate a fourth.
+approved them, or has parked them. No cap on versions: as many regeneration
+rounds as the candidate needs (owner, 2026-10-16), each one a new version that
+never overwrites an earlier one.
 
 **When declined.** Offered per offer. Declining generates nothing and leaves the
 offer `shortlisted`. A candidate who wants to write their own letter and only

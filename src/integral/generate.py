@@ -30,8 +30,8 @@ make that impossible is here, where the phrase would have to be written.
 
 **Nothing is overwritten.** A regeneration writes `v<N+1>`. An earlier version
 may already be with an employer, and a candidate has to be able to answer a
-question about their own application. Three rounds, then the useful move is to
-talk about what is wrong rather than generate a fourth.
+question about their own application. There is no cap on versions: the
+candidate decides how many rounds a document needs (owner, 2026-10-16).
 """
 
 from __future__ import annotations
@@ -82,12 +82,6 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T45.json"
 
 SCHEMA_VERSION: Literal[1] = 1
 
-# Three regeneration rounds per offer, then stop. Spec step 11's stop rule: the
-# useful move past this is a conversation about what is wrong with the draft,
-# not a fourth draft of the same wrongness.
-# arsenal-floor-margin: GENERATION_CAP value=3
-GENERATION_CAP = 3
-
 _VERSION_DIR = re.compile(r"^v(\d+)$")
 
 # The only lines in a generated document that are not claims. Closed on purpose
@@ -123,7 +117,7 @@ _HEADINGS: dict[str, str] = {
 
 
 class GenerationError(Exception):
-    """A generation was refused — the cap, or a version that already exists."""
+    """A generation was refused — for instance, a version that already exists."""
 
 
 class Strict(BaseModel):
@@ -423,6 +417,46 @@ def next_version(store: ProfileStore, offer_id: str) -> int:
     return max(found, default=0) + 1
 
 
+class EmployerLinkError(ValueError):
+    """The employer name is taken by another offer, or is not a plain name."""
+
+
+def is_employer_alias(path: Path) -> bool:
+    """True for `cv/generated/<employer-slug>`, a relative link naming one sibling
+    offer directory and nothing else. A link that leaves the tree, chains through
+    another link or carries a path separator is not an alias and stays refused
+    wherever `cv/generated/` is walked."""
+    if not path.is_symlink():
+        return False
+    target = path.readlink()
+    if target.is_absolute() or len(target.parts) != 1 or target.name in ("", ".", ".."):
+        return False
+    sibling = path.parent / target
+    return sibling.is_dir() and not sibling.is_symlink()
+
+
+def link_employer(store: ProfileStore, offer_id: str, slug: str) -> Path:
+    """Point `cv/generated/<slug>` at this offer's directory and return the link.
+
+    Re-linking the same offer is a no-op; a slug already naming another offer is
+    refused rather than re-pointed, because the path printed for that offer would
+    then open this one's documents."""
+    if not slug or "/" in slug or ":" in slug or slug in (".", "..") or slug == offer_id:
+        raise EmployerLinkError(f"not a plain employer name: {slug!r}")
+    link = store.path("cv", "generated") / slug
+    target = link.parent / offer_id
+    if len(Path(offer_id).parts) != 1 or not target.is_dir() or target.is_symlink():
+        raise EmployerLinkError(f"{offer_id!r} is not an offer directory beside the link")
+    if link.is_symlink():
+        if link.readlink() == Path(offer_id):
+            return link
+        raise EmployerLinkError(f"{slug!r} already links to {link.readlink()}")
+    if link.exists():
+        raise EmployerLinkError(f"{slug!r} exists and is not a link")
+    link.symlink_to(offer_id, target_is_directory=True)
+    return link
+
+
 def generate(
     store: ProfileStore,
     master: CVMaster,
@@ -475,12 +509,6 @@ def generate(
                 "nothing was written; retract the preference or change the line"
             )
     version = next_version(store, offer_id)
-    if version > GENERATION_CAP:
-        raise GenerationError(
-            f"{offer_id} already has {GENERATION_CAP} versions — the cap is three "
-            "rounds, and past it the useful move is to talk about what is wrong "
-            "with the draft rather than generate another one"
-        )
 
     # Reserve `v<N>` before rendering anything. `next_version` reads the
     # directory and two callers can read the same answer; an exclusive mkdir is
