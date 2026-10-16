@@ -3,6 +3,7 @@ id: t-b2734bcc
 title: "T191: Promote the docgen/weasyprint HTML+PDF pipeline out of one candidate's one offer directory"
 priority: 5
 tags: [step-11-application]
+status: merged
 ---
 
 Candidate note (2026-09-17, step `application`): "Los generadores de HTML y PDF
@@ -53,13 +54,6 @@ without its own owner's go-ahead.
 
 ## Acceptance gate
 
-<!-- Replace this with a fenced bash block. A gate that is only prose runs
-     nothing, and a gate that runs nothing passes everything — `task_select.py`
-     reports gate: false for a task with no block, so an unenforced gate is
-     visible rather than quietly inert. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-# e.g. bash tests/docgen_shared_smoke_test.sh
-false
+uv run pytest tests/test_document_render_version.py -q
 ```
