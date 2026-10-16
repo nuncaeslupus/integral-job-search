@@ -127,7 +127,7 @@ A CV and the candidate's letter (edited, with its authorship recorded) exist for
 
 ## When the candidate says it was sent or the advert closed
 
-When the candidate says the application went out, or the advert has closed, run `uv run python -m integral.applications mark <offer_id> applied|expired|rejected --id <handle> [--at DATE] [--reason TEXT]` instead of a scratch script: it writes the lifecycle transition and the application status under one timestamp and refuses a transition the lifecycle table forbids. An application sent with no advert is `record_open_application`'s record, not this one.
+When the candidate says the application went out, or the advert has closed, run `uv run python -m integral.applications mark <offer_id> applied|expired|rejected --id <handle> [--at DATE] [--reason TEXT]` instead of a scratch script: it writes the lifecycle transition and the application status under one timestamp and refuses a transition the lifecycle table forbids. An application with no advert is created by `record_open_application` (stored `shortlisted`); once it is sent, mark it `applied` with this same command.
 
 ## When declined
 
