@@ -51,6 +51,10 @@ In this step that sounds like:
 
 *Before:* the likely questions have an answer each, or the candidate says they are ready. **Hard cap: 10 rehearsed questions.** *After:* the questions asked and the outcome are recorded, or the candidate stops.
 
+## When the candidate reports an outcome
+
+When the candidate says they were turned down, record it with `uv run python -m integral.applications mark <offer_id> applied|expired|rejected --id <handle> [--at DATE] [--reason TEXT]` (`rejected`) rather than a scratch script; it refuses an offer that was never marked applied.
+
 ## When declined
 
 Both halves are offered. Declining preparation is common and fine. Declining to log an interview loses the lesson and nothing else; ask once, later, never twice.
