@@ -449,6 +449,7 @@ from integral.generate import (
     _claim_lines,
     claim_is_backed,
     generate,
+    is_employer_alias,
     read_manifest,
     withdrawn_turn_ids,
 )
@@ -1628,6 +1629,8 @@ def retracted_episodes_sendable(store: ProfileStore, master: CVMaster) -> dict[s
     evaluated = 0
     sendable: list[str] = []
     for path in sorted(generated.glob("*/v*/approvals.json")):
+        if is_employer_alias(path.parent.parent):
+            continue  # counted once, under the offer id it names
         approvals = Approvals.model_validate_json(path.read_text(encoding="utf-8"))
         measured: dict[str, Any] | None = None
         for approval in approvals.episodes:
@@ -1684,6 +1687,8 @@ def disclosures_unbacked_by_a_document(store: ProfileStore, master: CVMaster) ->
     compared = 0
     unbacked: list[str] = []
     for path in sorted(generated.glob("*/v*/manifest.json")):
+        if is_employer_alias(path.parent.parent):
+            continue  # counted once, under the offer id it names
         # The manifest names its own offer and version, so a directory renamed
         # underneath it cannot silently redirect the measurement at a version
         # that agrees with it.

@@ -74,7 +74,7 @@ from integral.cv_store import (
     SourcedText,
     write_master,
 )
-from integral.generate import Manifest, read_manifest
+from integral.generate import Manifest, link_employer, read_manifest
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
 from integral.retraction import retract
@@ -380,6 +380,18 @@ def test_the_reading_names_every_version_whose_manifest_outruns_its_documents(
     assert reading["disclosures_unbacked_by_a_generated_document"] == 1
     assert reading["manifest_disclosures_compared"] == 1
     assert reading["gate_status"] == "measured"
+
+
+def test_an_employer_link_does_not_count_a_version_twice(store: ProfileStore) -> None:
+    master = _master(store)
+    version = _prepare(store, master)
+    _drop_line(_where(store, version) / "letter.md", WIN)
+    link_employer(store, OFFER, "girona")
+
+    reading = disclosures_unbacked_by_a_document(store, master)
+
+    assert reading["disclosures_unbacked_by_a_generated_document"] == 1
+    assert reading["manifest_disclosures_compared"] == 1
 
 
 def test_the_reading_is_unmeasured_when_no_disclosure_was_compared(

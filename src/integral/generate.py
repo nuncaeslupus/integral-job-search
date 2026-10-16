@@ -417,6 +417,43 @@ def next_version(store: ProfileStore, offer_id: str) -> int:
     return max(found, default=0) + 1
 
 
+class EmployerLinkError(ValueError):
+    """The employer name is taken by another offer, or is not a plain name."""
+
+
+def is_employer_alias(path: Path) -> bool:
+    """True for `cv/generated/<employer-slug>`, a relative link naming one sibling
+    offer directory and nothing else. A link that leaves the tree, chains through
+    another link or carries a path separator is not an alias and stays refused
+    wherever `cv/generated/` is walked."""
+    if not path.is_symlink():
+        return False
+    target = path.readlink()
+    if target.is_absolute() or len(target.parts) != 1 or target.name in ("", ".", ".."):
+        return False
+    sibling = path.parent / target
+    return sibling.is_dir() and not sibling.is_symlink()
+
+
+def link_employer(store: ProfileStore, offer_id: str, slug: str) -> Path:
+    """Point `cv/generated/<slug>` at this offer's directory and return the link.
+
+    Re-linking the same offer is a no-op; a slug already naming another offer is
+    refused rather than re-pointed, because the path printed for that offer would
+    then open this one's documents."""
+    if not slug or "/" in slug or slug in (".", "..") or slug == offer_id:
+        raise EmployerLinkError(f"not a plain employer name: {slug!r}")
+    link = store.path("cv", "generated") / slug
+    if link.is_symlink():
+        if link.readlink() == Path(offer_id):
+            return link
+        raise EmployerLinkError(f"{slug!r} already links to {link.readlink()}")
+    if link.exists():
+        raise EmployerLinkError(f"{slug!r} exists and is not a link")
+    link.symlink_to(offer_id, target_is_directory=True)
+    return link
+
+
 def generate(
     store: ProfileStore,
     master: CVMaster,

@@ -13,7 +13,7 @@ from integral import prior_documents as pd
 from integral.application_authorship import TRACE_FILE
 from integral.approval import PersonalDetails, prepare
 from integral.cv_store import CVMaster, add_conversation_entry
-from integral.generate import Claim, Manifest, generate
+from integral.generate import Claim, Manifest, generate, link_employer
 from integral.identity import ProfileStore, create_profile
 from integral.offers import Offer, compute_offer_id, save_offer
 from integral.profile import EvidenceLog, rebuild
@@ -557,6 +557,16 @@ def test_a_symlinked_offer_or_version_directory_is_refused_by_name(
         f"cv/generated/{GRAFANA}/v2": "not a v<N> version",
     }
     assert by_id(result)[GRAFANA].versions == (1,)
+
+
+def test_an_employer_link_is_neither_skipped_nor_read_twice(store: ProfileStore) -> None:
+    offer(store, GRAFANA, "Grafana", "Backend")
+    version(store, GRAFANA, 1)
+    before = pd.digest(store)
+    link_employer(store, GRAFANA, "grafana")
+    after = pd.digest(store)
+    assert after == before
+    assert after.skipped == ()
 
 
 @pytest.mark.parametrize("target", ["manifest.json", "letter.md"])

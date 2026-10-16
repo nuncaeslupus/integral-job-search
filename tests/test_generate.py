@@ -15,8 +15,11 @@ import pytest
 
 from integral.cv_store import CVMaster, Experience, Skill, SourcedText, write_master
 from integral.generate import (
+    EmployerLinkError,
     GenerationError,
     generate,
+    is_employer_alias,
+    link_employer,
     read_manifest,
     traceability,
 )
@@ -97,6 +100,10 @@ def test_versions_are_not_capped(store: ProfileStore, master: CVMaster) -> None:
     for _ in range(4):
         generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
     assert store.path("cv", "generated", "girona-1", "v4").is_dir()
+    # A cap of any size is refused, not only three: past a million rounds is still allowed.
+    store.path("cv", "generated", "girona-1", "v1000000").mkdir()
+    generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
+    assert store.path("cv", "generated", "girona-1", "v1000001").is_dir()
 
 
 def test_advert_wording_is_mirrored_only_over_held_ground(
@@ -228,3 +235,31 @@ def test_a_deleted_claim_line_is_caught_even_though_the_fraction_stays_one(
     measured = traceability(store, master, "girona-1", version=1)
     assert measured["cv_generation_traceability"] == 1.0, "every surviving line still traces"
     assert measured["claims_unused"] == [f"cv.md: {dropped}"]
+
+
+def test_the_employer_link_is_relative_idempotent_and_never_repointed(store: ProfileStore) -> None:
+    root = store.path("cv", "generated")
+    (root / "offer-a" / "v1").mkdir(parents=True)
+    (root / "offer-b" / "v1").mkdir(parents=True)
+    link = link_employer(store, "offer-a", "acme")
+    assert link.readlink() == Path("offer-a") and (link / "v1").is_dir()
+    assert is_employer_alias(link)
+    assert link_employer(store, "offer-a", "acme") == link
+    with pytest.raises(EmployerLinkError):
+        link_employer(store, "offer-b", "acme")
+    assert link.readlink() == Path("offer-a")
+    for bad in ("", "..", "x/y", "offer-b"):
+        with pytest.raises(EmployerLinkError):
+            link_employer(store, "offer-b", bad)
+
+
+def test_a_link_out_of_the_tree_or_through_a_link_is_not_an_alias(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    root = store.path("cv", "generated")
+    (root / "offer-a").mkdir(parents=True)
+    (root / "out").symlink_to(tmp_path, target_is_directory=True)
+    (root / "up").symlink_to("../generated/offer-a", target_is_directory=True)
+    (root / "chain").symlink_to("up", target_is_directory=True)
+    (root / "gone").symlink_to("offer-z", target_is_directory=True)
+    assert not any(is_employer_alias(root / n) for n in ("out", "up", "chain", "gone", "offer-a"))

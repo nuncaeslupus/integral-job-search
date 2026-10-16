@@ -53,7 +53,7 @@ from integral.cv_store import (
     SourcedText,
     write_master,
 )
-from integral.generate import GenerationError, read_manifest
+from integral.generate import GenerationError, link_employer, read_manifest
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog, ProfileError
 from integral.retraction import retract, unretract
@@ -653,6 +653,18 @@ def test_a_populated_retraction_check_reports_measured(
     assert measured["retracted_episodes_evaluated"] > 0
     assert measured["gate_status"] == "measured"
     assert measured["retracted_episodes_still_sendable"] == 0
+
+
+def test_an_employer_link_does_not_count_a_version_twice(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    row = _episode_row(store, WIN)
+    offer_id, _ = _prepare(store, master, approved=(0,))
+    _retract_row(store, row)
+    before = retracted_episodes_sendable(store, master)
+    link_employer(store, offer_id, "girona")
+    assert retracted_episodes_sendable(store, master) == before
+    assert before["retracted_episodes_evaluated"] > 0
 
 
 def test_retracting_one_of_two_identical_episodes_withdraws_the_approval(
