@@ -251,6 +251,13 @@ def test_the_employer_link_is_relative_idempotent_and_never_repointed(store: Pro
     for bad in ("", "..", "x/y", "offer-b"):
         with pytest.raises(EmployerLinkError):
             link_employer(store, "offer-b", bad)
+    for bad in ("sha256:abc", "a:b"):
+        with pytest.raises(EmployerLinkError):
+            link_employer(store, "offer-b", bad)
+    for target in ("acme", "offer-z", "../x", "offer-a/v1"):
+        with pytest.raises(EmployerLinkError):
+            link_employer(store, target, "foo")
+    assert not (root / "foo").is_symlink()
 
 
 def test_a_link_out_of_the_tree_or_through_a_link_is_not_an_alias(

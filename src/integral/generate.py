@@ -441,9 +441,12 @@ def link_employer(store: ProfileStore, offer_id: str, slug: str) -> Path:
     Re-linking the same offer is a no-op; a slug already naming another offer is
     refused rather than re-pointed, because the path printed for that offer would
     then open this one's documents."""
-    if not slug or "/" in slug or slug in (".", "..") or slug == offer_id:
+    if not slug or "/" in slug or ":" in slug or slug in (".", "..") or slug == offer_id:
         raise EmployerLinkError(f"not a plain employer name: {slug!r}")
     link = store.path("cv", "generated") / slug
+    target = link.parent / offer_id
+    if len(Path(offer_id).parts) != 1 or not target.is_dir() or target.is_symlink():
+        raise EmployerLinkError(f"{offer_id!r} is not an offer directory beside the link")
     if link.is_symlink():
         if link.readlink() == Path(offer_id):
             return link
