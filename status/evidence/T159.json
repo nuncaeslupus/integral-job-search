@@ -110,12 +110,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4814
+      "line": 4816
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4968
+      "line": 4970
     },
     {
       "module": "gate_detector_states",
@@ -747,7 +747,6 @@
   ],
   "ceilings_excluded_from_the_floor_census": [
     "approval._SHINGLE",
-    "generate.GENERATION_CAP",
     "interview.MAX_EXTRA_EPISODE_ATTEMPTS",
     "sourcing.DETAIL_FETCH_CEILING"
   ],

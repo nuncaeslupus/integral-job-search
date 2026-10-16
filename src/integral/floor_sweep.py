@@ -4810,8 +4810,10 @@ MINIMUM_BOUNDS_READ_FOR_POLARITY = 99
 #: `extraction._CONFIRMING_MATCHES_FOR_BIPOLAR`, is a floor: `len(spans) <
 #: _CONFIRMING_MATCHES_FOR_BIPOLAR and not negated_any` returns `None`, so a dimension
 #: with fewer than two confirming matches is refused and *deleting* a match breaches it.
-#: arsenal-floor-margin: MINIMUM_CEILINGS_SET_ASIDE value=4
-MINIMUM_CEILINGS_SET_ASIDE = 4
+#: **3 since `generate.GENERATION_CAP` was removed** (owner, 2026-10-16: no cap on
+#: versions). A ceiling deleted from the code, not one the sweep stopped finding.
+#: arsenal-floor-margin: MINIMUM_CEILINGS_SET_ASIDE value=3
+MINIMUM_CEILINGS_SET_ASIDE = 3
 
 
 def measure_polarity_oracle() -> dict[str, Any]:

@@ -561,14 +561,6 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "this sweep does not trace."
         ),
     ),
-    "generate.GENERATION_CAP": (
-        "ceiling",
-        (
-            "`version > GENERATION_CAP` raises: the number of regeneration rounds "
-            "an offer may have is capped, and it is breached by adding a version, "
-            "not by deleting one."
-        ),
-    ),
     "generate.SCHEMA_VERSION": (
         "neither",
         (

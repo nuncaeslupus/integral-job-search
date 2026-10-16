@@ -15,7 +15,6 @@ import pytest
 
 from integral.cv_store import CVMaster, Experience, Skill, SourcedText, write_master
 from integral.generate import (
-    GENERATION_CAP,
     GenerationError,
     generate,
     read_manifest,
@@ -93,12 +92,11 @@ def test_regeneration_writes_a_new_version(store: ProfileStore, master: CVMaster
     assert after == before, "an earlier version may already be with an employer"
 
 
-def test_a_fourth_version_is_refused(store: ProfileStore, master: CVMaster) -> None:
-    """Hard cap: three rounds, then the useful move is to talk about what is wrong."""
-    for _ in range(GENERATION_CAP):
+def test_versions_are_not_capped(store: ProfileStore, master: CVMaster) -> None:
+    """As many rounds as the candidate needs (owner, 2026-10-16): a fourth is written."""
+    for _ in range(4):
         generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
-    with pytest.raises(GenerationError, match="three"):
-        generate(store, master, offer_id="girona-1", advert=ADVERT, asks=("PostgreSQL",))
+    assert store.path("cv", "generated", "girona-1", "v4").is_dir()
 
 
 def test_advert_wording_is_mirrored_only_over_held_ground(

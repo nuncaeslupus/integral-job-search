@@ -4604,7 +4604,6 @@ def test_every_evidence_path_the_resolver_accepts_is_hashed_by_the_digest(
 
 _NAMED_CEILINGS_THE_AST_FINDS = (
     "approval._SHINGLE",
-    "generate.GENERATION_CAP",
     "interview.MAX_EXTRA_EPISODE_ATTEMPTS",
     "sourcing.DETAIL_FETCH_CEILING",
 )

@@ -55,7 +55,7 @@ _HARD_CAP_MARKER = {
     "understanding": "per-run extraction budget",
     "ranking": "number shown at once",
     "feedback": "twice",
-    "application": "three regeneration rounds",
+    "application": "no cap on versions",
     "interview_log": "10 rehearsed questions",
 }
 

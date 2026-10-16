@@ -30,8 +30,8 @@ make that impossible is here, where the phrase would have to be written.
 
 **Nothing is overwritten.** A regeneration writes `v<N+1>`. An earlier version
 may already be with an employer, and a candidate has to be able to answer a
-question about their own application. Three rounds, then the useful move is to
-talk about what is wrong rather than generate a fourth.
+question about their own application. There is no cap on versions: the
+candidate decides how many rounds a document needs (owner, 2026-10-16).
 """
 
 from __future__ import annotations
@@ -82,12 +82,6 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T45.json"
 
 SCHEMA_VERSION: Literal[1] = 1
 
-# Three regeneration rounds per offer, then stop. Spec step 11's stop rule: the
-# useful move past this is a conversation about what is wrong with the draft,
-# not a fourth draft of the same wrongness.
-# arsenal-floor-margin: GENERATION_CAP value=3
-GENERATION_CAP = 3
-
 _VERSION_DIR = re.compile(r"^v(\d+)$")
 
 # The only lines in a generated document that are not claims. Closed on purpose
@@ -123,7 +117,7 @@ _HEADINGS: dict[str, str] = {
 
 
 class GenerationError(Exception):
-    """A generation was refused — the cap, or a version that already exists."""
+    """A generation was refused — for instance, a version that already exists."""
 
 
 class Strict(BaseModel):
@@ -475,12 +469,6 @@ def generate(
                 "nothing was written; retract the preference or change the line"
             )
     version = next_version(store, offer_id)
-    if version > GENERATION_CAP:
-        raise GenerationError(
-            f"{offer_id} already has {GENERATION_CAP} versions — the cap is three "
-            "rounds, and past it the useful move is to talk about what is wrong "
-            "with the draft rather than generate another one"
-        )
 
     # Reserve `v<N>` before rendering anything. `next_version` reads the
     # directory and two callers can read the same answer; an exclusive mkdir is

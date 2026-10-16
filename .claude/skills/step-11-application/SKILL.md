@@ -123,7 +123,7 @@ A form answer takes the place of the letter: answer each recorded form question 
 
 ## Stop rule
 
-A CV and the candidate's letter (edited, with its authorship recorded) exist for this offer and the candidate has approved them, or has parked them. **Hard cap: three regeneration rounds per offer** — each new CV version or fresh round of edits to the letter counts — after which the useful move is to talk about what is wrong rather than generate a fourth.
+A CV and the candidate's letter (edited, with its authorship recorded) exist for this offer and the candidate has approved them, or has parked them. **There is no cap on versions:** as many rounds as the candidate needs, each one a new `v<N+1>`.
 
 ## When declined
 
@@ -134,6 +134,8 @@ Offered per offer. Declining generates nothing and leaves the offer `shortlisted
 `cv/generated/<offer_id>/v<N>/` — CV and letter, versioned, plus a manifest of which store entries each claim came from. On send, `applications/<offer_id>/` records what went and when, immutable thereafter.
 
 **`send/` is the output of this step, for every candidate.** Once the candidate has approved the payload, collect the final files with `integral.approval.stage_send(store, master, offer_id, version, confirms=<payload digest>)`: it makes `cv/generated/<offer_id>/v<N>/send/` holding exactly the payload's documents (CV and letter), byte for byte what was measured, and nothing else — no manifest, traceability table or notes. Hand the candidate that one folder; do not collect files by hand. What is in `send/` is what was approved: `integral.approval.verify_send` names any file edited, added, removed or linked in afterwards, and `record_sent` refuses a version whose `send/` fails it. Staging uses the same check as `record_sent` (re-measured documents, digest confirmation), so nothing unapproved can be put there. The folder holds the Markdown documents only; rendered HTML is not part of the approved payload.
+
+**Every delivery ends with a link and a path.** The offer directory is named by a digest (`cv/generated/sha256:…`), so the first time an offer is generated, add a symlink beside it named for the employer — `ln -sfn <offer_id> cv/generated/<employer-slug>`, a relative link inside `cv/generated/` — and at the end of every delivery print `cv/generated/<employer-slug>/v<N>/send` as an absolute path on its own line, as `file://` and plain, so the candidate can click it. Never copy the files elsewhere: a copy can drift from what was approved, a link cannot.
 
 Each version also gets `carta.html` and `cv.html`, rendered from the Markdown by `integral.application_render.render_document(markdown, title=..., kind="letter"|"cv", photo=<optional bytes>, photo_mime=..., lang=..., palette=<optional BrandPalette>)` — one printable file each (A4, inline style, photo as a `data:` URI). The Markdown is the source; never edit the HTML by hand, regenerate it.
 
