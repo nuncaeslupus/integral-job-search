@@ -76,7 +76,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from integral import brand_palette, report_style
+from integral import brand_measure, brand_palette, report_style
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T142.json"
@@ -946,12 +946,48 @@ def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     return measured
 
 
+def version_colours(
+    directory: Path, chosen: dict[str, Any]
+) -> tuple[dict[str, int], dict[str, Any]]:
+    """`(counts, chosen)` for a generated version: its accent is the recorded measurement.
+
+    T342, fail-closed: a version with no `palette.json` is refused (record one with
+    `python -m integral.brand_measure`, or `{}` for a site that could not be read), and
+    so is an `--accent` that is not the measured one; a hand colour never overrides a
+    measurement. The returned `chosen` carries the measured accent.
+    """
+    try:
+        counts = brand_measure.counts_in(directory)
+    except brand_measure.MeasureError as exc:
+        raise RenderError(f"{directory}: {exc}") from exc
+    if counts is None:
+        raise RenderError(
+            f"{directory} has no palette.json: measure the employer's colours first "
+            "(tools/measure_colours.js, then python -m integral.brand_measure --root ... "
+            "--version N), or record {} for a site that cannot be read"
+        )
+    measured = brand_palette.to_hex(brand_palette.extract_palette(counts).accent)
+    given = chosen.get("accent")
+    if given is not None and normalise_accent(given) != measured:
+        raise RenderError(
+            f"--accent {given} is not the measured accent {measured} recorded in "
+            f"{directory / brand_measure.MEASUREMENT_FILE}; a hand colour does not "
+            "override a measurement (drop --accent, or re-measure)"
+        )
+    return counts, {**chosen, "accent": measured}
+
+
 def _build(
-    source: Path, country: str | None, chosen: dict[str, Any], *, pdf: bool
+    source: Path,
+    country: str | None,
+    chosen: dict[str, Any],
+    *,
+    pdf: bool,
+    colours: Mapping[str, int] | None = None,
 ) -> tuple[str, bytes | None]:
     """The HTML (and PDF) for one document JSON, in memory: nothing is written."""
     document = json.loads(source.read_text(encoding="utf-8"))
-    page = render(document, RenderParams.for_recipient(country, None, **chosen))
+    page = render(document, RenderParams.for_recipient(country, colours, **chosen))
     if not pdf:
         return page, None
     budget = CV_PAGE_BUDGET if validate(document) == "cv" else None
@@ -970,6 +1006,8 @@ def _render_one(
 def _render_version(directory: Path, country: str | None, chosen: dict[str, Any]) -> int:
     """HTML and PDF beside each ``cv.json``/``letter.json``.
 
+    The accent is the version's recorded measurement (:func:`version_colours`): exit 2
+    for a version with no ``palette.json`` or an ``--accent`` that disagrees with it.
     Exit 2 and nothing written when ``send/`` exists (a sent version is immutable),
     when neither document is there, or when any document fails to render (including
     no PDF engine): everything is built in memory before the first write.
@@ -987,10 +1025,15 @@ def _render_version(directory: Path, country: str | None, chosen: dict[str, Any]
     for n in names:
         if not (directory / f"{n}.json").is_file():
             print(f"note: {n}.json is missing in {directory}; not rendered", file=sys.stderr)
+    try:
+        colours, chosen = version_colours(directory, chosen)
+    except RenderError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     built: list[tuple[Path, str, bytes]] = []
     for source in found:
         try:
-            page, data = _build(source, country, chosen, pdf=True)
+            page, data = _build(source, country, chosen, pdf=True, colours=colours)
         except (RenderError, ValueError, OSError) as exc:
             print(f"{source}: {exc}", file=sys.stderr)
             return 2
@@ -1020,7 +1063,10 @@ def _main(argv: Sequence[str] | None = None) -> int:
     ver = sub.add_parser("version", help="render every cv.json/letter.json in a version dir")
     ver.add_argument("directory", type=Path)
     ver.add_argument("--country", help="the recipient's country; sets the page size")
-    ver.add_argument("--accent", help="hex colour; default is the neutral accent")
+    ver.add_argument(
+        "--accent",
+        help="optional; must equal the accent measured in the version's palette.json (T342)",
+    )
     ver.add_argument("--language", default="en")
     args = parser.parse_args(sys.argv[1:] if argv is None else list(argv))
     if args.command in ("render", "version"):

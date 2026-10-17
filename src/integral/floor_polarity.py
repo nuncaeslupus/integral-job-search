@@ -586,6 +586,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "denominator."
         ),
     ),
+    "mailbox_replies.MINIMUM_CASES_MEASURED": (
+        "floor",
+        (
+            "`measured['cases_measured'] >= MINIMUM_CASES_MEASURED` in `gate_passes`: "
+            "the gate fails when fewer constructed replies and follow-up checks ran than "
+            "are committed, so deleting a refusing case cannot shrink the denominator."
+        ),
+    ),
     "generate.SCHEMA_VERSION": (
         "neither",
         (
@@ -948,6 +956,21 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "member of the guarded population is what breaches it. Out of the T159 "
             "census only because its comparand is resolved at runtime or from a key "
             "this sweep does not trace."
+        ),
+    ),
+    "brand_measure.SCHEMA_VERSION": (
+        "neither",
+        (
+            "A format version compared for equality (`!=`) or written into records: "
+            "it identifies a format, it bounds no count."
+        ),
+    ),
+    "brand_gate.MINIMUM_VERSIONS": (
+        "floor",
+        (
+            "`examined < MINIMUM_VERSIONS` makes the gate report `unmeasured` (-1) "
+            "instead of a clean zero: a minimum on the generated versions read, "
+            "breached by dropping a constructed case."
         ),
     ),
     "send_gate.MINIMUM_FOLDERS": (

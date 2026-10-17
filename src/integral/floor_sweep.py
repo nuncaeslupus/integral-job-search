@@ -3761,9 +3761,11 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: `MINIMUM_ADVERT_CONTROLS` are two more.
 #: **109 with T345**: `offers_seen_again.MINIMUM_RULED_OFFERS_CHECKED` is one more.
 #: **110 with T338**: `send_gate.MINIMUM_FOLDERS` is one more.
-#: **111 with T343**: `generated_index.MINIMUM_CASES_MEASURED` is one more.
+#: **111 with T342**: `brand_gate.MINIMUM_VERSIONS` is one more.
+#: **112 with T343**: `generated_index.MINIMUM_CASES_MEASURED` is one more.
+#: **113 with T341**: `mailbox_replies.MINIMUM_CASES_MEASURED` is one more.
 #: Still zero slack.
-MINIMUM_FLOORS_SWEPT = 111
+MINIMUM_FLOORS_SWEPT = 113
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -3876,7 +3878,7 @@ MINIMUM_FLOORS_SWEPT = 111
 #: floor stays 36, twelve points of slack.
 #: **50 with T255's review fix**: the two new `presentation_log` floors are literal counts.
 #: **51 with T345**: `offers_seen_again`'s floor is a literal count, one more checked.
-#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=52
+#: arsenal-floor-margin: MINIMUM_FLOORS_ARITHMETICALLY_CHECKED value=36 population=53
 MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 
 
@@ -3909,7 +3911,9 @@ MINIMUM_FLOORS_ARITHMETICALLY_CHECKED = 36
 #: two more pinned. Still zero slack.
 #: **34 with T343**: `generated_index.MINIMUM_CASES_MEASURED` resolves through the committed
 #: `status/evidence/T343.json` (`cases_measured_at_least`). Still zero slack.
-MINIMUM_FLOORS_EVIDENCE_PINNED = 34
+#: **35 with T341**: `mailbox_replies.MINIMUM_CASES_MEASURED` resolves through the committed
+#: `status/evidence/T341.json` (`cases_measured_at_least`). Still zero slack.
+MINIMUM_FLOORS_EVIDENCE_PINNED = 35
 
 
 def record(measured: dict[str, Any]) -> dict[str, Any]:
@@ -4249,8 +4253,10 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: **105 with T255's review fix**: its two new floors are two scenarios more.
 #: **106 with T345**: `offers_seen_again`'s one new floor is one scenario more.
 #: **107 with T338**: `send_gate.MINIMUM_FOLDERS` is one more.
-#: **108 with T343**: `generated_index`'s one new floor is one scenario more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 108
+#: **108 with T342**: `brand_gate.MINIMUM_VERSIONS` is one more. Still zero slack.
+#: **109 with T343**: `generated_index`'s one new floor is one scenario more. Still zero slack.
+#: **110 with T341**: `mailbox_replies`'s one new floor is one scenario more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 110
 
 
 def measure_prose_clearance() -> dict[str, Any]:
