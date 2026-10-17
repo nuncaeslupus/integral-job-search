@@ -459,6 +459,7 @@ from integral.generate import (
     read_manifest,
     withdrawn_turn_ids,
 )
+from integral.generated_index import refresh_index
 from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.profile import EVIDENCE_PARTS, EvidenceLog, Kind, ProfileError
 from integral.send_set import (
@@ -885,6 +886,7 @@ def stage_send(
                 "send/ already exists and is not what was approved — it is not overwritten: "
                 + "; ".join(defects)
             )
+        refresh_index(store)
         return folder
     contents = {name: store.path(*where, name).read_bytes() for name in payload.documents}
     try:
@@ -919,6 +921,7 @@ def stage_send(
         *where,
         SEND_RECORD,
     )
+    refresh_index(store)
     return folder
 
 

@@ -18,12 +18,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "lineno": 3750
+      "lineno": 3753
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "lineno": 3745
+      "lineno": 3748
     },
     {
       "module": "arsenal_source",
@@ -118,12 +118,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "lineno": 4823
+      "lineno": 4827
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "lineno": 4977
+      "lineno": 4981
     },
     {
       "module": "gate_detector_states",
@@ -308,5 +308,5 @@
   ],
   "marker_restatement_scenarios_checked": 60,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 108
+  "scenarios_checked_at_least": 109
 }

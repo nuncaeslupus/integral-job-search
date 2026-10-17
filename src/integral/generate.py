@@ -63,6 +63,7 @@ from integral.cv_store import (
     _atomic_write_text,
     write_master,
 )
+from integral.generated_index import refresh_index
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
 from integral.voice import (
@@ -449,11 +450,13 @@ def link_employer(store: ProfileStore, offer_id: str, slug: str) -> Path:
         raise EmployerLinkError(f"{offer_id!r} is not an offer directory beside the link")
     if link.is_symlink():
         if link.readlink() == Path(offer_id):
+            refresh_index(store)
             return link
         raise EmployerLinkError(f"{slug!r} already links to {link.readlink()}")
     if link.exists():
         raise EmployerLinkError(f"{slug!r} exists and is not a link")
     link.symlink_to(offer_id, target_is_directory=True)
+    refresh_index(store)
     return link
 
 
@@ -541,6 +544,7 @@ def generate(
     _atomic_write_text(store, "\n".join(cv_lines).rstrip("\n") + "\n", *where, "cv.md")
     _atomic_write_text(store, "\n".join(letter_lines).rstrip("\n") + "\n", *where, "letter.md")
     _atomic_write_json(store, manifest.model_dump(mode="json"), *where, "manifest.json")
+    refresh_index(store)
     return manifest
 
 
