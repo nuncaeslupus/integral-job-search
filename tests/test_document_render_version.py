@@ -29,7 +29,15 @@ STUB = b"%PDF-stub"
 FLAGS = ["--country", "US", "--accent", "#c0392b", "--language", "ca"]
 
 
-def _version_dir(path: Path, *, cv: bool = True, letter: bool = True) -> Path:
+MEASURED = {"#c0392b": 40, "#ffffff": 100, "#111217": 60}
+
+
+def _version_dir(
+    path: Path, *, cv: bool = True, letter: bool = True, counts: dict[str, int] | None = MEASURED
+) -> Path:
+    if counts is not None:  # T342: the accent is the version's recorded measurement
+        record = {"schema_version": 1, "site": "https://x.example", "counts": counts}
+        (path / "palette.json").write_text(json.dumps(record), encoding="utf-8")
     if cv:
         (path / "cv.json").write_text(json.dumps(dr.sample_cv()), encoding="utf-8")
     if letter:
@@ -67,7 +75,7 @@ def test_version_html_matches_the_library_for_country_accent_and_language(
 
 @pytest.mark.parametrize(
     "flag, other",
-    [("--country", "ES"), ("--accent", "#00aa00"), ("--language", "en")],
+    [("--country", "ES"), ("--language", "en")],
 )
 def test_each_flag_changes_the_output(
     tmp_path: Path, stub_pdf: list[int | None], flag: str, other: str
@@ -82,6 +90,51 @@ def test_each_flag_changes_the_output(
     assert dr._main(["version", str(second), *flags]) == 0
     for name in ("cv", "letter"):
         assert (first / f"{name}.html").read_text() != (second / f"{name}.html").read_text()
+
+
+def test_the_accent_is_the_recorded_measurement_when_none_is_given(
+    tmp_path: Path, stub_pdf: list[int | None]
+) -> None:
+    folder = _version_dir(tmp_path, counts={"#00aa44": 30, "#ffffff": 100})
+    assert dr._main(["version", str(folder), "--country", "US"]) == 0
+    expected = dr.render(
+        dr.sample_cv(), dr.RenderParams.for_recipient("US", None, accent="#00aa44")
+    )
+    assert (folder / "cv.html").read_text(encoding="utf-8") == expected
+    assert "#00aa44" in expected and "#999999" not in expected
+
+
+def test_a_version_with_no_recorded_palette_is_refused_and_writes_nothing(
+    tmp_path: Path, stub_pdf: list[int | None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = _version_dir(tmp_path, counts=None)
+    for flags in ([], ["--accent", "#123456"]):
+        assert dr._main(["version", str(folder), *flags]) == 2
+        assert "no palette.json" in capsys.readouterr().err
+    assert sorted(p.name for p in folder.iterdir()) == ["cv.json", "letter.json"]
+
+
+def test_a_hand_accent_that_disagrees_with_the_measurement_is_refused(
+    tmp_path: Path, stub_pdf: list[int | None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = _version_dir(tmp_path)
+    assert dr._main(["version", str(folder), "--accent", "#00aa00"]) == 2
+    assert "not the measured accent #c0392b" in capsys.readouterr().err
+    assert sorted(p.name for p in folder.iterdir()) == ["cv.json", "letter.json", "palette.json"]
+    # the same colour, spelled in capitals, is the measurement and goes through
+    assert dr._main(["version", str(folder), "--accent", "#C0392B"]) == 0
+
+
+def test_an_unreadable_palette_record_is_refused(
+    tmp_path: Path, stub_pdf: list[int | None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = _version_dir(tmp_path, counts=None)
+    (folder / "palette.json").write_text(
+        '{"schema_version": 1, "site": "s", "counts": {"rgb(1, 2, 3)": 4}}'
+    )
+    assert dr._main(["version", str(folder)]) == 2
+    assert "cannot be read" in capsys.readouterr().err
+    assert not (folder / "cv.html").exists()
 
 
 def test_version_refuses_a_sent_version_and_writes_nothing(
@@ -104,7 +157,12 @@ def test_version_writes_nothing_when_a_later_document_fails(
     (folder / "cv.pdf").write_bytes(b"old")
     assert dr._main(["version", str(folder)]) == 2
     assert (folder / "cv.pdf").read_bytes() == b"old"
-    assert sorted(p.name for p in folder.iterdir()) == ["cv.json", "cv.pdf", "letter.json"]
+    assert sorted(p.name for p in folder.iterdir()) == [
+        "cv.json",
+        "cv.pdf",
+        "letter.json",
+        "palette.json",
+    ]
 
 
 def test_version_writes_nothing_when_the_pdf_cannot_be_made(
@@ -116,7 +174,7 @@ def test_version_writes_nothing_when_the_pdf_cannot_be_made(
     monkeypatch.setattr(dr, "render_pdf", refuse)
     folder = _version_dir(tmp_path)
     assert dr._main(["version", str(folder)]) == 2
-    assert sorted(p.name for p in folder.iterdir()) == ["cv.json", "letter.json"]
+    assert sorted(p.name for p in folder.iterdir()) == ["cv.json", "letter.json", "palette.json"]
 
 
 @pytest.mark.parametrize("missing", ["cv", "letter"])
@@ -141,8 +199,9 @@ def test_version_without_documents_is_a_refusal(tmp_path: Path) -> None:
 
 def test_version_with_an_invalid_document_writes_nothing_for_it(tmp_path: Path) -> None:
     (tmp_path / "cv.json").write_text(json.dumps({"title": "x", "blocks": []}), encoding="utf-8")
+    _version_dir(tmp_path, cv=False, letter=False)
     assert dr._main(["version", str(tmp_path)]) == 2
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["cv.json"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["cv.json", "palette.json"]
 
 
 @needs_engine

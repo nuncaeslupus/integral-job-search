@@ -56,6 +56,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from integral import brand_measure
 from integral.application_render import CSS, render_document
 from integral.approval import (
     ApprovalError,
@@ -579,6 +580,10 @@ def _send(
     assert sent is not None
     offer_id, version, _ = sent
     confirms = payload_digest(read_payload(store, offer_id, version))
+    # T342: staging needs a recorded palette; `{}` is a site that could not be read.
+    brand_measure.record(
+        store, ("cv", "generated", offer_id, f"v{version}"), "fixture://unreadable", {}
+    )
     try:
         stage_send(
             store,
