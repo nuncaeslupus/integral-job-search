@@ -150,8 +150,8 @@ def measure(
 def record(measured: dict[str, Any]) -> dict[str, Any]:
     """What is committed, out of what was measured.
 
-    The two differences are the two denominators, and they are `naming.record`'s
-    difference for `naming.record`'s reason (T100, T150): the live census goes
+    The two differences are the two denominators, and they are `repo_gate.record_formatting`'s
+    difference for its reason (T100, T150): the live census goes
     out and the floor it was checked against goes in. Neither number says
     anything about whether the subtree is gone — they exist so that the zero
     that says it is cannot rest on an empty tree — and committed exactly, both

@@ -30,7 +30,7 @@ divergence" section (the corpus's own account of itself), and this module's
 `TARGET_MIX` (what `tests/test_corpus_raw.py` actually pins) — and nothing
 stops a future edit to any one of them from drifting back to "remote
 programming" while the other two still say otherwise. That is the same failure
-class D-3 (`integral.spec_consistency`) exists for: a document that is
+class D-3 (a spec-consistency check, since pruned) existed for: a document that is
 *reconciled-looking* is not the same as a document that is reconciled, and the
 gap between them is invisible to anyone who only reads one of the three. This
 module is the mechanical check: it reads the real `status/plan.md` and

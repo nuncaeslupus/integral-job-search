@@ -77,7 +77,7 @@ from integral.rank import (
 
 # §4.3's site is `integral.rank`; this module explains that formula's second
 # term rather than implementing a formula of its own, so it declares no
-# METHODS_REF — see `integral.methods_links` on what the register requires.
+# METHODS_REF — the register is `docs/METHODS.md`.
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T19.json"

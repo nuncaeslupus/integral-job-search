@@ -62,7 +62,7 @@ triples the two matchers answer differently on that no committed row names. The
 population is a closed product of rule, wildcard, run, region and target
 components — a generator, never a list of cases — so a new component widens it
 without anyone remembering to. Its size is the denominator, committed as a
-floor (`naming.MINIMUM_SCANNED`'s style, T100): a generator that shrank would
+floor (a floor, never the count of the day, T100): a generator that shrank would
 otherwise score a clean zero over nothing, and an empty one reports
 `gate_status: unmeasured`.
 
