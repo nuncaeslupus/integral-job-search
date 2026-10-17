@@ -56,6 +56,7 @@ from typing import Any
 from integral.application_authorship import TRACE_FILE
 from integral.approval import Approvals, _normalised_equal
 from integral.generate import _HEADINGS, Manifest, _claim_lines, is_employer_alias
+from integral.generated_index import INDEX_NAME
 from integral.identity import IdentityError, ProfileLeak, ProfileStore
 from integral.offers import OfferError, load_offer
 from integral.state_home import StateHomeRefused, ensure_outside_a_work_tree, profiles_root
@@ -222,6 +223,8 @@ def digest(store: ProfileStore) -> Digest:
         rel = f"cv/generated/{offer_dir.name}"
         if is_employer_alias(offer_dir):
             continue  # the offer it names is read under its own id
+        if offer_dir.name == INDEX_NAME and offer_dir.is_file():
+            continue  # T343: the derived map of this tree, not an offer
         if not offer_dir.is_dir() or offer_dir.is_symlink():
             skipped.append(Skipped(rel, "not an offer directory"))
             continue

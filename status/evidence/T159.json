@@ -15,12 +15,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3674
+      "line": 3676
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3669
+      "line": 3671
     },
     {
       "module": "arsenal_source",
@@ -110,12 +110,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4819
+      "line": 4823
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4973
+      "line": 4977
     },
     {
       "module": "gate_detector_states",
@@ -369,25 +369,31 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3878,
-      "population": 51
+      "line": 3879,
+      "population": 52
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3908,
-      "population": 33
+      "line": 3911,
+      "population": 34
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3764,
-      "population": 109
+      "line": 3765,
+      "population": 110
     },
     {
       "module": "freshness",
       "name": "MINIMUM_OFFERS",
       "line": 406,
+      "population": 5
+    },
+    {
+      "module": "generated_index",
+      "name": "MINIMUM_CASES_MEASURED",
+      "line": 45,
       "population": 5
     },
     {
@@ -429,7 +435,7 @@
     {
       "module": "revision",
       "name": "MINIMUM_AGED",
-      "line": 443,
+      "line": 447,
       "population": 6
     },
     {
@@ -685,6 +691,7 @@
     "gate_detector_states.MINIMUM_DETECTOR_STATES_PROBED",
     "gate_detector_states.MINIMUM_DISTINCT_STATE_TRACES",
     "gate_reader_agreement.MINIMUM_ARRANGEMENTS_PROBED",
+    "generated_index.MINIMUM_CASES_MEASURED",
     "identity.MINIMUM_PROBES",
     "interview.MINIMUM_CHECKS",
     "lifecycle.MINIMUM_SCENARIOS",
@@ -754,6 +761,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 109,
+  "floors_swept_at_least": 110,
   "floors_arithmetically_checked_at_least": 36
 }

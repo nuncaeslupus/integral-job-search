@@ -453,6 +453,7 @@ from integral.generate import (
     read_manifest,
     withdrawn_turn_ids,
 )
+from integral.generated_index import refresh_index
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EVIDENCE_PARTS, EvidenceLog, Kind, ProfileError
 
@@ -873,6 +874,7 @@ def stage_send(
         *where,
         SEND_RECORD,
     )
+    refresh_index(store)
     return folder
 
 

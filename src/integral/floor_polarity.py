@@ -576,6 +576,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "this sweep does not trace."
         ),
     ),
+    "generated_index.MINIMUM_CASES_MEASURED": (
+        "floor",
+        (
+            "`measured['cases_measured'] >= MINIMUM_CASES_MEASURED` in `gate_passes`: "
+            "the gate fails when fewer constructed cases ran than are committed, so "
+            "deleting a case cannot shrink the denominator."
+        ),
+    ),
     "generate.SCHEMA_VERSION": (
         "neither",
         (
