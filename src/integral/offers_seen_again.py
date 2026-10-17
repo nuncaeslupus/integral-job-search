@@ -104,14 +104,22 @@ def _record_only(status: str) -> Callable[[ProfileStore], str]:
 
 
 def _repeat_unmarked() -> int:
-    """Repeats that `shown_notes` does not name, plus new offers it wrongly names."""
-    with tempfile.TemporaryDirectory() as tmp:
-        store = _store(Path(tmp))
-        seen = _save(store, "seen", ())
-        fresh = _save(store, "fresh", ())
-        present(store, [seen], at=_AT)
-        line = "\n".join(shown_notes(store, [seen, fresh]))
-        return int(seen not in line) + int(fresh in line)
+    """Repeats `shown_notes` fails to name plus new offers it wrongly names, over the
+    order step 9's SKILL documents (partition, present, then shown_notes) and the
+    reverse (shown_notes before present)."""
+    wrong = 0
+    for notes_after_present in (True, False):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = _store(Path(tmp))
+            seen = _save(store, "seen", ())
+            fresh = _save(store, "fresh", ())
+            present(store, [seen], at=_AT)
+            show, _ = partition(store, [seen, fresh])
+            before = shown_notes(store, show)
+            present(store, show, at=_AT)
+            line = "\n".join(shown_notes(store, show) if notes_after_present else before)
+            wrong += int("Role seen" not in line) + int("Role fresh" in line)
+    return wrong
 
 
 def measure() -> dict[str, Any]:

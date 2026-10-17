@@ -282,9 +282,9 @@ def _has_applied(store: ProfileStore, offer_id: str) -> bool:
     """T250. Ever applied, or an `applications/<id>/status.json` record past
     `drafted` (a draft is not an application) which can exist while the offer
     still reads `new`. A record that cannot be read is not evidence of an
-    application: the offer is shown. Only siblings are asked: an offer's own
-    application record is left to the ranking (T242 ranks applied offers on
-    purpose)."""
+    application: the offer is shown. Asked of the offer itself and of its
+    siblings in `partition` (T345); `rank_named` does not go through `partition`,
+    so T242 still ranks applied offers on purpose."""
     if _ever(store, offer_id, frozenset({"applied"})):
         return True
     try:
@@ -372,10 +372,32 @@ def pending_skill_line(store: ProfileStore, offer_ids: list[str]) -> str:
     return f"sin leer todavía para saber si lo exigen: {parts}"
 
 
+class Shown(list[str]):
+    """What `partition` returns to show. `seen` is the subset shown in an EARLIER
+    batch, fixed when `partition` ran, so it cannot include the batch `present()`
+    records afterwards (T345: `shown_notes` may run before or after `present`)."""
+
+    seen: frozenset[str] = frozenset()
+
+
 def seen_before(store: ProfileStore, offer_ids: list[str]) -> list[str]:
-    """T345. Those of `offer_ids` already shown to the candidate in an earlier batch."""
+    """T345. Those of `offer_ids` already shown to the candidate in an earlier batch.
+
+    A list from `partition` carries that answer; any other list is asked of the log,
+    which is only right before `present()` has recorded it."""
+    if isinstance(offer_ids, Shown):
+        return [i for i in offer_ids if i in offer_ids.seen]
     presented = _presented_ids(store)
     return [i for i in offer_ids if i in presented]
+
+
+def _described(store: ProfileStore, offer_id: str) -> str:
+    loaded = _loaded(store, offer_id)
+    if loaded is None:
+        return offer_id
+    offer = loaded[0]
+    title = offer.title or offer_id
+    return f"{title} ({offer.company})" if offer.company else title
 
 
 def seen_line(store: ProfileStore, offer_ids: list[str]) -> str:
@@ -383,7 +405,8 @@ def seen_line(store: ProfileStore, offer_ids: list[str]) -> str:
     seen = seen_before(store, offer_ids)
     if not seen:
         return ""
-    return f"{len(seen)} ya se te habían mostrado antes (no son nuevas): " + ", ".join(seen)
+    names = "; ".join(_described(store, i) for i in seen)
+    return f"{len(seen)} ya se te habían mostrado antes (no son nuevas): {names}"
 
 
 def shown_notes(store: ProfileStore, show: list[str]) -> list[str]:
@@ -423,7 +446,7 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     stored. An offer with no employer is compared with nothing and is shown;
     `unchecked_line` says so.
     """
-    show: list[str] = []
+    show = Shown()
     held: list[Withheld] = []
     # T203. Read here, at the one place every list the candidate reads passes
     # through: an offer stored *before* they ruled its topic out is not touched
@@ -511,6 +534,7 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
                 shown_by_component[component] = offer_id
             if loaded is not None:
                 shown_in_batch.append((offer_id, loaded[0].company, loaded[0].title))
+    show.seen = frozenset(i for i in show if i in presented)
     return show, held
 
 

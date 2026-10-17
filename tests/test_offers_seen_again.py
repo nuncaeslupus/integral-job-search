@@ -52,3 +52,22 @@ def test_reasons_name_the_cause() -> None:
 
 def test_a_draft_is_not_an_application() -> None:
     assert _held(gate._record_only("drafted")) is None
+
+
+def test_seen_note_names_only_the_repeat_in_the_documented_order() -> None:
+    import tempfile
+    from pathlib import Path
+
+    from integral.presentation_log import present, shown_notes
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = gate._store(Path(tmp))
+        seen = gate._save(store, "seen", ())
+        fresh = gate._save(store, "fresh", ())
+        present(store, [seen], at=gate._AT)
+        show, _ = partition(store, [seen, fresh])
+        present(store, show, at=gate._AT)
+        text = "\n".join(shown_notes(store, show))
+        assert "Role seen" in text
+        assert "Role fresh" not in text
+    assert gate._repeat_unmarked() == 0
