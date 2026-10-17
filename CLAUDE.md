@@ -462,112 +462,20 @@ rather than listed. An enumeration has no last element.
 
 ## The review half of `merge-policy` is a second session, not a bot
 
-**CodeRabbit came back when the repository went public on 2026-09-07**, and the
-paragraph this replaces said it was gone for good. What is true now: it is
-installed on the OSS tier, it does **not** review automatically below 10 stars
-(its own comment on #398 says so, and its commit status reads *"Review skipped:
-manual review required for this OSS repository"*), and a `@coderabbitai review`
-comment triggers it by hand.
+A code PR may merge once a session other than its implementer has read it and
+posted its report on the PR. CodeRabbit does not review automatically below 10
+stars, so it never satisfies this half on its own; `merge-policy` stays
+`after-ci-and-review`.
 
-**That changes nothing below.** A bot that has to be asked is not a standing
-reviewer; this repository has swapped review bots four times; and the measured
-comparison in this section is why the second-session read is the *primary*
-reviewer rather than the fallback, not a stopgap for the days the bot was away.
-Trigger it when a diff is worth a second opinion. It does not satisfy the review
-half on its own, and `merge-policy` stays `after-ci-and-review`.
-
-**A code PR may merge once a session other than its implementer has read it and
-reported on the PR.** That is the same discipline the section above already requires
-for a correctness-critical gate, applied to the whole diff rather than to fixtures —
-and on the evidence it is the stronger reviewer, not the fallback. Measured on the
-PRs open when the bot left: the independent read of `concept_map.yaml` found **41**
-placements wrong in the fail-open direction, and the read of the cue vocabulary found
-**19**, against CodeRabbit's **9** on the same PR that carried the 41.
-
-Three rules keep it from becoming prose nobody reads:
-
-- **The report goes on the PR**, naming for each finding the input, the verdict, and
-  the section of spec or definition it is derived from. A verdict argued from what the
-  code does is the circularity this exists to break.
-- **The implementer never signs it off.** If no other session has read a PR, it is not
-  reviewed — say so and leave it, exactly as `open_task_pr.sh` refuses a PR that would
-  close nothing.
-- **Accepted findings are committed as fixtures before merge**, per the section above.
-  A report that is read and waved through leaves the code as unprotected as it was.
-
-**Docs-only PRs are exempt** — a handover or a task-file edit merges on green CI. The
-rule is about diffs that can be wrong in a way a test does not already catch.
-
-`D-28` (`claude-arsenal#313`) is re-scoped to this: not "read CodeRabbit's signal" but
-"a merge must not proceed until a second-reader report exists for the head commit".
-That is a checkable condition, which the bot's never was — **and it now has a
-reader**, so the rule above is no longer only prose.
-
-**End the report with the marker, and check it before merging.** The marker is
-emitted, never typed: prose saying "reviewed" passes a scan that matches words and
-fails on a thorough review that does not use them.
-
-```bash
-uv run python -m integral.review_reader emit --head <40-hex head sha>   # the reader pastes this last line
-uv run python -m integral.review_reader check <pr-state.json>           # the merger runs this
-```
-
-`check` reads a small JSON capture — `number`, `author`, `head_sha`, `files`,
-`comments[{author, body}]` — written to disk from a GitHub tool result, the same
-way the board JSON is, so it works on a surface whose REST channel answers 403.
-Its exit codes are `adversarial_review.sh`'s, and for the same reason: **0** a
-second reader cleared *this* head (or the PR is docs-only and exempt), **1** a
-second reader said BLOCK, **2** no report on record, **3** a report exists but for
-another commit. **2 and 3 are not passes** — a review of an earlier tree is not a
-review of this one, which is what #320 cost nine unworked findings. A marker
-written by the PR's own author never counts, including one they quote from
-somebody else's report — and one whose author did not resolve at all counts for
-nobody: an identity that cannot be shown to differ from the implementer's does
-not rule self-review out.
-
-**How an author becomes an identity is one rule: the string must already BE a
-login.** #408 took **five** review rounds, and each of the first four normalised
-one more layer of decoration and stopped — a blank author, then case, then
-invisible padding, then visible padding (`@nuncaeslupus`, `nuncaeslupus.`,
-`(nuncaeslupus)`, the fullwidth `ｎｕｎｃａｅｓｌｕｐｕｓ`, `nunca es lupus`), every
-one of them clearing that account's own PR through this very CLI at exit 0. So
-the rule is now stated as a **validator**, not a transform:
-
-> `resolve_identity` trims outer whitespace, requires the whole string to match
-> `[A-Za-z0-9](?:-?[A-Za-z0-9])*`, and casefolds. **Anything else returns
-> `None`** — unresolvable, exit 2 — and is never repaired into an identity.
-
-**The paragraph this replaces was wrong, and the way it was wrong is the lesson.**
-Round 4's rule was *NFKC-fold, then delete everything outside `[A-Za-z0-9-]`*,
-defended here as safe because "the transform only ever *merges* strings … so
-every collision pushes toward `blocked`". Both halves are false:
-
-- **An allowlist applied as a deletion filter enumerates by complement.** It
-  removes only decoration made of characters *outside* the alphabet; decoration
-  made of characters *inside* it is **welded onto the login**, and a weld is a
-  different identity, which reads as somebody else and clears the PR.
-  `nuncaeslupus (OWNER)` — a `gh` association badge, one step past round 4's own
-  accepted `(nuncaeslupus)` — became `nuncaeslupusowner`: exit 0,
-  `merge_may_proceed: true`, on a PR authored by `nuncaeslupus`.
-- **The transform did not only merge.** Its own worked example refutes it:
-  `resolve_identity("straße")` returned `strae`, **not** `strasse`. Deletion
-  shortens and NFKC lengthens (`™`→`TM`, `№`→`No`, `Ⅷ`→`VIII`), so it **split**
-  too — and every split is **fail-open**, because a split moves a writer away
-  from the author and toward "somebody else". `²`, `Ⅷ`, `™`, `Ⓐ`, `½` and `㎏`
-  each resolved alone to a distinct identity and cleared the head at exit 0.
-
-The discriminator is therefore not whether the output *looks* like a login (`2`
-looks no worse than `reviewer`) but whether normalisation had to **rewrite the
-input into something else**. Validation cannot: it returns the login GitHub
-itself would case-fold, or nothing. `nunca-es-lupus` is the control that the
-strictness has not gone too far — the hyphen is in the grammar, so a hyphenated
-login is a different, real account and still clears at exit 0.
-
-`status/evidence/D28.json` is the gate: `merges_allowed_without_a_review_of_the_head`
-over forty-seven constructed states — including the PR-**author**-side mirrors no
-round before the fifth had, which is structurally why each stopped one layer
-short — with `-1` and `review_reader_status: unmeasured` rather than a clean zero
-when the scan resolves nothing.
+- **The report goes on the PR**, naming for each finding the input, the verdict and
+  the section of spec or definition it derives from, not what the code does.
+- **The implementer never signs it off.** If no other session has read a PR, it is
+  not reviewed: say so and leave it.
+- **Accepted findings are committed as fixtures before merge.**
+- **Docs-only PRs are exempt** (a handover or task-file edit merges on green CI).
+- **The report ends with** `second-reader: head=<40-hex sha> verdict=CLEAR|BLOCK`.
+  The merger checks that `head` equals the PR's current head and the verdict is
+  `CLEAR` before merging; a report for an earlier head is not a review of this one.
 
 ## Work each task in a linked worktree — that is the whole branch protocol
 
