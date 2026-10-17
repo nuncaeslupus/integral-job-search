@@ -465,9 +465,12 @@ from integral.send_set import (
     LETTER_TXT,
     Renderer,
     SendSetError,
+    TextReader,
     derive,
     derived_names,
     letter_text,
+    pdf_defects,
+    pdf_references,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -910,7 +913,12 @@ def stage_send(
 
 
 def verify_send(
-    store: ProfileStore, offer_id: str, version: int, *, payload: Payload | None = None
+    store: ProfileStore,
+    offer_id: str,
+    version: int,
+    *,
+    payload: Payload | None = None,
+    pdf_reader: TextReader | None = None,
 ) -> list[str]:
     """What in `send/` is not what was approved. Empty means it is exactly that.
 
@@ -948,8 +956,13 @@ def verify_send(
     if confirmed != payload_digest(payload):
         defects.append("send.json was staged over a different payload than the one on disk")
     try:
-        derived = derived_names(store.identity().display_name, payload.documents)
-    except (SendSetError, IdentityError) as exc:
+        identity = store.identity()
+        derived = derived_names(identity.display_name, payload.documents)
+        approved = {
+            name: store.path(*where, name).read_text(encoding="utf-8") for name in payload.documents
+        }
+        pdf_expected = pdf_references(identity.display_name, identity.language, approved)
+    except (SendSetError, IdentityError, OSError, ValueError) as exc:
         return [*defects, f"the sendable set cannot be derived: {exc}"]
     if sorted(recorded) != sorted((*payload.documents, *derived)):
         defects.append("send.json does not list exactly the payload's documents and sendable set")
@@ -973,11 +986,17 @@ def verify_send(
                 letter = store.path(*where, LETTER_MD).read_text(encoding="utf-8")
                 reference = letter_text(letter).encode("utf-8")
             else:
-                # A PDF is not reproducible (the engine stamps a time), so the
-                # recorded digest is all there is, and the file must at least be one.
+                # A PDF is not reproducible (the engine stamps a time), so its
+                # reference is its text layer: it must hold the approved document(s),
+                # re-rendered from the version dir, in order. The digest alone would
+                # agree with a PDF rewritten together with send.json.
                 reference = None
                 if not sent.startswith(b"%PDF"):
                     defects.append(f"{name} in send/ is not a PDF")
+                else:
+                    defects.extend(
+                        pdf_defects(name, sent, pdf_expected.get(name, ("",)), pdf_reader)
+                    )
             if (reference is not None and sent != reference) or _sha256(sent) != expected:
                 defects.append(f"{name} in send/ differs from what was approved")
     return defects

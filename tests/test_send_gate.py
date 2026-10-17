@@ -14,6 +14,9 @@ def test_the_gate_reads_zero_over_every_candidate() -> None:
     assert measured["send_folders_examined_at_least"] == send_gate.MINIMUM_FOLDERS == 3
 
 
+_REAL_DERIVE = send_set.derive
+
+
 def _without(name_part: str):  # type: ignore[no-untyped-def]
     real = send_set.derive
 
@@ -51,6 +54,31 @@ def test_a_combined_pdf_with_the_cv_first_is_counted(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr("integral.approval.derive", cv_first)
     assert send_gate.measure()["send_folders_missing_a_sendable_document"] == 3
+
+
+def _swapped(display, lang, texts, render=None):  # type: ignore[no-untyped-def]
+    """The second reader's mutation: each single holds the other document, CV first."""
+    made = _REAL_DERIVE(display, lang, texts, render)
+    stem = send_set.name_stem(display)
+    cv, letter = made[f"{stem}-CV.pdf"], made[f"{stem}-Cover-Letter.pdf"]
+    made[f"{stem}-CV.pdf"], made[f"{stem}-Cover-Letter.pdf"] = letter, cv
+    made[f"{stem}-Application.pdf"] = send_set.fixture_renderer(
+        [
+            cv.removeprefix(b"%PDF-fixture\n").decode(),
+            letter.removeprefix(b"%PDF-fixture\n").decode(),
+        ]
+    )
+    return made
+
+
+def test_pdfs_that_hold_each_others_documents_are_counted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F1: names and a self-consistent combined file do not make the right content."""
+    monkeypatch.setattr("integral.approval.derive", _swapped)
+    measured = send_gate.measure()
+    assert measured["send_folders_missing_a_sendable_document"] == 3
+    assert any("does not hold the CV" in d for d in measured["defects"])
 
 
 def test_a_generic_cv_pdf_name_is_counted(monkeypatch: pytest.MonkeyPatch) -> None:

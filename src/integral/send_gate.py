@@ -35,7 +35,7 @@ from integral.approval import (
 )
 from integral.cv_store import write_master
 from integral.identity import ProfileStore, create_profile
-from integral.send_set import fixture_renderer, letter_text
+from integral.send_set import fixture_renderer, letter_text, read_pdf_text
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T338.json"
@@ -55,8 +55,10 @@ MINIMUM_FOLDERS = 3
 _MARKED_LETTER = "# Dear team\n\nI **led** the move.\n\n- one\n* two\n"
 _PLAIN_LETTER = "Dear team\n\nI led the move.\n\n- one\n- two\n"
 
-_PAGE_SEPARATOR = b"\n%%PAGE\n"
-_HEADER = b"%PDF-fixture\n"
+# Text only the CV carries (its "Skills" heading) and only the letter carries (its
+# salutation), as `text_stream` writes them. Stated here, not derived from the code.
+_CV_ONLY = "skillspostgresql"
+_LETTER_ONLY = "dearhiringteam"
 
 
 def _folder_defects(display: str, handle: str, stem: str, root: Path) -> tuple[bool, list[str]]:
@@ -84,9 +86,14 @@ def _folder_defects(display: str, handle: str, stem: str, root: Path) -> tuple[b
             found.append(f"{handle}: {name} is missing from send/")
     if found:
         return True, found
-    cv = (folder / wanted[0]).read_bytes().removeprefix(_HEADER)
-    letter_pdf = (folder / wanted[1]).read_bytes().removeprefix(_HEADER)
-    if (folder / wanted[2]).read_bytes() != _HEADER + letter_pdf + _PAGE_SEPARATOR + cv:
+    cv_pdf, letter_pdf, combined = (read_pdf_text((folder / name).read_bytes()) for name in wanted)
+    # The property, read against text stated here (not against the other output files):
+    # each named PDF holds its own document, and the combined one opens with the letter.
+    if _CV_ONLY not in cv_pdf or _LETTER_ONLY in cv_pdf:
+        found.append(f"{handle}: {wanted[0]} does not hold the CV")
+    if _LETTER_ONLY not in letter_pdf or _CV_ONLY in letter_pdf:
+        found.append(f"{handle}: {wanted[1]} does not hold the cover letter")
+    if not 0 <= combined.find(_LETTER_ONLY) < combined.find(_CV_ONLY):
         found.append(f"{handle}: the combined PDF is not the letter followed by the CV")
     text = (folder / "Cover-Letter.txt").read_text(encoding="utf-8")
     if "**" in text or any(line.startswith("#") for line in text.splitlines()):

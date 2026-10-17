@@ -24,8 +24,15 @@ from integral.approval import (
     verify_send,
 )
 from integral.cv_store import CVMaster, Episode, Experience, Skill, write_master
+from integral.document_render import RenderError
 from integral.identity import ProfileStore, create_profile
-from integral.send_set import SendSetError, fixture_renderer, letter_text, name_stem
+from integral.send_set import (
+    SendSetError,
+    fixture_renderer,
+    letter_text,
+    name_stem,
+    read_pdf_text,
+)
 
 OFFER = "girona-1"
 SENDABLE = [
@@ -274,7 +281,12 @@ def test_a_document_edited_after_staging_in_both_places_is_refused(
     for where in (_send(store, version), _version_dir(store, version)):
         letter = where / "letter.md"
         letter.write_text(letter.read_text(encoding="utf-8") + "\nBest wishes.\n", encoding="utf-8")
+    # the PDFs made from the old letter no longer match the letter on disk either
     assert verify_send(store, OFFER, version) == [
+        "Ada-Lovelace-Application.pdf in send/ does not hold approved document 1"
+        " in the required order",
+        "Ada-Lovelace-Cover-Letter.pdf in send/ does not hold the approved text"
+        " in the required order",
         "Cover-Letter.txt in send/ differs from what was approved",
         "letter.md in send/ differs from what was approved",
     ]
@@ -299,6 +311,28 @@ def test_the_combined_pdf_puts_the_letter_first(store: ProfileStore, master: CVM
     cv = (folder / "Ada-Lovelace-CV.pdf").read_bytes().removeprefix(b"%PDF-fixture\n")
     assert letter != cv
     assert combined == b"%PDF-fixture\n" + letter + b"\n%%PAGE\n" + cv
+
+
+def _pdf_text(folder: Path, name: str) -> str:
+    return read_pdf_text((folder / name).read_bytes())
+
+
+def test_each_pdf_holds_the_document_its_name_says_and_the_combined_is_letter_first(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """F1: the property, against text stated here, not against the other output files.
+
+    Only the CV carries its "Skills" heading and only the letter its salutation; both
+    strings are written out, so a swap in `derive` cannot agree with them.
+    """
+    folder = _send(store, _staged(store, master))
+    cv_marker, letter_marker = "skillspostgresql", "dearhiringteam"
+    letter_pdf = _pdf_text(folder, "Ada-Lovelace-Cover-Letter.pdf")
+    cv_pdf = _pdf_text(folder, "Ada-Lovelace-CV.pdf")
+    combined = _pdf_text(folder, "Ada-Lovelace-Application.pdf")
+    assert cv_marker in cv_pdf and cv_marker not in letter_pdf
+    assert letter_marker in letter_pdf and letter_marker not in cv_pdf
+    assert 0 <= combined.find(letter_marker) < combined.find(cv_marker)
 
 
 def test_the_plain_text_letter_is_the_letter_without_markup(
@@ -330,9 +364,31 @@ def test_the_file_name_comes_from_the_display_name(display: str, stem: str) -> N
     assert name_stem(display) == stem
 
 
-def test_a_name_with_no_usable_letters_refuses() -> None:
-    with pytest.raises(SendSetError):
-        name_stem("—  ")
+@pytest.mark.parametrize("display", ["—  ", "Иван Петров", "李小龙", "Νίκος Παππάς", ""])
+def test_a_name_with_no_latin_letters_takes_a_neutral_stem(display: str) -> None:
+    assert name_stem(display) == "Candidate"
+
+
+def test_a_mixed_script_name_keeps_its_latin_words() -> None:
+    assert name_stem("Иван Petrov") == "Petrov"
+
+
+def test_a_non_latin_display_name_still_stages_the_whole_set(
+    tmp_path: Path, master: CVMaster
+) -> None:
+    identity = create_profile(tmp_path / "other", "Иван Петров", handle="ivan", language="en")
+    store = ProfileStore(tmp_path / "other", identity.handle)
+    write_master(store, master)
+    version = _staged(store, master)
+    assert {p.name for p in _send(store, version).iterdir()} == {
+        "cv.md",
+        "letter.md",
+        "Candidate-Application.pdf",
+        "Candidate-CV.pdf",
+        "Candidate-Cover-Letter.pdf",
+        "Cover-Letter.txt",
+    }
+    assert verify_send(store, OFFER, version) == []
 
 
 @pytest.mark.parametrize("target", [*SENDABLE])
@@ -365,6 +421,53 @@ def test_a_derived_file_rewritten_with_its_record_is_still_refused_when_derivabl
     assert verify_send(store, OFFER, version) == [
         "Cover-Letter.txt in send/ differs from what was approved"
     ]
+
+
+def _rerecord(store: ProfileStore, version: int, name: str) -> None:
+    record = _version_dir(store, version) / "send.json"
+    data = json.loads(record.read_text(encoding="utf-8"))
+    data["files"][name] = hashlib.sha256((_send(store, version) / name).read_bytes()).hexdigest()
+    record.write_text(json.dumps(data), encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "name", ["Ada-Lovelace-CV.pdf", "Ada-Lovelace-Cover-Letter.pdf", "Ada-Lovelace-Application.pdf"]
+)
+def test_a_forged_pdf_with_a_matching_record_is_refused(
+    store: ProfileStore, master: CVMaster, name: str
+) -> None:
+    """F2: a PDF rewritten together with its send.json digest still has to hold the text."""
+    version = _staged(store, master)
+    (_send(store, version) / name).write_bytes(b"%PDF-1.7\nan unapproved letter\n")
+    _rerecord(store, version, name)
+    defects = verify_send(store, OFFER, version)
+    assert defects and all(name in d for d in defects)
+    with pytest.raises(ApprovalError, match="send/ folder is not what was approved"):
+        record_sent(store, master, OFFER, version, confirms=_confirm(store, version))
+
+
+def test_a_pdf_whose_text_was_changed_but_whose_header_is_right_is_refused(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    version = _staged(store, master)
+    path = _send(store, version) / "Ada-Lovelace-Cover-Letter.pdf"
+    path.write_bytes(
+        path.read_bytes().replace(b"hiring team", b"hiring crew") + b"<p>Pay me in advance</p>"
+    )
+    _rerecord(store, version, path.name)
+    assert path.name in "".join(verify_send(store, OFFER, version))
+
+
+def test_a_pdf_with_no_text_reader_is_not_waved_through(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    version = _staged(store, master)
+
+    def blind(_: bytes) -> str:
+        raise SendSetError("no reader")
+
+    defects = verify_send(store, OFFER, version, pdf_reader=blind)
+    assert len(defects) == 3 and all("cannot be checked" in d for d in defects)
 
 
 def test_a_pdf_swapped_for_something_else_is_refused_even_with_a_matching_record(
@@ -413,3 +516,35 @@ def test_the_real_engine_stages_the_same_set(store: ProfileStore, master: CVMast
         if name.endswith(".pdf"):
             assert (folder / name).read_bytes().startswith(b"%PDF")
     assert verify_send(store, OFFER, version) == []
+
+
+def test_the_real_engines_page_join_keeps_each_document_whole_and_in_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F3: `render_pdf_pages` against a stub engine, so it runs without the pdf extra."""
+    import types
+
+    from integral.document_render import render_pdf_pages
+
+    class Doc:
+        def __init__(self, pages: list[str]) -> None:
+            self.pages = pages
+
+        def copy(self, pages: list[str]) -> Doc:
+            return Doc(list(pages))
+
+        def write_pdf(self) -> bytes:
+            return b"%PDF-stub:" + ",".join(self.pages).encode()
+
+    class Html:
+        def __init__(self, string: str, url_fetcher: object) -> None:
+            self.string = string
+
+        def render(self) -> Doc:
+            return Doc([f"{self.string}/1", f"{self.string}/2"])
+
+    monkeypatch.setitem(sys.modules, "weasyprint", types.SimpleNamespace(HTML=Html))
+    assert render_pdf_pages(["letter", "cv"]) == b"%PDF-stub:letter/1,letter/2,cv/1,cv/2"
+    assert render_pdf_pages(["only"]) == b"%PDF-stub:only/1,only/2"
+    with pytest.raises(RenderError):
+        render_pdf_pages([])
