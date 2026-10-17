@@ -122,14 +122,20 @@ def package_population(src: Path = SRC) -> Findings:
     return found
 
 
-#: Markup the package holds that no person ever reads as a report: stand-ins for a
-#: board's response and the copies of one, built for a probe or a fixture. Keyed by
+#: Markup the package holds that is not a report page of the shell's own: stand-ins for a
+#: board's response and the copies of one, built for a probe or a fixture, plus the printable
+#: CV or letter that document_render writes beside its JSON (built by report_style.page, so
+#: styled by the shell, but written by that module and recorded here in the open). Keyed by
 #: module, scope and kind, with how many matches it covers, so an exemption cannot
 #: absorb a second opener or a different kind of finding.
 NOT_A_REPORT: dict[Finding, tuple[int, str]] = {
     ("connector_exchange", "_stale_source", OPENS): (1, "an empty list page for a fixture"),
     ("connector_exchange", "_stale_source", WRITES): (1, "writes that page into a fixture"),
     ("connector_health", "<module>", OPENS): (12, "simulated board responses (WAF, 429, a list)"),
+    ("document_render", "_render_version", WRITES): (
+        1,
+        "a candidate document rendered via report_style.page, written beside its JSON",
+    ),
     ("exclusion_live_round", "measure_live_round", OPENS): (1, "a served board page, offline"),
     ("fixture_shapes", "buried", OPENS): (1, "an anchor a refusal fixture is restyled at"),
     ("fixture_shapes", "named_innocuously", OPENS): (3, "anchors a refusal fixture is retitled at"),
