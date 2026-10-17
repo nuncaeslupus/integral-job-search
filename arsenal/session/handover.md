@@ -1,5 +1,22 @@
 # Session handover
 
+## 00024. Night run: six PRs merged, owner policy A–E, pruning approved
+
+Merged: #815, #816, #817, #818, #820, #821, #823, #824. In flight: #825 (T341, CLEAR, merge after CI),
+#822 (T339, review cap reached under policy C; merge main, wait for green CI, then merge).
+Follow-ups filed: #826 (mailbox), #827 (brand palette), #828 (form answers).
+
+- **Owner policy A–E** is now the first rules section of `CLAUDE.md`. Long sections below it
+  (verified_gate, mutation, second-reader fixtures, floors) are superseded where they conflict.
+- **Pruning approved (owner, 2026-10-17):** tiers (a)+(b) of the meta-code audit (~28k lines,
+  ~2,300 tests), including `tools/verified_gate.sh` and its CLAUDE.md sections, in small PRs per group.
+  Start with the `floor_*` trio: `test_floor_sweep` alone takes ≥5 min. Each deletion PR drops the
+  module from the evidence registry, deletes its evidence JSON, keeps `verify_gates` passing for
+  archived tasks, and lowers the `MINIMUM_*` floors.
+- **Process lessons:** fixers used `pkill` on their own gate twice (never do this); stage everything
+  before `open_task_pr.sh` or `make evidence` diffs against the index; two `make evidence` runs on
+  one machine at once broke policy D.
+
 ## 00023. Laptop run handed to the cloud mid-flight: T191, T340, T344 open; T346 seeded
 
 The laptop closed with four PRs open. Pick them up in this order (each later one conflicts on the M4
