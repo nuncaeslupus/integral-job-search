@@ -6,6 +6,7 @@ deps: [t-6f2b9c14]
 tags: [ARSENAL]
 workspace: BACKEND
 status: merged
+retired: "floor_* meta gates deleted, pruned 2026-10-17 by owner decision"
 ---
 
 ## Acceptance gate

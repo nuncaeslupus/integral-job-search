@@ -14,7 +14,6 @@ integral.sourcing_exclusions` is the task's gate) and never imports it.
 Not an `EVIDENCE_SOURCES` entry, on purpose: T150 requires every registered
 source to be moved by a mutation of the tree, and this measurement reads a fixed
 corpus, so registering it would fail that rule for a reason that is no defect.
-`floor_sweep`'s `MINIMUM_FLOORS_SWEPT` carries the same precedent.
 
 Known ceiling, stated rather than solved: an exclusion is matched as words, so a
 figurative use of the topic ("first line of defense") in an advert on some other

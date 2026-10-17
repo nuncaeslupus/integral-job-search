@@ -494,7 +494,7 @@ _HTML_ATTRIBUTE = re.compile(r'([A-Za-z_:][-A-Za-z0-9_:.]*)="([^"]*)"')
 # "this repository's own library" — it is "whatever directory this particular
 # invocation was given", which varies by caller the same way
 # `corpus.MIN_ADS_PER_FAMILY` and `salary_recovery.HOUSE_ESTIMATE_MINIMUM`
-# (both named in `floor_sweep`'s own docstring) compare against a per-group
+# compare against a per-group
 # count that is never the length of a fixed collection. `1` stays a floor in
 # the sense this task cares about (a run over zero packages is refused, at
 # `evidence_target(positional, own_library) is not None`'s own check above),

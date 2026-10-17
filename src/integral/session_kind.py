@@ -330,9 +330,8 @@ def read_recorded_kind(root: Path, *, session_id: str) -> SessionKind | None:
 # really adding or archiving one (`repo_gate.EvidenceSource.measure(repo_root,
 # **population)`). `measure` below counts misclassifications over constructed
 # temp directories that have nothing to do with `repo_root` — neither tree
-# mutation would ever change its result, which is exactly the shape
-# `floor_sweep.py` already declines to register `floors_swept` over, for the
-# identical reason, stated there beside its own such omission: a source
+# mutation would ever change its result, which is exactly the shape of a
+# registrant that must decline to register: a source
 # `repo_gate.measure_evidence_stability` cannot move is reported as "moved by
 # no mutation" and turns *that* gate `unmeasured` over a registrant that was
 # never going to move. `status/evidence/T137.json` is still produced and

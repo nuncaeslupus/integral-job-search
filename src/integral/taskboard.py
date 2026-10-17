@@ -92,6 +92,7 @@ def _row(path: Path, *, default_status: str) -> dict[str, Any] | None:
         "tags": meta.get("tags", []),
         "workspace": meta.get("workspace"),
         "pr": meta.get("pr"),
+        "retired": meta.get("retired"),
         "payload": str(path),
     }
 

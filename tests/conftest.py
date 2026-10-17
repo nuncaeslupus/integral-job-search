@@ -1,14 +1,12 @@
 """Session-wide guard: no test may modify the committed evidence.
 
-`floor_sweep`'s cache key hashes every `status/evidence/*.json`, and the
-evidence files are the repository's committed measurements, so a test that
-rewrites one -- even with identical bytes -- can race another worker's read and
-key a second analysis of the same tree, and one that leaves different bytes
-dirties a committed record (issue #671). The rule is closed rather than listed:
-every file under `status/evidence/` is snapshotted (bytes and mtime) when the
-session starts, and the session fails at its end naming each file that changed,
-appeared or vanished. Under xdist the controller does the check, so a write by
-any worker is seen.
+The evidence files are the repository's committed measurements, so a test that
+rewrites one -- even with identical bytes -- can race another worker's read, and
+one that leaves different bytes dirties a committed record (issue #671).
+The rule is closed rather than listed: every file under `status/evidence/` is
+snapshotted (bytes and mtime) when the session starts, and the session fails at
+its end naming each file that changed, appeared or vanished. Under xdist the
+controller does the check, so a write by any worker is seen.
 """
 
 from __future__ import annotations
