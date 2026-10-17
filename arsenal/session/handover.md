@@ -1,5 +1,38 @@
 # Session handover
 
+## 00023. Laptop run handed to the cloud mid-flight: T191, T340, T344 open; T346 seeded
+
+The laptop closed with four PRs open. Pick them up in this order (each later one conflicts on the M4
+row of `status/plan.md`; resolve by removing all merged labels from that row):
+
+1. **#816 T340 `applications mark` — ready to merge.** Opus second reader CLEAR on head `39003568`
+   (comment 6227215875). Remaining: `UV_PYTHON=3.12 bash tools/verified_gate.sh <head>` PASS, CI green,
+   squash-merge with `--match-head-commit`. Non-blocking notes in the CLEAR comment (N1: pin that no
+   `offer_reaction` row is written after a confirmed-status refusal).
+2. **#818 T346 seed + this handover — docs-only.** Needs CI green and a verified_gate block; no reader.
+3. **#815 T191 `document_render version` — fix in progress.** Two BLOCKs (6225714380, 6226588869).
+   Open item G1: write the `.html`/`.pdf` suffix literally, and add
+   `("document_render", "_render_version", WRITES)` to `NOT_A_REPORT` in `test_report_style`. Head:
+   `55879b9e` (G1 edits committed as WIP by the closing session, untested). Then: full `make host-gate`, Opus re-review of the diff since the BLOCK, gate, merge.
+   The real-data run on a candidate's version directory is still owed after merge.
+4. **#817 T344 `employer_brief` — fix in progress.** BLOCK 6227065997. Fixes asked: F1 (tripped
+   exclusion or `hires_in_candidate_country=false` must not count as briefed), F2 (compare the brief's
+   sector text on its own; `topic_text` strips trailing Requisitos/Beneficios sections), F3 (sector test),
+   F4 (liveness without a source URL is not checked), F5 (brief after the presentation does not clear it;
+   ISO `checked_at`), F7 (malformed presentations rows reported, not crashed), skill uses
+   `uv run python -m` and names `integral.applications mark … expired`. F6, F8 left as-is (F8, no
+   cutoff date, is an owner decision); F9 accepted. Head: `524b9dff` (all listed fixes committed by the worker; host-gate not confirmed). Then host-gate, re-review, gate, merge.
+
+- **Gate only after CLEAR.** `verified_gate.sh` took ~45 min here (`9260 passed in 2638.92s`); two runs
+  were thrown away by starting it before review. T346 is the task to make it faster (`--dist loadfile`
+  makes the slowest file the critical path: `test_generate`, `test_step_skills`, `test_floor_sweep`
+  took 31 min serial); T312 is the serial `make evidence` half.
+- **`claim_task.sh` printed `lost` with no claim ref present.** Workaround: create the ref directly
+  (`gh api -X POST repos/<owner>/<repo>/git/refs -f ref=refs/heads/arsenal/claims/<id> -f sha=<main>`,
+  201 = won). Upstream bug, not filed.
+- **Candidate-side, open:** `lesson_triage` for the session's candidate has ~137 open rows
+  (`uv run python -m integral.lesson_triage … check` exits 1); a degree year and grade are still unrecorded.
+
 ## 00022. Cloud run: T255 (#797, supersedes #792) and T148 (#798) merged
 
 - **Merged:** T255 (#797: #792's work with `main` merged in and fixes for its BLOCK findings B1-B3, N4, N5),
