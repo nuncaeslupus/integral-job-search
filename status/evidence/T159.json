@@ -110,12 +110,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4816
+      "line": 4819
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4970
+      "line": 4973
     },
     {
       "module": "gate_detector_states",
@@ -369,20 +369,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3876,
-      "population": 50
+      "line": 3878,
+      "population": 51
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3906,
+      "line": 3908,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3763,
-      "population": 108
+      "line": 3764,
+      "population": 109
     },
     {
       "module": "freshness",
@@ -579,6 +579,7 @@
     "mock_interview.MAX_QUESTIONS",
     "mock_interview.SCHEMA_VERSION",
     "mock_interview._ID_WIDTH",
+    "offers_seen_again.MINIMUM_RULED_OFFERS_CHECKED",
     "pagination_capture.MINIMUM_DUPLICATE_KEY_PROBES",
     "pagination_capture.MINIMUM_URL_SIDE_PROBES",
     "pay.STALE_AFTER_DAYS",
@@ -695,6 +696,7 @@
     "matcher_readings.MINIMUM_TRIPLES",
     "naming.MINIMUM_SCANNED",
     "offers.MINIMUM_CHECKS",
+    "offers_seen_again.MINIMUM_CONTROLS",
     "page_placeholder.MINIMUM_PROBES",
     "pagination_capture.MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES",
     "pagination_capture.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED",
@@ -752,6 +754,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 108,
+  "floors_swept_at_least": 109,
   "floors_arithmetically_checked_at_least": 36
 }

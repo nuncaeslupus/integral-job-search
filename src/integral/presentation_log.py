@@ -102,6 +102,8 @@ _RULED_OUT = ("screened_out", "rejected")
 REASON_APPLIED = "ya te presentaste a esta vacante"
 REASON_SHORTLISTED = "ya la tenías en tu lista de interesantes"
 REASON_SHOWN = "el mismo anuncio ya se te mostró"
+#: T345. The offer's own record, not a sibling's: the vacancy has lapsed.
+REASON_EXPIRED = "la vacante ya caducó"
 #: T255. Not a vacancy: nothing to rank, so it is told about rather than listed.
 REASON_OPEN_APPLICATION = "es una candidatura abierta, no una vacante"
 
@@ -280,9 +282,9 @@ def _has_applied(store: ProfileStore, offer_id: str) -> bool:
     """T250. Ever applied, or an `applications/<id>/status.json` record past
     `drafted` (a draft is not an application) which can exist while the offer
     still reads `new`. A record that cannot be read is not evidence of an
-    application: the offer is shown. Only siblings are asked: an offer's own
-    application record is left to the ranking (T242 ranks applied offers on
-    purpose)."""
+    application: the offer is shown. Asked of the offer itself and of its
+    siblings in `partition` (T345); `rank_named` does not go through `partition`,
+    so T242 still ranks applied offers on purpose."""
     if _ever(store, offer_id, frozenset({"applied"})):
         return True
     try:
@@ -370,13 +372,51 @@ def pending_skill_line(store: ProfileStore, offer_ids: list[str]) -> str:
     return f"sin leer todavía para saber si lo exigen: {parts}"
 
 
+class Shown(list[str]):
+    """What `partition` returns to show. `seen` is the subset shown in an EARLIER
+    batch, fixed when `partition` ran, so it cannot include the batch `present()`
+    records afterwards (T345: `shown_notes` may run before or after `present`)."""
+
+    seen: frozenset[str] = frozenset()
+
+
+def seen_before(store: ProfileStore, offer_ids: list[str]) -> list[str]:
+    """T345. Those of `offer_ids` already shown to the candidate in an earlier batch.
+
+    A list from `partition` carries that answer; any other list is asked of the log,
+    which is only right before `present()` has recorded it."""
+    if isinstance(offer_ids, Shown):
+        return [i for i in offer_ids if i in offer_ids.seen]
+    presented = _presented_ids(store)
+    return [i for i in offer_ids if i in presented]
+
+
+def _described(store: ProfileStore, offer_id: str) -> str:
+    loaded = _loaded(store, offer_id)
+    if loaded is None:
+        return offer_id
+    offer = loaded[0]
+    title = offer.title or offer_id
+    return f"{title} ({offer.company})" if offer.company else title
+
+
+def seen_line(store: ProfileStore, offer_ids: list[str]) -> str:
+    """T345. Says which shown offers are repeats, so none passes for new."""
+    seen = seen_before(store, offer_ids)
+    if not seen:
+        return ""
+    names = "; ".join(_described(store, i) for i in seen)
+    return f"{len(seen)} ya se te habían mostrado antes (no son nuevas): {names}"
+
+
 def shown_notes(store: ProfileStore, show: list[str]) -> list[str]:
     """Every note that must accompany a shown list: unchecked employers, unread skills.
 
     The one call step 9 makes after `partition`, so a note added here reaches the
     candidate without the SKILL having to name it.
     """
-    return [line for line in (unchecked_line(store, show), pending_skill_line(store, show)) if line]
+    lines = (unchecked_line(store, show), pending_skill_line(store, show), seen_line(store, show))
+    return [line for line in lines if line]
 
 
 def presented_pending_skill_counts(store: ProfileStore) -> dict[str, int]:
@@ -406,7 +446,7 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
     stored. An offer with no employer is compared with nothing and is shown;
     `unchecked_line` says so.
     """
-    show: list[str] = []
+    show = Shown()
     held: list[Withheld] = []
     # T203. Read here, at the one place every list the candidate reads passes
     # through: an offer stored *before* they ruled its topic out is not touched
@@ -458,8 +498,13 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
             )
         if loaded is not None and not is_advert(loaded[0]):
             held.append(Withheld(offer_id, REASON_OPEN_APPLICATION))
+        elif loaded is not None and _has_applied(store, offer_id):
+            # T345. The offer itself, not only a sibling: applied to is never shown as a find.
+            held.append(Withheld(offer_id, REASON_APPLIED))
         elif loaded is not None and loaded[0].status in _RULED_OUT:
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
+        elif loaded is not None and _ever(store, offer_id, frozenset({"expired"})):
+            held.append(Withheld(offer_id, REASON_EXPIRED))
         elif applied_copy is not None:
             held.append(Withheld(offer_id, REASON_APPLIED, applied_copy))
         elif shortlisted_copy is not None:
@@ -489,6 +534,7 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
                 shown_by_component[component] = offer_id
             if loaded is not None:
                 shown_in_batch.append((offer_id, loaded[0].company, loaded[0].title))
+    show.seen = frozenset(i for i in show if i in presented)
     return show, held
 
 
