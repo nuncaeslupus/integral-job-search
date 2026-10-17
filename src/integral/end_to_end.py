@@ -81,6 +81,7 @@ from integral.prior_documents import digest as prior_digest
 from integral.process_spec import StepList, load_steps
 from integral.profile import EvidenceLog
 from integral.rank import RankingError, from_extraction, rank
+from integral.send_set import fixture_renderer
 from integral.step_runtime import (
     ProfileView,
     missing_inputs,
@@ -579,7 +580,7 @@ def _send(
     offer_id, version, _ = sent
     confirms = payload_digest(read_payload(store, offer_id, version))
     try:
-        stage_send(store, master, offer_id, version, confirms=confirms)
+        stage_send(store, master, offer_id, version, confirms=confirms, renderer=fixture_renderer)
         defects = verify_send(store, offer_id, version)
         replay.check(not defects, f"the send folder is not what was approved: {defects}")
         # The check must be able to say no: a letter edited after staging is refused.

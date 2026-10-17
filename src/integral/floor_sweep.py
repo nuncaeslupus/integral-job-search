@@ -3759,8 +3759,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: **106 with T255**: `presentation_log.MINIMUM_OPEN_APPLICATION_CASES` is one more.
 #: **108 with T255's review fix**: `MINIMUM_SYNTHETIC_SHAPES` and
 #: `MINIMUM_ADVERT_CONTROLS` are two more.
+#: **109 with T338**: `send_gate.MINIMUM_FOLDERS` is one more.
 #: Still zero slack.
-MINIMUM_FLOORS_SWEPT = 108
+MINIMUM_FLOORS_SWEPT = 109
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4240,8 +4241,9 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: **101 with T142**: `document_render`'s one floor carries its own comment block and marker.
 #: **102 with T105**: `connector_contract`'s one new floor is one scenario more.
 #: **103 with T255**: `presentation_log`'s one new floor is one scenario more.
-#: **105 with T255's review fix**: its two new floors are two scenarios more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 105
+#: **105 with T255's review fix**: its two new floors are two scenarios more.
+#: **106 with T338**: `send_gate.MINIMUM_FOLDERS` is one more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 106
 
 
 def measure_prose_clearance() -> dict[str, Any]:

@@ -195,6 +195,10 @@ def test_the_sent_revision_is_staged_verified_recorded_and_alone(tmp_path: Path)
     assert sorted(
         p.name for p in store.path("cv", "generated", offer, f"v{version}", "send").iterdir()
     ) == [
+        "Cover-Letter.txt",
+        "Marta-Ferrer-Application.pdf",
+        "Marta-Ferrer-CV.pdf",
+        "Marta-Ferrer-Cover-Letter.pdf",
         "cv.md",
         "letter.md",
     ]
