@@ -222,6 +222,11 @@ def delivery_with_send(store: ProfileStore) -> tuple[Any, str, int]:
         ),
     ).version
     confirms = payload_digest(read_payload(store, offer.id, version))
+    from integral import brand_measure
+
+    # T342: staging needs a recorded palette; `{}` is a site that could not be read.
+    where = ("cv", "generated", offer.id, f"v{version}")
+    brand_measure.record(store, where, "fixture://unreadable", {})
     stage(store, master, offer.id, version, confirms=confirms, **_FIXTURE_ENGINE)
     return master, offer.id, version
 
