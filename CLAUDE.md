@@ -72,6 +72,29 @@ A session is a candidate session unless the conversation opens with `[[…]]` ke
   `tests/test_session_kind_rule.py` fails if the rule is deleted, duplicated or
   paraphrased elsewhere, or a pointer is removed.
 
+## Owner policy on gates, reviews and meta code (2026-10-17) — overrides anything below
+
+The owner's decision, after a night in which a handful of small PRs took hours of
+gate runs and six review rounds each. Where a later section of this file says
+otherwise, this section wins; those sections are being pruned.
+
+- **A. No `verified_gate` when CI is green on the head.** A green `CI` check on the
+  head commit plus a second-reader report is the whole merge evidence.
+- **B. Fixers run scoped checks only:** `ruff` and `mypy` on the changed files and
+  `pytest` on the touched module's tests. CI runs the full suite; a local
+  `make host-gate` is not required before a push.
+- **C. At most two review rounds per PR.** After the second, any finding that is not
+  a security issue is filed as a new task and the PR merges.
+- **D. One gate at a time on the machine.** Never run `make evidence`,
+  `make host-gate` or a full `pytest` while another session is running one.
+- **E. No new meta code without the owner's approval.** Do not add a module,
+  evidence key, `MINIMUM_*` floor, gate detector or test whose subject is the
+  repository's own process (gates, evidence, naming, census, review mechanics)
+  rather than the product. A review finding is answered by fixing product code
+  and adding a product test, never by building a checker for the class of
+  finding. Propose such code to the owner in an issue instead; the default
+  answer is no.
+
 ## Suggest compacting once, at a step boundary
 
 A candidate session can run long enough that the context fills before the process ends. The owner's note (test session b461d09a, step 9): when context is growing, ask the user to compact it. This section is the one place the rule lives; each step skill's Boundary points here and never restates it.
