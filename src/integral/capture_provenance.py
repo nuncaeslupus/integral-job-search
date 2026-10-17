@@ -245,7 +245,7 @@ def _committed_at(root: Path, relative: Path) -> bool:
     "Committed" is a filesystem question everywhere it is asked, and it is the
     same disclosure `check_transcribed` makes about its source: *resolves here*
     is not *is tracked by git*. An untracked working-tree file satisfies it;
-    `tools/verified_gate.sh` measuring a clean checkout is what makes that gap
+    a clean checkout (as CI makes) is what makes that gap
     hard to reach rather than closed.
 
     `relative` is assumed relative. An **absolute** one makes `base / relative`
@@ -616,8 +616,8 @@ def check_transcribed(
     * nothing establishes the command was ever **run**, or that its output is
       what `captured.json` records — only that it is committed here;
     * "resolves in this repo" is not "is tracked by git": an untracked working
-      -tree file satisfies it. `tools/verified_gate.sh` measures a clean
-      checkout, which makes that gap hard to reach rather than closed;
+      -tree file satisfies it. a clean
+      checkout (CI's) measures it, which makes that gap hard to reach rather than closed;
     * the client vocabulary is a fixed list. A request issued by a client
       `_REQUEST_COMMAND` does not name reads as no command at all — fail-closed,
       and the fix is to add the name.

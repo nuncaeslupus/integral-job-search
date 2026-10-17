@@ -455,7 +455,7 @@ _RUN_WINDOW = 4000
 # module's tests in definition order. Measured at `_RUN_WINDOW = 10_000_000`:
 # the test holding the ceiling failed in 0.61 s, and the library walk defined
 # 23 lines above it was killed at 300 s against a 22 s baseline — `make test`,
-# `make host-gate` and `verified_gate.sh` all hung exactly as they did before
+# `make host-gate` all hung exactly as they did before
 # the ceiling existed. An import-time refusal has no ordering to lose: nothing
 # in this module runs, so no test can be the one that runs first.
 #
