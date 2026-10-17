@@ -1,0 +1,19 @@
+{
+  "generated_versions_missing_from_the_index": 0,
+  "constructed_skipping_write_missing": 1,
+  "constructed_hand_kept_index_missing": 1,
+  "constructed_hand_edits_detected": 4,
+  "constructed_hand_edits_tried": 4,
+  "cases_measured": 8,
+  "cases_measured_at_least": 8,
+  "cases": {
+    "real_generate_two_offers_two_versions": 0,
+    "real_link_lists_the_employer_slug": 0,
+    "constructed_hand_edited_index": 4,
+    "real_stage_send_shows_employer_role_and_send_path": 0,
+    "real_idempotent_stage_send_repairs_the_index": 0,
+    "constructed_write_skipping_the_index": 1,
+    "constructed_hand_kept_index": 1,
+    "regeneration_is_byte_identical": 0
+  }
+}
