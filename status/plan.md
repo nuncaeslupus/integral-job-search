@@ -609,7 +609,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T338 | send/ is not the whole sendable set: no sendable PDF names, no combined PDF, no plain-text letter | 5 | M | — | `send_folders_missing_a_sendable_document == 0` | gate set in its own PR | ☑ |
 | T339 | Application-form answers are drafted by hand every time and never recorded | 5 | M | — | `form_answers_without_a_store_source == 0` | gate set in its own PR | ☐ |
 | T340 | Marking an offer applied, expired or rejected from the conversation has no command | 5 | M | — | `applications_mark_tests_failed == 0` | `uv run pytest tests/test_applications_mark.py -q` | ☑ |
-| T341 | Nothing reads the candidate's mailbox for replies to applications they sent | 5 | M | — | `mailbox_reads_without_a_per_read_permission == 0` | gate set in its own PR | ☐ |
+| T341 | Nothing reads the candidate's mailbox for replies to applications they sent | 5 | M | — | `mailbox_reads_without_a_per_read_permission == 0` | `uv run pytest tests/test_mailbox_replies.py -q && uv run python -m integral.mailbox_replies` | ☑ |
 | T342 | The employer's brand colours are measured by hand-written browser JavaScript every time | 5 | M | — | `generated_versions_without_a_recorded_palette_measurement == 0` | gate set in its own PR | ☑ |
 | T343 | cv/generated/ has no index, so finding a delivery means reading hash directories | 5 | M | — | `generated_versions_missing_from_the_index == 0` | `uv run pytest tests/test_generated_index.py && uv run python -m integral.generated_index` | ☑ |
 | T344 | An offer reaches the candidate's decision with no brief on the real employer or whether it is still open | 5 | M | — | `offers_presented_for_decision_without_an_employer_brief == 0` | gate set in its own PR | ☑ |
@@ -663,7 +663,7 @@ from `arsenal/tasks/_history/`, never from the plan's own ticks.
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed |, T285, T291, T292, T323, T327 |
 | **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T15, T59, T91, T199, T202, T256, T268, T270, T272, T274, T277, T278, T279, T282, T283, T284, T287, T294, T297, T298, T300, T301, T310, T315, T322, T330, T334 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T20, T69, T145, T249, T257, T275, T281, T289, T295, T314, T324 |
-| **M4 — per opportunity** | documents for one advert, and the interview around it | T29, D-26, T143, T211, T286, T288, T296, T313, T325, T326, T329, T339, T341 |
+| **M4 — per opportunity** | documents for one advert, and the interview around it | T29, D-26, T143, T211, T286, T288, T296, T313, T325, T326, T329, T339 |
 | **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | D-23, D-25, T112, T106, T189, T258, T259, T261, T262, T269, T271, T273, T276, T280, T290, T299, T302, T304, T305, T307, T308, T309, T319, T331, T332, T335, T336, T337 |
 | **cross-cutting** | S7 lands once M1 exists — a checkpoint script needs state to read | T115, T119, T213, T260, T263, T264, T265, T266, T267, T293, T303, T306, T311, T312, T316, T317, T318, T320, T321, T328, T333, T346 |
 

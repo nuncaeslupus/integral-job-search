@@ -115,12 +115,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4827
+      "line": 4831
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4981
+      "line": 4985
     },
     {
       "module": "gate_detector_states",
@@ -379,20 +379,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3881,
-      "population": 52
+      "line": 3882,
+      "population": 53
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3913,
-      "population": 34
+      "line": 3916,
+      "population": 35
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3767,
-      "population": 112
+      "line": 3768,
+      "population": 113
     },
     {
       "module": "freshness",
@@ -417,6 +417,12 @@
       "name": "MINIMUM_SCENARIOS",
       "line": 1227,
       "population": 78
+    },
+    {
+      "module": "mailbox_replies",
+      "name": "MINIMUM_CASES_MEASURED",
+      "line": 343,
+      "population": 47
     },
     {
       "module": "offers",
@@ -708,6 +714,7 @@
     "interview.MINIMUM_CHECKS",
     "lifecycle.MINIMUM_SCENARIOS",
     "literal_pin.MINIMUM_PINS_SWEPT",
+    "mailbox_replies.MINIMUM_CASES_MEASURED",
     "markup_text.MINIMUM_FIXTURE_OFFERS",
     "markup_text.MINIMUM_MARKUP_CONTRACTS",
     "markup_text.MINIMUM_MARKUP_VALUES_COMPARED",
@@ -774,6 +781,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 112,
+  "floors_swept_at_least": 113,
   "floors_arithmetically_checked_at_least": 36
 }
