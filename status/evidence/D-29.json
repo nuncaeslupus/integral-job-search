@@ -1,11 +1,17 @@
 {
-  "milestone_row_membership_violations": 0,
+  "milestone_row_membership_violations": 2,
   "gate_status": "measured",
-  "merged_still_listed": [],
+  "merged_still_listed": [
+    "T339",
+    "T343"
+  ],
   "listed_without_a_task": [],
   "open_but_unlisted": [],
   "open_but_listed_more_than_once": [],
-  "violations": [],
+  "violations": [
+    "T339 is merged and still listed in a milestone row",
+    "T343 is merged and still listed in a milestone row"
+  ],
   "merged_tasks_resolved_at_least": 100,
   "milestone_labels_scanned_at_least": 20
 }

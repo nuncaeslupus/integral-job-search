@@ -74,6 +74,10 @@ _CLASSES: tuple[tuple[tuple[str, ...], ArtefactClass], ...] = (
     (("interviews", "*", "preparation"), "authored"),
     (("interviews",), "historical"),
     (("cv", "source"), "historical"),
+    # T343: the map of that tree, rewritten on every version and link. Derived from
+    # the authored files beside it, carries no revision, and is never an offer to
+    # regenerate or a stale CV; unplaced it would be reported stale on every profile.
+    (("cv", "generated", "INDEX.md"), "historical"),
     (("cv", "generated"), "authored"),
     (("profile",), "derived"),
     (("extractions",), "derived"),
