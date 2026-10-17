@@ -586,6 +586,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "denominator."
         ),
     ),
+    "mailbox_replies.MINIMUM_CASES_MEASURED": (
+        "floor",
+        (
+            "`measured['cases_measured'] >= MINIMUM_CASES_MEASURED` in `gate_passes`: "
+            "the gate fails when fewer constructed replies and follow-up checks ran than "
+            "are committed, so deleting a refusing case cannot shrink the denominator."
+        ),
+    ),
     "generate.SCHEMA_VERSION": (
         "neither",
         (
