@@ -15,7 +15,13 @@ byte-identical and a regeneration that changes nothing writes nothing.
 and `approval.stage_send` call it as their last step; those are the three places
 that change what the index says. `status/evidence/T343.json` measures
 `generated_versions_missing_from_the_index` over constructed trees, one of which
-is a write path that skips the call, so the metric can read above zero.
+is a write path that skips the call, so the metric can read above zero. A
+"missing" here means the file on disk is not byte-for-byte `render_index` of the
+tree (`index_differs`); no cell is parsed, so a wrong link, a phantom version or
+row, or a `|` in a company name cannot pass or break the check. The real cases
+include a stored offer (employer and role columns) and a real `stage_send`
+(send-path column, the call's position after the send folder is written, and the
+early return over an intact folder).
 
 The file sits beside the offer directories, so every walker of `cv/generated/`
 has to skip it by name (`INDEX_NAME`); `revision.py` classes it historical, since
@@ -42,7 +48,7 @@ _VERSION_DIR = re.compile(r"^v(\d+)$")
 
 #: Constructed cases the metric is measured over (a floor: deleting a case makes
 #: the gate fail, it cannot silently shrink the denominator).
-MINIMUM_CASES_MEASURED = 5
+MINIMUM_CASES_MEASURED = 8
 
 _EMPTY = "-"
 
@@ -130,36 +136,19 @@ def refresh_index(store: ProfileStore) -> Path:
     return _atomic_write_text(store, text, "cv", "generated", INDEX_NAME)
 
 
-def versions_on_disk(store: ProfileStore) -> list[tuple[str, int]]:
-    root = store.path("cv", "generated")
-    found: list[tuple[str, int]] = []
-    if root.is_dir():
-        for child in sorted(root.iterdir(), key=lambda p: p.name):
-            if child.is_dir() and not child.is_symlink():
-                found.extend((child.name, n) for n in _versions(child))
-    return found
+def index_differs(store: ProfileStore) -> int:
+    """1 when `INDEX.md` on disk is not, byte for byte, what the tree renders; else 0.
 
-
-def missing_from_index(store: ProfileStore) -> list[str]:
-    """Versions on disk that the committed INDEX.md does not list, as `offer/vN`.
-
-    Reads the file on disk, not `render_index`: a write path that never called
-    `refresh_index` leaves the file as it was, and that is the thing measured."""
+    The closed rule: the file is a pure function of the manifests, so any other
+    content is stale (a write that skipped `refresh_index`), hand-edited (a wrong
+    link or send path), or invented (a phantom version or offer row). No cell is
+    parsed, so no cell content can fool it or break it."""
     path = store.path("cv", "generated", INDEX_NAME)
     try:
-        text = path.read_text(encoding="utf-8")
+        on_disk = path.read_text(encoding="utf-8")
     except OSError:
-        text = ""
-    listed: dict[str, set[int]] = {}
-    for line in text.splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) == 5 and cells[2].startswith("`") and cells[2].endswith("`"):
-            listed[cells[2].strip("`")] = {int(n) for n in re.findall(r"\bv(\d+)\b", cells[3])}
-    return [
-        f"{offer_id}/v{n}"
-        for offer_id, n in versions_on_disk(store)
-        if n not in listed.get(offer_id, set())
-    ]
+        return 1
+    return int(on_disk != render_index(store))
 
 
 # --- the gate ---------------------------------------------------------------
@@ -180,6 +169,53 @@ def _master() -> Any:
     return CVMaster.model_validate_json(DEFAULT_FIXTURE_MASTER.read_text(encoding="utf-8"))
 
 
+_GATE_ADVERT = "We are hiring a data engineer in Girona to own a PostgreSQL estate."
+GATE_COMPANY = "Acme | Co"
+GATE_ROLE = "Data Engineer"
+
+
+def delivery_with_send(store: ProfileStore) -> tuple[Any, str, int]:
+    """A real delivery: a stored offer with a company (containing `|`) and a title,
+    one prepared version, and `stage_send` run over it. Returns master, offer id, version."""
+    from integral.approval import PersonalDetails, payload_digest, prepare, read_payload
+    from integral.approval import stage_send as stage
+    from integral.cv_store import CVMaster, Experience, Skill, write_master
+    from integral.offers import connect_manual, save_offer
+
+    master = CVMaster(
+        experience=(
+            Experience(
+                title="Data migration lead",
+                organisation="Cintra Logistics",
+                start="2021",
+                end="2025",
+                description="Moved the billing system off the mainframe.",
+            ),
+        ),
+        skills=(Skill(name="PostgreSQL", level="strong"),),
+    )
+    write_master(store, master)
+    offer = connect_manual(_GATE_ADVERT, title=GATE_ROLE, company=GATE_COMPANY)
+    save_offer(store, offer)
+    version = prepare(
+        store,
+        master,
+        offer_id=offer.id,
+        advert=_GATE_ADVERT,
+        recipient="hiring team",
+        details=PersonalDetails(
+            full_name="Gate Fixture",
+            email="gate@example.invalid",
+            phone="+34 600 111 222",
+            postal_address="3 Carrer Nou, 17001 Girona",
+            date_of_birth="1815-12-10",
+        ),
+    ).version
+    confirms = payload_digest(read_payload(store, offer.id, version))
+    stage(store, master, offer.id, version, confirms=confirms)
+    return master, offer.id, version
+
+
 def _case_generate(store: ProfileStore, offer: str, skip: bool) -> None:
     """Write one version. `skip=True` is the write path that forgets the index."""
     from integral import generated_index as me
@@ -193,12 +229,40 @@ def _case_generate(store: ProfileStore, offer: str, skip: bool) -> None:
         me.refresh_index(store)
 
 
+def _hand_edits_detected(store: ProfileStore) -> tuple[int, int]:
+    """Apply each hand edit to a good index; count how many `index_differs` flags.
+
+    Edits: a wrong employer slug, a wrong send path, a phantom version, a phantom
+    offer row. Returns (detected, tried)."""
+    path = store.path("cv", "generated", INDEX_NAME)
+    good = path.read_text(encoding="utf-8")
+    rows = [line for line in good.splitlines() if line.startswith("| ") and "`sha256:" in line]
+    row = rows[0]
+    edits = [
+        good.replace("(`acme`)", "(`globex`)"),
+        good.replace(row, row.replace(", v2", ", v2, v9", 1)),
+        good + row.replace("`sha256:", "`sha256:zzz", 1) + "\n",
+        good.replace(row, row[: -len("| - |")] + "| `sha256:aaa/v2/send` |"),
+    ]
+    detected = 0
+    for edited in edits:
+        path.write_text(edited, encoding="utf-8")
+        detected += index_differs(store) if edited != good else 0
+    path.write_text(good, encoding="utf-8")
+    return detected, len(edits)
+
+
 def measure() -> dict[str, Any]:
     """`generated_versions_missing_from_the_index` over constructed trees.
 
-    Five cases. The real write paths (`generate`, `link_employer`, `stage_send`)
-    must leave nothing missing; the constructed skipping path must be caught, so
-    the count is shown able to read above zero."""
+    Every case counts, for one tree, how far `INDEX.md` on disk is from
+    `render_index` of that tree (byte for byte), plus the cells a real delivery
+    must show. The real write paths (`generate`, `link_employer`, `stage_send`,
+    and `stage_send` over an intact folder) must read 0; the constructed
+    skipping, hand-kept and hand-edited indexes must be caught, so the count is
+    shown able to read above zero."""
+    from integral.approval import payload_digest, read_payload
+    from integral.approval import stage_send as stage
     from integral.generate import generate, link_employer
 
     cases: dict[str, int] = {}
@@ -214,23 +278,41 @@ def measure() -> dict[str, Any]:
         for offer in ("sha256:aaa", "sha256:bbb"):
             generate(store, master, offer_id=offer, advert="Engineer")
             generate(store, master, offer_id=offer, advert="Engineer")
-        cases["real_generate_two_offers_two_versions"] = len(missing_from_index(store))
+        cases["real_generate_two_offers_two_versions"] = index_differs(store)
 
         link_employer(store, "sha256:aaa", "acme")
         text = store.path("cv", "generated", INDEX_NAME).read_text(encoding="utf-8")
-        cases["real_link_lists_the_employer_slug"] = len(missing_from_index(store)) + (
+        cases["real_link_lists_the_employer_slug"] = index_differs(store) + (
             0 if "`acme`" in text else 1
         )
+        detected, tried = _hand_edits_detected(store)
+        cases["constructed_hand_edited_index"] = detected
+
+        store = fresh("send")
+        delivered, offer_id, version = delivery_with_send(store)
+        text = store.path("cv", "generated", INDEX_NAME).read_text(encoding="utf-8")
+        wanted = (
+            "Acme \\| Co",
+            f"| {GATE_ROLE} |",
+            f"`{offer_id}/v{version}/send`",
+        )
+        cases["real_stage_send_shows_employer_role_and_send_path"] = index_differs(store) + sum(
+            1 for cell in wanted if cell not in text
+        )
+        store.path("cv", "generated", INDEX_NAME).write_text("# hand kept\n", encoding="utf-8")
+        confirms = payload_digest(read_payload(store, offer_id, version))
+        stage(store, delivered, offer_id, version, confirms=confirms)
+        cases["real_idempotent_stage_send_repairs_the_index"] = index_differs(store)
 
         store = fresh("skip")
         _case_generate(store, "sha256:ccc", skip=False)
         _case_generate(store, "sha256:ccc", skip=True)
-        cases["constructed_write_skipping_the_index"] = len(missing_from_index(store))
+        cases["constructed_write_skipping_the_index"] = index_differs(store)
 
         store = fresh("stale")
         _case_generate(store, "sha256:ddd", skip=False)
         store.path("cv", "generated", INDEX_NAME).write_text("# hand kept\n", encoding="utf-8")
-        cases["constructed_hand_kept_index"] = len(missing_from_index(store))
+        cases["constructed_hand_kept_index"] = index_differs(store)
 
         store = fresh("deterministic")
         _case_generate(store, "sha256:eee", skip=False)
@@ -240,12 +322,19 @@ def measure() -> dict[str, Any]:
             store.path("cv", "generated", INDEX_NAME).read_bytes() != first
         )
 
-    real = ("real_generate_two_offers_two_versions", "real_link_lists_the_employer_slug")
+    real = (
+        "real_generate_two_offers_two_versions",
+        "real_link_lists_the_employer_slug",
+        "real_stage_send_shows_employer_role_and_send_path",
+        "real_idempotent_stage_send_repairs_the_index",
+        "regeneration_is_byte_identical",
+    )
     return {
-        "generated_versions_missing_from_the_index": sum(cases[k] for k in real)
-        + cases["regeneration_is_byte_identical"],
+        "generated_versions_missing_from_the_index": sum(cases[k] for k in real),
         "constructed_skipping_write_missing": cases["constructed_write_skipping_the_index"],
         "constructed_hand_kept_index_missing": cases["constructed_hand_kept_index"],
+        "constructed_hand_edits_detected": cases["constructed_hand_edited_index"],
+        "constructed_hand_edits_tried": tried,
         "cases_measured": len(cases),
         "cases_measured_at_least": MINIMUM_CASES_MEASURED,
         "cases": cases,
@@ -264,6 +353,8 @@ def gate_passes(measured: dict[str, Any]) -> bool:
         measured["generated_versions_missing_from_the_index"] == 0
         and measured["constructed_skipping_write_missing"] > 0
         and measured["constructed_hand_kept_index_missing"] > 0
+        and measured["constructed_hand_edits_detected"] == measured["constructed_hand_edits_tried"]
+        and measured["constructed_hand_edits_tried"] > 0
         and measured["cases_measured"] >= MINIMUM_CASES_MEASURED
     )
 

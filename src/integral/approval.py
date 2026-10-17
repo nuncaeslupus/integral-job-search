@@ -862,6 +862,7 @@ def stage_send(
                 "send/ already exists and is not what was approved — it is not overwritten: "
                 + "; ".join(defects)
             )
+        refresh_index(store)
         return folder
     files: dict[str, str] = {}
     for name in payload.documents:
