@@ -102,6 +102,8 @@ _RULED_OUT = ("screened_out", "rejected")
 REASON_APPLIED = "ya te presentaste a esta vacante"
 REASON_SHORTLISTED = "ya la tenías en tu lista de interesantes"
 REASON_SHOWN = "el mismo anuncio ya se te mostró"
+#: T345. The offer's own record, not a sibling's: the vacancy has lapsed.
+REASON_EXPIRED = "la vacante ya caducó"
 #: T255. Not a vacancy: nothing to rank, so it is told about rather than listed.
 REASON_OPEN_APPLICATION = "es una candidatura abierta, no una vacante"
 
@@ -370,13 +372,28 @@ def pending_skill_line(store: ProfileStore, offer_ids: list[str]) -> str:
     return f"sin leer todavía para saber si lo exigen: {parts}"
 
 
+def seen_before(store: ProfileStore, offer_ids: list[str]) -> list[str]:
+    """T345. Those of `offer_ids` already shown to the candidate in an earlier batch."""
+    presented = _presented_ids(store)
+    return [i for i in offer_ids if i in presented]
+
+
+def seen_line(store: ProfileStore, offer_ids: list[str]) -> str:
+    """T345. Says which shown offers are repeats, so none passes for new."""
+    seen = seen_before(store, offer_ids)
+    if not seen:
+        return ""
+    return f"{len(seen)} ya se te habían mostrado antes (no son nuevas): " + ", ".join(seen)
+
+
 def shown_notes(store: ProfileStore, show: list[str]) -> list[str]:
     """Every note that must accompany a shown list: unchecked employers, unread skills.
 
     The one call step 9 makes after `partition`, so a note added here reaches the
     candidate without the SKILL having to name it.
     """
-    return [line for line in (unchecked_line(store, show), pending_skill_line(store, show)) if line]
+    lines = (unchecked_line(store, show), pending_skill_line(store, show), seen_line(store, show))
+    return [line for line in lines if line]
 
 
 def presented_pending_skill_counts(store: ProfileStore) -> dict[str, int]:
@@ -458,8 +475,13 @@ def partition(store: ProfileStore, offer_ids: list[str]) -> tuple[list[str], lis
             )
         if loaded is not None and not is_advert(loaded[0]):
             held.append(Withheld(offer_id, REASON_OPEN_APPLICATION))
+        elif loaded is not None and _has_applied(store, offer_id):
+            # T345. The offer itself, not only a sibling: applied to is never shown as a find.
+            held.append(Withheld(offer_id, REASON_APPLIED))
         elif loaded is not None and loaded[0].status in _RULED_OUT:
             held.append(Withheld(offer_id, reason_for(store, offer_id) or "ruled out earlier"))
+        elif loaded is not None and _ever(store, offer_id, frozenset({"expired"})):
+            held.append(Withheld(offer_id, REASON_EXPIRED))
         elif applied_copy is not None:
             held.append(Withheld(offer_id, REASON_APPLIED, applied_copy))
         elif shortlisted_copy is not None:
