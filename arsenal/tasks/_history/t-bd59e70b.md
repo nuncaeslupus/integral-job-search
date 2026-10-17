@@ -3,6 +3,7 @@ id: t-bd59e70b
 title: "D-13: say what the tool is doing before a long silent setup"
 priority: 10
 status: merged
+retired: "step_narration gate, pruned 2026-10-17 by owner decision"
 ---
 
 Captured during a test session at step `intake` (ledger `test-2026-08-20-a`).

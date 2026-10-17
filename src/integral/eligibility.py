@@ -1,7 +1,7 @@
 """T76 — the eligibility gate: refuse to score an offer the candidate is barred from.
 
 Every hard constraint this tool holds today filters on what the **candidate**
-declared (`stated_constraints.py`, `constraints_step.py`). Nothing filters on
+declared (`constraints_step.py`). Nothing filters on
 what the **advert demands**. So a beautifully ranked list can lead with a role
 requiring a work permit, a citizenship or a security clearance the candidate
 does not have — useless in the first reply
