@@ -32,6 +32,7 @@ from collections.abc import Callable, Mapping, Sequence
 from html.parser import HTMLParser
 
 from integral.application_render import render_document
+from integral.brand_palette import BrandPalette
 from integral.document_render import render_pdf_pages
 
 # html pages in, one PDF out; the pages are joined in the order given.
@@ -111,18 +112,26 @@ def derive(
     lang: str,
     texts: Mapping[str, str],
     render: Renderer | None = None,
+    palette: BrandPalette | None = None,
 ) -> dict[str, bytes]:
-    """Every derived file's bytes, from the approved Markdown in `texts` (name -> text)."""
+    """Every derived file's bytes, from the approved Markdown in `texts` (name -> text).
+
+    `palette` (T342) is the employer's measured palette, rendered into every page.
+    """
     render = render or render_pdf_pages
     stem = name_stem(display_name)
     made: dict[str, bytes] = {}
     letter = cv = ""
     if LETTER_MD in texts:
-        letter = render_document(texts[LETTER_MD], title=display_name, kind="letter", lang=lang)
+        letter = render_document(
+            texts[LETTER_MD], title=display_name, kind="letter", lang=lang, palette=palette
+        )
         made[f"{stem}-Cover-Letter.pdf"] = render([letter])
         made[LETTER_TXT] = letter_text(texts[LETTER_MD]).encode("utf-8")
     if CV_MD in texts:
-        cv = render_document(texts[CV_MD], title=display_name, kind="cv", lang=lang)
+        cv = render_document(
+            texts[CV_MD], title=display_name, kind="cv", lang=lang, palette=palette
+        )
         made[f"{stem}-CV.pdf"] = render([cv])
     if LETTER_MD in texts and CV_MD in texts:
         made[f"{stem}-Application.pdf"] = render([letter, cv])

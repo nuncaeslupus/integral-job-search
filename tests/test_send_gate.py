@@ -41,8 +41,8 @@ def test_a_folder_missing_any_sendable_document_is_counted(
 def test_a_combined_pdf_with_the_cv_first_is_counted(monkeypatch: pytest.MonkeyPatch) -> None:
     real = send_set.derive
 
-    def cv_first(display, lang, texts, render=None):  # type: ignore[no-untyped-def]
-        made = real(display, lang, texts, render)
+    def cv_first(display, lang, texts, render=None, **kwargs):  # type: ignore[no-untyped-def]
+        made = real(display, lang, texts, render, **kwargs)
         stem = send_set.name_stem(display)
         made[f"{stem}-Application.pdf"] = send_set.fixture_renderer(
             [
@@ -56,9 +56,9 @@ def test_a_combined_pdf_with_the_cv_first_is_counted(monkeypatch: pytest.MonkeyP
     assert send_gate.measure()["send_folders_missing_a_sendable_document"] == 3
 
 
-def _swapped(display, lang, texts, render=None):  # type: ignore[no-untyped-def]
+def _swapped(display, lang, texts, render=None, **kwargs):  # type: ignore[no-untyped-def]
     """The second reader's mutation: each single holds the other document, CV first."""
-    made = _REAL_DERIVE(display, lang, texts, render)
+    made = _REAL_DERIVE(display, lang, texts, render, **kwargs)
     stem = send_set.name_stem(display)
     cv, letter = made[f"{stem}-CV.pdf"], made[f"{stem}-Cover-Letter.pdf"]
     made[f"{stem}-CV.pdf"], made[f"{stem}-Cover-Letter.pdf"] = letter, cv

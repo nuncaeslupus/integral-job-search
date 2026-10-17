@@ -3,7 +3,7 @@
   "cleared": [],
   "findings": [],
   "gate_status": "measured",
-  "unpinnable_floors_cleared_by_marker_restatement": 59,
+  "unpinnable_floors_cleared_by_marker_restatement": 60,
   "marker_restatement_cleared": [
     {
       "module": "alert_mailbox",
@@ -18,12 +18,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "lineno": 3744
+      "lineno": 3753
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "lineno": 3739
+      "lineno": 3748
     },
     {
       "module": "arsenal_source",
@@ -34,6 +34,11 @@
       "module": "arsenal_source",
       "name": "MINIMUM_VENDORED_SKILLS",
       "lineno": 114
+    },
+    {
+      "module": "brand_gate",
+      "name": "MINIMUM_VERSIONS",
+      "lineno": 62
     },
     {
       "module": "capture_provenance",
@@ -113,12 +118,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "lineno": 4829
+      "lineno": 4831
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "lineno": 4983
+      "lineno": 4985
     },
     {
       "module": "gate_detector_states",
@@ -258,7 +263,7 @@
     {
       "module": "send_gate",
       "name": "MINIMUM_FOLDERS",
-      "lineno": 52
+      "lineno": 53
     },
     {
       "module": "skill_requirement",
@@ -301,7 +306,7 @@
       "lineno": 590
     }
   ],
-  "marker_restatement_scenarios_checked": 59,
+  "marker_restatement_scenarios_checked": 60,
   "marker_restatement_gate_status": "measured",
-  "scenarios_checked_at_least": 109
+  "scenarios_checked_at_least": 110
 }

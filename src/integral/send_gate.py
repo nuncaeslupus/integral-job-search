@@ -23,6 +23,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from integral import brand_measure
 from integral.approval import (
     _PROBE_OFFER,
     ApprovalError,
@@ -68,6 +69,10 @@ def _folder_defects(display: str, handle: str, stem: str, root: Path) -> tuple[b
     master = _probe_master()
     write_master(store, master)
     payload = _probe_prepare(store, master, (0,))
+    # T342: staging needs a recorded palette; `{}` is a site that could not be read.
+    brand_measure.record(
+        store, ("cv", "generated", _PROBE_OFFER, f"v{payload.version}"), "probe://unreadable", {}
+    )
     try:
         folder = stage_send(
             store,

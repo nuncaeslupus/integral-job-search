@@ -435,6 +435,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from integral.brand_measure import MeasureError, palette_for
 from integral.claim_trace import FIXTURE_SOURCE, seed_fixture_source
 from integral.cv_store import (
     ConversationTurn,
@@ -890,15 +891,23 @@ def stage_send(
     contents = {name: store.path(*where, name).read_bytes() for name in payload.documents}
     try:
         identity = store.identity()
+        palette = palette_for(store, where)  # T342: the accent is the recorded measurement
+        if palette is None:
+            raise ApprovalError(
+                "no palette.json is recorded for this version, so nothing was staged: "
+                "measure the employer's colours (tools/measure_colours.js, then "
+                "python -m integral.brand_measure), or record {} for a site that cannot be read"
+            )
         contents.update(
             derive(
                 identity.display_name,
                 identity.language,
                 {name: raw.decode("utf-8") for name, raw in contents.items()},
                 renderer,
+                palette=palette,
             )
         )
-    except (SendSetError, RenderError, IdentityError) as exc:
+    except (SendSetError, RenderError, IdentityError, MeasureError) as exc:
         raise ApprovalError(
             f"the sendable set cannot be built, so nothing was staged: {exc}"
         ) from exc
