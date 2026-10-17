@@ -1,5 +1,23 @@
 # Session handover
 
+## 00025. Pruning night: tier (a) done, verified_gate deleted, CI pytest 1137 s → 453 s
+
+Merged: #822, #825, #829, #830 (floor_* trio), #831 (cue_audit), #832 (review_reader),
+#833 (gate_detector), #834 (prose gates), #835 (census gates), #836 (verified_gate + CLAUDE.md trim).
+In flight: tier (b) `prune-matrix` (query/pagination capture test matrices, 969 tests).
+
+- **Measured:** CI `pytest` job 1137 s on `54a2f16` (before pruning) vs 453 s on #836's head;
+  test files 198 → 181. No verified_gate (~10 min/merge) and at most two review rounds per PR.
+- **Tier (b) left:** the second robots reader; the plan/step lint modules (`step_gates` imports
+  `plan_v2`; untangle first). One PR each, then a reader, then merge.
+- **Stale after the pruning, owner to decide:**
+  - `t-ed41cbe3` (T115) is about a deleted module: retire or close it.
+  - `t-cc4473ea` (D-23) has a gate that runs the deleted `spec_consistency`: re-seed it with a new gate.
+  - `_history/t-d1a0cd63` still has a bash block running `integral.naming` (archived; harmless
+    unless `verify-gates` starts reading it).
+  - T346, T312, `t-593e9c42`, `t-ad3139e9` and `status/plan.md` mention `verified_gate.sh` as
+    history or timings; reword when next touched.
+
 ## 00024. Night run: six PRs merged, owner policy A–E, pruning approved
 
 Merged: #815, #816, #817, #818, #820, #821, #823, #824. In flight: #825 (T341, CLEAR, merge after CI),
