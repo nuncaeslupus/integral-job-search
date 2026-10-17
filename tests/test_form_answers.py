@@ -28,6 +28,7 @@ from integral.form_answers import (
     answer_defects,
     backed_lines,
     measure,
+    read_answers,
     shorten,
     write_answers,
 )
@@ -132,6 +133,15 @@ def test_shorten_keeps_whole_leading_sentences_within_the_limit() -> None:
     assert text.startswith(out)
     assert shorten(text, 22) == "I start in two months."
     assert shorten(text, 1000) == text
+
+
+def test_shorten_stops_at_a_sentence_too_long_and_does_not_skip_it() -> None:
+    # M11: `break` -> `continue` kept a later short sentence after dropping a long middle one,
+    # so the result was no longer the leading sentences of the text.
+    text = "I start soon. I can relocate to Girona with my whole family next spring. I agree."
+    out = shorten(text, 30)
+    assert out == "I start soon."
+    assert text.startswith(out)
 
 
 def test_shorten_refuses_rather_than_cut_the_first_sentence() -> None:
@@ -260,7 +270,9 @@ def test_changing_the_answers_changes_the_payload_the_candidate_confirms(
     store: ProfileStore, master: CVMaster, notice: str
 ) -> None:
     first = _prepare(store, master, (_answer(notice),))
-    second = _prepare(store, master, (_answer(notice, "My notice period is two months at most."),))
+    second = _prepare(
+        store, master, (_answer(notice, "My notice period is two months at my current employer."),)
+    )
     assert _confirm(store, first) != _confirm(store, second)
 
 
@@ -324,7 +336,7 @@ def test_the_gate_reads_zero_and_every_probe_is_judged_as_required() -> None:
     measured = measure()
     assert measured["form_answers_without_a_store_source"] == 0
     assert measured["answers_checked"] >= 5
-    assert measured["probe_cases"] >= 9
+    assert measured["probe_cases"] >= 18
     assert measured["probe_cases_misjudged"] == 0
 
 
@@ -339,3 +351,155 @@ def test_step_11_names_the_form_answers_output() -> None:
     ).read_text(encoding="utf-8")
     for needle in ("form_answers=", "form_answers.md", "shorten", "per-use"):
         assert needle in skill
+
+
+# --- the second reader's cases on #822 (report 6232424809), kept as fixtures -------------------
+
+
+def _refused(store: ProfileStore, answer: FormAnswer) -> list[str]:
+    return answer_defects(answer, _live(store), ())
+
+
+def _ans(text: str, *ids: str, q: str = "Question?") -> FormAnswer:
+    return FormAnswer(question=q, text=text, evidence_ids=ids)
+
+
+def test_f1_an_outcome_row_is_never_a_source(store: ProfileStore, master: CVMaster) -> None:
+    # step 10: a rejection reason "is never quoted to any employer"; interview outcomes stay local
+    rejection = _row(store, "outcome", "The manager was dismissive, I would not go back.")
+    lesson = _row(store, "outcome", "I lost the thread in the interview when asked about pricing.")
+    cases = (
+        (rejection, "The manager was dismissive, I would not go back."),
+        (lesson, "I lost the thread in the interview when asked about pricing."),
+    )
+    for ev, text in cases:
+        assert any("outcome row" in d for d in _refused(store, _ans(text, ev)))
+        with pytest.raises(ApprovalError, match="outcome row"):
+            _prepare(store, master, (_ans(text, ev),))
+    assert not list(store.path("cv", "generated", OFFER).glob("v*/send"))
+
+
+def test_f2_a_denial_dropped_from_the_cited_row_is_refused(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    row = _row(store, "statement", "I do not hold a work permit for the United Kingdom.")
+    flipped = _ans("I hold a work permit for the United Kingdom.", row)
+    assert any("is dropped" in d for d in _refused(store, flipped))
+    with pytest.raises(ApprovalError, match="dropped"):
+        _prepare(store, master, (flipped,))
+    # the unrelated denial in another sentence does not stand in for the dropped one
+    other = _row(store, "constraint", "I do not need visa sponsorship.")
+    both = _ans(
+        "I hold a work permit for the United Kingdom. I do not need visa sponsorship.", row, other
+    )
+    assert any("is dropped" in d for d in _refused(store, both))
+
+
+@pytest.mark.parametrize(
+    ("row", "answer"),
+    [
+        (
+            "I want to work on logistics software at a company this size.",
+            "I have a valid work permit for the United States.",
+        ),
+        (
+            "I want to work on logistics software at a company this size.",
+            "I am a certified AWS architect and want to work remotely.",
+        ),
+        (
+            "I used Kubernetes at Acme for two years.",
+            "I am a certified Kubernetes administrator.",
+        ),
+        # closed rule: any word the row lacks, however ordinary the words around it
+        ("I want to work on logistics software.", "I want to work on logistics software daily."),
+    ],
+)
+def test_f3_a_common_shared_word_does_not_back_an_invented_claim(
+    store: ProfileStore, master: CVMaster, row: str, answer: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert any("come from no cited row" in d for d in _refused(store, _ans(answer, cited)))
+    with pytest.raises(ApprovalError, match="come from no cited row"):
+        _prepare(store, master, (_ans(answer, cited),))
+
+
+def test_f3_words_may_be_drawn_from_two_cited_rows(store: ProfileStore) -> None:
+    one = _row(store, "statement", "I want to work on logistics software.")
+    two = _row(store, "statement", "I used Kubernetes at Acme for two years.")
+    assert not _refused(store, _ans("I used Kubernetes on logistics software.", one, two))
+
+
+def test_f4_a_claim_in_the_question_is_refused(
+    store: ProfileStore, master: CVMaster, notice: str
+) -> None:
+    claims = (
+        "I am a certified Kubernetes administrator with a UK work permit",
+        "Certified Kubernetes administrator with a UK work permit",
+        "Notice period? I hold a UK work permit.",
+        "Do you need sponsorship? I do not.",
+        "Notice period of 3 months?",
+    )
+    for q in claims:
+        bad = _answer(notice).model_copy(update={"question": q})
+        assert any(d.startswith("question:") for d in answer_defects(bad, _live(store), ())), q
+        with pytest.raises(ApprovalError, match="question:"):
+            _prepare(store, master, (bad,))
+    ok = _answer(notice).model_copy(update={"question": "How long is your notice period?"})
+    assert not answer_defects(ok, _live(store), ())
+
+
+def test_f5_a_denial_cited_word_for_word_is_accepted_and_staged(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    row = _row(store, "constraint", "I do not need visa sponsorship.")
+    said = FormAnswer(
+        question="Do you require sponsorship?",
+        text="I do not need visa sponsorship.",
+        evidence_ids=(row,),
+    )
+    assert not answer_defects(said, _live(store), ())
+    version = _prepare(store, master, (said,))
+    stage_send(store, master, OFFER, version, confirms=_confirm(store, version))
+    assert verify_send(store, OFFER, version) == []
+    # a paraphrase of the denial is not word for word
+    loose = said.model_copy(update={"text": "I don't need visa sponsorship."})
+    assert any(d.startswith("denial:") for d in answer_defects(loose, _live(store), ()))
+
+
+# --- reverts the first round left unpinned (M14, M15, M16) -----------------------------------
+
+
+def test_m14_a_record_for_another_offer_or_version_is_not_read(
+    store: ProfileStore, master: CVMaster, notice: str
+) -> None:
+    version = _prepare(store, master, (_answer(notice),))
+    assert read_answers(store, OFFER, version) is not None
+    record = _vdir(store, version) / "form_answers.json"
+    for field, value in (("version", version + 1), ("offer_id", "other-offer")):
+        data = json.loads(record.read_text(encoding="utf-8"))
+        data[field] = value
+        record.write_text(json.dumps(data), encoding="utf-8")
+        assert read_answers(store, OFFER, version) is None
+        assert not backed_lines(store, OFFER, version, ())
+        data[field] = {"version": version, "offer_id": OFFER}[field]
+        record.write_text(json.dumps(data), encoding="utf-8")
+    assert read_answers(store, OFFER, version) is not None
+
+
+def test_m15_a_heading_line_or_a_multi_line_question_is_a_shape_defect(
+    store: ProfileStore, notice: str
+) -> None:
+    live = _live(store)
+    smuggled = _answer(notice, "My notice period is two months.\n# Another question\nmonths.")
+    assert any(d.startswith("shape:") for d in answer_defects(smuggled, live, ()))
+    broken = _answer(notice).model_copy(update={"question": "Notice\nperiod?"})
+    assert any(d.startswith("shape:") for d in answer_defects(broken, live, ()))
+    assert not any(d.startswith("shape:") for d in answer_defects(_answer(notice), live, ()))
+
+
+def test_m16_an_empty_answer_set_is_refused(store: ProfileStore, master: CVMaster) -> None:
+    version = _prepare(store, master, ())
+    with pytest.raises(FormAnswerError, match="no form answers"):
+        write_answers(store, OFFER, version, ())
+    assert not (_vdir(store, version) / "form_answers.md").exists()
+    assert not (_vdir(store, version) / "form_answers.json").exists()

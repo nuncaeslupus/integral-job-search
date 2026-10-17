@@ -12,10 +12,18 @@ The rules, each pinned by its own test and by a probe in ``measure``:
 
 * **Store entries only.** An answer cites at least one live evidence row of a
   kind that states something about the candidate (``STORE_KINDS``). A row that
-  does not exist, was retracted, is a ``reaction`` or ``retraction``, or shares
-  no word with the answer backs nothing. Denials and numbers get the letter's
-  rule (``claim_trace.paragraph_defects``): an absence, or a figure, must be in
-  the words the answer cites.
+  does not exist, was retracted, is a ``reaction``, ``outcome`` or ``retraction``,
+  or shares no word with the answer backs nothing.
+* **Every word comes from a cited row.** Each word of four or more letters in the
+  answer must occur in a cited row, and at least one must be shared. That is a
+  closed rule, not a list of words to ignore: an invented permit, certification or
+  tool brings a word no cited row holds, whatever common words surround it.
+* **A denial is kept or quoted.** A denial in the answer must be in the cited
+  words verbatim, and a denial in a cited row cannot be dropped: an answer that
+  shares a word with it must carry a denial that shares one too. A number must be
+  in the cited words (the letter's rule, ``claim_trace.paragraph_defects``).
+* **The question is a line sent too.** It must read as the employer's question: one
+  line, one sentence, no digit or denial, no first-person word, and short.
 * **A stated limit is a limit.** ``shorten`` keeps whole sentences, in order,
   and refuses rather than cut mid-sentence or invent an ellipsis; an answer over
   its limit is a defect, so the limit cannot be ignored by editing afterwards.
@@ -30,8 +38,11 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   lines a store entry backs; an edited line, or an answer whose row was retracted
   after drafting, stops being backed and the send is refused.
 
-What is not claimed: that the words of an answer were *derived* from the cited
-rows. Sharing a word with a cited row is a floor, not a proof, and whether the
+What is not claimed: that a question is the employer's. A short noun phrase or a question
+sentence with no first-person word, number or denial cannot be told from a real one, so the
+rule only refuses the question that reads as a statement; the candidate reads what is staged.
+Nor that the words of an answer were *derived* from the cited
+rows. Drawing every word from a cited row is a floor, not a proof, and whether the
 answer is something the candidate would say is for the candidate to read.
 """
 
@@ -48,7 +59,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from integral.claim_trace import paragraph_defects
+from integral.claim_trace import (
+    DENIAL_KIND,
+    denial_sentences,
+    fold,
+    paragraph_defects,
+    sentences,
+)
 from integral.cv_store import _atomic_write_json, _atomic_write_text
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog, EvidenceRow
@@ -59,8 +76,9 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T339.json"
 FORM_ANSWERS_DOC = "form_answers.md"
 FORM_ANSWERS_RECORD = "form_answers.json"
 # Rows that state something about the candidate. A `reaction` is a private response to an
-# advert and a `retraction` is bookkeeping: neither is something to tell an employer.
-STORE_KINDS = frozenset({"episode", "statement", "constraint", "outcome", "candidate_statement"})
+# advert, a `retraction` is bookkeeping, and an `outcome` holds a step-10 rejection reason or an
+# interview lesson ("never leaves the machine", step 10): none is something to tell an employer.
+STORE_KINDS = frozenset({"episode", "statement", "constraint", "candidate_statement"})
 _WORD = re.compile(r"[^\W\d_]+")
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 SOURCE_DEFECT = "source"
@@ -113,9 +131,64 @@ def shorten(text: str, limit: int) -> str:
 
 
 def _words(text: str) -> set[str]:
-    # Words of 4+ letters: a cited row must share one with the answer, so a citation to an
-    # unrelated row backs nothing. A floor, not a proof of derivation (module docstring).
+    # Words of 4+ letters, the unit of the "every word comes from a cited row" rule. A floor,
+    # not a proof of derivation (module docstring).
     return {w.casefold() for w in _WORD.findall(text) if len(w) >= 4}
+
+
+_TOKEN = re.compile(r"[^\W_]+(?:'[^\W_]+)*")
+# The candidate's own voice. An employer's question is addressed to "you", so a question that
+# speaks as "I" is a claim placed where no citation is looked for.
+_FIRST_PERSON = frozenset({"i", "i'm", "i've", "i'd", "i'll", "my", "mine", "myself"})
+
+
+def _tokens(text: str) -> list[str]:
+    return _TOKEN.findall(fold(text))
+
+
+def _quoted(clause: str, cited: Sequence[str]) -> bool:
+    """Is `clause` in a cited row word for word (case, accent and spacing aside)?"""
+    want = _tokens(clause)
+    if not want:
+        return False
+    for row in cited:
+        have = _tokens(row)
+        if any(have[i : i + len(want)] == want for i in range(len(have) - len(want) + 1)):
+            return True
+    return False
+
+
+def _question_defects(question: str) -> list[str]:
+    q = " ".join(question.split())
+    toks = _tokens(q)
+    why = []
+    if len(sentences(q)) > 1 or "\n" in question:
+        why.append("more than one sentence")
+    if any(c.isdigit() for c in q):
+        why.append("a number")
+    if denial_sentences(q):
+        why.append("a denial")
+    if _FIRST_PERSON & set(toks):
+        why.append("a first-person claim")
+    if len(toks) > (25 if q.endswith("?") else 6):
+        why.append("too long for a question or a label")
+    return [f"question: the question is a line sent to the employer and has {w}" for w in why]
+
+
+def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
+    """A denial must be quoted from a cited row; a cited row's denial must not be dropped."""
+    defects = [
+        f"denial: {clause!r} is not in the words cited"
+        for clause in denial_sentences(text)
+        if not _quoted(clause, cited)
+    ]
+    kept = [_words(clause) for clause in denial_sentences(text)]
+    for row in cited:
+        for clause in denial_sentences(row):
+            shared = _words(clause) & _words(text)
+            if shared and not any(shared & mine for mine in kept):
+                defects.append(f"denial: the cited {clause!r} is dropped from the answer")
+    return defects
 
 
 def _live_rows(store: ProfileStore) -> dict[str, EvidenceRow]:
@@ -133,6 +206,7 @@ def answer_defects(
         defects.append("empty: the answer says nothing")
     if "\n" in answer.question or any(ln.lstrip().startswith("#") for ln in text.splitlines()):
         defects.append("shape: a question on one line and an answer with no heading line")
+    defects += _question_defects(answer.question)
     if answer.char_limit is not None and len(text) > answer.char_limit:
         defects.append(f"limit: {len(text)} characters, over the stated {answer.char_limit}")
     if not answer.evidence_ids:
@@ -152,8 +226,15 @@ def answer_defects(
             defects.append(f"{SOURCE_DEFECT}: {ev} shares no word with the answer")
         else:
             cited.append(row.text)
+    held = _words(" ".join(cited))
+    if cited and (extra := sorted(_words(text) - held)):
+        defects.append(f"{SOURCE_DEFECT}: {', '.join(extra)} come from no cited row")
+    flat = " ".join(text.split())
+    defects += _denial_defects(text, cited)
     defects += [
-        f"{d.kind}: {d.detail}" for d in paragraph_defects("edited", " ".join(text.split()), cited)
+        f"{d.kind}: {d.detail}"
+        for d in paragraph_defects("edited", flat, cited)
+        if d.kind != DENIAL_KIND
     ]
     return defects
 
@@ -275,11 +356,17 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             recorded_at="2026-10-17T09:01:00Z", step="history", kind="retraction",
             text="Forget that.", source="conversation", retracts=retracted,
         )  # fmt: skip
+        # the reviewer's cases on #822 (second-reader report 6232424809), F1-F5
+        rejection = row("outcome", "The manager was dismissive and I would not go back.")
+        lesson = row("outcome", "In the interview I lost the thread when asked about pricing.")
+        no_permit = row("statement", "I do not hold a work permit for the United Kingdom.")
+        used = row("statement", "I used Kubernetes at Acme for two years.")
+        no_sponsor = row("constraint", "I do not need visa sponsorship.")
         approved = {log_row.text for log_row in log.rows() if log_row.id == story}
         live = _live_rows(store)
 
-        def a(text: str, *ids: str, limit: int | None = None) -> FormAnswer:
-            return FormAnswer(question="Q", text=text, char_limit=limit, evidence_ids=ids)
+        def a(text: str, *ids: str, limit: int | None = None, q: str = "Q") -> FormAnswer:
+            return FormAnswer(question=q, text=text, char_limit=limit, evidence_ids=ids)
 
         clean = [
             ("notice period", a("My notice period is two months.", notice, limit=60)),
@@ -289,17 +376,48 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             ("approved episode", a(
                 "I rewrote billing reconciliation and the run fell from six hours to "
                 "forty minutes.", story)),
+            ("denial quoted word for word", a("I do not need visa sponsorship.", no_sponsor)),
         ]  # fmt: skip
-        holes: list[tuple[str, int, FormAnswer, Collection[str]]] = [
-            ("no citation", 1, a("My notice period is two months."), approved),
-            ("unknown id", 1, a("My notice period is two months.", "ev-999999"), approved),
-            ("retracted row", 1, a("I know Kubernetes well.", retracted), approved),
-            ("reaction row", 1, a("The remote policy put me off a little.", reaction), approved),
-            ("unrelated row", 1, a("My notice period is two months.", salary), approved),
-            ("episode without approval", 1, clean[4][1], ()),
-            ("over the limit", 0, a("My notice period is two months.", notice, limit=10), approved),
-            ("denial not cited", 0, a("I have never used Kubernetes.", ops), approved),
-            ("number not cited", 0, a("My notice period is three months.", notice), approved),
+        notice_text = "My notice period is two months."
+        S, SC, SD = (
+            frozenset(k) for k in ({"source"}, {"source", "hand_typed_count"}, {"source", "denial"})
+        )
+        LIM = frozenset({"limit"})
+        # (case, the defect kinds required, the answer, the approved episodes). `()` is a
+        # case that must be accepted: a probe that cannot pass is no proof the rule is not
+        # simply refusing everything.
+        holes: list[tuple[str, frozenset[str], FormAnswer, Collection[str]]] = [
+            ("no citation", SC, a(notice_text), approved),
+            ("unknown id", SC, a(notice_text, "ev-999999"), approved),
+            ("retracted row", S, a("I know Kubernetes well.", retracted), approved),
+            ("reaction row", S, a("The remote policy put me off.", reaction), approved),
+            ("unrelated row", SC, a(notice_text, salary), approved),
+            ("episode without approval", SC, clean[4][1], ()),
+            ("over the limit", LIM, a(notice_text, notice, limit=10), approved),
+            ("denial not cited", SD,
+                a("I have never used Kubernetes.", ops), approved),
+            ("number not cited", SC,
+                a("My notice period is three months.", notice), approved),
+            ("F1 rejection reason", SD,
+                a("The manager was dismissive and I would not go back.", rejection), approved),
+            ("F1 interview lesson", S,
+                a("I lost the thread when asked about pricing.", lesson), approved),
+            ("F2 denial dropped", frozenset({"denial"}),
+                a("I hold a work permit for the United Kingdom.", no_permit), approved),
+            ("F3 invented permit on a common word", S,
+                a("I have a valid work permit for the United States.", why), approved),
+            ("F3 invented certification on a common word", S,
+                a("I am a certified AWS architect and want to work remotely.", why), approved),
+            ("F3 invented certification of a used tool", S,
+                a("I am a certified Kubernetes administrator.", used), approved),
+            ("F4 claim in the question", frozenset({"question"}),
+                a("My notice period is two months.", notice,
+                  q="I am a certified Kubernetes administrator with a UK work permit"), approved),
+            ("F5 denial quoted is accepted", frozenset(),
+                a("I do not need visa sponsorship.", no_sponsor), approved),
+            ("F5 denial quoted with the question asked", frozenset(),
+                a("I do not hold a work permit for the United Kingdom.", no_permit,
+                  q="Do you hold a UK work permit?"), approved),
         ]  # fmt: skip
         corpus = [
             {"case": label, "source_defects": _count_source(answer_defects(ans, live, approved))}
@@ -308,13 +426,16 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         probes = [
             {
                 "case": label,
-                "expected_source_defects": want,
-                "found_source_defects": _count_source(answer_defects(ans, live, appr)),
-                "flagged": bool(answer_defects(ans, live, appr)),
+                "expected_defect_kinds": sorted(want),
+                "found_defect_kinds": sorted(_kinds(answer_defects(ans, live, appr))),
             }
             for label, want, ans, appr in holes
         ]
         return corpus, probes
+
+
+def _kinds(defects: Sequence[str]) -> set[str]:
+    return {d.split(":", 1)[0] for d in defects}
 
 
 def _count_source(defects: Sequence[str]) -> int:
@@ -322,13 +443,15 @@ def _count_source(defects: Sequence[str]) -> int:
 
 
 def measure() -> dict[str, Any]:
-    """``form_answers_without_a_store_source`` over a clean corpus, plus the probes."""
+    """``form_answers_without_a_store_source`` over a clean corpus, plus the probes.
+
+    The first is 0 by construction (the corpus is hand-picked clean), so it can only catch a
+    rule that starts refusing the clean answers. ``probe_cases_misjudged`` is the count that can
+    catch a rule that stops refusing: it compares the defect kinds each probe raises with the
+    kinds it must raise, and a probe that must be accepted must raise none.
+    """
     corpus, probes = _corpus_and_probes()
-    misjudged = sum(
-        1
-        for p in probes
-        if p["found_source_defects"] != p["expected_source_defects"] or not p["flagged"]
-    )
+    misjudged = sum(1 for p in probes if p["found_defect_kinds"] != p["expected_defect_kinds"])
     return {
         "form_answers_without_a_store_source": sum(c["source_defects"] for c in corpus),
         "answers_checked": len(corpus),
