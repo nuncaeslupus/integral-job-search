@@ -608,7 +608,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T337 | usajobs_en stops at page 2 of 3 | 5 | M | — | `usajobs_en_pages_not_reached == 0` | gate set in its own PR | ☐ |
 | T338 | send/ is not the whole sendable set: no sendable PDF names, no combined PDF, no plain-text letter | 5 | M | — | `send_folders_missing_a_sendable_document == 0` | gate set in its own PR | ☐ |
 | T339 | Application-form answers are drafted by hand every time and never recorded | 5 | M | — | `form_answers_without_a_store_source == 0` | gate set in its own PR | ☐ |
-| T340 | Marking an offer applied, expired or rejected from the conversation has no command | 5 | M | — | `uv run pytest tests/test_applications_mark.py -q` | gate set in its own PR | ☑ |
+| T340 | Marking an offer applied, expired or rejected from the conversation has no command | 5 | M | — | `applications_mark_tests_failed == 0` | `uv run pytest tests/test_applications_mark.py -q` | ☑ |
 | T341 | Nothing reads the candidate's mailbox for replies to applications they sent | 5 | M | — | `mailbox_reads_without_a_per_read_permission == 0` | gate set in its own PR | ☐ |
 | T342 | The employer's brand colours are measured by hand-written browser JavaScript every time | 5 | M | — | `generated_versions_without_a_recorded_palette_measurement == 0` | gate set in its own PR | ☐ |
 | T343 | cv/generated/ has no index, so finding a delivery means reading hash directories | 5 | M | — | `generated_versions_missing_from_the_index == 0` | gate set in its own PR | ☐ |
