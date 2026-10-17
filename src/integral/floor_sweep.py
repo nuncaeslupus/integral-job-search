@@ -3761,8 +3761,9 @@ def _analyse(src_dir: Path) -> dict[str, Any]:
 #: `MINIMUM_ADVERT_CONTROLS` are two more.
 #: **109 with T345**: `offers_seen_again.MINIMUM_RULED_OFFERS_CHECKED` is one more.
 #: **110 with T338**: `send_gate.MINIMUM_FOLDERS` is one more.
+#: **111 with T342**: `brand_gate.MINIMUM_VERSIONS` is one more.
 #: Still zero slack.
-MINIMUM_FLOORS_SWEPT = 110
+MINIMUM_FLOORS_SWEPT = 111
 
 
 #: Round 4's own denominator (F1): *how many* of the floors above actually reach
@@ -4245,8 +4246,9 @@ def _measure_marker_restatement_clearance() -> dict[str, Any]:
 #: **103 with T255**: `presentation_log`'s one new floor is one scenario more.
 #: **105 with T255's review fix**: its two new floors are two scenarios more.
 #: **106 with T345**: `offers_seen_again`'s one new floor is one scenario more.
-#: **107 with T338**: `send_gate.MINIMUM_FOLDERS` is one more. Still zero slack.
-MINIMUM_PROSE_MUTATION_SCENARIOS = 107
+#: **107 with T338**: `send_gate.MINIMUM_FOLDERS` is one more.
+#: **108 with T342**: `brand_gate.MINIMUM_VERSIONS` is one more. Still zero slack.
+MINIMUM_PROSE_MUTATION_SCENARIOS = 108
 
 
 def measure_prose_clearance() -> dict[str, Any]:

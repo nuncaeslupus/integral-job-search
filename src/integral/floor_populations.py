@@ -768,6 +768,12 @@ FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
         "checked",
         "the session kind cases counted by `measure`",
     ),
+    "brand_gate.MINIMUM_VERSIONS": (
+        "counted",
+        "brand_gate.measure",
+        "examined",
+        "the generated versions staged and read by `measure`",
+    ),
     "send_gate.MINIMUM_FOLDERS": (
         "counted",
         "send_gate.measure",

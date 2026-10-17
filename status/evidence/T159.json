@@ -15,12 +15,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3741
+      "line": 3744
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3736
+      "line": 3739
     },
     {
       "module": "arsenal_source",
@@ -31,6 +31,11 @@
       "module": "arsenal_source",
       "name": "MINIMUM_VENDORED_SKILLS",
       "line": 114
+    },
+    {
+      "module": "brand_gate",
+      "name": "MINIMUM_VERSIONS",
+      "line": 57
     },
     {
       "module": "capture_provenance",
@@ -110,12 +115,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4821
+      "line": 4823
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4975
+      "line": 4977
     },
     {
       "module": "gate_detector_states",
@@ -374,20 +379,20 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3879,
+      "line": 3880,
       "population": 51
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3909,
+      "line": 3910,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3765,
-      "population": 110
+      "line": 3766,
+      "population": 111
     },
     {
       "module": "freshness",
@@ -513,6 +518,7 @@
     "approval.SCHEMA_VERSION",
     "approval._RECORDED_SENDS",
     "bodyless_post.MINIMUM_PACKAGES",
+    "brand_measure.SCHEMA_VERSION",
     "bulk_filter.PROBE_BATCH",
     "calibration.TWENTY",
     "claim_trace.FIXTURE_SOURCE_CHARS",
@@ -650,6 +656,7 @@
     "arsenal_source.MINIMUM_VENDORED_SKILLS",
     "audit_followup.CASES_AT_LEAST",
     "bodyless_post.MINIMUM_PROBES",
+    "brand_gate.MINIMUM_VERSIONS",
     "bulk_filter.MINIMUM_BATCH",
     "bulk_filter.MUST_KEEP_ROWS",
     "candidate.MINIMUM_CASES",
@@ -760,6 +767,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 110,
+  "floors_swept_at_least": 111,
   "floors_arithmetically_checked_at_least": 36
 }

@@ -940,6 +940,21 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "this sweep does not trace."
         ),
     ),
+    "brand_measure.SCHEMA_VERSION": (
+        "neither",
+        (
+            "A format version compared for equality (`!=`) or written into records: "
+            "it identifies a format, it bounds no count."
+        ),
+    ),
+    "brand_gate.MINIMUM_VERSIONS": (
+        "floor",
+        (
+            "`examined < MINIMUM_VERSIONS` makes the gate report `unmeasured` (-1) "
+            "instead of a clean zero: a minimum on the generated versions read, "
+            "breached by dropping a constructed case."
+        ),
+    ),
     "send_gate.MINIMUM_FOLDERS": (
         "floor",
         (
