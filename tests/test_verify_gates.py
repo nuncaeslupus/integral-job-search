@@ -219,6 +219,19 @@ def test_a_retired_task_is_skipped_and_counted(tmp_path: Path) -> None:
     assert "1 retired" in result.stdout
 
 
+def test_a_retired_value_without_a_pruning_reason_does_not_skip(tmp_path: Path) -> None:
+    """`retired: false` (or any value not naming the pruning) still runs the gate."""
+    board = _board(tmp_path, "h7", status="merged", measured=None)
+    path = board / "_history" / "h7.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "status: merged\n", "status: merged\nretired: false\n", 1
+        ),
+        encoding="utf-8",
+    )
+    assert _run(tmp_path, board).returncode == 1
+
+
 def test_a_board_whose_gates_all_hold_passes(tmp_path: Path) -> None:
     """Asserted last, for the reason given above."""
     board = _board(tmp_path, "h5", status="merged", measured=1.0)

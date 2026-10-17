@@ -178,9 +178,15 @@ def main(argv: list[str] | None = None) -> int:
     for row in rows:
         if row.get("status") not in TERMINAL:
             continue
-        if row.get("retired"):
-            # A front-matter `retired: "<reason>"` marks a gate whose measuring
-            # code was deleted on purpose. Skipped, but counted in the summary.
+        reason = row.get("retired")
+        if (
+            isinstance(reason, str)
+            and "pruned" in reason
+            and Path(str(row.get("payload", ""))).parent.name == "_history"
+        ):
+            # A front-matter `retired: "<reason>, pruned <date> ..."` on an
+            # archived task marks a gate whose measuring code was deleted on
+            # purpose. Skipped, but counted in the summary.
             retired += 1
             continue
         task_id = str(row.get("id", "?"))
