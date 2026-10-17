@@ -18,12 +18,17 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   occur in a cited row (at least one word of four letters must be shared). Only a closed
   set of articles, linking verbs, "and"/"or" and prepositions is exempt, so an invented
   permit, certification or tool (UK, EU, PhD, AWS, Go) brings a token no cited row holds.
-* **A denial is kept or quoted.** A denial in the answer must be a cited row's whole
-  denial sentence verbatim (a sentence ends only at . ! ? or a line end, so a clause after
-  ':' or ';' never stands alone), and each denial in a cited row must itself appear whole in
-  an answer that shares any token (of any length) with it; one quoted denial never covers another.
-  A number must be in the cited words
-  (the letter's rule, ``claim_trace.paragraph_defects``).
+* **A denial is kept or quoted, from the start of its row.** A denial in the answer (any
+  clause cut at . ! ? ... : ; or a line end that carries a negation) must lie inside a quote of
+  a cited row **from the row's first word through the end of the line that holds the denial**,
+  token for token. No sentence splitting decides what may be dropped: whatever precedes the
+  denial (attribution, scope, condition, an abbreviation's full stop, an ellipsis, a line
+  break) is carried along, and whatever follows it on its line (a scope after the denial) too.
+  Conversely, each denial line of a cited row must appear as that same quote in any answer
+  that shares a content token (any length, cues and function words aside) with the line; a
+  denial line with **no** content token ("No.", "Not yet.") is one with the lines before it, so
+  its content is theirs and the whole row up to it must be quoted. One quoted denial never
+  covers another. A number must be in the cited words (``claim_trace.paragraph_defects``).
 * **The question is a line sent too.** It must read as the employer's question: one
   line, one sentence, no digit or denial, no first-person word, and short.
 * **A stated limit is a limit.** ``shorten`` keeps whole sentences, in order,
@@ -82,10 +87,9 @@ FORM_ANSWERS_RECORD = "form_answers.json"
 STORE_KINDS = frozenset({"episode", "statement", "constraint", "candidate_statement"})
 _WORD = re.compile(r"[^\W\d_]+")
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
-# A sentence of an answer or a cited row ends only at . ! ? or a line end. claim_trace also cuts
-# at ':' and ';', which would let the clause after one pass as a "whole sentence" with the
-# attribution, scope or condition before it dropped.
-_WHOLE_SENTENCE_END = re.compile(r"[.!?…]+(?=\s|$)|\n+")
+# Where a clause of the ANSWER is cut to find the denials in it. Cutting finely only finds more
+# denials; what a denial must be quoted with is decided by the row's lines, never by this cut.
+_CLAUSE_END = re.compile(r"[.!?…:;]+(?=\s|$)|\n+")
 SOURCE_DEFECT = "source"
 
 
@@ -155,29 +159,43 @@ _FUNCTION_WORDS = frozenset(
 
 
 def _sentences(text: str) -> list[str]:
-    return [p.strip() for p in _WHOLE_SENTENCE_END.split(text) if p.strip()]
+    return [p.strip() for p in _SENTENCE_END.split(text) if p.strip()]
+
+
+def _clauses(text: str) -> list[str]:
+    return [p.strip() for p in _CLAUSE_END.split(text) if p.strip()]
 
 
 def denial_sentences(text: str) -> list[str]:
-    """Each whole sentence of `text` (cut only at . ! ? or a line end) that carries a negation."""
-    return [s for s in _sentences(text) if is_denial(s)]
+    """Each clause of `text` (cut at . ! ? ... : ; or a line end) that carries a negation."""
+    return [c for c in _clauses(text) if is_denial(c)]
 
 
 def _tokens(text: str) -> list[str]:
     return _TOKEN.findall(fold(text))
 
 
-def _quoted(clause: str, cited: Sequence[str]) -> bool:
-    """Is `clause` a cited row's whole denial sentence, word for word (case, accent, spacing)?
+def _content(tokens: Sequence[str]) -> set[str]:
+    # every token but the function words and the negation cues themselves
+    return {t for t in tokens if t not in _FUNCTION_WORDS and not is_denial(t)}
 
-    Equal to the whole sentence, never a window inside it: a shorter quote would drop the scope
-    ("for Spain, but ..."), condition ("once ...") or attribution ("my manager said ...") that
-    limits the denial.
-    """
-    want = _tokens(clause)
-    if not want:
-        return False
-    return any(_tokens(sentence) == want for row in cited for sentence in denial_sentences(row))
+
+def _denial_quotes(row: str) -> list[tuple[list[str], set[str]]]:
+    """For each denial line of `row`: the tokens from the row's start through that line's end,
+    and the content that line (or, when it has none, everything up to it) is about."""
+    lines = [ln for ln in row.splitlines() if ln.strip()]
+    quotes = []
+    for i, line in enumerate(lines):
+        if not is_denial(line):
+            continue
+        upto = [t for ln in lines[: i + 1] for t in _tokens(ln)]
+        quotes.append((upto, _content(_tokens(line)) or _content(upto)))
+    return quotes
+
+
+def _at(haystack: Sequence[str], needle: Sequence[str]) -> list[int]:
+    n = len(needle)
+    return [i for i in range(len(haystack) - n + 1) if list(haystack[i : i + n]) == list(needle)]
 
 
 def _question_defects(question: str) -> list[str]:
@@ -198,20 +216,24 @@ def _question_defects(question: str) -> list[str]:
 
 
 def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
-    """A denial must be quoted from a cited row; a cited row's denial must not be dropped."""
-    defects = [
-        f"denial: {clause!r} is not in the words cited"
-        for clause in denial_sentences(text)
-        if not _quoted(clause, cited)
-    ]
-    mine = set(_tokens(text))
-    wholes = {tuple(_tokens(sentence)) for sentence in denial_sentences(text)}
-    for row in cited:
-        for clause in denial_sentences(row):
-            # every token but the function words and the negation cues themselves
-            content = {t for t in _tokens(clause) if t not in _FUNCTION_WORDS and not is_denial(t)}
-            if content & mine and tuple(_tokens(clause)) not in wholes:
-                defects.append(f"denial: the cited {clause!r} is dropped from the answer")
+    """A denial must be quoted from its row's start; a cited row's denial must not be dropped."""
+    quotes = [q for row in cited for q in _denial_quotes(row)]
+    pieces = [_tokens(c) for c in _clauses(text)]
+    mine = [t for piece in pieces for t in piece]
+    covered: set[int] = set()
+    for upto, _ in quotes:
+        for start in _at(mine, upto):
+            covered.update(range(start, start + len(upto)))
+    defects = []
+    offset = 0
+    for clause, piece in zip(_clauses(text), pieces, strict=True):
+        span = range(offset, offset + len(piece))
+        offset += len(piece)
+        if is_denial(clause) and not all(i in covered for i in span):
+            defects.append(f"denial: {clause!r} is not in the words cited")
+    for upto, content in quotes:
+        if content & set(mine) and not _at(mine, upto):
+            defects.append(f"denial: the cited {' '.join(upto)!r} is dropped from the answer")
     return defects
 
 
@@ -397,6 +419,14 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             "statement", "Once my residence card is renewed I will not need visa sponsorship."
         )
         said = row("statement", "My manager said I do not need supervision, which was wrong.")
+        # round-4 reviewer cases (report 6235094699): A1-A6
+        usa = row("statement", "In the U.S. I do not need visa sponsorship.")
+        jan = row("statement", "From Jan. I will not need visa sponsorship.")
+        ell = row("statement", "My manager said\u2026 I do not need supervision.")
+        nl = row("statement", "My manager said:\nI do not need supervision.")
+        qno = row("statement", "Do I need visa sponsorship? No.")
+        qno2 = row("statement", "Do I need visa sponsorship?\nNo.")
+        notyet = row("statement", "Do I hold a work permit for Spain? Not yet.")
         # round-3 reviewer cases (report 6233957716): R1-R3 cut sentence, R4-R8 dropped denials
         boss = row("statement", "My manager said: I do not need supervision.")
         semi = row("statement", "I do not need visa sponsorship; that holds for Spain only.")
@@ -491,6 +521,26 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             ("D2 tense flip through was", S, a(notice_was, notice), approved),
             ("R1 the whole sentence is accepted", frozenset(),
                 a("My manager said: I do not need supervision.", boss), approved),
+            ("A1 scope before an abbreviation dropped", frozenset({"denial"}),
+                a("I do not need visa sponsorship.", usa), approved),
+            ("A2 condition before an abbreviation dropped", frozenset({"denial"}),
+                a("I will not need visa sponsorship.", jan), approved),
+            ("A3 attribution before an ellipsis dropped", frozenset({"denial"}),
+                a("I do not need supervision.", ell), approved),
+            ("A4 attribution before a line break dropped", frozenset({"denial"}),
+                a("I do not need supervision.", nl), approved),
+            ("A5 contentless No answering a question", frozenset({"denial"}),
+                a("I need visa sponsorship.", qno), approved),
+            ("A6 contentless Not yet answering a question", frozenset({"denial"}),
+                a("I hold a work permit for Spain.", notyet), approved),
+            ("A5 contentless No on its own line", frozenset({"denial"}),
+                a("I need visa sponsorship.", qno2), approved),
+            ("A1 the whole row is accepted", frozenset(),
+                a("In the U.S. I do not need visa sponsorship.", usa), approved),
+            ("A4 the whole two-line row is accepted", frozenset(),
+                a("My manager said: I do not need supervision.", nl), approved),
+            ("A5 the whole question and No is accepted", frozenset(),
+                a("Do I need visa sponsorship? No.", qno), approved),
             ("N3 me in the question", frozenset({"question"}),
                 a("My notice period is two months.", notice, q="Hire me, AWS certified"),
                 approved),

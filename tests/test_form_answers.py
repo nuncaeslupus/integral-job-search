@@ -515,11 +515,60 @@ def test_n2_a_denial_quote_may_not_drop_its_scope_condition_or_attribution(
         _prepare(store, master, (_ans(answer, cited),))
 
 
-def test_n2_the_whole_denial_sentence_of_a_longer_row_is_accepted(store: ProfileStore) -> None:
+def test_n2_a_row_up_to_the_end_of_the_denial_line_is_accepted(store: ProfileStore) -> None:
     cited = _row(
-        store, "statement", "I live in Girona. I do not need visa sponsorship. I like trains."
+        store, "statement", "I live in Girona.\nI do not need visa sponsorship.\nI like trains."
     )
-    assert not _refused(store, _ans("I do not need visa sponsorship.", cited))
+    assert not _refused(store, _ans("I live in Girona. I do not need visa sponsorship.", cited))
+    assert _refused(store, _ans("I do not need visa sponsorship.", cited))
+
+
+@pytest.mark.parametrize(
+    ("row", "answer", "whole"),
+    [
+        (
+            "In the U.S. I do not need visa sponsorship.",
+            "I do not need visa sponsorship.",
+            "In the U.S. I do not need visa sponsorship.",
+        ),
+        (
+            "From Jan. I will not need visa sponsorship.",
+            "I will not need visa sponsorship.",
+            "From Jan. I will not need visa sponsorship.",
+        ),
+        (
+            "My manager said\u2026 I do not need supervision.",
+            "I do not need supervision.",
+            "My manager said\u2026 I do not need supervision.",
+        ),
+        (
+            "My manager said:\nI do not need supervision.",
+            "I do not need supervision.",
+            "My manager said: I do not need supervision.",
+        ),
+        (
+            "Do I need visa sponsorship? No.",
+            "I need visa sponsorship.",
+            "Do I need visa sponsorship? No.",
+        ),
+        (
+            "Do I hold a work permit for Spain? Not yet.",
+            "I hold a work permit for Spain.",
+            "Do I hold a work permit for Spain? Not yet.",
+        ),
+        (
+            "Do I need visa sponsorship?\nNo.",
+            "I need visa sponsorship.",
+            "Do I need visa sponsorship? No.",
+        ),
+    ],
+)
+def test_a1_to_a6_the_denial_is_quoted_from_the_start_of_its_row(
+    store: ProfileStore, row: str, answer: str, whole: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert any(d.startswith("denial:") for d in _refused(store, _ans(answer, cited)))
+    assert not _refused(store, _ans(whole, cited))
 
 
 @pytest.mark.parametrize(
