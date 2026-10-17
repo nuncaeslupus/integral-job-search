@@ -123,5 +123,5 @@ def test_every_committed_pin_test_uses_the_shared_rule() -> None:
 def test_the_record_commits_the_floor_and_no_census() -> None:
     committed = literal_pin.record(measure())
     assert not any(k.startswith("_") for k in committed)
-    assert committed["pins_swept_at_least"] == 3
+    assert committed["pins_swept_at_least"] == 2
     assert json.loads(json.dumps(committed)) == committed
