@@ -439,7 +439,7 @@ def floor_breaches(measured: dict[str, Any]) -> list[str]:
     `evidence_gates_read_at_least: 100` unconditionally, so a five-gate board
     that writes first leaves an artefact asserting a floor the run never met —
     and that artefact is what the next healthy run's `make evidence` diffs
-    against. Same repair, same day, as `plan_v2.floor_breaches`.
+    against.
     """
     return [
         f"only {measured[name]} gate(s) counted for {name} (floor {floor}) — "

@@ -12,11 +12,10 @@ matter and the payload as the body. Two directories hold them here:
 
 The second directory exists because the migration does not preserve finished
 tasks: it writes their id, title and PR into a prose file and drops the payload
-carrying the fenced ``gate`` block, along with their `deps`. Two checks in this
-repository read exactly those fields — `tools/verify_gates.py` re-asserts every
-terminal task's gate, and `integral.plan_v2` compares the plan's `Depends`
-column against the board's. Both would have gone quiet rather than red, which is
-the worse failure: a check that silently stops checking still exits 0.
+carrying the fenced ``gate`` block, along with their `deps`. `tools/verify_gates.py`
+re-asserts every terminal task's gate, and would have gone quiet rather than
+red, which is the worse failure: a check that silently stops checking still
+exits 0.
 
 Rows come back in the shape the JSONL ledger used, so callers written against
 the old board keep working — `deps` as `[{"id": …, "type": "blocks"}]` rather

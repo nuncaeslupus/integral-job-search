@@ -5,6 +5,7 @@ priority: 10
 workspace: SOLO
 tags: [m2]
 status: merged
+retired: "step_gates owner (D-7) gate, pruned 2026-10-17 by owner decision"
 pr: https://github.com/nuncaeslupus/job-search/pull/24
 ---
 

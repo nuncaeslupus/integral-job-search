@@ -91,13 +91,9 @@ session-end = "handoff"
 # every turn of every session. Revisit it when the library grows — that is the
 # price of a budget that is chosen rather than fitted.
 #
-# `integral.skill_budget` reads this key and measures against it, and refuses
-# a value that is not a round multiple of 1,000 or that leaves under 400 chars
-# of headroom — so it cannot be quietly reset to whatever the library happens
-# to measure. `audit_library.py` still uses upstream's hardcoded 8,000
+# `audit_library.py` still uses upstream's hardcoded 8,000
 # (claude-arsenal#143 asks it to read this key), which is why it reports a
-# listing-budget finding here by design; the total it prints is the number our
-# own measurement is asserted against.
+# listing-budget finding here by design.
 listing-budget = 11000
 queue-automation = true
 

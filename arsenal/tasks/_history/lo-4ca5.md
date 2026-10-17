@@ -4,6 +4,7 @@ title: "D-4: the Traits gate is assigned to T28 by the specification and to T27 
 priority: 10
 tags: [m3]
 status: merged
+retired: "step_gates owner (D-4) gate, pruned 2026-10-17 by owner decision"
 pr: https://github.com/nuncaeslupus/job-search/pull/24
 ---
 

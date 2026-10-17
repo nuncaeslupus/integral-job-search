@@ -5,6 +5,7 @@ priority: 10
 workspace: SOLO
 tags: [infra]
 status: merged
+retired: "skill_budget gate, pruned 2026-10-17 by owner decision"
 ---
 
 Surfaced by S7, which added thirteen step skills. Flagged rather than resolved
