@@ -613,7 +613,7 @@ plan is a complete ledger of the queue rather than of the implementation only.
 | T342 | The employer's brand colours are measured by hand-written browser JavaScript every time | 5 | M | — | `generated_versions_without_a_recorded_palette_measurement == 0` | gate set in its own PR | ☐ |
 | T343 | cv/generated/ has no index, so finding a delivery means reading hash directories | 5 | M | — | `generated_versions_missing_from_the_index == 0` | gate set in its own PR | ☐ |
 | T344 | An offer reaches the candidate's decision with no brief on the real employer or whether it is still open | 5 | M | — | `offers_presented_for_decision_without_an_employer_brief == 0` | gate set in its own PR | ☑ |
-| T345 | An offer already seen or applied to can be shown to the candidate again | 5 | M | — | `offers_presented_again_after_applied_or_rejected == 0` | gate set in its own PR | ☐ |
+| T345 | An offer already seen or applied to can be shown to the candidate again | 5 | M | — | `offers_presented_again_after_applied_or_rejected == 0` | `uv run pytest tests/test_offers_seen_again.py -q` | ☑ |
 | T346 | make host-gate takes ~45 min on 12 cores: the slowest test file is the critical path | 5 | M | — | `slowest_test_file_seconds <= 120` | gate set in its own PR | ☐ |
 
 ### Divergences
@@ -661,7 +661,7 @@ from `arsenal/tasks/_history/`, never from the plan's own ticks.
 | milestone | delivers | tasks |
 |-----------|----------|-------|
 | **M1 — the spine** | a candidate is identified, resumed and never mixed up with another; the graph can say what is owed |, T285, T291, T292, T323, T327 |
-| **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T15, T59, T91, T199, T202, T256, T268, T270, T272, T274, T277, T278, T279, T282, T283, T284, T287, T294, T297, T298, T300, T301, T310, T315, T322, T330, T334, T345 |
+| **M2 — L1, a rough list end to end** | constraints → offers → extraction → annotation → a provisional, labelled ranking | T15, T59, T91, T199, T202, T256, T268, T270, T272, T274, T277, T278, T279, T282, T283, T284, T287, T294, T297, T298, T300, T301, T310, T315, T322, T330, T334 |
 | **M3 — L2, the full first run** | history, traits, reactions, weights, feedback — the ranking gets sharp and the loop closes | T20, T69, T145, T249, T257, T275, T281, T289, T295, T314, T324 |
 | **M4 — per opportunity** | documents for one advert, and the interview around it | T29, D-26, T143, T211, T286, T288, T296, T313, T325, T326, T329, T338, T339, T341, T342, T343 |
 | **M5 — contact with the world** | the layers that touch the outside stop reporting success over work they did not do: robots, connector health, liveness identity, canonical-source dedup, the eligibility and language gates, the ATS text-layer contract, the application status vocabulary | D-23, D-25, T112, T106, T189, T258, T259, T261, T262, T269, T271, T273, T276, T280, T290, T299, T302, T304, T305, T307, T308, T309, T319, T331, T332, T335, T336, T337 |
