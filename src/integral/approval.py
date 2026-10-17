@@ -443,6 +443,13 @@ from integral.cv_store import (
     _atomic_write_json,
     write_master,
 )
+from integral.form_answers import (
+    FORM_ANSWERS_DOC,
+    FormAnswer,
+    FormAnswerError,
+    backed_lines,
+    write_answers,
+)
 from integral.generate import (
     DEFAULT_FIXTURE_MASTER,
     Manifest,
@@ -732,6 +739,7 @@ def prepare(
     details: PersonalDetails,
     asks: tuple[str, ...] = (),
     approved_episodes: tuple[int, ...] = (),
+    form_answers: tuple[FormAnswer, ...] = (),
 ) -> Payload:
     """Draft the application for one advert and stop one step short of sending.
 
@@ -763,6 +771,21 @@ def prepare(
     )
     _atomic_write_json(store, approvals.model_dump(mode="json"), *where, "approvals.json")
     _atomic_write_json(store, details.model_dump(mode="json"), *where, "personal.json")
+    if form_answers:
+        # T339: written before the payload is measured, so `form_answers.md` is one of
+        # `payload.documents`, in the digest the candidate confirms, and staged in send/.
+        try:
+            write_answers(
+                store,
+                offer_id,
+                manifest.version,
+                form_answers,
+                approved_episodes=tuple(approval.text for approval in approvals.episodes),
+            )
+        except FormAnswerError as error:
+            raise ApprovalError(
+                f"the form answers are not backed by the store, so no payload was written: {error}"
+            ) from error
 
     measured = measure_prepared(store, master, offer_id, manifest.version)
     if measured["unapproved_episode_disclosures"]:
@@ -777,7 +800,10 @@ def prepare(
         version=manifest.version,
         recipient=recipient,
         documents=tuple(sorted(path.name for path in store.path(*where).glob("*.md"))),
-        claims=tuple(f"{claim.document}: {claim.text}" for claim in manifest.claims),
+        claims=tuple(f"{claim.document}: {claim.text}" for claim in manifest.claims)
+        + tuple(
+            f"{FORM_ANSWERS_DOC}: {a.question.strip()} — {a.text.strip()}" for a in form_answers
+        ),
         episodes=tuple(approval.text for approval in approvals.episodes),
         contact_details=details.stated(),
         undecidable_episodes=tuple(measured["undecidable_episodes"]),
@@ -1127,6 +1153,9 @@ def measure_prepared(
             continue
         if claim_is_backed(master, claim, withdrawn_ids):
             backed[(claim.document, claim.text)] += 1
+    # T339: a form answer's line is backed by the live evidence rows it cites, judged now.
+    for line, count in backed_lines(store, offer_id, version, approved).items():
+        backed[(FORM_ANSWERS_DOC, line)] += count
 
     documents = {path.name: path.read_text(encoding="utf-8") for path in sorted(where.glob("*.md"))}
     findings: list[str] = []

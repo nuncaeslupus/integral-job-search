@@ -18,12 +18,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "lineno": 3674
+      "lineno": 3703
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "lineno": 3669
+      "lineno": 3698
     },
     {
       "module": "arsenal_source",

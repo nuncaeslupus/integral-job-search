@@ -121,6 +121,15 @@ The employer's own site is the reference for the language, the products and the 
 A form answer takes the place of the letter: answer each recorded form question in the candidate's own words, asked for first, edited and harvested exactly as a letter is.
 ```
 
+## Form answers
+
+Most ATS forms ask free-text questions (why us, notice period, salary expectation, work permit, where you heard of us), often with a character limit. They are an output of this step, not a scratch file beside the documents.
+
+- **Drafted from store entries only.** Each answer is a `integral.form_answers.FormAnswer(question, text, char_limit, evidence_ids)`: it cites the live evidence rows it rests on, as the letter's authorship table does. A row that is missing, retracted, a `reaction` or shares no word with the answer backs nothing; a denial or a number must be in the words cited. An answer with no store source is not written; ask the candidate for the fact instead.
+- **A stated limit is kept.** Fit an answer with `integral.form_answers.shorten(text, limit)`: it keeps whole leading sentences and refuses rather than cut one. If the first sentence alone is over the limit, ask the candidate for a shorter one.
+- **Story-bank episodes need per-use approval.** An `episode` row may be cited only for an episode approved for this version (`approved_episodes`), and the document sweep treats the answers' lines like the letter's.
+- **Staged with the payload.** Pass the answers to `integral.approval.prepare(..., form_answers=(...))`. They are written as `form_answers.md`, so they are a payload document, in the digest the candidate confirms, and `stage_send` puts them in `send/`; the record `form_answers.json` stays beside, never inside it. An answer line edited afterwards, or whose cited row is retracted, is no longer backed and staging is refused.
+
 ## Stop rule
 
 A CV and the candidate's letter (edited, with its authorship recorded) exist for this offer and the candidate has approved them, or has parked them. **There is no cap on versions:** as many rounds as the candidate needs, each one a new `v<N+1>`.
