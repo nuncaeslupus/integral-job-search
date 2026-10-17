@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from integral.employer_brief import _main, load_brief, presented_without_brief, record_brief
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import (
@@ -17,6 +20,7 @@ from integral.presentation_log import present
 from integral.sourcing_exclusions import Exclusion, record_exclusion
 
 _AT = "2026-10-16T09:00:00Z"
+_EARLIER = "2026-10-16T08:00:00Z"
 
 
 def _store(tmp_path: Path) -> ProfileStore:
@@ -24,10 +28,8 @@ def _store(tmp_path: Path) -> ProfileStore:
     return ProfileStore(tmp_path, identity.handle)
 
 
-def _shown_offer(store: ProfileStore) -> str:
-    offer = connect_manual(
-        "Backend en Barcelona.", title="Backend", company="Aggregator", language="es"
-    )
+def _shown_offer(store: ProfileStore, text: str = "Backend en Barcelona.") -> str:
+    offer = connect_manual(text, title="Backend", company="Aggregator", language="es")
     save_lifecycle_offer(store, offer, track_new_offer(offer, at=_AT))
     present(store, [offer.id], at=_AT)
     return offer.id
@@ -38,7 +40,8 @@ def _brief(store: ProfileStore, offer_id: str, **over: str) -> None:
         "real_employer": "Real SL",
         "resolved_via": "apply_link",
         "live_at_source": "true",
-        "checked_at": _AT,
+        "checked_at": _EARLIER,
+        "source_posting_url": "https://real.example/job",
         "what_they_do": "logistics software",
         "sector": "logistics",
         "pay": "not published",
@@ -118,9 +121,87 @@ def test_cli_record_show_missing(tmp_path: Path, capsys) -> None:  # type: ignor
     base = ["--id", "candidate", "--root", str(tmp_path)]
     assert _main(["missing", *base]) == 1
     args = ["record", *base, "--offer", offer_id, "--employer", "Real SL"]
-    args += ["--resolved-via", "advert_wording", "--live", "true", "--checked-at", _AT]
-    args += ["--what", "x", "--sector", "y", "--pay", "n/a", "--hires", "unknown"]
+    args += ["--resolved-via", "advert_wording", "--live", "true", "--checked-at", _EARLIER]
+    args += [
+        "--source-url",
+        "https://real.example/job",
+        "--what",
+        "x",
+        "--sector",
+        "y",
+        "--pay",
+        "n/a",
+        "--hires",
+        "unknown",
+    ]
     assert _main(args) == 0
     assert _main(["show", *base, "--offer", offer_id]) == 0
     assert _main(["missing", *base]) == 0
     assert "Real SL" in capsys.readouterr().out
+
+
+def _ban(store: ProfileStore) -> None:
+    record_exclusion(
+        store,
+        Exclusion(about="sector:banca", stated_at_cycle=1, words="no banca", terms=("banking",)),
+    )
+
+
+def test_a_brief_whose_sector_trips_an_exclusion_is_not_briefed(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _ban(store)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id, sector="banking", what_they_do="retail banking")
+    assert presented_without_brief(store) == [offer_id]
+
+
+def test_the_sector_is_compared_when_the_advert_ends_in_a_section(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _ban(store)
+    offer_id = _shown_offer(store, "Backend en Barcelona.\nRequisitos:\n- Python")
+    _brief(store, offer_id, sector="banking", what_they_do="retail banking")
+    brief = load_brief(store, offer_id)
+    assert brief is not None and brief.exclusions_tripped == ("sector:banca",)
+
+
+def test_a_brief_for_an_employer_that_does_not_hire_here_is_not_briefed(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id, hires_in_candidate_country="false")
+    assert presented_without_brief(store) == [offer_id]
+
+
+def test_liveness_with_no_source_posting_is_not_checked(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    for live in ("true", "unknown"):
+        _brief(store, offer_id, live_at_source=live, source_posting_url="")
+        assert presented_without_brief(store) == [offer_id]
+
+
+def test_a_brief_written_after_the_offer_was_shown_does_not_clear_it(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id, checked_at="2026-10-16T10:00:00Z")
+    assert presented_without_brief(store) == [offer_id]
+
+
+def test_checked_at_must_be_a_timestamp(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    with pytest.raises(ValidationError):
+        _brief(store, offer_id, checked_at="yesterday")
+
+
+def test_malformed_presentation_rows_are_named_not_crashed_on(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id)
+    path = store.path("search", "presentations.jsonl")
+    with path.open("a", encoding="utf-8") as f:
+        f.write(f'{{"at": "{_AT}", "offer_ids": "abc"}}\n{{"offer_ids": null}}\nnot json\n')
+    assert presented_without_brief(store) == [
+        "presentations.jsonl line 2: unreadable row",
+        "presentations.jsonl line 3: unreadable row",
+        "presentations.jsonl line 4: unreadable row",
+    ]

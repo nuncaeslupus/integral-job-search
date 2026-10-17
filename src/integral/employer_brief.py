@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, get_args
 
@@ -31,11 +32,21 @@ from pydantic import ValidationError, field_validator
 from integral.identity import IdentityError, ProfileStore, default_profiles_root
 from integral.lifecycle import load_lifecycle_offer
 from integral.offers import Strict, load_offer
-from integral.presentation_log import _rows
+from integral.presentation_log import PRESENTATIONS
 from integral.sourcing_exclusions import Candidate, load_exclusions, ruled_out_by
 
 Tri = Literal["true", "false", "unknown"]
 ResolvedVia = Literal["apply_link", "advert_wording", "same_as_listed"]
+
+
+def _when(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _parts(offer_id: str) -> tuple[str, str, str]:
@@ -65,6 +76,13 @@ class EmployerBrief(Strict):
             raise ValueError("blank")
         return value
 
+    @field_validator("checked_at")
+    @classmethod
+    def _iso(cls, value: str) -> str:
+        if _when(value) is None:
+            raise ValueError("checked_at is not ISO-8601")
+        return value
+
 
 def load_brief(store: ProfileStore, offer_id: str) -> EmployerBrief | None:
     """The brief, or `None` when absent or unreadable (an unreadable brief is no brief)."""
@@ -91,12 +109,13 @@ def record_brief(
     """Write the brief; the exclusion comparison is computed here, never typed."""
     offer = load_offer(store, offer_id)
     exclusions = load_exclusions(store)
-    candidate = Candidate(
-        offer_id=offer_id,
-        title=offer.title,
-        text=f"{offer.text} {what_they_do} {sector}",
-        employer=real_employer,
+    # The brief's own words are a region of their own: appended to the advert they would
+    # land inside its last section, which `topic_text` strips (T227).
+    advert = Candidate(
+        offer_id=offer_id, title=offer.title, text=offer.text, employer=real_employer
     )
+    said = Candidate(offer_id=offer_id, text=f"{what_they_do}\n{sector}", employer=real_employer)
+    tripped = dict.fromkeys((*ruled_out_by(advert, exclusions), *ruled_out_by(said, exclusions)))
     brief = EmployerBrief(
         offer_id=offer_id,
         real_employer=real_employer,
@@ -107,7 +126,7 @@ def record_brief(
         what_they_do=what_they_do,
         sector=sector,
         exclusions_compared=tuple(e.about for e in exclusions),
-        exclusions_tripped=ruled_out_by(candidate, exclusions),
+        exclusions_tripped=tuple(tripped),
         pay=pay,
         hires_in_candidate_country=hires_in_candidate_country,
     )
@@ -122,18 +141,49 @@ def _expired(store: ProfileStore, offer_id: str) -> bool:
         return False
 
 
-def is_briefed(store: ProfileStore, offer_id: str, stated: frozenset[str]) -> bool:
+def is_briefed(
+    store: ProfileStore, offer_id: str, stated: frozenset[str], first_shown: datetime | None
+) -> bool:
+    """Complete, current, clean, and written before the offer was first shown."""
     brief = load_brief(store, offer_id)
     if brief is None or not stated <= set(brief.exclusions_compared):
         return False
-    return brief.live_at_source != "false" or _expired(store, offer_id)
+    if brief.exclusions_tripped or brief.hires_in_candidate_country == "false":
+        return False
+    checked = _when(brief.checked_at)
+    if checked is None or first_shown is None or checked > first_shown:
+        return False
+    if brief.live_at_source == "false":
+        return _expired(store, offer_id)
+    # Open or unknown without the employer's own posting is "not checked".
+    return bool(brief.source_posting_url and brief.source_posting_url.strip())
 
 
 def presented_without_brief(store: ProfileStore) -> list[str]:
-    """`offers_presented_for_decision_without_an_employer_brief`, as the offer ids."""
+    """`offers_presented_for_decision_without_an_employer_brief`, as the offer ids.
+
+    A presentations row that cannot be read is listed by name, never skipped silently.
+    """
     stated = frozenset(e.about for e in load_exclusions(store))
-    shown = sorted({str(i) for row in _rows(store) for i in row.get("offer_ids", ())})
-    return [i for i in shown if not is_briefed(store, i, stated)]
+    first: dict[str, datetime | None] = {}
+    bad: list[str] = []
+    if store.exists(*PRESENTATIONS):
+        for n, line in enumerate(store.read_text(*PRESENTATIONS).splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                row = None
+            ids = row.get("offer_ids") if isinstance(row, dict) else None
+            if not isinstance(ids, list):
+                bad.append(f"presentations.jsonl line {n}: unreadable row")
+                continue
+            at = _when(row.get("at"))
+            for i in map(str, ids):
+                old = first.get(i, at)
+                first[i] = None if at is None or old is None else min(at, old)
+    return bad + [i for i in sorted(first) if not is_briefed(store, i, stated, first[i])]
 
 
 def _main(argv: list[str]) -> int:
