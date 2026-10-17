@@ -564,6 +564,30 @@ def test_an_html_file_with_the_fixture_header_is_not_a_pdf_in_production(
         read_pdf_text((_send(store, version) / CV_PDF).read_bytes())
 
 
+def test_the_production_default_reader_refuses_an_html_file_with_the_fixture_header(
+    store: ProfileStore, master: CVMaster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R3, the default half: no `pdf_reader` argument, and the fixture swap undone.
+
+    Every other test here swaps `integral.send_set.read_pdf_text` for the fixture
+    reader, so none reaches `pdf_defects`' own fallback. Restoring the real reader
+    pins that the fallback is the real one: the staged files are html carrying exactly
+    the approved text behind a `%PDF-fixture` header, and they are not PDFs.
+    """
+    version = _staged(store, master)
+    monkeypatch.setattr("integral.send_set.read_pdf_text", read_pdf_text)
+    sent = (_send(store, version) / CV_PDF).read_bytes()
+    assert sent.startswith(b"%PDF-fixture")  # the approved text, behind the fixture header
+    with pytest.raises(SendSetError) as reason:
+        read_pdf_text(sent)
+    if importlib.util.find_spec("pypdf") is not None:
+        assert "cannot be read" in str(reason.value)  # refused as not a PDF, not for want of pypdf
+    defects = verify_send(store, OFFER, version)
+    assert len(defects) == 3 and all("cannot be checked" in d for d in defects), defects
+    with pytest.raises(ApprovalError, match="send/ folder is not what was approved"):
+        record_sent(store, master, OFFER, version, confirms=_confirm(store, version))
+
+
 def test_a_pdf_with_no_text_reader_is_not_waved_through(
     store: ProfileStore, master: CVMaster
 ) -> None:
