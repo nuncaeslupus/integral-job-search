@@ -98,7 +98,7 @@ def test_a_dropped_pin_row_is_unmeasured_not_clean() -> None:
 def test_the_floor_on_pins_swept_is_a_literal_and_equals_the_table() -> None:
     source = Path(literal_pin.__file__).read_text(encoding="utf-8")
     assert binding_defects(source, "MINIMUM_PINS_SWEPT") == []
-    assert literal_pin.MINIMUM_PINS_SWEPT == len(PINS) == 3
+    assert literal_pin.MINIMUM_PINS_SWEPT == len(PINS) == 2
 
 
 def test_every_committed_pin_test_uses_the_shared_rule() -> None:

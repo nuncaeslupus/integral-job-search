@@ -153,7 +153,7 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         metavar="PATH",
         help=(
             "write what this run counted and what the checker actually read to PATH — "
-            "the input `integral.gate_reader_agreement` measures T122's gate from"
+            "a machine-readable record of the run"
         ),
     )
     return parser.parse_args(argv)
