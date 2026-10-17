@@ -82,6 +82,10 @@ DefectKind = Literal["denial_outside_candidate_paragraph", "hand_typed_count"]
 # denials would withhold the achievements a CV exists to state. They are a stated
 # ceiling ("I worked without tracing tools" is not seen), not an oversight.
 
+# The words the paragraph above leaves out of NEGATORS, named so a caller with a stricter need can
+# cite them rather than restate them (form_answers guards a row that holds one). Not read here.
+NON_CUE_NEGATIONS: frozenset[str] = frozenset({"without", "sin", "sense", "zero"})
+
 NEGATORS: frozenset[str] = frozenset(
     {
         # en

@@ -736,3 +736,76 @@ def test_b_a_whole_guarded_row_or_a_paraphrased_unguarded_row_is_accepted(
 ) -> None:
     ids = [_row(store, "statement", r) for r in rows]
     assert not _refused(store, _ans(answer, *ids))
+
+
+# --- round 6: a hyphenated word is one token; every negation word guards its row (N1-N5, RC1) --
+
+
+@pytest.mark.parametrize(
+    ("rows", "answer", "kind"),
+    [
+        (["I am a non-EU citizen."], "I am an EU citizen.", "source:"),  # N1
+        (
+            ["As a non-EU national I need visa sponsorship."],
+            "As an EU national I need visa sponsorship.",
+            "source:",
+        ),  # N1b
+        (["I am an ex-employee of Acme."], "I am an employee of Acme.", "source:"),  # N12
+        (
+            ["I am still without a UK work permit; I have one for Spain."],
+            "I have a UK work permit.",
+            "denial:",
+        ),  # N4
+        (
+            ["Sigo sin permiso de trabajo para el Reino Unido; lo tengo para España."],
+            "Tengo permiso de trabajo para el Reino Unido.",
+            "denial:",
+        ),  # N5
+        (
+            ["I have zero years of Kubernetes experience."],
+            "I have years of Kubernetes experience.",
+            "denial:",
+        ),  # N3
+        (["I did zero-downtime cutovers."], "I did cutovers.", "denial:"),  # zero inside a compound
+        (["I do n't need visa sponsorship."], "I do need visa sponsorship.", "denial:"),  # N2
+        (
+            [
+                "I do not need visa sponsorship for Spain.",
+                "I need visa sponsorship for the UK.",
+                "I moved to Spain in 2020.",
+            ],
+            "I need visa sponsorship for Spain.",
+            "denial:",
+        ),  # RC1: the denial is cited and not quoted
+    ],
+)
+def test_round_6_a_dropped_prefix_or_an_omitted_cue_is_refused(
+    store: ProfileStore, rows: list[str], answer: str, kind: str
+) -> None:
+    ids = [_row(store, "statement", r) for r in rows]
+    assert any(d.startswith(kind) for d in _refused(store, _ans(answer, *ids)))
+
+
+@pytest.mark.parametrize(
+    ("rows", "answer"),
+    [
+        (["I am a well-known engineer."], "I am a well-known engineer."),
+        (["I am a well-known engineer in Girona."], "In Girona I am a well-known engineer."),
+        (["I am a non-EU citizen."], "I am a non-EU citizen."),
+        (["I am still without a UK work permit."], "I am still without a UK work permit."),
+        (["I do n't need visa sponsorship."], "I do n't need visa sponsorship."),
+    ],
+)
+def test_round_6_a_hyphenated_word_or_an_omitted_cue_row_quoted_whole_is_accepted(
+    store: ProfileStore, rows: list[str], answer: str
+) -> None:
+    ids = [_row(store, "statement", r) for r in rows]
+    assert not _refused(store, _ans(answer, *ids))
+
+
+def test_round_6_the_omitted_cues_are_claim_traces_own_named_constant() -> None:
+    from integral import claim_trace
+
+    # the list is cited, not restated: and none of them is a cue there, which is why it exists
+    assert {"without", "sin", "sense", "zero"} == set(claim_trace.NON_CUE_NEGATIONS)
+    assert not any(claim_trace.is_denial(f"I did {w} it") for w in claim_trace.NON_CUE_NEGATIONS)

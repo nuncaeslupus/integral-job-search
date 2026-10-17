@@ -18,9 +18,16 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   occur in a cited row (at least one word of four letters must be shared). Only a closed
   set of articles, linking verbs, "and"/"or" and prepositions is exempt, so an invented
   permit, certification or tool (UK, EU, PhD, AWS, Go) brings a token no cited row holds.
+* **A hyphenated word is one token** ("non-EU", "ex-employee"), so a prefix cannot be dropped
+  from it: the bare word is a token no cited row holds. No prefix list. A spaced "non EU" is two
+  tokens and stays a gap, as does "well known" against "well-known" (refused, fail-closed).
 * **A row that holds a denial is quoted whole, or not used.** A cited row with a negation cue
-  anywhere in it (any line, any sentence) is *guarded*: it can back words of the answer only
-  as a verbatim quote of the **whole row**, token for token (CRLF, curly quotes, spacing and a
+  anywhere in it (any line, any sentence) is *guarded*: a cue is what ``claim_trace.is_denial``
+  sees, or one of ``claim_trace.NON_CUE_NEGATIONS`` ("without", "sin", "sense", "zero", which a
+  CV leaves unread on purpose but where a guard costs only a whole-row quote), or a bare "n't".
+  A guarded row that is cited and not quoted whole anywhere in the answer is a defect too, so a
+  denial cannot be cited for support while it is dropped. A guarded row can back words of the
+  answer only as a verbatim quote of the **whole row**, token for token (CRLF, curly quotes, spacing and a
   leading list marker such as ``1.`` or ``-`` aside). Every answer word not inside such a quote
   must come from an unguarded row, and an answer clause that carries a negation must lie wholly
   inside one. So a denial on a later line, a hard-wrapped one, a scope or a condition on
@@ -68,6 +75,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from integral.claim_trace import (
     DENIAL_KIND,
+    NON_CUE_NEGATIONS,
     fold,
     is_denial,
     paragraph_defects,
@@ -145,7 +153,9 @@ def _words(text: str) -> set[str]:
     return {w.casefold() for w in _WORD.findall(text) if len(w) >= 4}
 
 
-_TOKEN = re.compile(r"[^\W_]+(?:'[^\W_]+)*")
+# A hyphenated compound is ONE token ("non-eu", "ex-employee"): dropping its prefix leaves a word
+# no cited row holds, so no prefix list is needed. Spaced "non EU" stays two tokens (a gap).
+_TOKEN = re.compile(r"[^\W_]+(?:['-][^\W_]+)*")
 # The candidate's own voice. An employer's question is addressed to "you", so a question that
 # speaks as "I" is a claim placed where no citation is looked for.
 _FIRST_PERSON = frozenset({"i", "i'm", "i've", "i'd", "i'll", "me", "my", "mine", "myself"})
@@ -169,6 +179,16 @@ def _clauses(text: str) -> list[str]:
 def denial_sentences(text: str) -> list[str]:
     """Each clause of `text` (cut at . ! ? ... : ; or a line end) that carries a negation."""
     return [c for c in _clauses(text) if is_denial(c)]
+
+
+def _holds_negation(text: str) -> bool:
+    """A cue ``is_denial`` sees, or one it leaves out for CV use (``NON_CUE_NEGATIONS``), or a
+    bare ``n't`` token ("do n't"). Here a guarded row costs only a whole-row quote."""
+    return is_denial(text) or any(
+        part in _OMITTED_CUES or part == "n't"
+        for token in _tokens(text)
+        for part in token.split("-")
+    )
 
 
 def _tokens(text: str) -> list[str]:
@@ -205,13 +225,18 @@ def _question_defects(question: str) -> list[str]:
     return [f"question: the question is a line sent to the employer and has {w}" for w in why]
 
 
+_OMITTED_CUES = frozenset(fold(w) for w in NON_CUE_NEGATIONS)
+
+
 def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
     """A cited row holding a denial anywhere is guarded: it backs words only as a whole-row quote.
 
     Every word of the answer that is not inside such a quote must come from an unguarded row, and
     a clause of the answer that carries a negation must lie wholly inside such a quote."""
-    guarded = [_row_tokens(row) for row in cited if is_denial(" ".join(row.split()))]
-    free = {t for row in cited if not is_denial(" ".join(row.split())) for t in _row_tokens(row)}
+    guarded = [_row_tokens(row) for row in cited if _holds_negation(" ".join(row.split()))]
+    free = {
+        t for row in cited if not _holds_negation(" ".join(row.split())) for t in _row_tokens(row)
+    }
     free |= _FUNCTION_WORDS
     pieces = [_tokens(c) for c in _clauses(text)]
     mine = [t for piece in pieces for t in piece]
@@ -224,9 +249,14 @@ def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
     for clause, piece in zip(_clauses(text), pieces, strict=True):
         span = range(offset, offset + len(piece))
         offset += len(piece)
-        if is_denial(clause) and not all(i in covered for i in span):
+        if _holds_negation(clause) and not all(i in covered for i in span):
             defects.append(f"denial: {clause!r} is not a whole-row quote of a cited row")
-    held = {t for quote in guarded for t in quote if not is_denial(t)}
+    held = {t for quote in guarded for t in quote if not _holds_negation(t)}
+    for quote in guarded:
+        if not _at(mine, quote):
+            defects.append(
+                "denial: a cited row that holds a denial is not quoted whole in the answer"
+            )
     outside = [t for i, t in enumerate(mine) if i not in covered and t in held and t not in free]
     if outside:
         defects.append(
@@ -441,6 +471,21 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         b9 = row("statement", "It is true that I moved to Girona.")
         listed = row("statement", "1. I do not need visa sponsorship.")
         girona = row("statement", "I live in Girona and I like trains.")
+        # round-6 reviewer cases (report 6238354981): N1 a dropped prefix, N2-N5 negations that
+        # claim_trace leaves out for CV use, RC1 a guarded row cited and not quoted
+        noneu = row("statement", "I am a non-EU citizen.")
+        exemp = row("statement", "I am an ex-employee of Acme.")
+        known = row("statement", "I am a well-known engineer in Girona.")
+        without = row("statement", "I am still without a UK work permit; I have one for Spain.")
+        sin = row(
+            "statement",
+            "Sigo sin permiso de trabajo para el Reino Unido; lo tengo para Espa\u00f1a.",
+        )
+        zero = row("statement", "I have zero years of Kubernetes experience.")
+        spaced = row("statement", "I do n't need visa sponsorship.")
+        rc_no = row("statement", "I do not need visa sponsorship for Spain.")
+        rc_uk = row("statement", "I need visa sponsorship for the UK.")
+        rc_moved = row("statement", "I moved to Spain in 2020.")
         # round-3 reviewer cases (report 6233957716): R1-R3 cut sentence, R4-R8 dropped denials
         boss = row("statement", "My manager said: I do not need supervision.")
         semi = row("statement", "I do not need visa sponsorship; that holds for Spain only.")
@@ -575,6 +620,24 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             ("B9 a negation wrapped round a quote", frozenset({"denial"}),
                 a("It is not true that I do not need visa sponsorship.", no_sponsor, b9),
                 approved),
+            ("N1 non-EU reversed to EU", frozenset({"source"}),
+                a("I am an EU citizen.", noneu), approved),
+            ("N1 ex-employee reversed to employee", frozenset({"source"}),
+                a("I am an employee of Acme.", exemp), approved),
+            ("N4 without a permit reversed", frozenset({"denial"}),
+                a("I have a UK work permit.", without), approved),
+            ("N5 sin permiso reversed", frozenset({"denial"}),
+                a("Tengo permiso de trabajo para el Reino Unido.", sin), approved),
+            ("N3 zero years reversed", frozenset({"denial"}),
+                a("I have years of Kubernetes experience.", zero), approved),
+            ("N2 spaced n't reversed", frozenset({"denial"}),
+                a("I do need visa sponsorship.", spaced), approved),
+            ("RC1 denial cited and not quoted", frozenset({"denial"}),
+                a("I need visa sponsorship for Spain.", rc_no, rc_uk, rc_moved), approved),
+            ("N1 a hyphenated word quoted is accepted", frozenset(),
+                a("I am a well-known engineer in Girona.", known), approved),
+            ("N1 a hyphenated word paraphrased is accepted", frozenset(),
+                a("In Girona I am a well-known engineer.", known), approved),
             ("B the whole multi-line row is accepted", frozenset(),
                 a("Do I need visa sponsorship? No, it is not needed.", b1), approved),
             ("B the whole hard-wrapped row is accepted", frozenset(),
