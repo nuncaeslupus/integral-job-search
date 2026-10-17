@@ -179,10 +179,77 @@ def test_liveness_with_no_source_posting_is_not_checked(tmp_path: Path) -> None:
         assert presented_without_brief(store) == [offer_id]
 
 
-def test_a_brief_written_after_the_offer_was_shown_does_not_clear_it(tmp_path: Path) -> None:
+def test_a_truthful_brief_written_after_the_offer_was_shown_clears_it(tmp_path: Path) -> None:
+    # F10: a backlog brief, and the re-check of a stale one, are written after the showing.
     store = _store(tmp_path)
     offer_id = _shown_offer(store)
     _brief(store, offer_id, checked_at="2026-10-16T10:00:00Z")
+    assert presented_without_brief(store) == []
+
+
+def test_a_stale_brief_is_cleared_by_a_truthful_recheck(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id)
+    record_exclusion(store, Exclusion(about="sector:gambling", stated_at_cycle=1, words="no"))
+    assert presented_without_brief(store) == [offer_id]
+    _brief(store, offer_id, checked_at="2026-10-16T11:00:00Z")
+    assert presented_without_brief(store) == []
+
+
+def test_a_brief_dated_after_it_was_written_does_not_clear(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id, checked_at="2999-01-01T00:00:00Z")
+    assert presented_without_brief(store) == [offer_id]
+
+
+def test_a_brief_with_no_recorded_at_does_not_clear(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id)
+    path = ("offers", "briefs", f"{offer_id}.json")
+    data = store.read_json(*path)
+    del data["recorded_at"]
+    store.write_json(data, *path)
+    assert presented_without_brief(store) == [offer_id]
+
+
+def test_a_recorded_at_in_the_future_does_not_clear(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id, checked_at="2999-01-01T00:00:00Z")
+    path = ("offers", "briefs", f"{offer_id}.json")
+    data = store.read_json(*path)
+    data["recorded_at"] = "2999-01-02T00:00:00Z"
+    store.write_json(data, *path)
+    assert presented_without_brief(store) == [offer_id]
+
+
+def test_restating_an_exclusion_with_broader_terms_makes_the_brief_stale(tmp_path: Path) -> None:
+    # F6: same `about`, so `exclusions_compared` cannot see it; the words are re-compared.
+    store = _store(tmp_path)
+    record_exclusion(store, Exclusion(about="sector:finance", stated_at_cycle=1, words="no"))
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id, sector="banca", what_they_do="una caja")
+    assert presented_without_brief(store) == []
+    record_exclusion(
+        store,
+        Exclusion(about="sector:finance", stated_at_cycle=2, words="no", terms=("banca",)),
+    )
+    assert presented_without_brief(store) == [offer_id]
+
+
+def test_a_hand_edited_empty_verdict_does_not_clear_a_tripped_offer(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _ban(store)
+    offer_id = _shown_offer(store)
+    _brief(store, offer_id, sector="banking", what_they_do="retail banking")
+    path = ("offers", "briefs", f"{offer_id}.json")
+    data = store.read_json(*path)
+    assert data["exclusions_tripped"] == ["sector:banca"]
+    data["exclusions_tripped"] = []
+    store.write_json(data, *path)
     assert presented_without_brief(store) == [offer_id]
 
 

@@ -10,8 +10,14 @@ re-recorded: it is `presentations.jsonl`'s `offer_ids` (`presentation_log.presen
 
 An offer counts as briefed when its brief is complete, was checked against every
 exclusion the candidate has stated *now* (a topic ruled out after the brief was
-written makes it stale), and is not known to be closed at the source unless the
-offer is also marked `expired` in its lifecycle record.
+written makes it stale), trips none of them when compared again at read time, and is
+not known to be closed at the source unless the offer is also marked `expired`.
+
+The brief is deliberately not ordered against the presentation: a re-check of a stale
+brief, or a brief for an offer shown before this gate existed, is necessarily written
+after the offer was first shown, and refusing it would leave only a backdated
+`checked_at` as the route to zero. What stops a made-up date is `recorded_at`, stamped
+by `record_brief`: a `checked_at` later than the moment of writing is refused.
 
     uv run python -m integral.employer_brief record --id H --offer O --employer … …
     uv run python -m integral.employer_brief show --id H --offer O
@@ -31,9 +37,9 @@ from pydantic import ValidationError, field_validator
 
 from integral.identity import IdentityError, ProfileStore, default_profiles_root
 from integral.lifecycle import load_lifecycle_offer
-from integral.offers import Strict, load_offer
+from integral.offers import Offer, Strict, load_offer
 from integral.presentation_log import PRESENTATIONS
-from integral.sourcing_exclusions import Candidate, load_exclusions, ruled_out_by
+from integral.sourcing_exclusions import Candidate, Exclusion, load_exclusions, ruled_out_by
 
 Tri = Literal["true", "false", "unknown"]
 ResolvedVia = Literal["apply_link", "advert_wording", "same_as_listed"]
@@ -60,6 +66,8 @@ class EmployerBrief(Strict):
     source_posting_url: str | None = None
     live_at_source: Tri
     checked_at: str
+    #: Stamped by `record_brief`, never typed: when the brief was written.
+    recorded_at: str | None = None
     what_they_do: str
     sector: str
     #: Every exclusion `about` compared, and the ones the real employer tripped.
@@ -92,6 +100,25 @@ def load_brief(store: ProfileStore, offer_id: str) -> EmployerBrief | None:
         return None
 
 
+def _tripped(
+    offer: Offer,
+    real_employer: str,
+    what_they_do: str,
+    sector: str,
+    exclusions: tuple[Exclusion, ...],
+) -> tuple[str, ...]:
+    """The exclusions the real employer trips, computed from the words, never read back."""
+    # The brief's own words are a region of their own: appended to the advert they would
+    # land inside its last section, which `topic_text` strips (T227).
+    advert = Candidate(
+        offer_id=offer.id, title=offer.title, text=offer.text, employer=real_employer
+    )
+    said = Candidate(offer_id=offer.id, text=f"{what_they_do}\n{sector}", employer=real_employer)
+    return tuple(
+        dict.fromkeys((*ruled_out_by(advert, exclusions), *ruled_out_by(said, exclusions)))
+    )
+
+
 def record_brief(
     store: ProfileStore,
     offer_id: str,
@@ -109,13 +136,7 @@ def record_brief(
     """Write the brief; the exclusion comparison is computed here, never typed."""
     offer = load_offer(store, offer_id)
     exclusions = load_exclusions(store)
-    # The brief's own words are a region of their own: appended to the advert they would
-    # land inside its last section, which `topic_text` strips (T227).
-    advert = Candidate(
-        offer_id=offer_id, title=offer.title, text=offer.text, employer=real_employer
-    )
-    said = Candidate(offer_id=offer_id, text=f"{what_they_do}\n{sector}", employer=real_employer)
-    tripped = dict.fromkeys((*ruled_out_by(advert, exclusions), *ruled_out_by(said, exclusions)))
+    tripped = _tripped(offer, real_employer, what_they_do, sector, exclusions)
     brief = EmployerBrief(
         offer_id=offer_id,
         real_employer=real_employer,
@@ -123,6 +144,7 @@ def record_brief(
         source_posting_url=source_posting_url,
         live_at_source=live_at_source,
         checked_at=checked_at,
+        recorded_at=datetime.now(UTC).isoformat(),
         what_they_do=what_they_do,
         sector=sector,
         exclusions_compared=tuple(e.about for e in exclusions),
@@ -142,16 +164,25 @@ def _expired(store: ProfileStore, offer_id: str) -> bool:
 
 
 def is_briefed(
-    store: ProfileStore, offer_id: str, stated: frozenset[str], first_shown: datetime | None
+    store: ProfileStore, offer_id: str, stated: frozenset[str], exclusions: tuple[Exclusion, ...]
 ) -> bool:
-    """Complete, current, clean, and written before the offer was first shown."""
+    """Complete, current, clean against today's exclusions, and not dated in the future."""
     brief = load_brief(store, offer_id)
     if brief is None or not stated <= set(brief.exclusions_compared):
         return False
-    if brief.exclusions_tripped or brief.hires_in_candidate_country == "false":
+    if brief.hires_in_candidate_country == "false":
         return False
-    checked = _when(brief.checked_at)
-    if checked is None or first_shown is None or checked > first_shown:
+    try:
+        offer = load_offer(store, offer_id)
+    except Exception:
+        return False
+    # Recomputed now, against the exclusions as they stand: a stored verdict is not trusted.
+    if _tripped(offer, brief.real_employer, brief.what_they_do, brief.sector, exclusions):
+        return False
+    checked, recorded = _when(brief.checked_at), _when(brief.recorded_at)
+    if checked is None or recorded is None or checked > recorded:
+        return False
+    if recorded > datetime.now(UTC):
         return False
     if brief.live_at_source == "false":
         return _expired(store, offer_id)
@@ -164,8 +195,9 @@ def presented_without_brief(store: ProfileStore) -> list[str]:
 
     A presentations row that cannot be read is listed by name, never skipped silently.
     """
-    stated = frozenset(e.about for e in load_exclusions(store))
-    first: dict[str, datetime | None] = {}
+    exclusions = load_exclusions(store)
+    stated = frozenset(e.about for e in exclusions)
+    shown: set[str] = set()
     bad: list[str] = []
     if store.exists(*PRESENTATIONS):
         for n, line in enumerate(store.read_text(*PRESENTATIONS).splitlines(), 1):
@@ -179,11 +211,8 @@ def presented_without_brief(store: ProfileStore) -> list[str]:
             if not isinstance(ids, list):
                 bad.append(f"presentations.jsonl line {n}: unreadable row")
                 continue
-            at = _when(row.get("at"))
-            for i in map(str, ids):
-                old = first.get(i, at)
-                first[i] = None if at is None or old is None else min(at, old)
-    return bad + [i for i in sorted(first) if not is_briefed(store, i, stated, first[i])]
+            shown.update(map(str, ids))
+    return bad + [i for i in sorted(shown) if not is_briefed(store, i, stated, exclusions)]
 
 
 def _main(argv: list[str]) -> int:
