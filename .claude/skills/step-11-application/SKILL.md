@@ -125,6 +125,10 @@ A form answer takes the place of the letter: answer each recorded form question 
 
 A CV and the candidate's letter (edited, with its authorship recorded) exist for this offer and the candidate has approved them, or has parked them. **There is no cap on versions:** as many rounds as the candidate needs, each one a new `v<N+1>`.
 
+## When the candidate says it was sent or the advert closed
+
+When the candidate says the application went out, or the advert has closed, run `uv run python -m integral.applications mark <offer_id> applied|expired|rejected --id <handle> [--at DATE] [--reason TEXT]` instead of a scratch script: it writes the lifecycle transition and the application status under one timestamp and refuses a transition the lifecycle table forbids. An application with no advert is created by `record_open_application` (stored `shortlisted`); once it is sent, mark it `applied` with this same command.
+
 ## When declined
 
 Offered per offer. Declining generates nothing and leaves the offer `shortlisted`. A candidate who writes a letter but wants no edits to it gets it back unchanged, with the authorship table all `candidate`; one who wants no letter at all, or only the CV, gets exactly that — the skill never writes one in their place.
