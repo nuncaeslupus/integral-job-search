@@ -81,6 +81,7 @@ from integral.prior_documents import digest as prior_digest
 from integral.process_spec import StepList, load_steps
 from integral.profile import EvidenceLog
 from integral.rank import RankingError, from_extraction, rank
+from integral.send_set import fixture_renderer, fixture_text_reader
 from integral.step_runtime import (
     ProfileView,
     missing_inputs,
@@ -579,19 +580,29 @@ def _send(
     offer_id, version, _ = sent
     confirms = payload_digest(read_payload(store, offer_id, version))
     try:
-        stage_send(store, master, offer_id, version, confirms=confirms)
-        defects = verify_send(store, offer_id, version)
+        stage_send(
+            store,
+            master,
+            offer_id,
+            version,
+            confirms=confirms,
+            renderer=fixture_renderer,
+            pdf_reader=fixture_text_reader,
+        )
+        defects = verify_send(store, offer_id, version, pdf_reader=fixture_text_reader)
         replay.check(not defects, f"the send folder is not what was approved: {defects}")
         # The check must be able to say no: a letter edited after staging is refused.
         letter = store.path("cv", "generated", offer_id, f"v{version}", "send", "letter.md")
         original = letter.read_text(encoding="utf-8")
         letter.write_text(original + "\nAn unapproved sentence.\n", encoding="utf-8")
         try:
-            tampered = verify_send(store, offer_id, version)
+            tampered = verify_send(store, offer_id, version, pdf_reader=fixture_text_reader)
         finally:
             letter.write_text(original, encoding="utf-8")
         replay.check(bool(tampered), "a send folder edited after staging still verifies")
-        record_sent(store, master, offer_id, version, confirms=confirms)
+        record_sent(
+            store, master, offer_id, version, confirms=confirms, pdf_reader=fixture_text_reader
+        )
     except ApprovalError as exc:
         replay.check(False, f"the sent revision was refused: {exc}")
         return

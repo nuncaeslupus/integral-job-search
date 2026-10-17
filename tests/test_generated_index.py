@@ -128,7 +128,9 @@ def test_an_idempotent_stage_send_repairs_the_index(store: ProfileStore) -> None
     built, offer_id, version = delivery_with_send(store)
     store.path("cv", "generated", INDEX_NAME).write_text("hand kept\n", encoding="utf-8")
     confirms = payload_digest(read_payload(store, offer_id, version))
-    stage_send(store, built, offer_id, version, confirms=confirms)
+    stage_send(
+        store, built, offer_id, version, confirms=confirms, **generated_index._FIXTURE_ENGINE
+    )
     assert index_differs(store) == 0
 
 

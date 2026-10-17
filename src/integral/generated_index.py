@@ -174,6 +174,16 @@ GATE_COMPANY = "Acme | Co"
 GATE_ROLE = "Data Engineer"
 
 
+def _engine() -> dict[str, Any]:
+    """The fixture PDF engine and its reader: no Pango, no optional extra."""
+    from integral.send_set import fixture_renderer, fixture_text_reader
+
+    return {"renderer": fixture_renderer, "pdf_reader": fixture_text_reader}
+
+
+_FIXTURE_ENGINE = _engine()
+
+
 def delivery_with_send(store: ProfileStore) -> tuple[Any, str, int]:
     """A real delivery: a stored offer with a company (containing `|`) and a title,
     one prepared version, and `stage_send` run over it. Returns master, offer id, version."""
@@ -212,7 +222,7 @@ def delivery_with_send(store: ProfileStore) -> tuple[Any, str, int]:
         ),
     ).version
     confirms = payload_digest(read_payload(store, offer.id, version))
-    stage(store, master, offer.id, version, confirms=confirms)
+    stage(store, master, offer.id, version, confirms=confirms, **_FIXTURE_ENGINE)
     return master, offer.id, version
 
 
@@ -301,7 +311,7 @@ def measure() -> dict[str, Any]:
         )
         store.path("cv", "generated", INDEX_NAME).write_text("# hand kept\n", encoding="utf-8")
         confirms = payload_digest(read_payload(store, offer_id, version))
-        stage(store, delivered, offer_id, version, confirms=confirms)
+        stage(store, delivered, offer_id, version, confirms=confirms, **_FIXTURE_ENGINE)
         cases["real_idempotent_stage_send_repairs_the_index"] = index_differs(store)
 
         store = fresh("skip")

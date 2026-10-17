@@ -482,6 +482,29 @@ def render_pdf(page_html: str, *, max_pages: int | None = None) -> tuple[bytes, 
     return bytes(rendered.write_pdf()), int(pages)
 
 
+def render_pdf_pages(pages_html: Sequence[str]) -> bytes:
+    """One PDF holding each page-html document in turn (the combined upload).
+
+    Each document is rendered on its own, then their pages are joined in the order
+    given, so a document keeps its own page size and styles. Needs the same extra
+    as :func:`render_pdf`, and the engine is handed the same refusing fetcher.
+    """
+    if not pages_html:
+        raise RenderError("no document to render")
+    try:
+        import weasyprint  # type: ignore[import-not-found,import-untyped,unused-ignore]
+    except (ImportError, OSError) as exc:
+        raise RenderError(
+            "PDF output needs the optional 'pdf' extra (WeasyPrint): `uv sync --extra pdf`"
+        ) from exc
+    rendered = [
+        weasyprint.HTML(string=page, url_fetcher=_refusing_fetcher()).render()
+        for page in pages_html
+    ]
+    joined = rendered[0].copy([page for document in rendered for page in document.pages])
+    return bytes(joined.write_pdf())
+
+
 # --------------------------------------------------------------------------
 # What the gate reads from a rendered page: derived from the page, never from
 # the generator that wrote it.
