@@ -54,6 +54,12 @@ REVIEWED_SCALARS: tuple[str, ...] = (
 )
 
 FLOOR_POPULATIONS: dict[str, tuple[str, str, str, str]] = {
+    "offers_seen_again.MINIMUM_RULED_OFFERS_CHECKED": (
+        "counted",
+        "offers_seen_again.measure",
+        "checked",
+        "the ruled-out offers run through `partition` by `measure`",
+    ),
     "alert_mailbox.MINIMUM_PERMITTED_CASES": (
         "counted",
         "alert_mailbox.measure",

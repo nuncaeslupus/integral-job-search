@@ -181,6 +181,21 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "this sweep does not trace."
         ),
     ),
+    "offers_seen_again.MINIMUM_RULED_OFFERS_CHECKED": (
+        "floor",
+        (
+            "`checked >= MINIMUM_RULED_OFFERS_CHECKED` is the measurement's own `ok` flag: "
+            "a lower bound on ruled-out offers run through `partition`, breached by "
+            "deleting a case."
+        ),
+    ),
+    "offers_seen_again.MINIMUM_CONTROLS": (
+        "floor",
+        (
+            "`len(CONTROLS) >= MINIMUM_CONTROLS` is the measurement's own `ok` flag: "
+            "a lower bound on offers that must stay shown, breached by deleting a control."
+        ),
+    ),
     "presentation_log.MINIMUM_OPEN_APPLICATION_CASES": (
         "floor",
         (
