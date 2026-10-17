@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import itertools
 import json
 import re
 import shutil
@@ -206,17 +207,15 @@ def test_query_measured(pattern: str, captured: str | None, measured: bool) -> N
 
 
 @pytest.mark.parametrize("in_query_component", [True, False])
-@pytest.mark.parametrize("char", [chr(code) for code in range(0x20, 0x7F)])
-def test_the_raw_alphabet_is_the_one_the_connector_encodes_in(
-    char: str, in_query_component: bool
-) -> None:
+def test_the_raw_alphabet_is_the_one_the_connector_encodes_in(in_query_component: bool) -> None:
     """Derived from `quote`, not listed: a raw character is accepted exactly when
     `build_list_urls`' encoder would leave it as it is, plus `+` in the query
     component. An enumeration of delimiters has no last element (F2)."""
     pattern = "https://b.test/jobs?q={query}" if in_query_component else "https://b.test/j/{query}/"
-    captured = pattern.replace("{query}", f"x{char}x")
-    expected = quote(char, safe="") == char or (char == "+" and in_query_component)
-    assert qc.query_measured(pattern, captured) is expected
+    for char in map(chr, range(0x20, 0x7F)):
+        captured = pattern.replace("{query}", f"x{char}x")
+        expected = quote(char, safe="") == char or (char == "+" and in_query_component)
+        assert qc.query_measured(pattern, captured) is expected, char
 
 
 #: RFC 3986 §2.3, written out from the RFC rather than read off `quote`.
@@ -224,10 +223,7 @@ _UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 
 
 @pytest.mark.parametrize("in_query_component", [True, False])
-@pytest.mark.parametrize("octet", range(256))
-def test_an_escape_is_accepted_only_where_an_encoder_writes_one(
-    octet: int, in_query_component: bool
-) -> None:
+def test_an_escape_is_accepted_only_where_an_encoder_writes_one(in_query_component: bool) -> None:
     """Round 2, R2-2: the shape of a `%` escape was a regex nobody tested.
 
     The expectation comes from the RFC, not from the code. An encoder escapes
@@ -235,7 +231,8 @@ def test_an_escape_is_accepted_only_where_an_encoder_writes_one(
     octet at or above 0x80 is not UTF-8, so no query string encodes to it.
     """
     pattern = "https://b.test/jobs?q={query}" if in_query_component else "https://b.test/j/{query}/"
-    for escape in {f"%{octet:02X}", f"%{octet:02x}"}:
+    for octet, escape in itertools.product(range(256), ("{:02X}", "{:02x}")):
+        escape = "%" + escape.format(octet)
         captured = pattern.replace("{query}", f"x{escape}x")
         expected = octet < 0x80 and chr(octet) not in _UNRESERVED and escape == escape.upper()
         assert qc.query_measured(pattern, captured) is expected, escape
@@ -245,16 +242,15 @@ _AWKWARD_QUERIES = ("python", "técnico farmacia", "c++", "a/b", "x&y=z", "50%",
 
 
 @pytest.mark.parametrize("name", _STEERABLE)
-@pytest.mark.parametrize("query", _AWKWARD_QUERIES)
-def test_every_url_the_connector_sends_is_accepted(name: str, query: str) -> None:
+def test_every_url_the_connector_sends_is_accepted(name: str) -> None:
     """The fail-closed mirror: nothing `build_list_urls` sends reads as unmeasured."""
     connector = load_connector(DEFAULT_CONNECTORS_DIR / name)
-    for url in build_list_urls(connector, query=query):
-        assert qc.query_measured(connector.list.url_pattern, url), url
+    for query in _AWKWARD_QUERIES:
+        for url in build_list_urls(connector, query=query):
+            assert qc.query_measured(connector.list.url_pattern, url), url
 
 
-@pytest.mark.parametrize("query", _AWKWARD_QUERIES)
-def test_every_url_a_path_slot_connector_sends_is_accepted(library: Path, query: str) -> None:
+def test_every_url_a_path_slot_connector_sends_is_accepted(library: Path) -> None:
     """The mirror for a path slot, which no package on `main` has yet (O2).
 
     `..` is left out on purpose. `build_list_urls` sending it into a path is a
@@ -272,8 +268,9 @@ def test_every_url_a_path_slot_connector_sends_is_accepted(library: Path, query:
     yaml_path.write_text(yaml_path.read_text(encoding="utf-8").replace(old, moved), "utf-8")
     connector = load_connector(package)
     assert connector.list.url_pattern == moved
-    for url in build_list_urls(connector, query=query):
-        assert qc.query_measured(moved, url), url
+    for query in _AWKWARD_QUERIES:
+        for url in build_list_urls(connector, query=query):
+            assert qc.query_measured(moved, url), url
 
 
 def test_jobfluents_committed_bytes_carry_no_session_token_or_client_ip() -> None:
