@@ -110,7 +110,7 @@ CONNECTOR_FILENAME = "connector.yaml"
 #: One label of a hostname, per RFC 1123 §2.1: letters, digits and interior
 #: hyphens. Written as a grammar the whole label must match — an allowlist
 #: applied as a *deletion filter* welds decoration onto the thing it filters,
-#: which is how CLAUDE.md's `resolve_identity` cleared five review rounds while
+#: which is how a since-removed reviewer-identity check spent five review rounds
 #: reading `nuncaeslupus (OWNER)` as somebody other than `nuncaeslupus`.
 _LABEL_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?")
 
@@ -142,8 +142,8 @@ RESERVED_TLDS = frozenset({"test", "example", "invalid", "localhost"})
 def _hostname(url: str) -> str | None:
     """The host a url names, or `None` when it does not validly name one.
 
-    A **validator, not a transform** — the distinction CLAUDE.md's
-    `resolve_identity` section took five review rounds to reach. Anything that
+    A **validator, not a transform** — the distinction a since-removed
+    reviewer-identity check took five review rounds to reach. Anything that
     would have to be *repaired* into a hostname is refused instead, because the
     repair is the step that turns somebody else's host into one of ours.
     Measured on this module's own predecessor: `https://evil.test\\.remotive.com/ad`
