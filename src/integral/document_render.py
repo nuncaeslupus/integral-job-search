@@ -974,9 +974,7 @@ def _render_version(directory: Path, country: str | None, chosen: dict[str, Any]
         assert data is not None
         built.append((source, page, data))
     for source, page, data in built:
-        # Suffixes are built, not spelled: the report-style scan allows only the shell
-        # to name a page file in a literal, and this writes beside the JSON on purpose.
-        html, pdf = (source.with_suffix("." + ext) for ext in ("html", "pdf"))
+        html, pdf = source.with_suffix(".html"), source.with_suffix(".pdf")
         html.write_text(page, encoding="utf-8")
         pdf.write_bytes(data)
         print(f"wrote {html} and {pdf}")
