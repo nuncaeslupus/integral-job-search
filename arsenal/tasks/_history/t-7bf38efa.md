@@ -5,6 +5,7 @@ priority: 10
 deps: [t-b5cf7968]
 workspace: ONTOLOGY
 status: merged
+retired: "spec_consistency gate, pruned 2026-10-17 by owner decision"
 ---
 
 ## Acceptance gate

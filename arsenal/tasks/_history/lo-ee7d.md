@@ -6,6 +6,7 @@ workspace: PROFILE
 tags: [m3]
 status: merged
 pr: https://github.com/nuncaeslupus/job-search/pull/24
+retired: "spec_consistency gate, pruned 2026-10-17 by owner decision"
 ---
 
 ## Acceptance gate

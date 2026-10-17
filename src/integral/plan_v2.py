@@ -287,10 +287,7 @@ def task_label(row: dict[str, object]) -> str | None:
 def merged_tasks(labelled: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
     """The labelled tasks the board says are finished: `status: merged`, exactly.
 
-    One definition, read by this module's tick check (D-27) and by
-    `plan_milestones` (D-29) — two modules deciding separately which tasks are
-    merged is how they come to disagree about it, and each would then certify
-    the plan against a different archive. Reads the board, never a plan tick.
+    One definition, read by this module's tick check (D-27). Reads the board, never a plan tick.
     """
     return {label: task for label, task in labelled.items() if str(task.get("status")) == "merged"}
 

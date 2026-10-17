@@ -637,8 +637,7 @@ def _main(argv: list[str]) -> int:
 
     `[path]` overrides where T62's file goes; T64's and T65's are always written
     beside it at `status/evidence/`, on the same run — one module, one
-    invocation, all three of the sourcing-strategy numbers, the way
-    `integral.spec_consistency` writes D-3's and T61's.
+    invocation, all three of the sourcing-strategy numbers, in one run.
 
     Exit 3 when any probe measured too little to be trusted, 1 on any violation,
     0 otherwise.

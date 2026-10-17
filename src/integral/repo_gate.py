@@ -72,7 +72,7 @@ from typing import Any
 
 import yaml
 
-from integral import arsenal_source, naming
+from integral import arsenal_source
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "D-22.json"
@@ -844,8 +844,8 @@ MINIMUM_PYTHON_FILES_FORMATTED = 240
 def record_formatting(measured: dict[str, Any]) -> dict[str, Any]:
     """What is committed, out of what `measure_formatting` measured.
 
-    The difference is the denominators, and it is `naming.record`'s difference
-    for `naming.record`'s reason (T100). `files_checked` measures nothing about
+    The difference is the denominators, and it is `arsenal_source.record`'s
+    difference for `arsenal_source.record`'s reason (T100). `files_checked` measures nothing about
     the code: it exists so that `unformatted_files == 0` cannot rest on a scan
     that found nothing. Committed as an exact value it moved on every pull
     request that added a file — and since ruff 0.16 the formatter reads
@@ -869,7 +869,7 @@ def record_formatting(measured: dict[str, Any]) -> dict[str, Any]:
 
 
 #: This module's declaration to the evidence-stability gate below. It is
-#: discovered exactly like `naming`'s and `arsenal_source`'s, through the same
+#: discovered exactly like `arsenal_source`'s, through the same
 #: import — `repo_gate` gets no privileged place in its own registry, because a
 #: registry whose author can hand-add themselves is a registry that can be
 #: hand-trimmed to the sources that happen to pass.
@@ -898,13 +898,10 @@ def write_formatting_evidence(
 
 DEFAULT_T150_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T150.json"
 
-#: The two ways the tree moves under a pull request that changes no behaviour.
-#: T100 asked the second one only, which is why it never saw `files_checked`:
-#: archiving a task file moves it inside the tree, and `ruff format` reads it
-#: either way, so the key that drifts on every added file survived a check
-#: built entirely out of moving one.
+#: The way the tree moves under a pull request that changes no behaviour and
+#: that the gate applies: a file is added. (The archive mutation went with the
+#: only census it moved, `naming`'s, when that module was pruned.)
 A_FILE_IS_ADDED = "a Markdown file is added"
-A_TASK_FILE_IS_ARCHIVED = "a task file is archived"
 
 
 @dataclass(frozen=True)
@@ -912,7 +909,7 @@ class EvidenceSource:
     """One committed evidence record, and how to produce it from a tree.
 
     `measure` is the live measurement and `record` is what gets committed out
-    of it — the same pair `naming.measure`/`naming.record` already are. There is
+    of it — the same pair `arsenal_source.measure`/`arsenal_source.record` are. There is
     deliberately **no per-source mutation** here. The first version of this gate
     had one, a map from a mutation name to a transform of the *measurement*, and
     every transform it could contain was `{**measured, key: population + 1}` for
@@ -938,7 +935,7 @@ PROBE_BASENAME = "_evidence_stability_probe.md"
 
 #: Its contents. Plain prose on purpose: `ruff format` must leave it alone (or
 #: `unformatted_files` moves for a reason that is the probe's fault and not the
-#: tree's) and `naming.measure` must find no old name in it.
+#: tree's) and no census may count it as an old name.
 PROBE_TEXT = (
     "# evidence stability probe\n"
     "\n"
@@ -997,19 +994,9 @@ def _a_markdown_file_is_added(repo_root: Path) -> Iterator[dict[str, Any] | None
             target.unlink(missing_ok=True)
 
 
-@contextmanager
-def _a_task_file_is_archived(repo_root: Path) -> Iterator[dict[str, Any] | None]:
-    """T100's mutation, reused: one live task file measured as if in `_history/`."""
-    candidate = naming.first_task_file(repo_root)
-    yield None if candidate is None else {"archived": frozenset({candidate})}
-
-
 def tree_mutations() -> tuple[tuple[str, Callable[[Path], Any]], ...]:
     """The tree changes every committed evidence key has to survive."""
-    return (
-        (A_FILE_IS_ADDED, _a_markdown_file_is_added),
-        (A_TASK_FILE_IS_ARCHIVED, _a_task_file_is_archived),
-    )
+    return ((A_FILE_IS_ADDED, _a_markdown_file_is_added),)
 
 
 def modules_declaring_evidence_sources(src_dir: Path = DEFAULT_SRC_DIR) -> tuple[str, ...]:
@@ -1105,18 +1092,18 @@ def evidence_sources(src_dir: Path = DEFAULT_SRC_DIR) -> tuple[EvidenceSource, .
     return tuple(sorted(found, key=lambda source: source.name))
 
 
-#: The denominator's floor. Today's registry compares 22 committed keys across
-#: the mutations that move them; losing any one of the three sources costs at
-#: least five. Asserted, because a silently shrinking denominator was how a
+#: The denominator's floor. Today's registry compares 10 committed keys across
+#: the mutation that moves them; losing either of the two sources costs at
+#: least four. Asserted, because a silently shrinking denominator was how a
 #: source could be deleted outright while the record still read `measured` with
 #: both mutations advertised and zero unstable keys — the only trace was this
 #: number moving, and nothing read it.
-MINIMUM_EVIDENCE_KEYS_COMPARED = 18
+MINIMUM_EVIDENCE_KEYS_COMPARED = 10
 
 #: And the registry's own floor, for the same reason said about sources rather
 #: than keys. Two independent catches for one deletion is deliberate: the key
 #: count also moves when a record legitimately gains or loses a field.
-MINIMUM_EVIDENCE_SOURCES_COMPARED = 3
+MINIMUM_EVIDENCE_SOURCES_COMPARED = 2
 
 
 def measure_evidence_stability(
@@ -1129,7 +1116,7 @@ def measure_evidence_stability(
     """T150's gate: `unstable_evidence_keys`.
 
     A committed evidence key must say the same thing about a tree that gained a
-    file and about a tree that archived one. Anything else is a gate that goes
+    file. Anything else is a gate that goes
     red on pull requests it has no opinion about, which is the state that
     teaches sessions to expect red.
 

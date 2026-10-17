@@ -503,7 +503,6 @@ def test_a_key_that_moves_when_a_file_is_added_is_named(tmp_path: Path) -> None:
 
     assert measured["gate_status"] == "measured", measured
     assert "census.files moves when a Markdown file is added" in measured["unstable"]
-    assert "census.files moves when a task file is archived" in measured["unstable"]
 
 
 def test_a_floor_in_place_of_the_census_is_what_makes_it_stable(tmp_path: Path) -> None:
@@ -513,11 +512,8 @@ def test_a_floor_in_place_of_the_census_is_what_makes_it_stable(tmp_path: Path) 
     )
 
     assert measured["unstable_evidence_keys"] == 0, measured
-    assert measured["evidence_keys_compared"] == 4, measured
-    assert measured["mutations_compared"] == [
-        repo_gate.A_FILE_IS_ADDED,
-        repo_gate.A_TASK_FILE_IS_ARCHIVED,
-    ]
+    assert measured["evidence_keys_compared"] == 2, measured
+    assert measured["mutations_compared"] == [repo_gate.A_FILE_IS_ADDED]
 
 
 def test_a_second_census_key_the_registry_never_named_is_still_caught(tmp_path: Path) -> None:
@@ -564,8 +560,7 @@ def test_a_second_census_key_the_registry_never_named_is_still_caught(tmp_path: 
 
 
 def test_a_source_no_mutation_moves_is_unmeasured_not_a_pass(tmp_path: Path) -> None:
-    """F3a. A record compared with itself agrees with itself — the shape
-    `naming.first_task_file` was rewritten to avoid. Pooled across the registry
+    """F3a. A record compared with itself agrees with itself. Pooled across the registry
     it hid: with one source carrying both mutations, another source's coverage
     could degrade to identity and the run still read `measured` with both
     mutations advertised. Coverage is now required **per source**."""
@@ -636,9 +631,9 @@ def test_the_registry_is_discovered_from_the_modules_that_write_evidence() -> No
     the counting, and the gate asks every module that writes evidence."""
     discovered = {source.name for source in repo_gate.evidence_sources()}
 
-    assert {"T55", "T125", "T58"} <= discovered, discovered
+    assert {"T125", "T58"} <= discovered, discovered
     declaring = repo_gate.modules_declaring_evidence_sources()
-    assert {"naming", "arsenal_source", "repo_gate"} <= set(declaring), declaring
+    assert {"arsenal_source", "repo_gate"} <= set(declaring), declaring
     assert repo_gate.evidence_sources_not_imported() == (), (
         "a module declares a source the registry cannot reach"
     )
@@ -709,10 +704,7 @@ def test_this_repository_commits_nothing_that_moves_under_either_mutation() -> N
 
     assert measured["gate_status"] == "measured", measured
     assert measured["unstable_evidence_keys"] == 0, measured["unstable"]
-    assert measured["mutations_compared"] == [
-        repo_gate.A_FILE_IS_ADDED,
-        repo_gate.A_TASK_FILE_IS_ARCHIVED,
-    ]
+    assert measured["mutations_compared"] == [repo_gate.A_FILE_IS_ADDED]
     assert measured["evidence_keys_compared"] >= repo_gate.MINIMUM_EVIDENCE_KEYS_COMPARED
     assert measured["evidence_sources_compared"] >= repo_gate.MINIMUM_EVIDENCE_SOURCES_COMPARED
 

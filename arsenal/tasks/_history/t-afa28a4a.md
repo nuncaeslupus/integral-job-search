@@ -5,6 +5,7 @@ priority: 5
 tags: [ROBOTS]
 workspace: BACKEND
 status: merged
+retired: "audit_followup gate, pruned 2026-10-17 by owner decision"
 ---
 
 Imported from issue #236 — case 22 of the round-2 independent T70 audit, the one
