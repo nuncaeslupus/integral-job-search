@@ -77,20 +77,13 @@ original file is never rewritten, so there is no headed copy to keep in sync (T1
 
 ## The skill listing budget lives in `arsenal/config.toml`
 
-`integral.skill_budget` and `skill-workshop`'s `audit_library.py` both read that
-key since v0.33.0 (`claude-arsenal#143`).
+`skill-workshop`'s `audit_library.py` reads that key since v0.33.0 (`claude-arsenal#143`).
 
 `listing-budget = 11000` since T58 — down from 13,000, because v2.0.0 trimmed
 seven oversized descriptions and dropped `lsp-setup` and the old `skill-creator`.
 The library measures 9,231 chars over 31 skills with 1,769 spare, which is the
 same headroom discipline S10 chose originally (~5 more skills), not the tightest
 legal number.
-
-`integral.skill_budget` is the gate: it refuses a budget that is not a round
-multiple of 1,000 or that leaves under 400 chars of headroom, and reports `-1` —
-not a clean zero — when the library is inside a budget that was overridden, fell
-back, or was fitted to the measurement. **Do not silence it by raising the
-number.**
 
 The listing is resident context on every turn, and a new skill's `description` is
 paid for in every session including the ones that never load it.

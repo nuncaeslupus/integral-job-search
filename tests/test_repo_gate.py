@@ -3,11 +3,11 @@
 `make evidence` regenerates every module's committed number and fails on any
 drift, but its own module list used to be derived by grepping
 `src/integral/*.py` for `^def _main` — a naming convention on the
-entry-point function, not on what the module actually does. Three modules
-(`plan_v2`, `process_spec`, `step_specs`) write evidence through a function
+entry-point function, not on what the module actually does. Two modules
+(`process_spec`, `step_specs`) write evidence through a function
 named `main` instead, and were invisible to that loop: `T85: The evidence run
 reaches every module that writes evidence` (arsenal task `t-cd8dcc16`) found
-`S8.json`'s committed `plan_rows` reading 81 against 107 actually measured,
+a committed `plan_rows` count of 81 against 107 actually measured,
 while `make evidence` exited 0 printing "no drift".
 
 `repo_gate.evidence_writing_modules` is the fix, and these tests hold it to
@@ -86,8 +86,8 @@ def test_a_module_that_writes_evidence_and_is_missed_fails_the_check(tmp_path: P
     measured = repo_gate.measure_evidence_reach(makefile=old_makefile, repo_root=REPO_ROOT)
 
     assert measured["gate_status"] == "measured"
-    assert measured["modules_missing"] == ["plan_v2", "process_spec", "step_specs"]
-    assert measured["gate_modules_outside_the_evidence_run"] == 3
+    assert measured["modules_missing"] == ["process_spec", "step_specs"]
+    assert measured["gate_modules_outside_the_evidence_run"] == 2
 
 
 def test_the_selection_does_not_depend_on_a_private_name_convention() -> None:

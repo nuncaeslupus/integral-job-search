@@ -244,7 +244,7 @@ def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
         results = list(pool.map(run, repo_gate.evidence_writing_modules()))
     for module, code, stderr in results:
         # A module's own verdict (0 pass, 3 unmeasured, 1 red) is not this test's
-        # subject: `plan_v2` goes red on the host's task state, not on a package. What
+        # subject: a module can go red on the host's task state, not on a package. What
         # would invalidate the measurement is a module that crashed before writing.
         assert "Traceback" not in stderr, f"{module} (exit {code}): {stderr}"
     return {

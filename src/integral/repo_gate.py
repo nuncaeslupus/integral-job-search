@@ -31,8 +31,8 @@ the two are still distinct here, which is what made the confusion possible.
 
 **T85 lives here too, beside D-22, not replacing it.** `make evidence` derives
 its module list by grepping `src/integral/*.py` for a naming convention on the
-entry-point function — first `^def _main`, and three modules
-(`plan_v2`, `process_spec`, `step_specs`) that define `main` instead were
+entry-point function — first `^def _main`, and two modules
+(`process_spec`, `step_specs`) that define `main` instead were
 invisible to it, so their evidence never regenerated and never drift-checked.
 Renaming those three would only rebuild the trap for the next module that
 defines `main`. `evidence_writing_modules` fixes the *selection*: it statically
