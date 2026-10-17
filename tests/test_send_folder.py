@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from integral import brand_measure
 from integral.approval import (
     ApprovalError,
     PersonalDetails,
@@ -97,6 +98,14 @@ def master(store: ProfileStore) -> CVMaster:
 
 
 def _prepare(store: ProfileStore, master: CVMaster, approved: tuple[int, ...] = ()) -> int:
+    version = _prepared(store, master, approved)
+    # T342: staging needs a recorded palette; `{}` is a site that could not be read.
+    where = ("cv", "generated", OFFER, f"v{version}")
+    brand_measure.record(store, where, "fixture://unreadable", {})
+    return version
+
+
+def _prepared(store: ProfileStore, master: CVMaster, approved: tuple[int, ...] = ()) -> int:
     return prepare(
         store,
         master,

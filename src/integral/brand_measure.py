@@ -10,7 +10,11 @@ printing `{colour: element count}`); this module takes that JSON from there.
   `palette.json`; `--trazabilidad FILE` appends the section to that file.
 * The accent a document is rendered with is **re-derived from the recorded counts**
   (`palette_for`), never read from a stored colour, so the document cannot carry an
-  accent nobody measured. `approval.stage_send` and `verify_send` render with it.
+  accent nobody measured. `approval.stage_send` renders with it and **refuses a version
+  that has no record**; `document_render version` does the same and refuses an
+  `--accent` that disagrees with it. `verify_send` does not read the palette: a staged
+  PDF is checked against its text layer, not its colour, so a record written after
+  staging is not seen by it (the staging itself is where the record is required).
 * `versions_without_measurement` lists the generated versions with no record: those are
   the ones the T342 gate counts.
 
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -32,6 +37,10 @@ from integral.identity import ProfileStore
 
 MEASUREMENT_FILE = "palette.json"
 SCHEMA_VERSION = 1
+
+# The one spelling a count key may have: what the snippet prints. Any other spelling
+# (`rgb()`, `#fff`, `oklch()`, an upper-case hex) is refused rather than guessed at.
+_COLOUR_KEY = re.compile(r"#[0-9a-f]{6}")
 
 
 class MeasureError(ValueError):
@@ -52,9 +61,14 @@ def checked_counts(raw: Any) -> dict[str, int]:
         raise MeasureError("the colour counts must be a JSON object {colour: count}")
     counts: dict[str, int] = {}
     for colour, n in raw.items():
+        if not isinstance(colour, str) or not _COLOUR_KEY.fullmatch(colour):
+            raise MeasureError(
+                f"the colour {colour!r} is not '#rrggbb' in lower case; "
+                "tools/measure_colours.js prints that form and nothing else"
+            )
         if isinstance(n, bool) or not isinstance(n, int) or n <= 0:
             raise MeasureError(f"the count for {colour!r} is {n!r}, not a positive whole number")
-        counts[str(colour)] = n
+        counts[colour] = n
     return counts
 
 
@@ -74,10 +88,28 @@ def read_measurement(
     if not store.exists(*where, MEASUREMENT_FILE):
         return None
     try:
-        data = store.read_json(*where, MEASUREMENT_FILE)
-        if data["schema_version"] != SCHEMA_VERSION:
-            raise MeasureError(f"schema_version {data['schema_version']!r} is not {SCHEMA_VERSION}")
-        return str(data["site"]), checked_counts(data["counts"])
+        return _measurement_from(store.read_json(*where, MEASUREMENT_FILE))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise MeasureError(f"{MEASUREMENT_FILE} cannot be read: {exc}") from exc
+
+
+def _measurement_from(data: Any) -> tuple[str, dict[str, int]]:
+    if data["schema_version"] != SCHEMA_VERSION:
+        raise MeasureError(f"schema_version {data['schema_version']!r} is not {SCHEMA_VERSION}")
+    return str(data["site"]), checked_counts(data["counts"])
+
+
+def counts_in(directory: Path) -> dict[str, int] | None:
+    """The colour counts recorded in the version directory `directory`; None when none.
+
+    The path form of `read_measurement`, for the printable-document command, which is
+    given a directory and not a profile store.
+    """
+    target = directory / MEASUREMENT_FILE
+    if not target.is_file():
+        return None
+    try:
+        return _measurement_from(json.loads(target.read_text(encoding="utf-8")))[1]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise MeasureError(f"{MEASUREMENT_FILE} cannot be read: {exc}") from exc
 

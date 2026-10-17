@@ -9,7 +9,12 @@ generated versions, the ones where the step-11 flow leaves a defect:
   judging itself), or carry another fixture's accent;
 * a site that could not be read does not fall back to the neutral accent, and
   `trazabilidad_section` does not say so;
-* `verify_send` finds a defect in the folder staged from the record.
+* `verify_send` finds a defect in the folder staged from the record;
+* (`_refusal_defects`) a version with no recorded measurement, or one whose record has
+  another `schema_version`, is staged anyway; the colour counts are accepted in a
+  spelling the CLI cannot read (`oklch()`, `rgb()`, `#fff`) and silently dropped; or
+  `document_render version` renders a version with no record, or with a hand
+  `--accent` that disagrees with the record.
 
 The flow is driven through the shipped CLI (`brand_measure.main`), so a CLI that stops
 recording is counted. The engine is `send_set.fixture_renderer`, which keeps each page's
@@ -48,7 +53,7 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T342.json"
 # accent is stated, not derived. The last site could not be read: neutral grey.
 CASES: tuple[tuple[str, str, dict[str, int], str], ...] = (
     ("ada", "https://orange.example", {"#f46800": 40, "#ffffff": 200, "#111217": 120}, "#f46800"),
-    ("nuria", "https://red.example", {"rgb(228, 0, 43)": 30, "rgb(255, 255, 255)": 90}, "#e4002b"),
+    ("nuria", "https://red.example", {"#e4002b": 30, "#ffffff": 90}, "#e4002b"),
     ("cher", "https://closed.example", {}, "#999999"),
 )
 # floor on the versions examined: a zero-length scan must not read as a clean zero
@@ -110,6 +115,87 @@ def _version_defects(
     return True, found
 
 
+def _refusal_defects(root: Path) -> list[str]:
+    """The branches the CASES never reach: a version with no usable record, or a colour
+    key the CLI cannot read. Each must be refused, and must leave nothing behind."""
+    from integral import document_render
+    from integral.document_render import RenderError
+
+    found: list[str] = []
+    identity = create_profile(root, "Dora", handle="dora", language="en")
+    store = ProfileStore(root, identity.handle)
+    master = _probe_master()
+    write_master(store, master)
+    payload = _probe_prepare(store, master, (0,))
+    where = ("cv", "generated", _PROBE_OFFER, f"v{payload.version}")
+    confirms = payload_digest(read_payload(store, _PROBE_OFFER, payload.version))
+
+    def stage() -> Path:
+        return stage_send(
+            store,
+            master,
+            _PROBE_OFFER,
+            payload.version,
+            confirms=confirms,
+            renderer=fixture_renderer,
+            pdf_reader=fixture_text_reader,
+        )
+
+    # F1: no record at all.
+    if where not in brand_measure.versions_without_measurement(store):
+        found.append("a version with no palette.json is not listed as unmeasured")
+    try:
+        stage()
+        found.append("a version with no recorded palette measurement was staged")
+    except ApprovalError:
+        if store.exists(*where, "send"):
+            found.append("a refused staging left a send/ folder behind")
+    # F5: a record in another format is not read as this one.
+    store.write_json(
+        {"schema_version": brand_measure.SCHEMA_VERSION + 1, "site": "s", "counts": {}},
+        *where,
+        brand_measure.MEASUREMENT_FILE,
+    )
+    try:
+        stage()
+        found.append("a palette.json of another schema_version was staged")
+    except ApprovalError:
+        pass
+    # F3: a colour key the CLI cannot read is refused, not dropped.
+    for bad in ("oklch(0.705 0.213 47.604)", "rgb(244, 104, 0)", "#F46800", "#f60"):
+        counts_file = root / "bad-counts.json"
+        counts_file.write_text(json.dumps({bad: 40, "#ffffff": 9}), encoding="utf-8")
+        argv = ["--site", "s", "--counts", str(counts_file), "--root", str(root)]
+        argv += ["--handle", identity.handle, "--offer", _PROBE_OFFER]
+        argv += ["--version", str(payload.version)]
+        with contextlib.redirect_stderr(io.StringIO()):
+            code = brand_measure.main(argv)
+        if code != 2:
+            found.append(f"the colour key {bad!r} was accepted by the CLI (exit {code})")
+    # F2: the printable-document command takes its accent from the record.
+    store.path(*where, brand_measure.MEASUREMENT_FILE).unlink()
+    directory = store.path(*where)
+    try:
+        document_render.version_colours(directory, {"language": "en"})
+        found.append("document_render version rendered a version with no recorded palette")
+    except RenderError:
+        pass
+    brand_measure.record(store, where, "https://orange.example", {"#f46800": 40, "#ffffff": 9})
+    try:
+        document_render.version_colours(directory, {"language": "en", "accent": "#123456"})
+        found.append("document_render version accepted a hand --accent over the measurement")
+    except RenderError:
+        pass
+    try:
+        _, chosen = document_render.version_colours(directory, {"language": "en"})
+    except RenderError as exc:
+        found.append(f"document_render version refused a recorded measurement: {exc}")
+    else:
+        if chosen.get("accent") != "#f46800":
+            found.append(f"document_render version took the accent {chosen.get('accent')!r}")
+    return [f"dora: {d}" for d in found]
+
+
 def measure() -> dict[str, Any]:
     """`generated_versions_without_a_recorded_palette_measurement` over the constructed versions."""
     defects: list[str] = []
@@ -120,11 +206,15 @@ def measure() -> dict[str, Any]:
             examined += read
             bad += bool(found)
             defects.extend(found)
+        refusals = _refusal_defects(Path(scratch) / "dora")
+        bad += bool(refusals)
+        defects.extend(refusals)
     if examined < MINIMUM_VERSIONS:
         return {
             "generated_versions_without_a_recorded_palette_measurement": -1,
             "gate_status": "unmeasured",
             "reasons": [f"{examined} versions examined; the floor is {MINIMUM_VERSIONS}"],
+            "defects": defects,
         }
     return {
         "generated_versions_without_a_recorded_palette_measurement": bad,
