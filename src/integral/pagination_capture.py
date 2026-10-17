@@ -415,7 +415,7 @@ def probe_url_side() -> tuple[list[str], int]:
     Behavioural, not textual. Every probe is parsed as a connector document and
     every loading one is built into the requests it would issue, so a validator
     that was deleted, weakened or replaced by a comment fails here — which is
-    the lesson `integral.verified_gate` learned across three defeated rounds of
+    the lesson a since-deleted gate learned across three defeated rounds of
     reading a file's text.
     """
     defects: list[str] = []

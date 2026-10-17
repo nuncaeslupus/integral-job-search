@@ -22,7 +22,7 @@ reason to introduce it. Inverting the dependency costs nothing and removes the
 question — the script is a CLI over this, so the two cannot drift.
 
 **Why it is measured by running rather than by reading.** `T121` is the
-standing lesson: three rounds of grepping `verified_gate.sh` for the commands
+standing lesson: three rounds of grepping a gate script for the commands
 it should run were defeated first by its own comments and then by an unused
 string holding all twelve patterns. So the cases below are real robots.txt
 snapshots the connector library already commits, classified by the same

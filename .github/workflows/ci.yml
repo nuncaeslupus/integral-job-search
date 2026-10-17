@@ -46,8 +46,7 @@ on:
     # covered — by `pull_request` — but `pull_request` builds
     # `refs/pull/<n>/merge`, a commit git makes by merging the head into the
     # base. So what returns when the minutes do never measures the pushed head
-    # itself. `tools/verified_gate.sh` does, by SHA, which is the one thing this
-    # change makes more rather than less necessary.
+    # itself.
     branches: [main]
   pull_request:
   workflow_dispatch:

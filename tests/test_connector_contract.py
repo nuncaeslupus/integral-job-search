@@ -1416,7 +1416,7 @@ def test_the_run_window_is_bounded_on_both_sides() -> None:
     left all 83 tests green — in **5h21m**, against three minutes. That is the
     fail-closed direction for correctness and a denial of service on the gate,
     and the only thing standing against it was that somebody would eventually
-    notice `verified_gate.sh` had not come back. A wall-clock intuition is not
+    notice the gate had not come back. A wall-clock intuition is not
     a check.
 
     The ceiling itself is **imported**, not restated. It lived here as a local
@@ -1474,7 +1474,7 @@ def test_a_window_at_the_ceiling_refuses_to_import() -> None:
     The module is executed from its own source with `_RUN_WINDOW` substituted,
     in this interpreter and without importing it, so the refusal is measured
     rather than read off the source text — the class of check that let three
-    rounds of `verified_gate.sh` pass over a script that ran nothing. Executing
+    rounds of a gate script check pass over a script that ran nothing. Executing
     the module runs no scan, so the case that costs hours in production costs
     milliseconds here.
     """

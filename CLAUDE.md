@@ -78,7 +78,7 @@ The owner's decision, after a night in which a handful of small PRs took hours o
 gate runs and six review rounds each. Where a later section of this file says
 otherwise, this section wins; those sections are being pruned.
 
-- **A. No `verified_gate` when CI is green on the head.** A green `CI` check on the
+- **A. No `verified_gate`: it was deleted (2026-10-17).** A green `CI` check on the
   head commit plus a second-reader report is the whole merge evidence.
 - **B. Fixers run scoped checks only:** `ruff` and `mypy` on the changed files and
   `pytest` on the touched module's tests. CI runs the full suite; a local
@@ -232,8 +232,7 @@ The arithmetic, so the number is not a guess. Each agent reported **135k–280k
 tokens** on completion; twenty-odd runs is roughly **3–4M**. The orchestrator's own
 context was barely touched — this is entirely the fleet. And the work is expensive
 by nature rather than by waste: one reviewer ran 54 mutations, another 30, each
-re-running a 3,300-test suite, and `verified_gate.sh` checks out a clean tree and
-runs the whole gate again.
+re-running a 3,300-test suite.
 
 **Higher concurrency buys less than it looks like it should**, because the loop is
 implement → review → fix → re-review and each stage waits on the last. Five agents
@@ -413,7 +412,7 @@ behind one.
 
 Seventeen review rounds across four pull requests on 2026-09-08/09 produced
 seventeen findings and **no empty round**. All were fail-open; all were behind a
-green `make host-gate`, a PASS `verified_gate.sh` block and green CI. Eight were
+green `make host-gate`, a PASS local gate run and green CI. Eight were
 the same defect, and three of the four pull requests had a round whose finding
 sat **inside the remedy written for the previous round**.
 
@@ -503,82 +502,6 @@ worktrees are *unavailable* — `worktree_probe.sh` prints `available` here, so 
 would be a false record, and `task_select.py` reads it to clamp every future round to one
 task. The probe writes it itself when it is true; nothing else should.
 
-## `tools/verified_gate.sh` — the local verdict block, run whatever CI is doing
-
-Actions ran dry on 2026-09-04 — 2000 monthly minutes in four days — and for three
-days this script *replaced* the CI half of `merge-policy`. **It has minutes again
-as of 2026-09-07** (measured below), so the script is no longer a substitute for
-anything. It stays required anyway, and the reason is the one it was always worth
-running for rather than the outage: it measures the **committed** commit, and the
-working tree a session happens to have is not what a reviewer merges.
-
-`merge-policy` stays `after-ci-and-review`. Both halves are live again; this is
-what the local half runs:
-
-```bash
-bash tools/verified_gate.sh <branch-or-sha>     # prints a verdict block
-```
-
-It resolves the ref to a 40-character SHA, checks **that commit** out into a
-throwaway detached worktree, clears bytecode, and runs `make host-gate` there. It
-delegates — it never lists targets — so it cannot fall behind the Makefile, and
-`integral.repo_gate`'s sibling `integral.verified_gate` (T121) asserts that it
-still does all of the above.
-
-**How that assertion works is the part worth knowing, because three rounds of
-the obvious answer were defeated.** `integral.verified_gate` does not read the
-script's text. Round 1 searched the file for `make\s+host-gate`, which the
-script's own header comments carried twice, so a script running `make lint` and
-a script with the gate deleted and `status=0` hard-coded both scored
-`verified_gate_defects == 0`. Round 2 added a comment-stripper and twelve
-patterns; round 3 put all twelve inside one unused single-quoted string, and
-again in *trailing* comments, and scored 0 both times over a script that
-resolved nothing and ran nothing. A `#`-line filter is not an executability
-test, and no thirteenth pattern fixes that.
-
-So the measurement is **behavioural**: ten named contracts, each of which builds
-a throwaway git repository — one a clone with a real bare `origin` — runs the
-script against it, and reads the verdict block, the exit status and the
-filesystem afterwards. `verified_gate_defects` is the number of contracts the
-script fails. Editing a comment cannot break it; hard-coding a PASS cannot pass
-it. The one thing still read rather than run is that **this file names the
-script**, which is D-22's prose half and not a claim about behaviour.
-
-The practical consequence for anyone editing `tools/verified_gate.sh`: run
-`uv run python -m integral.verified_gate` and read `failed_contracts`. It names
-what broke and what it observed, not which regex stopped matching.
-
-**Give it the ref.** With no argument it measures the local `HEAD`, which is
-usually right and is never the *pushed* commit by construction — and the block's
-`resolved` and `on origin` lines say which of the two you got, so read them before
-pasting. (Until the second-reader round on #333 the no-argument form fetched
-`HEAD` from origin, which git answers with the **default branch**: standing on a
-branch whose gate genuinely failed, a bare run printed `main`'s SHA and `PASS`.
-The fix was a blacklist of the one string `"HEAD"`, and `@` — git's documented
-synonym for it — walked straight through: the same green verdict about `main`,
-reached by a different spelling. Only a plain ref name is now asked of the
-remote; `@`, `HEAD~0`, `HEAD^0`, `@{u}` and `""` all resolve locally.)
-
-Why a clean checkout rather than just running `make host-gate` where you stand:
-the working tree is **not what a reviewer merges**. Uncommitted edits, a staged
-file, and the `.pyc` trap below can each make a local run green over code that is
-not being shipped.
-
-Three rules, and the third is the one that is easy to skip:
-
-- **Paste the verdict block onto the pull request.** CI's value was never only
-  the checking; it was that anyone could see it had happened.
-- **Quote the four results in the merge commit.** A merge whose evidence lives in
-  one session's scrollback is a merge nobody can audit afterwards.
-- **Merge only while the head is still the SHA the block names.** A push after
-  the block was produced makes it evidence about a commit nobody is merging.
-  This was done by hand twice on 2026-09-04 and is exactly the kind of step that
-  gets skipped once it stops feeling new.
-
-**A docs-only PR still needs it.** #331 merged on a local run during the outage;
-the point of the script is that "local run" stops meaning "whatever tree the
-session happened to have".
-
 ## What "mutation" means here — one deliberate revert, not `mutmut`
 
 The word is borrowed and the practice is not the same one, which has cost real
@@ -627,20 +550,15 @@ and the heat and the tokens go.** Measured here:
 |---|---|
 | one scoped mutation round | edit + `rm` + `pytest tests/test_x.py` — **seconds** |
 | the full suite | 3,968 tests, **~400–570 s** |
-| `verified_gate.sh` | clean checkout + `make host-gate` — **~9–10 min** per run |
 | the worst round on record | one reviewer ran **54** mutations, another 30, **each re-running the whole suite** → ~6 h of CPU for one review |
 | a review agent | 135k–280k tokens on completion |
 
-So three rules, and the second and third are the ones that get skipped:
+So two rules, and the second is the one that gets skipped:
 
 - **Scope the test run.** `uv run pytest tests/test_x.py` during the cycle. A full
   suite per mutation is the single largest avoidable cost in this repository.
 - **`make host-gate` once**, at the end, before the push — not per mutation and not
   per fix.
-- **`verified_gate.sh` on the head that will be merged, and on no other commit.** The
-  block is evidence about one SHA; a block produced for an intermediate commit is ~10
-  minutes spent on a commit nobody merges. #435 and #455 carried nine commits each,
-  which is where an hour and a half of gate goes if every push gets one.
 
 ## A reverted mutation can leave the mutated bytecode running
 
@@ -758,8 +676,7 @@ about the code until the clock below says otherwise.
 `pull_request`, and `actions/checkout@v4` with no `ref:` checks out
 `refs/pull/<n>/merge` — the PR merged into its base, a commit that exists in
 nobody's clone. So CI answers "does this change work *once merged*", which is the
-more useful question and is **not** the one `tools/verified_gate.sh` answers. The
-two are complementary rather than redundant, which is why both are required.
+more useful question than a run over a local tree.
 
 **Do not read the cause as a billing period turning over.** That was the guess
 this session made from the run durations alone, and it is wrong in the way that
@@ -773,16 +690,8 @@ under ~10 seconds with unreadable logs is the runner dying; a run of a minute or
 more is a verdict. Measured on #329 — 6 and 5 seconds with every log a 404,
 against ~95 seconds with real conclusions on #328 twenty minutes earlier.
 
-`tools/verified_gate.sh <ref>` is **not** retired by that, and the section above
-says why: it measures the committed commit rather than whatever tree the session
-happens to have, which is a different assertion from CI's and the one a reviewer
-can re-run by hand. So the discipline is unchanged — verdict block on the pull
-request, the four results quoted in the merge commit, and merge only while the
-head is still the SHA the block names. Do **not** reach for a bare
-`make host-gate` in the working tree instead. What changed is only that the block
-is no longer the *whole* evidence: a green `CI` check is required beside it, and
-the two assert different things — CI over the PR's **merge ref**, the block over
-the **committed head**.
+**Merge rule (owner decision 2026-10-17):** merge on a green `CI` check for the head plus
+a second-reader CLEAR for that head. No local verdict block is pasted or quoted.
 
 **Going public was the fix, and it has been taken** — the same decision as the
 corpus and the contribution guard (#352). The old note here said it "would fix
@@ -813,8 +722,8 @@ and wrote "the billing period turned over" — a plausible story for the right
 observation, and false. The repository's visibility was one API field away and
 settles it. A run's duration says whether CI is reporting; it never says why.
 
-**Run the gate locally as well.** These are what CI runs, and all four must
-pass before a merge:
+**Run the gate in CI.** These are what CI runs, and all four must
+pass before a merge (locally, run scoped checks per policy B above):
 
 ```bash
 make host-gate      # all four, one command — run this
@@ -824,105 +733,13 @@ make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-**`open_task_pr.sh` could not open a PR in this repo until bundle v3.3.0, and the
-first fix announced for it was announced without being made.** The fault:
-`T55.files_scanned` counts files under `arsenal/tasks/` and the archive moves one
-of them into `_history/`, which the count excludes. v3.2.0 ran the host gate
-**twice** — once before the archive and once after — so the committed evidence
-would have had to hold two values at once. Measured here on 2026-09-01 against the
-v3.2.0 script:
-
-```text
-pre-archive = 615    post-archive = 614
-```
-
-The **v3.1.14** changelog had already stated that the gate "now runs once, over the
-archived tree". Both `bash -c "${host_gate}"` calls were still in the file, and the
-advice it said was gone was still at `:636`. That entry was believed here, and the
-CLAUDE.md section it produced was wrong for the length of one pull request
-(`claude-arsenal#336`, closed on the v3.3.0 measurement).
-
-**In v3.3.0 it is real.** The gate is read at `:220` and run once at `:645`, after
-the archive, and the file says why at `:225-238`: the archived tree is the one the
-PR ships, so it is the only tree whose measurement means anything. One
-`bash -c "${host_gate}"` in the script.
-
-So the helper is the way to open a task PR again, and **it has now been exercised
-end to end** — #282 (T97) and #283 (T73). Every PR from #257 to #268 was opened by
-hand (`gh pr create`, archiving the task file in the same commit); nothing needs
-to be.
-
-The repair that is ours rather than upstream's outlived the fix, because a
-denominator committed as an exact value drifts on every task PR whichever side of
-the archive measures it. `files_scanned` is not a measurement — it exists to stop a
-clean zero resting on an empty scan, and a **floor** does that job without moving.
-(Counting `_history/` instead would make the number archive-invariant and
-immediately break `old_name_references == 0`: archived rows legitimately carry the
-old name, which is why `naming.py` allowlists that directory.) That was **T100**,
-and it is done: `status/evidence/T55.json` now records `files_scanned_at_least`,
-the floor `naming.MINIMUM_SCANNED` asserts, and never the count of the day.
-
-**So there is no longer a pre-PR workaround, and re-deriving one is the mistake.**
-Between #282 and T100 the sequence was `git mv` the task file into `_history/`,
-`make evidence`, `git mv` it back, `git add` — which left `make host-gate` red on
-the working tree by construction before every task PR, turning the one command this
-file tells sessions to trust into one where red was expected. If a task PR ever
-fails on evidence drift again, the finding is that something *new* is
-archive-sensitive: `status/evidence/T100.json` names it, because
-`archive_sensitive_evidence_keys` compares the whole committed record across a
-simulated archive rather than trusting that one key was the only one.
-
-**Adding a file is the other half of that, and it was the second instance.**
-`T125.files_checked` counted every file `ruff format` reads, which since ruff 0.16
-includes **Markdown**, so a pull request of nine task files and no Python at all moved
-it 453 → 462 — and two branches could each read 465 while their merge ref read 467.
-That is **T150**: the count is committed as the floor `files_checked_at_least`
-(`repo_gate.MINIMUM_FILES_FORMATTED`), and `status/evidence/T150.json`'s
-`unstable_evidence_keys` compares each registered record across **both** mutations —
-a file added and a task file archived. T100's check could only ever see the second.
-
-**The mutation is applied to the tree, not to the number, and that distinction is the
-whole check.** The first version of T150's gate transformed the *measurement*:
-`{**measured, key: population + 1}` for a hand-written `key`. Two keys were ever
-written, and they were the two already known to be broken, so the check could
-re-confirm the fixes it shipped with and could not discover a third — while the third,
-`T58.bundle_files`, sat committed on `main` and the gate reported a clean zero over it.
-The added-file mutation now **writes a real Markdown file** into every top-level
-directory that already holds Markdown, hands those paths to every registered
-measurement, and deletes them again; one added file therefore moves every population
-derived from it at once, exactly as a real pull request does. A key nobody named moves
-with the rest. Caught by the second reader on the pull request that introduced the
-gate, who added a second census key to a committed record and watched it report
-`stable`.
-
-Two consequences worth knowing before editing any of this:
-
-- **The registry is discovered, not listed.** A module joins by declaring
-  `EVIDENCE_SOURCES = (("T55", measure, record),)` beside the code that counts;
-  `repo_gate` finds those declarations by parsing the source (never `importlib` —
-  `src/integral/` may not load code, and the connector contract depends on that) and
-  resolves them through `sys.modules`. A module that declares one and is not imported
-  by `repo_gate` makes the gate `unmeasured` and says so by name.
-- **Every registered source must be moved by some mutation, and both denominators are
-  asserted** (`MINIMUM_EVIDENCE_KEYS_COMPARED`, `MINIMUM_EVIDENCE_SOURCES_COMPARED`).
-  Pooled across the registry, one source's coverage could degrade to nothing — deleted,
-  emptied, or blind to the tree — while another kept the run reading `measured` with
-  both mutations advertised. The only trace was a denominator nobody read.
-
-**`ruff format` reads two unrelated populations, so there are two floors.** Markdown is
-242 files and grows about nine per task-seeding pull request; Python is 227. A single
-total floor of 300 is satisfied by Markdown alone within six or seven such PRs, at which
-point a scan that read **no Python at all** scores a clean pass — and even today it does
-not catch losing `src/` (469 − 104 = 365). `MINIMUM_PYTHON_FILES_FORMATTED` says the
-thing the conflated total cannot.
-
 **One evidence key is now archive-*driven* by design, and it is not that finding.**
 Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
 archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row
 in `status/plan.md`. So **ticking the row is part of archiving the task**: a task PR
 that moves its file and leaves the plan alone turns `make evidence` red, by
 construction. That red is the check working — tick the row in the same commit. The
-denominator `merged_tasks_compared` is committed as a floor for T100's reason above,
+denominator `merged_tasks_compared` is committed as a floor as a floor,
 so it does not move.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and

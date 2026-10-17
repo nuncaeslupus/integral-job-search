@@ -45,7 +45,7 @@ dev = [
     # laptop, under `-n auto` from the Makefile and `--dist loadfile` from
     # [tool.pytest.ini_options] below — which says why each flag is where it is.
     # Every review round pays the serial cost several times over
-    # (`make host-gate`, then `tools/verified_gate.sh`).
+    # (`make host-gate`).
     "pytest-xdist>=3.6",
     "ruff>=0.6",
     "types-pyyaml>=6.0",

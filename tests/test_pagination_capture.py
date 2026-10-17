@@ -628,7 +628,7 @@ def test_every_url_side_probe_agrees_with_the_rule() -> None:
     """The measurement itself: every probe parsed, every legal one built into
     the requests it would issue. Behavioural, so a validator deleted, weakened
     or replaced by a comment fails here — which is what
-    `integral.verified_gate`'s three defeated rounds are about."""
+    a since-deleted gate's three defeated rounds are about."""
     defects, checked = pc.probe_url_side()
 
     assert defects == []
