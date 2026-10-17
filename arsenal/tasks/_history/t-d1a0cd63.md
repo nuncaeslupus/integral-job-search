@@ -4,6 +4,7 @@ title: "T104: Every open task PR goes stale on D12 the moment any other task PR 
 priority: 5
 issue: 288
 status: merged
+retired: "task_gate (D12) gate, pruned 2026-10-17 by owner decision"
 ---
 
 Imported from issue #288

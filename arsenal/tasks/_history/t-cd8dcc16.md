@@ -6,6 +6,7 @@ deps: []
 workspace: SOLO
 tags: [v3, m5]
 status: merged
+retired: "repo_gate (D-22, T85) gate, pruned 2026-10-17 by owner decision"
 ---
 
 # T85: The evidence run reaches every module that writes evidence

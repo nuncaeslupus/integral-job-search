@@ -41,7 +41,6 @@ should cost one line of output, not the run.
 
 ```bash
 uv run pytest tests/test_offers.py -q
-uv run python -m integral.repo_gate
 ```
 
 Fixtures: a stored offer carrying each observed raw value loads and round-trips;

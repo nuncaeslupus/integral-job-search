@@ -767,18 +767,6 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
     return committed
 
 
-# No `EVIDENCE_SOURCES` declaration here, deliberately. That registry is
-# `repo_gate`'s T150 gate, and joining it is a contract this measurement cannot
-# meet: every registered source must *move* under a tree mutation — a Markdown
-# file added, a task file archived — and must accept those populations as
-# keyword arguments. This record is derived from `connectors/`, so neither
-# mutation touches it, and a source that moves under no mutation makes T150
-# read `unmeasured`. Declaring it and watching the gate go red is how that was
-# found. The archive-stability argument the registry exists to make is made
-# here by construction instead: `record` commits floors rather than the counts
-# of the day, for T100's reason.
-
-
 def write_evidence(evidence: Path = DEFAULT_EVIDENCE_PATH) -> dict[str, Any]:
     """Measure and record `status/evidence/T200.json`."""
     measured = measure()

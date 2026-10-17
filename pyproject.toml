@@ -140,8 +140,8 @@ exclude = [
 # than the weaker `no tests ran`.
 #
 # What it buys is the one thing a recipe cannot pin. `make test`'s parallelism
-# is only safe file-by-file — tests/test_repo_gate.py is the sole place in the
-# suite that writes into the live working tree — and nothing in this repository
+# is only safe file-by-file — a test that writes into the live working tree
+# must not be split across workers — and nothing in this repository
 # reads a Makefile recipe body, so the flag written there was unenforced by
 # construction. Here it holds for every `-n` run, including one somebody types
 # by hand.
