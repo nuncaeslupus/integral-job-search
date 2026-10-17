@@ -396,15 +396,15 @@ def test_f2_a_denial_dropped_from_the_cited_row_is_refused(
 ) -> None:
     row = _row(store, "statement", "I do not hold a work permit for the United Kingdom.")
     flipped = _ans("I hold a work permit for the United Kingdom.", row)
-    assert any("is dropped" in d for d in _refused(store, flipped))
-    with pytest.raises(ApprovalError, match="dropped"):
+    assert any(d.startswith("denial:") for d in _refused(store, flipped))
+    with pytest.raises(ApprovalError, match="denial:"):
         _prepare(store, master, (flipped,))
     # the unrelated denial in another sentence does not stand in for the dropped one
     other = _row(store, "constraint", "I do not need visa sponsorship.")
     both = _ans(
         "I hold a work permit for the United Kingdom. I do not need visa sponsorship.", row, other
     )
-    assert any("is dropped" in d for d in _refused(store, both))
+    assert any(d.startswith("denial:") for d in _refused(store, both))
 
 
 @pytest.mark.parametrize(
@@ -515,11 +515,13 @@ def test_n2_a_denial_quote_may_not_drop_its_scope_condition_or_attribution(
         _prepare(store, master, (_ans(answer, cited),))
 
 
-def test_n2_a_row_up_to_the_end_of_the_denial_line_is_accepted(store: ProfileStore) -> None:
-    cited = _row(
-        store, "statement", "I live in Girona.\nI do not need visa sponsorship.\nI like trains."
+def test_n2_a_guarded_row_is_quoted_whole_not_up_to_its_denial_line(store: ProfileStore) -> None:
+    row = "I live in Girona.\nI do not need visa sponsorship.\nI like trains."
+    cited = _row(store, "statement", row)
+    assert not _refused(
+        store, _ans("I live in Girona. I do not need visa sponsorship. I like trains.", cited)
     )
-    assert not _refused(store, _ans("I live in Girona. I do not need visa sponsorship.", cited))
+    assert _refused(store, _ans("I live in Girona. I do not need visa sponsorship.", cited))
     assert _refused(store, _ans("I do not need visa sponsorship.", cited))
 
 
@@ -668,3 +670,69 @@ def test_m16_an_empty_answer_set_is_refused(store: ProfileStore, master: CVMaste
         write_answers(store, OFFER, version, ())
     assert not (_vdir(store, version) / "form_answers.md").exists()
     assert not (_vdir(store, version) / "form_answers.json").exists()
+
+
+# --- round 5: one closed rule, a row holding a denial is quoted whole (B1-B9) ----------------
+
+
+@pytest.mark.parametrize(
+    ("rows", "answer"),
+    [
+        (["Do I need visa sponsorship?\nNo, it is not needed."], "I need visa sponsorship."),  # B1
+        (["I hold a UK work permit.\nIt is no longer valid."], "I hold a UK work permit."),  # B2
+        (
+            ["I hold a UK work permit.\nThat was true until 2023; it no longer is."],
+            "I hold a UK work permit.",
+        ),  # B3
+        (["Did I ever hold a UK work permit?\nNope, never did."], "I ever hold a UK work permit."),
+        (["I do not\nneed visa sponsorship for Spain."], "I need visa sponsorship for Spain."),
+        (["I have never\nheld a UK work permit."], "I held a UK work permit."),  # B6
+        (
+            ["I do not need visa sponsorship to work\nin Spain; for the UK I would."],
+            "I do not need visa sponsorship to work.",
+        ),  # B7
+        (
+            ["Do I hold a work permit for Spain? Not yet."],
+            "Do I hold a work permit for Spain? Not yet. I hold a work permit for Spain.",
+        ),  # B8
+        (
+            ["I do not need visa sponsorship.", "It is true that I moved to Girona."],
+            "It is not true that I do not need visa sponsorship.",
+        ),  # B9
+        (["Do I need visa sponsorship?\r\nNo."], "I need visa sponsorship."),  # CRLF
+    ],
+)
+def test_b1_to_b9_a_guarded_row_backs_nothing_outside_a_whole_row_quote(
+    store: ProfileStore, rows: list[str], answer: str
+) -> None:
+    ids = [_row(store, "statement", r) for r in rows]
+    assert any(d.startswith("denial:") for d in _refused(store, _ans(answer, *ids)))
+
+
+@pytest.mark.parametrize(
+    ("rows", "answer"),
+    [
+        (
+            ["Do I need visa sponsorship?\nNo, it is not needed."],
+            "Do I need visa sponsorship? No, it is not needed.",
+        ),
+        (["Do I need visa sponsorship?\r\nNo."], "Do I need visa sponsorship? No."),
+        (
+            ["I do not\nneed visa sponsorship for Spain."],
+            "I do not need visa sponsorship for Spain.",
+        ),
+        (["1. I do not need visa sponsorship."], "I do not need visa sponsorship."),
+        (["- I do not need visa sponsorship."], "I do not need visa sponsorship."),
+        (["I don\u2019t need visa sponsorship."], "I don't need visa sponsorship."),
+        (["I live in Girona and I like trains."], "I like trains and I live in Girona."),
+        (
+            ["I live in Girona.", "I do not need visa sponsorship."],
+            "I live in Girona. I do not need visa sponsorship.",
+        ),
+    ],
+)
+def test_b_a_whole_guarded_row_or_a_paraphrased_unguarded_row_is_accepted(
+    store: ProfileStore, rows: list[str], answer: str
+) -> None:
+    ids = [_row(store, "statement", r) for r in rows]
+    assert not _refused(store, _ans(answer, *ids))

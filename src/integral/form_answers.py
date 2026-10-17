@@ -18,17 +18,17 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   occur in a cited row (at least one word of four letters must be shared). Only a closed
   set of articles, linking verbs, "and"/"or" and prepositions is exempt, so an invented
   permit, certification or tool (UK, EU, PhD, AWS, Go) brings a token no cited row holds.
-* **A denial is kept or quoted, from the start of its row.** A denial in the answer (any
-  clause cut at . ! ? ... : ; or a line end that carries a negation) must lie inside a quote of
-  a cited row **from the row's first word through the end of the line that holds the denial**,
-  token for token. No sentence splitting decides what may be dropped: whatever precedes the
-  denial (attribution, scope, condition, an abbreviation's full stop, an ellipsis, a line
-  break) is carried along, and whatever follows it on its line (a scope after the denial) too.
-  Conversely, each denial line of a cited row must appear as that same quote in any answer
-  that shares a content token (any length, cues and function words aside) with the line; a
-  denial line with **no** content token ("No.", "Not yet.") is one with the lines before it, so
-  its content is theirs and the whole row up to it must be quoted. One quoted denial never
-  covers another. A number must be in the cited words (``claim_trace.paragraph_defects``).
+* **A row that holds a denial is quoted whole, or not used.** A cited row with a negation cue
+  anywhere in it (any line, any sentence) is *guarded*: it can back words of the answer only
+  as a verbatim quote of the **whole row**, token for token (CRLF, curly quotes, spacing and a
+  leading list marker such as ``1.`` or ``-`` aside). Every answer word not inside such a quote
+  must come from an unguarded row, and an answer clause that carries a negation must lie wholly
+  inside one. So a denial on a later line, a hard-wrapped one, a scope or a condition on
+  another line, a reply that points back ("No, it is not needed"), and a claim appended after a
+  quote are all refused by the same rule, with no sentence or line splitting deciding what may
+  be dropped. The cost is deliberate: the part of a guarded row the candidate wants to send
+  cannot be taken out of it, so the drafter asks the candidate to restate it as a row of its own.
+  A number must be in the cited words (``claim_trace.paragraph_defects``).
 * **The question is a line sent too.** It must read as the employer's question: one
   line, one sentence, no digit or denial, no first-person word, and short.
 * **A stated limit is a limit.** ``shorten`` keeps whole sentences, in order,
@@ -175,22 +175,12 @@ def _tokens(text: str) -> list[str]:
     return _TOKEN.findall(fold(text))
 
 
-def _content(tokens: Sequence[str]) -> set[str]:
-    # every token but the function words and the negation cues themselves
-    return {t for t in tokens if t not in _FUNCTION_WORDS and not is_denial(t)}
+_LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*\u2022])\s+")
 
 
-def _denial_quotes(row: str) -> list[tuple[list[str], set[str]]]:
-    """For each denial line of `row`: the tokens from the row's start through that line's end,
-    and the content that line (or, when it has none, everything up to it) is about."""
-    lines = [ln for ln in row.splitlines() if ln.strip()]
-    quotes = []
-    for i, line in enumerate(lines):
-        if not is_denial(line):
-            continue
-        upto = [t for ln in lines[: i + 1] for t in _tokens(ln)]
-        quotes.append((upto, _content(_tokens(line)) or _content(upto)))
-    return quotes
+def _row_tokens(row: str) -> list[str]:
+    """The tokens of a whole row, line by line, each line's leading list marker (1. - *) dropped."""
+    return [t for line in row.splitlines() for t in _tokens(_LIST_MARKER.sub("", line))]
 
 
 def _at(haystack: Sequence[str], needle: Sequence[str]) -> list[int]:
@@ -216,24 +206,33 @@ def _question_defects(question: str) -> list[str]:
 
 
 def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
-    """A denial must be quoted from its row's start; a cited row's denial must not be dropped."""
-    quotes = [q for row in cited for q in _denial_quotes(row)]
+    """A cited row holding a denial anywhere is guarded: it backs words only as a whole-row quote.
+
+    Every word of the answer that is not inside such a quote must come from an unguarded row, and
+    a clause of the answer that carries a negation must lie wholly inside such a quote."""
+    guarded = [_row_tokens(row) for row in cited if is_denial(" ".join(row.split()))]
+    free = {t for row in cited if not is_denial(" ".join(row.split())) for t in _row_tokens(row)}
+    free |= _FUNCTION_WORDS
     pieces = [_tokens(c) for c in _clauses(text)]
     mine = [t for piece in pieces for t in piece]
     covered: set[int] = set()
-    for upto, _ in quotes:
-        for start in _at(mine, upto):
-            covered.update(range(start, start + len(upto)))
+    for quote in guarded:
+        for start in _at(mine, quote):
+            covered.update(range(start, start + len(quote)))
     defects = []
     offset = 0
     for clause, piece in zip(_clauses(text), pieces, strict=True):
         span = range(offset, offset + len(piece))
         offset += len(piece)
         if is_denial(clause) and not all(i in covered for i in span):
-            defects.append(f"denial: {clause!r} is not in the words cited")
-    for upto, content in quotes:
-        if content & set(mine) and not _at(mine, upto):
-            defects.append(f"denial: the cited {' '.join(upto)!r} is dropped from the answer")
+            defects.append(f"denial: {clause!r} is not a whole-row quote of a cited row")
+    held = {t for quote in guarded for t in quote if not is_denial(t)}
+    outside = [t for i, t in enumerate(mine) if i not in covered and t in held and t not in free]
+    if outside:
+        defects.append(
+            f"denial: {', '.join(sorted(set(outside)))} rest on a cited row that holds a denial "
+            "and is not quoted whole"
+        )
     return defects
 
 
@@ -427,6 +426,21 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         qno = row("statement", "Do I need visa sponsorship? No.")
         qno2 = row("statement", "Do I need visa sponsorship?\nNo.")
         notyet = row("statement", "Do I hold a work permit for Spain? Not yet.")
+        # round-5 reviewer cases (report 6236128412): B1-B9, one rule: a guarded row is quoted whole
+        b1 = row("statement", "Do I need visa sponsorship?\nNo, it is not needed.")
+        b2 = row("statement", "I hold a UK work permit.\nIt is no longer valid.")
+        b3 = row(
+            "statement", "I hold a UK work permit.\nThat was true until 2023; it no longer is."
+        )
+        b4 = row("statement", "Did I ever hold a UK work permit?\nNope, never did.")
+        b5 = row("statement", "I do not\nneed visa sponsorship for Spain.")
+        b6 = row("statement", "I have never\nheld a UK work permit.")
+        b7 = row(
+            "statement", "I do not need visa sponsorship to work\nin Spain; for the UK I would."
+        )
+        b9 = row("statement", "It is true that I moved to Girona.")
+        listed = row("statement", "1. I do not need visa sponsorship.")
+        girona = row("statement", "I live in Girona and I like trains.")
         # round-3 reviewer cases (report 6233957716): R1-R3 cut sentence, R4-R8 dropped denials
         boss = row("statement", "My manager said: I do not need supervision.")
         semi = row("statement", "I do not need visa sponsorship; that holds for Spain only.")
@@ -541,6 +555,34 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                 a("My manager said: I do not need supervision.", nl), approved),
             ("A5 the whole question and No is accepted", frozenset(),
                 a("Do I need visa sponsorship? No.", qno), approved),
+            ("B1 anaphoric No on a later line", frozenset({"denial"}),
+                a("I need visa sponsorship.", b1), approved),
+            ("B2 later line withdraws the claim", frozenset({"denial"}),
+                a("I hold a UK work permit.", b2), approved),
+            ("B3 later line says it no longer holds", frozenset({"denial"}),
+                a("I hold a UK work permit.", b3), approved),
+            ("B4 Nope on a later line", frozenset({"denial"}),
+                a("I ever hold a UK work permit.", b4), approved),
+            ("B5 hard wrap after the negator", frozenset({"denial"}),
+                a("I need visa sponsorship for Spain.", b5), approved),
+            ("B6 hard wrap after never", frozenset({"denial"}),
+                a("I held a UK work permit.", b6), approved),
+            ("B7 scope continues on the next line", frozenset({"denial"}),
+                a("I do not need visa sponsorship to work.", b7), approved),
+            ("B8 a claim appended after a quote", frozenset({"denial"}),
+                a("Do I hold a work permit for Spain? Not yet. I hold a work permit for Spain.",
+                  notyet), approved),
+            ("B9 a negation wrapped round a quote", frozenset({"denial"}),
+                a("It is not true that I do not need visa sponsorship.", no_sponsor, b9),
+                approved),
+            ("B the whole multi-line row is accepted", frozenset(),
+                a("Do I need visa sponsorship? No, it is not needed.", b1), approved),
+            ("B the whole hard-wrapped row is accepted", frozenset(),
+                a("I do not need visa sponsorship for Spain.", b5), approved),
+            ("B a list-numbered row quoted whole is accepted", frozenset(),
+                a("I do not need visa sponsorship.", listed), approved),
+            ("B an unguarded row is paraphrased freely", frozenset(),
+                a("I like trains and I live in Girona.", girona), approved),
             ("N3 me in the question", frozenset({"question"}),
                 a("My notice period is two months.", notice, q="Hire me, AWS certified"),
                 approved),
