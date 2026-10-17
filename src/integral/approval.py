@@ -857,6 +857,7 @@ def stage_send(
     *,
     confirms: str,
     renderer: Renderer | None = None,
+    pdf_reader: TextReader | None = None,
 ) -> Path:
     """Collect exactly the approved final files into `<version>/send/` — step 11's output.
 
@@ -877,7 +878,7 @@ def stage_send(
     where = _version_parts(offer_id, version)
     folder = store.path(*where, SEND_DIR)
     if folder.exists() or store.path(*where, SEND_RECORD).exists():
-        defects = verify_send(store, offer_id, version, payload=payload)
+        defects = verify_send(store, offer_id, version, payload=payload, pdf_reader=pdf_reader)
         if defects:
             raise ApprovalError(
                 "send/ already exists and is not what was approved — it is not overwritten: "
@@ -994,9 +995,7 @@ def verify_send(
                 if not sent.startswith(b"%PDF"):
                     defects.append(f"{name} in send/ is not a PDF")
                 else:
-                    defects.extend(
-                        pdf_defects(name, sent, pdf_expected.get(name, ("",)), pdf_reader)
-                    )
+                    defects.extend(pdf_defects(name, sent, pdf_expected.get(name, ()), pdf_reader))
             if (reference is not None and sent != reference) or _sha256(sent) != expected:
                 defects.append(f"{name} in send/ differs from what was approved")
     return defects
@@ -1010,6 +1009,7 @@ def record_sent(
     *,
     confirms: str,
     sent_at: str | None = None,
+    pdf_reader: TextReader | None = None,
 ) -> Path:
     """Record that the candidate sent this application. Nothing here sends it.
 
@@ -1019,7 +1019,7 @@ def record_sent(
     does and does not prove.
     """
     payload, digest = _confirmed_payload(store, master, offer_id, version, confirms)
-    defects = verify_send(store, offer_id, version, payload=payload)
+    defects = verify_send(store, offer_id, version, payload=payload, pdf_reader=pdf_reader)
     if defects:
         raise ApprovalError(
             "the send/ folder is not what was approved, so nothing here is sendable: "

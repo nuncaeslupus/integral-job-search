@@ -15,10 +15,10 @@ The text file is deterministic, so `approval.verify_send` regenerates it from th
 approved `letter.md` and compares bytes. A PDF is not (the engine stamps a creation
 time), so it cannot be compared byte for byte. Its independent reference is its text
 layer: `pdf_defects` reads the text out of the PDF and requires the visible text of the
-document(s) re-rendered from the approved Markdown, in order (letter, then CV, for the
-combined file). A PDF swapped together with its `send.json` digest, or a CV and a letter
-saved under each other's name, is refused. `verify_send` also requires the exact set of
-names derived here.
+document(s) re-rendered from the approved Markdown, exactly (letter, then CV, for the
+combined file; nothing before, between or after). A PDF swapped together with its
+`send.json` digest, or a CV and a letter saved under each other's name, is refused.
+`verify_send` also requires the exact set of names derived here.
 
 The PDF engine is a parameter (`Renderer`), because the engine is an optional extra
 that needs Pango and evidence must not depend on whether one is installed.
@@ -175,17 +175,27 @@ def page_stream(page_html: str) -> str:
     return text_stream(" ".join(parser.parts))
 
 
-def read_pdf_text(pdf: bytes) -> str:
-    """A PDF's text layer. `fixture_renderer` output is html pages, read as pages show.
+def fixture_text_reader(pdf: bytes) -> str:
+    """The text layer of `fixture_renderer` output (html pages, read as a page shows).
 
-    Anything else goes through `pypdf` (the `cv` extra); without it the text cannot be
-    read, which `pdf_defects` reports as a defect rather than waving the file through.
+    A test and gate reader only: production `verify_send` never sniffs for the fixture
+    header, so an html file given that header is not a PDF there. It is injected
+    (`pdf_reader=`) by the fixtures and gates that render with `fixture_renderer`.
     """
-    if pdf.startswith(_FIXTURE_HEADER):
-        return " ".join(
-            page_stream(chunk.decode("utf-8", "replace"))
-            for chunk in pdf.removeprefix(_FIXTURE_HEADER).split(_FIXTURE_SEPARATOR)
-        )
+    if not pdf.startswith(_FIXTURE_HEADER):
+        raise SendSetError("not a fixture PDF")
+    return " ".join(
+        page_stream(chunk.decode("utf-8", "replace"))
+        for chunk in pdf.removeprefix(_FIXTURE_HEADER).split(_FIXTURE_SEPARATOR)
+    )
+
+
+def read_pdf_text(pdf: bytes) -> str:
+    """A PDF's text layer, through `pypdf` (the `cv` extra).
+
+    Without it the text cannot be read, which `pdf_defects` reports as a defect rather
+    than waving the file through.
+    """
     try:
         import io
 
@@ -233,12 +243,10 @@ def pdf_defects(
         stream = (reader or read_pdf_text)(pdf)
     except SendSetError as exc:
         return [f"{name} in send/ cannot be checked: {exc}"]
-    stream = stream.replace(" ", "")
-    at = 0
-    for number, wanted in enumerate(expected):
-        found = stream.find(wanted, at) if wanted else -1
-        if found < 0:
-            what = "the approved text" if len(expected) == 1 else f"approved document {number + 1}"
-            return [f"{name} in send/ does not hold {what} in the required order"]
-        at = found + len(wanted)
+    # Exact, not containment: the text layer is the approved document(s) concatenated,
+    # so nothing sits before, between or after them. Both sides are `text_stream`
+    # output (letters and digits, folded), the only normalisation applied.
+    if not expected or stream.replace(" ", "") != "".join(expected):
+        what = "the approved text" if len(expected) == 1 else "the approved documents in order"
+        return [f"{name} in send/ is not exactly {what}"]
     return []

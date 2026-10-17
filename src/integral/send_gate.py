@@ -35,7 +35,7 @@ from integral.approval import (
 )
 from integral.cv_store import write_master
 from integral.identity import ProfileStore, create_profile
-from integral.send_set import fixture_renderer, letter_text, read_pdf_text
+from integral.send_set import fixture_renderer, fixture_text_reader, letter_text
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T338.json"
@@ -76,6 +76,7 @@ def _folder_defects(display: str, handle: str, stem: str, root: Path) -> tuple[b
             payload.version,
             confirms=payload_digest(read_payload(store, _PROBE_OFFER, payload.version)),
             renderer=fixture_renderer,
+            pdf_reader=fixture_text_reader,
         )
     except ApprovalError as exc:
         return False, [f"{handle}: staging refused: {exc}"]
@@ -86,7 +87,9 @@ def _folder_defects(display: str, handle: str, stem: str, root: Path) -> tuple[b
             found.append(f"{handle}: {name} is missing from send/")
     if found:
         return True, found
-    cv_pdf, letter_pdf, combined = (read_pdf_text((folder / name).read_bytes()) for name in wanted)
+    cv_pdf, letter_pdf, combined = (
+        fixture_text_reader((folder / name).read_bytes()) for name in wanted
+    )
     # The property, read against text stated here (not against the other output files):
     # each named PDF holds its own document, and the combined one opens with the letter.
     if _CV_ONLY not in cv_pdf or _LETTER_ONLY in cv_pdf:
@@ -100,7 +103,10 @@ def _folder_defects(display: str, handle: str, stem: str, root: Path) -> tuple[b
         found.append(f"{handle}: Cover-Letter.txt still carries Markdown markers")
     if (folder / "cv.pdf").exists():
         found.append(f"{handle}: a file named cv.pdf is in send/")
-    found.extend(f"{handle}: {d}" for d in verify_send(store, _PROBE_OFFER, payload.version))
+    found.extend(
+        f"{handle}: {d}"
+        for d in verify_send(store, _PROBE_OFFER, payload.version, pdf_reader=fixture_text_reader)
+    )
     return True, found
 
 

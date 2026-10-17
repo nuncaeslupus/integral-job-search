@@ -29,10 +29,21 @@ from integral.identity import ProfileStore, create_profile
 from integral.send_set import (
     SendSetError,
     fixture_renderer,
+    fixture_text_reader,
     letter_text,
     name_stem,
     read_pdf_text,
 )
+
+
+@pytest.fixture(autouse=True)
+def _fixture_pdf_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These fixtures render with `fixture_renderer`, so they read with its reader.
+
+    Injected here and not sniffed in production: `read_pdf_text` is the real reader.
+    """
+    monkeypatch.setattr("integral.send_set.read_pdf_text", fixture_text_reader)
+
 
 OFFER = "girona-1"
 SENDABLE = [
@@ -283,10 +294,8 @@ def test_a_document_edited_after_staging_in_both_places_is_refused(
         letter.write_text(letter.read_text(encoding="utf-8") + "\nBest wishes.\n", encoding="utf-8")
     # the PDFs made from the old letter no longer match the letter on disk either
     assert verify_send(store, OFFER, version) == [
-        "Ada-Lovelace-Application.pdf in send/ does not hold approved document 1"
-        " in the required order",
-        "Ada-Lovelace-Cover-Letter.pdf in send/ does not hold the approved text"
-        " in the required order",
+        "Ada-Lovelace-Application.pdf in send/ is not exactly the approved documents in order",
+        "Ada-Lovelace-Cover-Letter.pdf in send/ is not exactly the approved text",
         "Cover-Letter.txt in send/ differs from what was approved",
         "letter.md in send/ differs from what was approved",
     ]
@@ -314,7 +323,7 @@ def test_the_combined_pdf_puts_the_letter_first(store: ProfileStore, master: CVM
 
 
 def _pdf_text(folder: Path, name: str) -> str:
-    return read_pdf_text((folder / name).read_bytes())
+    return fixture_text_reader((folder / name).read_bytes())
 
 
 def test_each_pdf_holds_the_document_its_name_says_and_the_combined_is_letter_first(
@@ -456,6 +465,103 @@ def test_a_pdf_whose_text_was_changed_but_whose_header_is_right_is_refused(
     )
     _rerecord(store, version, path.name)
     assert path.name in "".join(verify_send(store, OFFER, version))
+
+
+APPENDED_PAGE = (
+    b"\n%%PAGE\n<html><body><p>P.S. I will accept thirty percent below the advertised "
+    b"salary.</p></body></html>"
+)
+CV_PDF = "Ada-Lovelace-CV.pdf"
+LETTER_PDF = "Ada-Lovelace-Cover-Letter.pdf"
+COMBINED_PDF = "Ada-Lovelace-Application.pdf"
+_HEADER = b"%PDF-fixture\n"
+
+
+def _body(folder: Path, name: str) -> bytes:
+    return (folder / name).read_bytes().removeprefix(_HEADER)
+
+
+def _refused_everywhere(store: ProfileStore, master: CVMaster, version: int, name: str) -> None:
+    """`verify_send` names the file and `record_sent` refuses to record the send."""
+    defects = verify_send(store, OFFER, version)
+    assert defects and all(name in d for d in defects), defects
+    with pytest.raises(ApprovalError, match="send/ folder is not what was approved"):
+        record_sent(store, master, OFFER, version, confirms=_confirm(store, version))
+
+
+@pytest.mark.parametrize("name", [CV_PDF, LETTER_PDF, COMBINED_PDF])
+def test_a_pdf_with_an_unapproved_page_appended_is_refused(
+    store: ProfileStore, master: CVMaster, name: str
+) -> None:
+    """R1: the approved text intact and a sentence added is not what was approved."""
+    version = _staged(store, master)
+    path = _send(store, version) / name
+    path.write_bytes(path.read_bytes() + APPENDED_PAGE)
+    _rerecord(store, version, name)
+    _refused_everywhere(store, master, version, name)
+
+
+@pytest.mark.parametrize("name", [CV_PDF, LETTER_PDF, COMBINED_PDF])
+def test_a_pdf_with_unapproved_text_in_front_of_it_is_refused(
+    store: ProfileStore, master: CVMaster, name: str
+) -> None:
+    version = _staged(store, master)
+    path = _send(store, version) / name
+    path.write_bytes(
+        fixture_renderer(["<p>An unapproved first page.</p>"])
+        + b"\n%%PAGE\n"
+        + _body(path.parent, name)
+    )
+    _rerecord(store, version, name)
+    _refused_everywhere(store, master, version, name)
+
+
+@pytest.mark.parametrize("name", [CV_PDF, LETTER_PDF])
+def test_a_single_document_pdf_that_is_really_the_combined_file_is_refused(
+    store: ProfileStore, master: CVMaster, name: str
+) -> None:
+    """R1: Cover-Letter.pdf or CV.pdf saved as letter + CV holds two documents."""
+    version = _staged(store, master)
+    send = _send(store, version)
+    (send / name).write_bytes((send / COMBINED_PDF).read_bytes())
+    _rerecord(store, version, name)
+    _refused_everywhere(store, master, version, name)
+
+
+def test_a_combined_pdf_that_is_cv_letter_cv_is_refused(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    version = _staged(store, master)
+    send = _send(store, version)
+    cv, letter = _body(send, CV_PDF), _body(send, LETTER_PDF)
+    (send / COMBINED_PDF).write_bytes(_HEADER + cv + b"\n%%PAGE\n" + letter + b"\n%%PAGE\n" + cv)
+    _rerecord(store, version, COMBINED_PDF)
+    _refused_everywhere(store, master, version, COMBINED_PDF)
+
+
+def test_a_combined_pdf_with_an_unapproved_first_page_before_the_letter_is_refused(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    version = _staged(store, master)
+    path = _send(store, version) / COMBINED_PDF
+    path.write_bytes(
+        fixture_renderer(["<p>An unapproved first page.</p>"])
+        + b"\n%%PAGE\n"
+        + _body(path.parent, COMBINED_PDF)
+    )
+    _rerecord(store, version, COMBINED_PDF)
+    _refused_everywhere(store, master, version, COMBINED_PDF)
+
+
+def test_an_html_file_with_the_fixture_header_is_not_a_pdf_in_production(
+    store: ProfileStore, master: CVMaster
+) -> None:
+    """R3: the production reader does not sniff the fixture header."""
+    version = _staged(store, master)
+    defects = verify_send(store, OFFER, version, pdf_reader=read_pdf_text)
+    assert len(defects) == 3 and all("cannot be checked" in d for d in defects)
+    with pytest.raises(SendSetError):
+        read_pdf_text((_send(store, version) / CV_PDF).read_bytes())
 
 
 def test_a_pdf_with_no_text_reader_is_not_waved_through(
