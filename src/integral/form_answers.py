@@ -21,7 +21,8 @@ The rules, each pinned by its own test and by a probe in ``measure``:
 * **A denial is kept or quoted.** A denial in the answer must be a cited row's whole
   denial sentence verbatim (a sentence ends only at . ! ? or a line end, so a clause after
   ':' or ';' never stands alone), and each denial in a cited row must itself appear whole in
-  an answer that shares any token (of any length) with it; one quoted denial never covers another. A number must be in the cited words
+  an answer that shares any token (of any length) with it; one quoted denial never covers another.
+  A number must be in the cited words
   (the letter's rule, ``claim_trace.paragraph_defects``).
 * **The question is a line sent too.** It must read as the employer's question: one
   line, one sentence, no digit or denial, no first-person word, and short.

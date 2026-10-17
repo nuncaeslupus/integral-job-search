@@ -535,7 +535,8 @@ def test_n2_the_whole_denial_sentence_of_a_longer_row_is_accepted(store: Profile
         ),
         (
             [
-                "I do not need a work visa for Spain. I do not hold a work permit for the United Kingdom."
+                "I do not need a work visa for Spain. "
+                "I do not hold a work permit for the United Kingdom."
             ],
             "I do not need a work visa for Spain. I hold a work permit for the United Kingdom.",
         ),
