@@ -733,14 +733,14 @@ make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-**One evidence key is now archive-*driven* by design, and it is not that finding.**
+**One evidence key is archive-*driven* by design.**
 Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
 archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row
 in `status/plan.md`. So **ticking the row is part of archiving the task**: a task PR
 that moves its file and leaves the plan alone turns `make evidence` red, by
 construction. That red is the check working — tick the row in the same commit. The
-denominator `merged_tasks_compared` is committed as a floor as a floor,
-so it does not move.
+denominator `merged_tasks_compared` is committed as a floor, so it does not
+move.
 
 `host-gate` is the name `claude-arsenal` points a worker at, and
 `integral.repo_gate` checks that every target listed here is real and is
