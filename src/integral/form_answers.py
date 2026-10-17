@@ -27,10 +27,11 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   CV leaves unread on purpose but where a guard costs only a whole-row quote), or a bare "n't".
   A guarded row that is cited and not quoted whole anywhere in the answer is a defect too, so a
   denial cannot be cited for support while it is dropped. A guarded row can back words of the
-  answer only as a verbatim quote of the **whole row**, token for token (CRLF, curly quotes, spacing and a
-  leading list marker such as ``1.`` or ``-`` aside). Every answer word not inside such a quote
-  must come from an unguarded row, and an answer clause that carries a negation must lie wholly
-  inside one. So a denial on a later line, a hard-wrapped one, a scope or a condition on
+  answer only as a verbatim quote of the **whole row**, token for token (CRLF, curly quotes,
+  spacing and a leading list marker such as ``1.`` or ``-`` aside). Every answer word not inside
+  such a quote must come from an unguarded row, and an answer clause that carries a negation
+  must lie wholly inside one. So a denial on a later line, a hard-wrapped one, a scope or a
+  condition on
   another line, a reply that points back ("No, it is not needed"), and a claim appended after a
   quote are all refused by the same rule, with no sentence or line splitting deciding what may
   be dropped. The cost is deliberate: the part of a guarded row the candidate wants to send
