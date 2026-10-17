@@ -19,7 +19,7 @@ as not listening. So the exclusion has to reach the *query*, before offers are
 fetched — `next_query` is that path, and `Presentation.penalty_applied` exists
 so the gate can say out loud that a demotion does not satisfy it.
 
-**Note the asymmetry with `stated_constraints.py`**, which covers hard
+**Note the asymmetry with the hard constraints**, which are
 constraints — permit, location, salary floor. A sector distaste is soft: it
 must not silently delete a role that is otherwise a strong match. So the metric
 is not "never fetched". It is that a restated exclusion is either honoured or

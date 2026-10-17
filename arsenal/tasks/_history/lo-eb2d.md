@@ -6,6 +6,7 @@ workspace: ONTOLOGY
 tags: [cross]
 status: merged
 pr: https://github.com/nuncaeslupus/job-search/pull/24
+retired: "reader_notes gate, pruned 2026-10-17 by owner decision"
 ---
 
 ## Acceptance gate

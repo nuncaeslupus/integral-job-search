@@ -3,6 +3,7 @@ id: t-65ecce18
 title: "D-15: stop offering to end the session at every step boundary"
 priority: 10
 status: merged
+retired: "session_exit gate, pruned 2026-10-17 by owner decision"
 ---
 
 Captured during a test session at step `constraints` (ledger `test-2026-08-20-a`).
