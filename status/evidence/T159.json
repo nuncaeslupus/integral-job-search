@@ -416,8 +416,8 @@
     {
       "module": "mailbox_replies",
       "name": "MINIMUM_CASES_MEASURED",
-      "line": 223,
-      "population": 34
+      "line": 343,
+      "population": 47
     },
     {
       "module": "offers",
