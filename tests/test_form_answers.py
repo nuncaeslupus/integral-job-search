@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from integral import form_answers
+from integral import brand_measure, form_answers
 from integral.approval import (
     ApprovalError,
     PersonalDetails,
@@ -108,7 +108,7 @@ def _prepare(
     answers: tuple[FormAnswer, ...],
     approved: tuple[int, ...] = (),
 ) -> int:
-    return prepare(
+    version = prepare(
         store,
         master,
         offer_id=OFFER,
@@ -119,6 +119,9 @@ def _prepare(
         approved_episodes=approved,
         form_answers=answers,
     ).version
+    # T342: staging refuses a version with no recorded palette; empty counts = not measurable.
+    brand_measure.record(store, ("cv", "generated", OFFER, f"v{version}"), "", {})
+    return version
 
 
 def _vdir(store: ProfileStore, version: int) -> Path:
