@@ -65,8 +65,8 @@ DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T144.json"
 #: The gate's floor, `ats_host_connectors_conforming >= 5` — one per ATS host
 #: this file's own docstring names: Greenhouse, Lever, Ashby, Workable, Rippling.
 #: Genuinely dynamic: conformance takes a live robots-adjudication replay
-#: (`integral.robots`), never an in-source count, so `floor_sweep` cannot resolve
-#: it from this module's AST.
+#: (`integral.robots`), never an in-source count, so it cannot be
+#: resolved from this module's AST.
 #: arsenal-floor-margin: MINIMUM_CONFORMING value=5
 MINIMUM_CONFORMING = 5
 

@@ -173,9 +173,21 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
     unreadable: list[str] = []
     silently_unread: list[str] = []
+    retired = 0
 
     for row in rows:
         if row.get("status") not in TERMINAL:
+            continue
+        reason = row.get("retired")
+        if (
+            isinstance(reason, str)
+            and "pruned" in reason
+            and Path(str(row.get("payload", ""))).parent.name == "_history"
+        ):
+            # A front-matter `retired: "<reason>, pruned <date> ..."` on an
+            # archived task marks a gate whose measuring code was deleted on
+            # purpose. Skipped, but counted in the summary.
+            retired += 1
             continue
         task_id = str(row.get("id", "?"))
         payload_name = str(row.get("payload") or f"{task_id}.md")
@@ -223,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     terminal = sum(1 for row in rows if row.get("status") in TERMINAL)
     print(
         f"verify-gates: {terminal} terminal task(s); {checked} gate(s) asserted, "
-        f"{ungated} carry no fenced gate block"
+        f"{ungated} carry no fenced gate block, {retired} retired"
     )
     if args.report_json is not None:
         args.report_json.parent.mkdir(parents=True, exist_ok=True)

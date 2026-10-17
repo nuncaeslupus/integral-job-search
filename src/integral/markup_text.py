@@ -83,10 +83,7 @@ EXEMPT_SITES = {
 #: to move it, and far enough above zero that a scan reaching one package
 #: fails rather than passes. Genuinely dynamic — the population is discovered
 #: from `connectors/` at scan time, not enumerated here — so the marker
-#: states `value=` alone, per `floor_sweep.margin_marker`'s own docstring. Own
-#: comment block, not shared with the floor below: `floor_sweep`'s own
-#: prose-clearance mutation refuses two swept floors that resolve to the same
-#: comment range.
+#: states `value=` alone. Own comment block, not shared with the floor below.
 #: arsenal-floor-margin: MINIMUM_FIXTURE_OFFERS value=50
 MINIMUM_FIXTURE_OFFERS = 50
 
