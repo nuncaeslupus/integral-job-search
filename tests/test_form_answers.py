@@ -336,7 +336,7 @@ def test_the_gate_reads_zero_and_every_probe_is_judged_as_required() -> None:
     measured = measure()
     assert measured["form_answers_without_a_store_source"] == 0
     assert measured["answers_checked"] >= 5
-    assert measured["probe_cases"] >= 25
+    assert measured["probe_cases"] >= 34
     assert measured["probe_cases_misjudged"] == 0
 
 
@@ -506,6 +506,65 @@ def test_n2_the_whole_denial_sentence_of_a_longer_row_is_accepted(store: Profile
         store, "statement", "I live in Girona. I do not need visa sponsorship. I like trains."
     )
     assert not _refused(store, _ans("I do not need visa sponsorship.", cited))
+
+
+@pytest.mark.parametrize(
+    ("rows", "answer"),
+    [
+        # R1-R3: a clause after ':' or ';' is not a whole sentence
+        (["My manager said: I do not need supervision."], "I do not need supervision."),
+        (
+            ["I do not need visa sponsorship; that holds for Spain only."],
+            "I do not need visa sponsorship.",
+        ),
+        (
+            ["Once my residence card is renewed: I will not need visa sponsorship."],
+            "I will not need visa sponsorship.",
+        ),
+        # R4-R6: a denial made of short words is still dropped
+        (["I do not use AWS; I prefer Azure."], "I use AWS. I prefer Azure."),
+        (["I am not in the EU. I live in Morocco now."], "I am in the EU. I live in Morocco now."),
+        (["I do not own a car. I cycle everywhere."], "I own a car. I cycle everywhere."),
+        # R7: two rows; R8: one row. Quoting one denial does not cover the other.
+        (
+            [
+                "I do not need a work visa for Spain.",
+                "I do not hold a work permit for the United Kingdom.",
+            ],
+            "I do not need a work visa for Spain. I hold a work permit for the United Kingdom.",
+        ),
+        (
+            [
+                "I do not need a work visa for Spain. I do not hold a work permit for the United Kingdom."
+            ],
+            "I do not need a work visa for Spain. I hold a work permit for the United Kingdom.",
+        ),
+        # D1, D2: a linking verb carries tense and attribution, so it must be cited too
+        (
+            ["The client wanted a certified Kubernetes administrator."],
+            "I am a certified Kubernetes administrator.",
+        ),
+        (["My notice period is two months."], "My notice period was two months."),
+    ],
+)
+def test_r1_to_r8_closed_rules_refuse_a_cut_a_short_word_denial_and_a_pooled_quote(
+    store: ProfileStore, rows: list[str], answer: str
+) -> None:
+    ids = [_row(store, "statement", r) for r in rows]
+    assert _refused(store, _ans(answer, *ids))
+
+
+def test_r_the_clause_before_a_colon_is_part_of_the_sentence_and_whole_quotes_pass(
+    store: ProfileStore,
+) -> None:
+    cited = _row(store, "statement", "My manager said: I do not need supervision.")
+    assert not _refused(store, _ans("My manager said: I do not need supervision.", cited))
+    both = [
+        _row(store, "statement", "I do not need a work visa for Spain."),
+        _row(store, "statement", "I do not hold a work permit for the United Kingdom."),
+    ]
+    ok = "I do not need a work visa for Spain. I do not hold a work permit for the United Kingdom."
+    assert not _refused(store, _ans(ok, *both))
 
 
 # --- reverts the first round left unpinned (M14, M15, M16) -----------------------------------

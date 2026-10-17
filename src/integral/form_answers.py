@@ -19,9 +19,9 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   set of articles, linking verbs, "and"/"or" and prepositions is exempt, so an invented
   permit, certification or tool (UK, EU, PhD, AWS, Go) brings a token no cited row holds.
 * **A denial is kept or quoted.** A denial in the answer must be a cited row's whole
-  denial sentence verbatim (never a part that drops its scope or condition), and a denial
-  in a cited row cannot be dropped: an answer that shares a word with it must carry a
-  denial that shares one too. A number must be in the cited words
+  denial sentence verbatim (a sentence ends only at . ! ? or a line end, so a clause after
+  ':' or ';' never stands alone), and each denial in a cited row must itself appear whole in
+  an answer that shares any token (of any length) with it; one quoted denial never covers another. A number must be in the cited words
   (the letter's rule, ``claim_trace.paragraph_defects``).
 * **The question is a line sent too.** It must read as the employer's question: one
   line, one sentence, no digit or denial, no first-person word, and short.
@@ -62,10 +62,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from integral.claim_trace import (
     DENIAL_KIND,
-    denial_sentences,
     fold,
+    is_denial,
     paragraph_defects,
-    sentences,
 )
 from integral.cv_store import _atomic_write_json, _atomic_write_text
 from integral.identity import ProfileStore, create_profile
@@ -82,6 +81,10 @@ FORM_ANSWERS_RECORD = "form_answers.json"
 STORE_KINDS = frozenset({"episode", "statement", "constraint", "candidate_statement"})
 _WORD = re.compile(r"[^\W\d_]+")
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
+# A sentence of an answer or a cited row ends only at . ! ? or a line end. claim_trace also cuts
+# at ':' and ';', which would let the clause after one pass as a "whole sentence" with the
+# attribution, scope or condition before it dropped.
+_WHOLE_SENTENCE_END = re.compile(r"[.!?…]+(?=\s|$)|\n+")
 SOURCE_DEFECT = "source"
 
 
@@ -146,8 +149,17 @@ _FIRST_PERSON = frozenset({"i", "i'm", "i've", "i'd", "i'll", "me", "my", "mine"
 # AWS, Go, C) must occur in a cited row, so a short word that carries a claim is never exempt.
 _FUNCTION_WORDS = frozenset(
     {"a", "an", "the", "and", "or", "of", "for", "to", "in", "on", "at", "with", "by", "from"}
-    | {"is", "am", "are", "was", "were", "be", "been", "i", "my"}
+    | {"i", "my"}
 )
+
+
+def _sentences(text: str) -> list[str]:
+    return [p.strip() for p in _WHOLE_SENTENCE_END.split(text) if p.strip()]
+
+
+def denial_sentences(text: str) -> list[str]:
+    """Each whole sentence of `text` (cut only at . ! ? or a line end) that carries a negation."""
+    return [s for s in _sentences(text) if is_denial(s)]
 
 
 def _tokens(text: str) -> list[str]:
@@ -171,7 +183,7 @@ def _question_defects(question: str) -> list[str]:
     q = " ".join(question.split())
     toks = _tokens(q)
     why = []
-    if len(sentences(q)) > 1 or "\n" in question:
+    if len(_sentences(q)) > 1 or "\n" in question:
         why.append("more than one sentence")
     if any(c.isdigit() for c in q):
         why.append("a number")
@@ -191,11 +203,13 @@ def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
         for clause in denial_sentences(text)
         if not _quoted(clause, cited)
     ]
-    kept = [_words(clause) for clause in denial_sentences(text)]
+    mine = set(_tokens(text))
+    wholes = {tuple(_tokens(sentence)) for sentence in denial_sentences(text)}
     for row in cited:
         for clause in denial_sentences(row):
-            shared = _words(clause) & _words(text)
-            if shared and not any(shared & mine for mine in kept):
+            # every token but the function words and the negation cues themselves
+            content = {t for t in _tokens(clause) if t not in _FUNCTION_WORDS and not is_denial(t)}
+            if content & mine and tuple(_tokens(clause)) not in wholes:
                 defects.append(f"denial: the cited {clause!r} is dropped from the answer")
     return defects
 
@@ -382,6 +396,19 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             "statement", "Once my residence card is renewed I will not need visa sponsorship."
         )
         said = row("statement", "My manager said I do not need supervision, which was wrong.")
+        # round-3 reviewer cases (report 6233957716): R1-R3 cut sentence, R4-R8 dropped denials
+        boss = row("statement", "My manager said: I do not need supervision.")
+        semi = row("statement", "I do not need visa sponsorship; that holds for Spain only.")
+        aws = row("statement", "I do not use AWS; I prefer Azure.")
+        eu = row("statement", "I am not in the EU. I live in Morocco now.")
+        car = row("statement", "I do not own a car. I cycle everywhere.")
+        visa = row("statement", "I do not need a work visa for Spain.")
+        one = row(
+            "statement",
+            "I do not need a work visa for Spain. "
+            "I do not hold a work permit for the United Kingdom.",
+        )
+        notice_was = "My notice period was two months."
         approved = {log_row.text for log_row in log.rows() if log_row.id == story}
         live = _live_rows(store)
 
@@ -444,6 +471,25 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                 a("I will not need visa sponsorship.", cond), approved),
             ("N2 disputed report", frozenset({"denial"}),
                 a("I do not need supervision.", said), approved),
+            ("R1 attribution before a colon dropped", frozenset({"denial"}),
+                a("I do not need supervision.", boss), approved),
+            ("R2 scope after a semicolon dropped", frozenset({"denial"}),
+                a("I do not need visa sponsorship.", semi), approved),
+            ("R4 short-word denial dropped", frozenset({"denial"}),
+                a("I use AWS. I prefer Azure.", aws), approved),
+            ("R5 denial of EU dropped", frozenset({"denial"}),
+                a("I am in the EU. I live in Morocco now.", eu), approved),
+            ("R6 denial of a car dropped", frozenset({"denial"}),
+                a("I own a car. I cycle everywhere.", car), approved),
+            ("R7 one denial quoted, another reversed", frozenset({"denial"}),
+                a("I do not need a work visa for Spain. I hold a work permit for the "
+                  "United Kingdom.", visa, no_permit), approved),
+            ("R8 the same two in one row", frozenset({"denial"}),
+                a("I do not need a work visa for Spain. I hold a work permit for the "
+                  "United Kingdom.", one), approved),
+            ("D2 tense flip through was", S, a(notice_was, notice), approved),
+            ("R1 the whole sentence is accepted", frozenset(),
+                a("My manager said: I do not need supervision.", boss), approved),
             ("N3 me in the question", frozenset({"question"}),
                 a("My notice period is two months.", notice, q="Hire me, AWS certified"),
                 approved),
