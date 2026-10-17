@@ -34,6 +34,7 @@ from integral.form_answers import (
 )
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
+from integral.send_set import fixture_renderer, fixture_text_reader
 
 OFFER = "girona-1"
 ADVERT = "We are hiring a data engineer in Girona. You will own a PostgreSQL estate."
@@ -44,6 +45,12 @@ FAILURE = (
 )
 DETAILS = PersonalDetails(full_name="Ada Lovelace", email="ada@example.invalid")
 NOTICE_TEXT = "My notice period is two months at my current employer."
+
+
+@pytest.fixture(autouse=True)
+def _fixture_pdf_reader(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Staging renders with `fixture_renderer`, so it is read back with its reader."""
+    monkeypatch.setattr("integral.send_set.read_pdf_text", fixture_text_reader)
 
 
 @pytest.fixture
@@ -257,8 +264,11 @@ def test_the_answers_are_a_payload_document_and_are_staged_byte_for_byte(
     payload = read_payload(store, OFFER, version)
     assert "form_answers.md" in payload.documents
     assert any(c.startswith("form_answers.md: Notice period?") for c in payload.claims)
-    folder = stage_send(store, master, OFFER, version, confirms=_confirm(store, version))
-    assert sorted(p.name for p in folder.iterdir()) == ["cv.md", "form_answers.md", "letter.md"]
+    folder = stage_send(
+        store, master, OFFER, version, confirms=_confirm(store, version), renderer=fixture_renderer
+    )
+    markdown = sorted(p.name for p in folder.iterdir() if p.suffix == ".md")
+    assert markdown == ["cv.md", "form_answers.md", "letter.md"]
     assert (folder / "form_answers.md").read_bytes() == (
         _vdir(store, version) / "form_answers.md"
     ).read_bytes()
@@ -284,7 +294,7 @@ def test_an_answer_line_edited_after_drafting_stops_staging(
     doc = _vdir(store, version) / "form_answers.md"
     doc.write_text(doc.read_text(encoding="utf-8") + "\nI can start tomorrow.\n", encoding="utf-8")
     with pytest.raises(ApprovalError, match="nothing here is sendable"):
-        stage_send(store, master, OFFER, version, confirms=confirm)
+        stage_send(store, master, OFFER, version, confirms=confirm, renderer=fixture_renderer)
     assert not (_vdir(store, version) / "send").exists()
 
 
@@ -303,7 +313,7 @@ def test_a_cited_row_retracted_after_drafting_stops_staging(
     )
     assert not backed_lines(store, OFFER, version, ())
     with pytest.raises(ApprovalError, match="nothing here is sendable"):
-        stage_send(store, master, OFFER, version, confirms=confirm)
+        stage_send(store, master, OFFER, version, confirms=confirm, renderer=fixture_renderer)
 
 
 def test_a_missing_record_backs_no_line(store: ProfileStore, master: CVMaster, notice: str) -> None:
@@ -311,14 +321,16 @@ def test_a_missing_record_backs_no_line(store: ProfileStore, master: CVMaster, n
     confirm = _confirm(store, version)
     (_vdir(store, version) / "form_answers.json").unlink()
     with pytest.raises(ApprovalError, match="nothing here is sendable"):
-        stage_send(store, master, OFFER, version, confirms=confirm)
+        stage_send(store, master, OFFER, version, confirms=confirm, renderer=fixture_renderer)
 
 
 def test_a_staged_version_is_not_rewritten(
     store: ProfileStore, master: CVMaster, notice: str
 ) -> None:
     version = _prepare(store, master, (_answer(notice),))
-    stage_send(store, master, OFFER, version, confirms=_confirm(store, version))
+    stage_send(
+        store, master, OFFER, version, confirms=_confirm(store, version), renderer=fixture_renderer
+    )
     with pytest.raises(FormAnswerError, match="already staged"):
         write_answers(store, OFFER, version, (_answer(notice),))
 
@@ -468,7 +480,9 @@ def test_f5_a_denial_cited_word_for_word_is_accepted_and_staged(
     )
     assert not answer_defects(said, _live(store), ())
     version = _prepare(store, master, (said,))
-    stage_send(store, master, OFFER, version, confirms=_confirm(store, version))
+    stage_send(
+        store, master, OFFER, version, confirms=_confirm(store, version), renderer=fixture_renderer
+    )
     assert verify_send(store, OFFER, version) == []
     # a paraphrase of the denial is not word for word
     loose = said.model_copy(update={"text": "I don't need visa sponsorship."})

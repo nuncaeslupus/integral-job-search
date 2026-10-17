@@ -406,6 +406,10 @@ makes, and `record_sent` refuses a version whose `send/` is not byte-for-byte wh
 was staged. The candidate still presses send; what the folder adds is that the
 files they are handed are the files that were approved.
 
+Since T338 the folder is the whole sendable set, not only the Markdown: PDFs named
+for sending, one combined PDF (letter first) and the letter as plain text, all
+derived from the approved documents by `integral.send_set`.
+
 **What the confirmation proves, and what it does not.** `record_sent` requires
 the payload's own digest, which pins *which* payload was named — a standing "send
 whatever you like" and a yes given to a different draft both fail it. It says
@@ -443,6 +447,7 @@ from integral.cv_store import (
     _atomic_write_json,
     write_master,
 )
+from integral.document_render import RenderError
 from integral.form_answers import (
     FORM_ANSWERS_DOC,
     FormAnswer,
@@ -460,8 +465,20 @@ from integral.generate import (
     read_manifest,
     withdrawn_turn_ids,
 )
-from integral.identity import ProfileStore, create_profile
+from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.profile import EVIDENCE_PARTS, EvidenceLog, Kind, ProfileError
+from integral.send_set import (
+    LETTER_MD,
+    LETTER_TXT,
+    Renderer,
+    SendSetError,
+    TextReader,
+    derive,
+    derived_names,
+    letter_text,
+    pdf_defects,
+    pdf_references,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T46.json"
@@ -865,32 +882,52 @@ def stage_send(
     version: int,
     *,
     confirms: str,
+    renderer: Renderer | None = None,
+    pdf_reader: TextReader | None = None,
 ) -> Path:
     """Collect exactly the approved final files into `<version>/send/` — step 11's output.
 
     Only after the same check `record_sent` makes: the documents re-measured against
     the approvals now, and `confirms` naming this payload's digest. The folder holds
-    the payload's own documents (`payload.documents`) and nothing else, byte for byte
-    what was measured; the digest of each is written beside it, in `send.json`, never
-    inside it, so the folder contains only files that go. A second call over an intact
-    folder is a no-op; over a folder that is not what was approved it refuses rather
-    than overwrite, because a stray file there is a finding, not clutter to tidy away.
+    the payload's own documents (`payload.documents`), byte for byte what was measured,
+    plus the sendable set derived from them (T338, `integral.send_set`): PDFs named
+    for sending, one combined PDF with the letter first, and the letter as plain text.
+    The digest of each is written beside it, in `send.json`, never inside it, so the
+    folder contains only files that go. `renderer` is the PDF engine (default: the
+    optional WeasyPrint extra); a missing engine refuses before anything is written.
+    A second call over an intact folder is a no-op; over a folder that is not what was
+    approved it refuses rather than overwrite, because a stray file there is a finding,
+    not clutter to tidy away.
     Nothing here sends.
     """
     payload, digest = _confirmed_payload(store, master, offer_id, version, confirms)
     where = _version_parts(offer_id, version)
     folder = store.path(*where, SEND_DIR)
     if folder.exists() or store.path(*where, SEND_RECORD).exists():
-        defects = verify_send(store, offer_id, version, payload=payload)
+        defects = verify_send(store, offer_id, version, payload=payload, pdf_reader=pdf_reader)
         if defects:
             raise ApprovalError(
                 "send/ already exists and is not what was approved — it is not overwritten: "
                 + "; ".join(defects)
             )
         return folder
+    contents = {name: store.path(*where, name).read_bytes() for name in payload.documents}
+    try:
+        identity = store.identity()
+        contents.update(
+            derive(
+                identity.display_name,
+                identity.language,
+                {name: raw.decode("utf-8") for name, raw in contents.items()},
+                renderer,
+            )
+        )
+    except (SendSetError, RenderError, IdentityError) as exc:
+        raise ApprovalError(
+            f"the sendable set cannot be built, so nothing was staged: {exc}"
+        ) from exc
     files: dict[str, str] = {}
-    for name in payload.documents:
-        content = store.path(*where, name).read_bytes()
+    for name, content in contents.items():
         _atomic_write(store, content, *where, SEND_DIR, name)
         files[name] = _sha256(content)
     _atomic_write_json(
@@ -903,7 +940,12 @@ def stage_send(
 
 
 def verify_send(
-    store: ProfileStore, offer_id: str, version: int, *, payload: Payload | None = None
+    store: ProfileStore,
+    offer_id: str,
+    version: int,
+    *,
+    payload: Payload | None = None,
+    pdf_reader: TextReader | None = None,
 ) -> list[str]:
     """What in `send/` is not what was approved. Empty means it is exactly that.
 
@@ -940,8 +982,17 @@ def verify_send(
     defects: list[str] = []
     if confirmed != payload_digest(payload):
         defects.append("send.json was staged over a different payload than the one on disk")
-    if sorted(recorded) != sorted(payload.documents):
-        defects.append("send.json does not list exactly the payload's documents")
+    try:
+        identity = store.identity()
+        derived = derived_names(identity.display_name, payload.documents)
+        approved = {
+            name: store.path(*where, name).read_text(encoding="utf-8") for name in payload.documents
+        }
+        pdf_expected = pdf_references(identity.display_name, identity.language, approved)
+    except (SendSetError, IdentityError, OSError, ValueError) as exc:
+        return [*defects, f"the sendable set cannot be derived: {exc}"]
+    if sorted(recorded) != sorted((*payload.documents, *derived)):
+        defects.append("send.json does not list exactly the payload's documents and sendable set")
     present = {entry.name: entry for entry in folder.iterdir()}
     for name in sorted(set(present) - set(recorded)):
         defects.append(f"{name} is in send/ and was never approved")
@@ -956,7 +1007,22 @@ def verify_send(
             # The record is a file in the same tree as `send/`, so a rewritten
             # `send.json` can agree with a rewritten file: the approved document
             # in the version dir is the independent reference.
-            if sent != store.path(*where, name).read_bytes() or _sha256(sent) != expected:
+            if name in payload.documents:
+                reference: bytes | None = store.path(*where, name).read_bytes()
+            elif name == LETTER_TXT:
+                letter = store.path(*where, LETTER_MD).read_text(encoding="utf-8")
+                reference = letter_text(letter).encode("utf-8")
+            else:
+                # A PDF is not reproducible (the engine stamps a time), so its
+                # reference is its text layer: it must hold the approved document(s),
+                # re-rendered from the version dir, in order. The digest alone would
+                # agree with a PDF rewritten together with send.json.
+                reference = None
+                if not sent.startswith(b"%PDF"):
+                    defects.append(f"{name} in send/ is not a PDF")
+                else:
+                    defects.extend(pdf_defects(name, sent, pdf_expected.get(name, ()), pdf_reader))
+            if (reference is not None and sent != reference) or _sha256(sent) != expected:
                 defects.append(f"{name} in send/ differs from what was approved")
     return defects
 
@@ -969,6 +1035,7 @@ def record_sent(
     *,
     confirms: str,
     sent_at: str | None = None,
+    pdf_reader: TextReader | None = None,
 ) -> Path:
     """Record that the candidate sent this application. Nothing here sends it.
 
@@ -978,7 +1045,7 @@ def record_sent(
     does and does not prove.
     """
     payload, digest = _confirmed_payload(store, master, offer_id, version, confirms)
-    defects = verify_send(store, offer_id, version, payload=payload)
+    defects = verify_send(store, offer_id, version, payload=payload, pdf_reader=pdf_reader)
     if defects:
         raise ApprovalError(
             "the send/ folder is not what was approved, so nothing here is sendable: "

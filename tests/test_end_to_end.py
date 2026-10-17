@@ -20,6 +20,7 @@ from integral.cv_store import CVMaster
 from integral.identity import ProfileStore
 from integral.prior_documents import digest as prior_digest
 from integral.process_spec import StepList, load_steps
+from integral.send_set import fixture_text_reader
 
 FIXTURE = e2e.load_fixture()
 
@@ -191,10 +192,14 @@ def test_the_sent_revision_is_staged_verified_recorded_and_alone(tmp_path: Path)
     ids = e2e._offer_ids(FIXTURE)
     sent = next(r for r in FIXTURE.revisions if r.n == FIXTURE.sent.revision)
     offer, version = ids[sent.offer], sent.expect.version
-    assert verify_send(store, offer, version) == []
+    assert verify_send(store, offer, version, pdf_reader=fixture_text_reader) == []
     assert sorted(
         p.name for p in store.path("cv", "generated", offer, f"v{version}", "send").iterdir()
     ) == [
+        "Cover-Letter.txt",
+        "Marta-Ferrer-Application.pdf",
+        "Marta-Ferrer-CV.pdf",
+        "Marta-Ferrer-Cover-Letter.pdf",
         "cv.md",
         "letter.md",
     ]
@@ -430,7 +435,7 @@ def test_a_send_folder_edited_after_staging_is_refused(tmp_path: Path) -> None:
     offer, version = ids[sent.offer], sent.expect.version
     letter = store.path("cv", "generated", offer, f"v{version}", "send", "letter.md")
     letter.write_text(letter.read_text(encoding="utf-8") + "\nAn unapproved sentence.\n")
-    assert verify_send(store, offer, version) != []
+    assert verify_send(store, offer, version, pdf_reader=fixture_text_reader) != []
 
 
 def test_a_verifier_that_passes_a_tampered_send_is_noticed(

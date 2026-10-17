@@ -940,6 +940,14 @@ ADJUDICATIONS: dict[str, tuple[str, str]] = {
             "this sweep does not trace."
         ),
     ),
+    "send_gate.MINIMUM_FOLDERS": (
+        "floor",
+        (
+            "`examined < MINIMUM_FOLDERS` makes the gate report `unmeasured` (-1) "
+            "instead of a clean zero: a minimum on the staged send folders read, "
+            "breached by dropping a constructed candidate."
+        ),
+    ),
     "skill_budget.BUDGET_GRANULARITY": (
         "neither",
         ("A divisor (`budget % BUDGET_GRANULARITY == 0`): a modulus, not a limit."),

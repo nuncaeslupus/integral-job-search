@@ -15,12 +15,12 @@
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_CHECKS",
-      "line": 3703
+      "line": 3770
     },
     {
       "module": "approval",
       "name": "MINIMUM_CARRIED_DISCLOSURE_STATES",
-      "line": 3698
+      "line": 3765
     },
     {
       "module": "arsenal_source",
@@ -110,12 +110,12 @@
     {
       "module": "floor_sweep",
       "name": "MINIMUM_CEILINGS_SET_ASIDE",
-      "line": 4819
+      "line": 4821
     },
     {
       "module": "floor_sweep",
       "name": "_MINIMUM_REASON_WORDS",
-      "line": 4973
+      "line": 4975
     },
     {
       "module": "gate_detector_states",
@@ -253,6 +253,11 @@
       "line": 921
     },
     {
+      "module": "send_gate",
+      "name": "MINIMUM_FOLDERS",
+      "line": 52
+    },
+    {
       "module": "skill_requirement",
       "name": "FEWEST_NOT_REQUIRING_CASES",
       "line": 79
@@ -357,32 +362,32 @@
     {
       "module": "end_to_end",
       "name": "MINIMUM_REVISIONS_REPLAYED",
-      "line": 707,
+      "line": 718,
       "population": 13
     },
     {
       "module": "end_to_end",
       "name": "MINIMUM_STEPS_REPLAYED",
-      "line": 703,
+      "line": 714,
       "population": 14
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_ARITHMETICALLY_CHECKED",
-      "line": 3878,
+      "line": 3879,
       "population": 51
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_EVIDENCE_PINNED",
-      "line": 3908,
+      "line": 3909,
       "population": 33
     },
     {
       "module": "floor_sweep",
       "name": "MINIMUM_FLOORS_SWEPT",
-      "line": 3764,
-      "population": 109
+      "line": 3765,
+      "population": 110
     },
     {
       "module": "freshness",
@@ -728,6 +733,7 @@
     "second_reader.FIXTURES_AT_LEAST",
     "second_reader.REGRESSION_CASES_AT_LEAST",
     "second_reader.STDLIB_DISAGREEMENTS_AT_LEAST",
+    "send_gate.MINIMUM_FOLDERS",
     "session.MINIMUM_PROBES",
     "skill_requirement.FEWEST_NOT_REQUIRING_CASES",
     "skill_requirement.FEWEST_REQUIRING_CASES",
@@ -754,6 +760,6 @@
   ],
   "bounds_with_a_polarity_nobody_adjudicated": [],
   "gate_status": "measured",
-  "floors_swept_at_least": 109,
+  "floors_swept_at_least": 110,
   "floors_arithmetically_checked_at_least": 36
 }
