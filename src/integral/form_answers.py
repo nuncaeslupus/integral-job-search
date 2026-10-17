@@ -14,14 +14,15 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   kind that states something about the candidate (``STORE_KINDS``). A row that
   does not exist, was retracted, is a ``reaction``, ``outcome`` or ``retraction``,
   or shares no word with the answer backs nothing.
-* **Every word comes from a cited row.** Each word of four or more letters in the
-  answer must occur in a cited row, and at least one must be shared. That is a
-  closed rule, not a list of words to ignore: an invented permit, certification or
-  tool brings a word no cited row holds, whatever common words surround it.
-* **A denial is kept or quoted.** A denial in the answer must be in the cited
-  words verbatim, and a denial in a cited row cannot be dropped: an answer that
-  shares a word with it must carry a denial that shares one too. A number must be
-  in the cited words (the letter's rule, ``claim_trace.paragraph_defects``).
+* **Every word comes from a cited row.** Each token of the answer, of any length, must
+  occur in a cited row (at least one word of four letters must be shared). Only a closed
+  set of articles, linking verbs, "and"/"or" and prepositions is exempt, so an invented
+  permit, certification or tool (UK, EU, PhD, AWS, Go) brings a token no cited row holds.
+* **A denial is kept or quoted.** A denial in the answer must be a cited row's whole
+  denial sentence verbatim (never a part that drops its scope or condition), and a denial
+  in a cited row cannot be dropped: an answer that shares a word with it must carry a
+  denial that shares one too. A number must be in the cited words
+  (the letter's rule, ``claim_trace.paragraph_defects``).
 * **The question is a line sent too.** It must read as the employer's question: one
   line, one sentence, no digit or denial, no first-person word, and short.
 * **A stated limit is a limit.** ``shorten`` keeps whole sentences, in order,
@@ -139,7 +140,14 @@ def _words(text: str) -> set[str]:
 _TOKEN = re.compile(r"[^\W_]+(?:'[^\W_]+)*")
 # The candidate's own voice. An employer's question is addressed to "you", so a question that
 # speaks as "I" is a claim placed where no citation is looked for.
-_FIRST_PERSON = frozenset({"i", "i'm", "i've", "i'd", "i'll", "my", "mine", "myself"})
+_FIRST_PERSON = frozenset({"i", "i'm", "i've", "i'd", "i'll", "me", "my", "mine", "myself"})
+# The only tokens an answer may use without finding them in a cited row: articles, linking
+# verbs, "and"/"or" and plain prepositions. Every other token of any length (UK, US, EU, PhD,
+# AWS, Go, C) must occur in a cited row, so a short word that carries a claim is never exempt.
+_FUNCTION_WORDS = frozenset(
+    {"a", "an", "the", "and", "or", "of", "for", "to", "in", "on", "at", "with", "by", "from"}
+    | {"is", "am", "are", "was", "were", "be", "been", "i", "my"}
+)
 
 
 def _tokens(text: str) -> list[str]:
@@ -147,15 +155,16 @@ def _tokens(text: str) -> list[str]:
 
 
 def _quoted(clause: str, cited: Sequence[str]) -> bool:
-    """Is `clause` in a cited row word for word (case, accent and spacing aside)?"""
+    """Is `clause` a cited row's whole denial sentence, word for word (case, accent, spacing)?
+
+    Equal to the whole sentence, never a window inside it: a shorter quote would drop the scope
+    ("for Spain, but ..."), condition ("once ...") or attribution ("my manager said ...") that
+    limits the denial.
+    """
     want = _tokens(clause)
     if not want:
         return False
-    for row in cited:
-        have = _tokens(row)
-        if any(have[i : i + len(want)] == want for i in range(len(have) - len(want) + 1)):
-            return True
-    return False
+    return any(_tokens(sentence) == want for row in cited for sentence in denial_sentences(row))
 
 
 def _question_defects(question: str) -> list[str]:
@@ -226,8 +235,8 @@ def answer_defects(
             defects.append(f"{SOURCE_DEFECT}: {ev} shares no word with the answer")
         else:
             cited.append(row.text)
-    held = _words(" ".join(cited))
-    if cited and (extra := sorted(_words(text) - held)):
+    held = set(_tokens(" ".join(cited))) | _FUNCTION_WORDS
+    if cited and (extra := sorted(set(_tokens(text)) - held)):
         defects.append(f"{SOURCE_DEFECT}: {', '.join(extra)} come from no cited row")
     flat = " ".join(text.split())
     defects += _denial_defects(text, cited)
@@ -362,6 +371,17 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         no_permit = row("statement", "I do not hold a work permit for the United Kingdom.")
         used = row("statement", "I used Kubernetes at Acme for two years.")
         no_sponsor = row("constraint", "I do not need visa sponsorship.")
+        # round-2 reviewer cases (report 6233180546): N1 short invented tokens, N2 cut denials
+        spain = row("statement", "I have a valid work permit for Spain.")
+        degree = row("statement", "I have a degree in physics.")
+        scoped = row(
+            "statement",
+            "I do not need visa sponsorship for Spain, but I need it for the United Kingdom.",
+        )
+        cond = row(
+            "statement", "Once my residence card is renewed I will not need visa sponsorship."
+        )
+        said = row("statement", "My manager said I do not need supervision, which was wrong.")
         approved = {log_row.text for log_row in log.rows() if log_row.id == story}
         live = _live_rows(store)
 
@@ -413,6 +433,20 @@ def _corpus_and_probes() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             ("F4 claim in the question", frozenset({"question"}),
                 a("My notice period is two months.", notice,
                   q="I am a certified Kubernetes administrator with a UK work permit"), approved),
+            ("N1 invented UK on a short token", S,
+                a("I have a valid work permit for Spain and the UK.", spain), approved),
+            ("N1 invented US and EU", S,
+                a("I have a valid work permit for the US and EU.", spain), approved),
+            ("N1 invented PhD", S, a("I have a PhD in physics.", degree), approved),
+            ("N2 scope dropped", frozenset({"denial"}),
+                a("I do not need visa sponsorship.", scoped), approved),
+            ("N2 condition dropped", frozenset({"denial"}),
+                a("I will not need visa sponsorship.", cond), approved),
+            ("N2 disputed report", frozenset({"denial"}),
+                a("I do not need supervision.", said), approved),
+            ("N3 me in the question", frozenset({"question"}),
+                a("My notice period is two months.", notice, q="Hire me, AWS certified"),
+                approved),
             ("F5 denial quoted is accepted", frozenset(),
                 a("I do not need visa sponsorship.", no_sponsor), approved),
             ("F5 denial quoted with the question asked", frozenset(),

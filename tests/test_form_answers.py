@@ -336,7 +336,7 @@ def test_the_gate_reads_zero_and_every_probe_is_judged_as_required() -> None:
     measured = measure()
     assert measured["form_answers_without_a_store_source"] == 0
     assert measured["answers_checked"] >= 5
-    assert measured["probe_cases"] >= 18
+    assert measured["probe_cases"] >= 25
     assert measured["probe_cases_misjudged"] == 0
 
 
@@ -410,6 +410,14 @@ def test_f2_a_denial_dropped_from_the_cited_row_is_refused(
             "I used Kubernetes at Acme for two years.",
             "I am a certified Kubernetes administrator.",
         ),
+        # round 2 (N1): short tokens carry claims too, so no length cut-off
+        (
+            "I have a valid work permit for Spain.",
+            "I have a valid work permit for Spain and the UK.",
+        ),
+        ("I have a valid work permit for Spain.", "I have a valid work permit for the US and EU."),
+        ("I have a degree in physics.", "I have a PhD in physics."),
+        ("I know Python and SQL.", "I know Python and Go."),
         # closed rule: any word the row lacks, however ordinary the words around it
         ("I want to work on logistics software.", "I want to work on logistics software daily."),
     ],
@@ -438,6 +446,7 @@ def test_f4_a_claim_in_the_question_is_refused(
         "Notice period? I hold a UK work permit.",
         "Do you need sponsorship? I do not.",
         "Notice period of 3 months?",
+        "Hire me, AWS certified",
     )
     for q in claims:
         bad = _answer(notice).model_copy(update={"question": q})
@@ -464,6 +473,39 @@ def test_f5_a_denial_cited_word_for_word_is_accepted_and_staged(
     # a paraphrase of the denial is not word for word
     loose = said.model_copy(update={"text": "I don't need visa sponsorship."})
     assert any(d.startswith("denial:") for d in answer_defects(loose, _live(store), ()))
+
+
+@pytest.mark.parametrize(
+    ("row", "answer"),
+    [
+        (
+            "I do not need visa sponsorship for Spain, but I need it for the United Kingdom.",
+            "I do not need visa sponsorship.",
+        ),
+        (
+            "Once my residence card is renewed I will not need visa sponsorship.",
+            "I will not need visa sponsorship.",
+        ),
+        (
+            "My manager said I do not need supervision, which was wrong.",
+            "I do not need supervision.",
+        ),
+    ],
+)
+def test_n2_a_denial_quote_may_not_drop_its_scope_condition_or_attribution(
+    store: ProfileStore, master: CVMaster, row: str, answer: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert any(d.startswith("denial:") for d in _refused(store, _ans(answer, cited)))
+    with pytest.raises(ApprovalError, match="denial:"):
+        _prepare(store, master, (_ans(answer, cited),))
+
+
+def test_n2_the_whole_denial_sentence_of_a_longer_row_is_accepted(store: ProfileStore) -> None:
+    cited = _row(
+        store, "statement", "I live in Girona. I do not need visa sponsorship. I like trains."
+    )
+    assert not _refused(store, _ans("I do not need visa sponsorship.", cited))
 
 
 # --- reverts the first round left unpinned (M14, M15, M16) -----------------------------------
