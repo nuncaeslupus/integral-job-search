@@ -29,8 +29,6 @@ So this runs in CI, on every push, over the *whole* board:
    is a **failure** rather than a quieter tally, and a counted gate whose
    checker printed nothing is a failure too — the second is the end-to-end
    catch that survives any future drift between the two grammars.
-   `status/evidence/T122.json` measures both, over this board and over a fixture
-   per way a fence can be present and unread.
 
 2. **An open task with no evidence is not a failure.** A task nobody has
    started legitimately has no measurement, and demanding one would make the
@@ -153,7 +151,7 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         metavar="PATH",
         help=(
             "write what this run counted and what the checker actually read to PATH — "
-            "the input `integral.gate_reader_agreement` measures T122's gate from"
+            "a machine-readable record of the run"
         ),
     )
     return parser.parse_args(argv)

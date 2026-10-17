@@ -468,7 +468,7 @@ def test_a_serves_from_entry_that_is_not_already_a_hostname_is_rejected() -> Non
     port, no path — so a declaration in any other spelling matches nothing, and
     the failure is silent in the fail-*closed* direction that reads like a bug
     in another module ("I declared it and the advert is still refused"). The
-    obvious remedy is to normalise it here, and that is the `resolve_identity`
+    obvious remedy is to normalise it here, and that is the repair
     trap: what a repair welds onto the string is a host nobody declared, and
     provenance is the entire purpose of the field. So each spelling below is
     refused where the file loads and the error names the connector.

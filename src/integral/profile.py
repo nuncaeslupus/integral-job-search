@@ -1036,7 +1036,7 @@ _D6_FIXTURE: tuple[tuple[str, ConstraintState, dict[str, Any] | None], ...] = (
 #: A literal, never `len(_D6_FIXTURE)` (T159). Written as the length of the fixture it
 #: bounds, the comparison at `_main` becomes `len(X) < len(X)` — false for every `X`,
 #: including an empty one — so the floor could never fire, the exact shape T122 fixed
-#: on `gate_reader_agreement.MINIMUM_ARRANGEMENTS_PROBED` by keeping the replacement a
+#: on a sibling floor by keeping the replacement a
 #: hand-written number instead of a derived one. Ten today, matching `_D6_FIXTURE`
 #: exactly: zero slack, so deleting the first row breaches this immediately.
 MINIMUM_FIELDS_CHECKED = 10

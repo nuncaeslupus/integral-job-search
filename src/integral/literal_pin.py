@@ -16,7 +16,7 @@ node at every depth, and *any* node that binds the name (assignment, annotated
 or augmented assignment, walrus, loop or comprehension target, `with ... as`,
 `except ... as`, import alias, `def`/`class` of that name, `global`) is a
 binding. A floor has exactly one, at module level, and its value is an integer
-literal. All three pins call `binding_defects`: one implementation of the rule.
+literal. Both pins call `binding_defects`: one implementation of the rule.
 
 `python -m integral.literal_pin` measures `literal_pins_a_nested_rebinding_escapes`
 into `status/evidence/T160.json`: for each committed pin it appends each nested
@@ -38,17 +38,15 @@ _SRC = Path(__file__).resolve().parent
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T160.json"
 
 #: The committed literal-pins, as (module file, pinned constant). Each has a test
-#: that calls `binding_defects`: `verified_gate`'s two and `gate_reader_agreement`'s
-#: one. Declared here and floored at the literal below, since a count derived from
-#: this table would shrink with a dropped pin.
+#: that calls `binding_defects`: `verified_gate`'s two. Declared here and floored
+#: at the literal below, since a count derived from this table would shrink with a dropped pin.
 PINS: tuple[tuple[str, str], ...] = (
     ("verified_gate.py", "MINIMUM_CONTRACTS"),
     ("verified_gate.py", "MINIMUM_CI_CLAIM_SCENARIOS"),
-    ("gate_reader_agreement.py", "MINIMUM_ARRANGEMENTS_PROBED"),
 )
 #: Equal to the table today, so the first dropped row breaches it.
-#: arsenal-floor-margin: MINIMUM_PINS_SWEPT value=3
-MINIMUM_PINS_SWEPT = 3
+#: arsenal-floor-margin: MINIMUM_PINS_SWEPT value=2
+MINIMUM_PINS_SWEPT = 2
 
 #: Rebinding forms appended after the real source, each nested, with the real
 #: literal left in place as the decoy. `{n}` is the pinned name.

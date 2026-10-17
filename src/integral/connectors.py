@@ -3486,7 +3486,7 @@ class Connector(Strict):
     @field_validator("serves_from")
     @classmethod
     def _serves_from_are_already_hostnames(cls, hosts: tuple[str, ...]) -> tuple[str, ...]:
-        # A validator, never a repair — the `resolve_identity` rule. A declared
+        # A validator, never a repair. A declared
         # host reaches `reaction_elicit.check_stimulus` as a member of the set an
         # offer's url host is matched against, and that host arrives from
         # `urlparse(...).hostname`: lowercased, port stripped, scheme gone. So

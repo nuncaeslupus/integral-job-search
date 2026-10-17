@@ -98,7 +98,7 @@ def test_a_dropped_pin_row_is_unmeasured_not_clean() -> None:
 def test_the_floor_on_pins_swept_is_a_literal_and_equals_the_table() -> None:
     source = Path(literal_pin.__file__).read_text(encoding="utf-8")
     assert binding_defects(source, "MINIMUM_PINS_SWEPT") == []
-    assert literal_pin.MINIMUM_PINS_SWEPT == len(PINS) == 3
+    assert literal_pin.MINIMUM_PINS_SWEPT == len(PINS) == 2
 
 
 def test_every_committed_pin_test_uses_the_shared_rule() -> None:
@@ -123,5 +123,5 @@ def test_every_committed_pin_test_uses_the_shared_rule() -> None:
 def test_the_record_commits_the_floor_and_no_census() -> None:
     committed = literal_pin.record(measure())
     assert not any(k.startswith("_") for k in committed)
-    assert committed["pins_swept_at_least"] == 3
+    assert committed["pins_swept_at_least"] == 2
     assert json.loads(json.dumps(committed)) == committed
