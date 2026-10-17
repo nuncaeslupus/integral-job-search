@@ -2689,7 +2689,7 @@ def test_the_committed_record_does_not_restate_the_numerator_as_a_measurement(
     make on purpose rather than a silent divergence between two numbers nobody
     was comparing.
 
-    Contrast `cue_audit` and `second_reader`, which derive a direction per case
+    Contrast `second_reader`, which derives a direction per case
     from the case: there `fail_open` is a measurement, and committing it says
     something.
     """

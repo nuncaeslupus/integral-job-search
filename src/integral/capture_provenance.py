@@ -852,8 +852,8 @@ def record(measured: dict[str, Any]) -> dict[str, Any]:
     and nothing in this module ever sets it to anything else, so the committed
     `fail_open` was `len(findings)` written twice — two numbers in one record
     that cannot disagree, the second reading as a corroborating measurement and
-    corroborating nothing. `cue_audit` and `second_reader` compute a direction
-    per case, which is what makes their `fail_open` a measurement; here it was a
+    corroborating nothing. `second_reader` computes a direction
+    per case, which is what makes its `fail_open` a measurement; here it was a
     constant wearing one's clothes. The per-row `direction` stays, because as a
     *label on a row* it is a true and useful statement — it is the aggregate
     that pretended to be measured. Anyone wanting the count can add up the rows,
