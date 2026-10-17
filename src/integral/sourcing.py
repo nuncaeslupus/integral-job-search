@@ -408,8 +408,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
 def _fields_outside(cls: type, excluded: frozenset[str]) -> tuple[str, ...]:
     """Every field `cls` (a dataclass) declares, except the names in `excluded`.
 
-    The idiom `tests/test_review_reader.py`'s `_twin_varying_every_non_input_field`
-    uses for "every field but the named inputs": inclusion is the default, so a
+    The idiom for "every field but the named inputs": inclusion is the default, so a
     field added to the dataclass later is picked up on its own, with no call
     site to update. Order follows declaration order.
     """

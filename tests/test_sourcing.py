@@ -1691,8 +1691,7 @@ def test_the_unrealized_row_fields_are_derived_not_hand_listed() -> None:
     """Round 6, F2: `employer_boards` and `measure_flood`'s
     `rows_not_accounted_for` each hand-listed the same four `BoardOutcome`
     field names, separately. `_fields_outside` is the idiom
-    `tests/test_review_reader.py`'s `_twin_varying_every_non_input_field`
-    already uses for the identical shape (its `_INPUT_FIELDS`): a field is
+    for the identical shape: a field is
     included by default, so a bucket added to the dataclass later needs no
     matching addition at either call site — only a name in the exclusion set
     would leave one out, and this proves the function reads

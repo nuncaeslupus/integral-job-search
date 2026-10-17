@@ -3,6 +3,7 @@ id: t-41fda10d
 title: "D-28: `after-ci-and-review` has no reader for the review half — and now no reviewer either"
 priority: 5
 status: merged
+retired: "review_reader meta gate deleted, pruned 2026-10-17 by owner decision"
 ---
 
 Imported from issue #313. **Re-scoped 2026-09-04**: CodeRabbit was gone — the

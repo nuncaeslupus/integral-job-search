@@ -44,7 +44,7 @@ LEDGER_PARTS = ("session", "mailbox_permissions.jsonl")
 
 # A mailbox is named by its address, and the whole string must already be one:
 # a display name, "me" or padding inside it is unresolvable and never repaired
-# into an identity (the rule `review_reader.resolve_identity` learnt). Pure
+# into an identity (the rule the former review_reader learnt). Pure
 # ASCII only: casefolding rewrites some other characters into different ones
 # (Kelvin sign, sharp s), which would merge two distinct strings.
 _ADDRESS = re.compile(r"[^\s@<>()]+@[^\s@<>()]+\.[^\s@<>()]+")

@@ -76,8 +76,7 @@ extraction:
     # The measured cost is real and is recorded rather than argued away:
     # `product_vs_services` F1 falls to `main`'s 0.1667, because all three
     # adverts it loses state placement **once** and a bipolar dimension needs
-    # two matches. That is the corroboration rule, not a wrong cue — see the
-    # `matches=1` case in `cue_audit.py`.
+    # two matches. That is the corroboration rule, not a wrong cue.
     en:
       - pattern: "our\\s+own\\s+product|we\\s+build\\s+our\\s+own|the\\s+product\\s+we\\s+build|our\\s+(own\\s+)?(platform|saas|product)|we\\s+build\\s+(a|our)\\s+saas"
         value: 0.7
