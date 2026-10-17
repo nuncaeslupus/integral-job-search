@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,20 @@ def test_the_gate_reads_clean_and_its_controls_read_above_zero() -> None:
     assert measured["control_unpermitted_reads_that_got_through"] > 0
     assert measured["control_digest_moves_when_a_change_is_applied"] > 0
     assert measured["cases_measured"] >= mr.MINIMUM_CASES_MEASURED
+    assert measured["reasons_recorded_without_the_candidates_yes"] == 0
+    assert measured["control_reason_rows_counted_when_the_candidate_says_yes"] == 1
+    assert measured["outcomes_without_a_case"] == 0
+
+
+def test_the_headline_counter_reads_above_zero_on_a_permission_blind_control() -> None:
+    blind = [mr.Verdict(mr.Outcome.PROPOSED) for _ in mr._CASES]
+    assert mr._unpermitted_that_got_through(blind) == mr.measure()["refusing_cases"]
+    honest = [mr.Verdict(o) for _r, o, _w, _f in mr._CASES]
+    assert mr._unpermitted_that_got_through(honest) == 0
+
+
+def test_every_outcome_is_expected_by_some_case() -> None:
+    assert {o for _r, o, _w, _f in mr._CASES} == set(mr.Outcome)
 
 
 def test_a_yes_for_read_one_does_not_authorise_read_two(
@@ -205,7 +220,7 @@ def test_the_command_line_reads_the_recorded_permission_and_confirms_on_request(
         "--mailbox",
         "me@example.org",
         "--read-at",
-        "2026-12-31T00:00:00+00:00",
+        granted["granted_at"],  # a read at the moment of the yes: never later than now
     ]
     # no permission cited: refused, exit 1, nothing written
     assert mr._cli(args) == 1
@@ -218,3 +233,130 @@ def test_the_command_line_reads_the_recorded_permission_and_confirms_on_request(
     assert mr._cli([*base, "confirm", out["proposal_id"]]) == 0
     assert _state(store, ids["acme"]) == ("rejected", "rejected")
     assert mr._cli([*base, "confirm", out["proposal_id"]]) == 2
+
+
+_NOW = datetime(2026, 12, 31, tzinfo=UTC)
+
+
+def _later(reply: mr.Reply, **changes: str) -> mr.Reply:
+    return mr.Reply(
+        reply.kind,
+        reply.title,
+        reply.employer,
+        changes.get("received_at", reply.received_at),
+        am.AlertPointer(
+            reply.pointer.title,
+            reply.pointer.employer,
+            reply.pointer.read_id,
+            reply.pointer.session,
+            reply.pointer.mailbox,
+            reply.pointer.permission_id,
+            changes.get("read_at", reply.pointer.read_at),
+        ),
+    )
+
+
+def test_a_reply_that_arrived_a_week_after_the_read_is_not_credited_to_it(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    verdict, proposal = mr.propose(
+        store, mr._reply(received_at="2026-10-12T09:00:00+00:00"), now=_NOW
+    )
+    assert verdict.outcome is Outcome.REPLY_AFTER_READ and proposal is None
+    assert _state(store, ids["acme"]) == ("applied", "applied")
+
+
+def test_a_read_time_in_the_future_is_refused_and_the_clock_is_injected(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    for read_at in ("2099-01-01T00:00:00+00:00", "2026-12-31T00:00:00+00:00"):
+        reply = mr._reply(read_id="r3", permission_id="p3", read_at=read_at)
+        verdict, proposal = mr.propose(store, reply, now=datetime(2026, 10, 17, tzinfo=UTC))
+        assert verdict.outcome is Outcome.READ_IN_FUTURE and proposal is None
+    # the same read time is fine once the clock has passed it
+    reply = mr._reply(read_id="r3", permission_id="p3", read_at="2026-12-31T00:00:00+00:00")
+    assert mr.propose(store, reply, now=_NOW)[0].outcome is Outcome.PROPOSED
+
+
+@pytest.mark.parametrize("received", ["yesterday", "", "2026-10-05T08:00:00", "05/10/2026"])
+def test_a_reply_date_that_does_not_parse_or_has_no_zone_is_refused(
+    store: ProfileStore, ids: dict[str, str], received: str
+) -> None:
+    verdict, proposal = mr.propose(store, mr._reply(received_at=received), now=_NOW)
+    assert verdict.outcome is Outcome.REPLY_DATE_BAD and proposal is None
+
+
+def test_a_read_id_reused_three_weeks_later_is_not_a_new_read(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    ack = mr._reply(ReplyKind.ACKNOWLEDGEMENT, "Data Analyst", "Beta")
+    assert mr.propose(store, ack, now=_NOW)[0].outcome is Outcome.NO_CHANGE
+    three_weeks = "2026-10-26T09:30:00+00:00"
+    late = mr._reply(received_at=three_weeks, read_at=three_weeks)
+    verdict, proposal = mr.propose(store, late, now=_NOW)
+    assert verdict.outcome is Outcome.READ_TIME_REBOUND and proposal is None
+    # the same instant spelled another way is the same read
+    same = mr._reply(read_at="2026-10-05T11:30:00+02:00")
+    assert mr.propose(store, same, now=_NOW)[0].outcome is Outcome.PROPOSED
+
+
+def test_a_refused_reply_does_not_bind_its_read_id(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    refused = mr._reply(permission_id=None, read_at="2026-10-05T10:00:00+00:00")
+    assert mr.propose(store, refused, now=_NOW)[0].outcome is Outcome.REFUSED
+    assert mr.propose(store, mr._reply(), now=_NOW)[0].outcome is Outcome.PROPOSED
+
+
+def test_a_proposal_is_refused_when_confirming_it_would_be(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    for kwargs, outcome in (
+        ({"title": "Chief Analyst", "employer": "Iota"}, Outcome.CONFIRMED_BY_CANDIDATE),
+        ({"received_at": "2026-09-01T00:00:00+00:00"}, Outcome.BEFORE_LAST_TRANSITION),
+        ({"received_at": "yesterday"}, Outcome.REPLY_DATE_BAD),
+    ):
+        verdict, proposal = mr.propose(store, mr._reply(**kwargs), now=_NOW)  # type: ignore[arg-type]
+        assert verdict.outcome is outcome and proposal is None
+    assert mr._rows(store) == []
+
+
+def test_a_second_pending_proposal_for_one_application_is_refused_until_decided(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    _v, first = mr.propose(store, mr._reply(), now=_NOW)
+    assert first
+    verdict, second = mr.propose(store, mr._reply(), now=_NOW)
+    assert verdict.outcome is Outcome.ALREADY_PENDING and second is None
+    mr.decline(store, first)
+    assert mr.propose(store, mr._reply(), now=_NOW)[0].outcome is Outcome.PROPOSED
+
+
+def test_confirm_judges_the_permission_again(store: ProfileStore, ids: dict[str, str]) -> None:
+    store.append_jsonl(
+        {
+            "proposal_id": "reply-handwritten",
+            "state": "proposed",
+            "offer_id": ids["acme"],
+            "to_status": "rejected",
+            "received_at": mr._RECEIVED,
+            "permission_id": None,
+            "read_id": "r1",
+        },
+        *mr.LEDGER_PARTS,
+    )
+    with pytest.raises(ProposalError, match="no longer has a yes"):
+        mr.confirm(store, "reply-handwritten")
+    assert _state(store, ids["acme"]) == ("applied", "applied")
+
+
+def test_confirm_refuses_a_row_whose_permission_names_another_read(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    _v, proposal = mr.propose(store, mr._reply(), now=_NOW)
+    assert proposal
+    rows = [{**r, "read_id": "r2"} if r.get("state") == "proposed" else r for r in mr._rows(store)]
+    path = store.path(*mr.LEDGER_PARTS)
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    with pytest.raises(ProposalError, match="no longer has a yes"):
+        mr.confirm(store, proposal)

@@ -5,9 +5,13 @@
   "status_changes_applied_without_confirmation": 0,
   "proposals_on_record_beyond_the_proposable": 0,
   "confirmation_follow_up_failures": 0,
-  "control_unpermitted_reads_that_got_through": 14,
+  "reasons_recorded_without_the_candidates_yes": 0,
+  "outcomes_without_a_case": 0,
+  "control_unpermitted_reads_that_got_through": 22,
   "control_digest_moves_when_a_change_is_applied": 1,
-  "cases_measured": 34,
-  "cases_measured_at_least": 34,
-  "refusing_cases": 14
+  "control_reason_rows_counted_when_the_candidate_says_yes": 1,
+  "control_outcomes_without_a_case_when_proposals_are_dropped": 1,
+  "cases_measured": 47,
+  "cases_measured_at_least": 47,
+  "refusing_cases": 22
 }
