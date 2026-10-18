@@ -187,7 +187,7 @@ def _prepare_dir(
 def test_an_answer_citing_nothing_is_refused_and_writes_nothing(
     store: ProfileStore, master: CVMaster
 ) -> None:
-    bare = FormAnswer(question="Why us?", text="I like the product.")
+    bare = FormAnswer(question="Why this company?", text="I like the product.")
     with pytest.raises(ApprovalError, match="not backed by the store"):
         _prepare(store, master, (bare,))
     assert not list(store.path("cv", "generated", OFFER).glob("v*/payload.json"))
@@ -238,7 +238,7 @@ def test_a_story_row_may_be_cited_only_under_a_per_use_approval(
     store: ProfileStore, master: CVMaster
 ) -> None:
     story = _row(store, "episode", WIN)
-    why = FormAnswer(question="Why us?", text=WIN, evidence_ids=(story,))
+    why = FormAnswer(question="Why this company?", text=WIN, evidence_ids=(story,))
     with pytest.raises(ApprovalError, match="no per-use approval"):
         _prepare(store, master, (why,))
     version = _prepare(store, master, (why,), approved=(0,))
@@ -251,7 +251,7 @@ def test_an_episode_carried_by_an_answer_that_cites_something_else_is_refused(
     said = _row(
         store, "statement", "I enjoy migrations and reconciliation work at logistics firms."
     )
-    smuggled = FormAnswer(question="Why us?", text=FAILURE, evidence_ids=(said,))
+    smuggled = FormAnswer(question="Why this company?", text=FAILURE, evidence_ids=(said,))
     # the cited row shares no episode flag, so only the document sweep can see the story
     with pytest.raises(ApprovalError):
         _prepare(store, master, (smuggled,))
@@ -902,3 +902,12 @@ def test_r2_only_a_clause_terminator_may_be_added_after_a_quoted_denial(
     cited = _row(store, "statement", "My salary floor is not under 50")
     assert not _refused(store, _ans("My salary floor is not under 50.", cited))
     assert _refused(store, _ans(f"My salary floor is not under 50{suffix}", cited))
+
+
+@pytest.mark.parametrize("marker", ["we", "our", "us"])
+def test_we_our_us_in_a_question_count_as_first_person(
+    store: ProfileStore, notice: str, marker: str
+) -> None:
+    q = f"Tell {marker} the notice period" if marker == "us" else f"Is {marker} notice period fine"
+    bad = _answer(notice).model_copy(update={"question": q})
+    assert any("first-person" in d for d in answer_defects(bad, _live(store), ())), q

@@ -161,7 +161,10 @@ def _words(text: str) -> set[str]:
 _TOKEN = re.compile(r"[^\W_]+(?:['-][^\W_]+)*")
 # The candidate's own voice. An employer's question is addressed to "you", so a question that
 # speaks as "I" is a claim placed where no citation is looked for.
-_FIRST_PERSON = frozenset({"i", "i'm", "i've", "i'd", "i'll", "me", "my", "mine", "myself"})
+_FIRST_PERSON = frozenset(
+    {"i", "i'm", "i've", "i'd", "i'll", "me", "my", "mine", "myself"}
+    | {"we", "we're", "we've", "we'd", "we'll", "our", "ours", "ourselves", "us"}
+)
 # The only tokens an answer may use without finding them in a cited row: articles, linking
 # verbs, "and"/"or" and plain prepositions. Every other token of any length (UK, US, EU, PhD,
 # AWS, Go, C) must occur in a cited row, so a short word that carries a claim is never exempt.
