@@ -209,6 +209,23 @@ def test_list_route_refusals_are_counted(tmp_path: Path) -> None:
     assert measured["salary_rows_read"] == 3
 
 
+def test_detail_route_refusals_are_counted(tmp_path: Path) -> None:
+    """foorilla_en refuses rows 34 and 38, both on the detail route with no card
+    band; every other row is read. Those refusals must reach the count too."""
+    directory = _copy_connectors(tmp_path, "foorilla_en")
+    data = json.loads(
+        (directory / "foorilla_en" / "fixture" / "salary.json").read_text(encoding="utf-8")
+    )
+    assert sorted(k for k, row in data["rows"].items() if row["verdict"] == "refused") == [
+        "34",
+        "38",
+    ]
+
+    measured = measure(directory)
+    assert measured["salary_rows_refused"] == 2
+    assert not measured["unread"]
+
+
 def _copy_connectors(tmp_path: Path, *packages: str) -> Path:
     """A private copy of the named packages only.
 

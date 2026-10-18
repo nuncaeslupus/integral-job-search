@@ -341,6 +341,9 @@ _CSS_COLOUR_4 = [
     ("oklab(0.62796 0.22486 0.12585)", "#ff0000", 1),
     ("lab(54.29 80.8 69.89)", "#ff0000", 1),
     ("lch(54.29 106.84 40.85)", "#ff0000", 1),
+    # CSS Color 4 percentages: lab/lch L 100% = 100, lab a/b 100% = 125, lch C 100% = 150.
+    ("lab(54.29% 64.64% 55.912%)", "#ff0000", 1),
+    ("lch(54.29% 71.22667% 40.85)", "#ff0000", 1),
     ("color(srgb 0.95 0.4 0)", "#f26600", 1),
     ("color(srgb-linear 1 0 0)", "#ff0000", 1),
     ("color(display-p3 1 0 0)", "#ff0000", 1),  # out of the sRGB gamut: clamped
@@ -348,6 +351,24 @@ _CSS_COLOUR_4 = [
     ("rgb(244.5 104 0)", "#f56800", 1),
     ("rgb(244 104 0 / 1)", "#f46800", 0),
 ]
+
+
+# Red is on the sRGB gamut edge, so a percentage scale that is too large clamps back to
+# #ff0000. An in-gamut point catches it: the percentage and number spellings must agree.
+_PERCENT_EQUALS_NUMBER = [
+    ("lab(50% 16% -16%)", "lab(50 20 -20)"),
+    ("lch(50% 20% 30)", "lch(50 30 30)"),
+]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.parametrize(("percent", "number"), _PERCENT_EQUALS_NUMBER)
+def test_lab_and_lch_percentages_scale_to_the_css_colour_4_reference_range(
+    percent: str, number: str
+) -> None:
+    got = _run_snippet([{"style": {**_BASE, "color": percent}}])
+    want = _run_snippet([{"style": {**_BASE, "color": number}}])
+    assert list(got) == list(want), (percent, got, want)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
@@ -393,3 +414,9 @@ def test_the_snippet_refuses_a_colour_function_it_cannot_read(value: str) -> Non
     with pytest.raises(subprocess.CalledProcessError) as raised:
         _run_snippet([{"style": {**_BASE, "color": value}}])
     assert "cannot read the computed colour" in raised.value.stderr
+
+
+def test_the_send_dir_repeated_here_is_approvals() -> None:
+    from integral import approval, brand_measure
+
+    assert brand_measure._SEND_DIR == approval.SEND_DIR
