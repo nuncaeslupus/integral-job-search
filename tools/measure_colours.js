@@ -64,11 +64,10 @@ function measureColours(root) {
     const xyz50 = [0.96422 * f(fx), L > kappa * eps ? fy * fy * fy : L / kappa, 0.82521 * f(fz)];
     return mul(XYZ_D65_TO_SRGB, mul(D50_TO_D65, xyz50));
   };
+  // getComputedStyle serialises a hue as a bare number or in deg, never rad, grad or turn.
   const hueDegrees = (token) => {
-    const m = /^(-?[\d.]+(?:e-?\d+)?)(deg|rad|grad|turn)?$/.exec(token);
-    if (!m) return NaN;
-    const unit = { deg: 1, rad: 180 / Math.PI, grad: 0.9, turn: 360 }[m[2] || "deg"];
-    return parseFloat(m[1]) * unit;
+    const m = /^(-?[\d.]+(?:e-?\d+)?)(deg)?$/.exec(token);
+    return m ? parseFloat(m[1]) : NaN;
   };
   // A number, a percentage of `full`, or `none` (a missing component is 0).
   const component = (token, full) => {
