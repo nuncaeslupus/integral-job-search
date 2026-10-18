@@ -353,6 +353,24 @@ _CSS_COLOUR_4 = [
 ]
 
 
+# Red is on the sRGB gamut edge, so a percentage scale that is too large clamps back to
+# #ff0000. An in-gamut point catches it: the percentage and number spellings must agree.
+_PERCENT_EQUALS_NUMBER = [
+    ("lab(50% 16% -16%)", "lab(50 20 -20)"),
+    ("lch(50% 20% 30)", "lch(50 30 30)"),
+]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+@pytest.mark.parametrize(("percent", "number"), _PERCENT_EQUALS_NUMBER)
+def test_lab_and_lch_percentages_scale_to_the_css_colour_4_reference_range(
+    percent: str, number: str
+) -> None:
+    got = _run_snippet([{"style": {**_BASE, "color": percent}}])
+    want = _run_snippet([{"style": {**_BASE, "color": number}}])
+    assert list(got) == list(want), (percent, got, want)
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 @pytest.mark.parametrize(("value", "want", "tolerance"), _CSS_COLOUR_4)
 def test_the_snippet_converts_css_colour_4_values_instead_of_dropping_them(
