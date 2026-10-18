@@ -360,3 +360,46 @@ def test_confirm_refuses_a_row_whose_permission_names_another_read(
     path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     with pytest.raises(ProposalError, match="no longer has a yes"):
         mr.confirm(store, proposal)
+
+
+def test_a_read_with_no_proposal_still_binds_its_read_id(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    late = mr._reply(received_at="2026-10-12T09:00:00+00:00")  # arrived after the read
+    assert mr.propose(store, late, now=_NOW)[0].outcome is Outcome.REPLY_AFTER_READ
+    reused = mr._reply(read_at=mr._LATER_READ)  # the same id claimed for a later read
+    verdict, proposal = mr.propose(store, reused, now=_NOW)
+    assert verdict.outcome is Outcome.READ_TIME_REBOUND and proposal is None
+
+
+def test_confirm_judges_visibility_and_the_read_binding_again(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    _v, proposal = mr.propose(store, mr._reply(), now=_NOW)
+    assert proposal
+    path = store.path(*mr.LEDGER_PARTS)
+    original = path.read_text(encoding="utf-8")
+    for change in ({"received_at": "2026-10-12T09:00:00+00:00"}, {"read_at": mr._LATER_READ}):
+        rows = [{**r, **change} if r.get("state") == "proposed" else r for r in mr._rows(store)]
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        with pytest.raises(ProposalError, match="no longer visible"):
+            mr.confirm(store, proposal, now=_NOW)
+        assert _state(store, ids["acme"]) == ("applied", "applied")
+        path.write_text(original, encoding="utf-8")
+
+
+def test_a_refused_confirm_does_not_block_the_next_reply(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    _v, proposal = mr.propose(store, mr._reply(), now=_NOW)
+    assert proposal
+    rows = [
+        {**r, "permission_id": None} if r.get("state") == "proposed" else r for r in mr._rows(store)
+    ]
+    store.path(*mr.LEDGER_PARTS).write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
+    )
+    with pytest.raises(ProposalError, match="no longer has a yes"):
+        mr.confirm(store, proposal, now=_NOW)
+    verdict = mr.propose(store, mr._reply(), now=_NOW)[0]
+    assert verdict.outcome is Outcome.PROPOSED
