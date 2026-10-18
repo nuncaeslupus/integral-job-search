@@ -132,6 +132,53 @@ def test_a_record_of_another_schema_version_is_refused(tmp_path: Path) -> None:
         brand_measure.read_measurement(store, where)
 
 
+def _store_with_version(tmp_path: Path):  # type: ignore[no-untyped-def]
+    from integral.identity import ProfileStore, create_profile
+
+    identity = create_profile(tmp_path, "Ada Lovelace", handle="ada", language="en")
+    store = ProfileStore(tmp_path, identity.handle)
+    where = ("cv", "generated", "o1", "v1")
+    store.path(*where).mkdir(parents=True)
+    return store, where
+
+
+def test_a_malformed_palette_json_counts_as_unmeasured(tmp_path: Path) -> None:
+    store, where = _store_with_version(tmp_path)
+    store.path(*where, "palette.json").write_text("{not json", encoding="utf-8")
+    assert brand_measure.versions_without_measurement(store) == [where]
+    store.write_json(
+        {"schema_version": 1, "site": "s", "counts": {"#f46800": 3}}, *where, "palette.json"
+    )
+    assert brand_measure.versions_without_measurement(store) == []
+
+
+def test_the_cli_refuses_to_rewrite_the_palette_of_a_version_with_a_send_folder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store, where = _store_with_version(tmp_path)
+    store.path(*where, "send").mkdir()
+    counts = tmp_path / "c.json"
+    counts.write_text('{"#f46800": 1}')
+    code = brand_measure.main(
+        [
+            *("--site", "s", "--counts", str(counts), "--root", str(tmp_path)),
+            *("--handle", "ada", "--offer", "o1", "--version", "1"),
+        ]
+    )
+    assert code != 0 and "send/" in capsys.readouterr().err
+    assert not store.path(*where, "palette.json").exists()
+
+
+@pytest.mark.parametrize("version", [True, 1.0])
+def test_only_the_integer_one_is_a_schema_version(tmp_path: Path, version: object) -> None:
+    store, where = _store_with_version(tmp_path)
+    store.write_json(
+        {"schema_version": version, "site": "s", "counts": {"#f46800": 3}}, *where, "palette.json"
+    )
+    with pytest.raises(brand_measure.MeasureError, match="schema_version"):
+        brand_measure.read_measurement(store, where)
+
+
 def test_staging_a_version_with_no_recorded_palette_is_refused(tmp_path: Path) -> None:
     from integral import approval
     from integral.cv_store import write_master

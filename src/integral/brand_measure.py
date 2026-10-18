@@ -33,9 +33,11 @@ from pathlib import Path
 from typing import Any
 
 from integral.brand_palette import BrandPalette, extract_palette, trazabilidad_section
-from integral.identity import ProfileStore
+from integral.identity import IdentityError, ProfileStore
 
 MEASUREMENT_FILE = "palette.json"
+# `approval.SEND_DIR`, repeated because approval imports this module.
+_SEND_DIR = "send"
 SCHEMA_VERSION = 1
 
 # The one spelling a count key may have: what the snippet prints. Any other spelling
@@ -89,12 +91,13 @@ def read_measurement(
         return None
     try:
         return _measurement_from(store.read_json(*where, MEASUREMENT_FILE))
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (IdentityError, OSError, ValueError, KeyError, TypeError) as exc:
         raise MeasureError(f"{MEASUREMENT_FILE} cannot be read: {exc}") from exc
 
 
 def _measurement_from(data: Any) -> tuple[str, dict[str, int]]:
-    if data["schema_version"] != SCHEMA_VERSION:
+    version = data["schema_version"]
+    if isinstance(version, bool) or not isinstance(version, int) or version != SCHEMA_VERSION:
         raise MeasureError(f"schema_version {data['schema_version']!r} is not {SCHEMA_VERSION}")
     return str(data["site"]), checked_counts(data["counts"])
 
@@ -135,10 +138,15 @@ def generated_versions(store: ProfileStore) -> list[tuple[str, ...]]:
 
 
 def versions_without_measurement(store: ProfileStore) -> list[tuple[str, ...]]:
-    """The generated versions with no recorded colour measurement."""
-    return [
-        where for where in generated_versions(store) if not store.exists(*where, MEASUREMENT_FILE)
-    ]
+    """The generated versions with no readable colour measurement (a malformed one counts)."""
+
+    def measured(where: tuple[str, ...]) -> bool:
+        try:
+            return read_measurement(store, where) is not None
+        except MeasureError:
+            return False
+
+    return [where for where in generated_versions(store) if not measured(where)]
 
 
 def _arguments(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -171,13 +179,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     palette = extract_palette(counts)
     if args.root is not None:
-        from integral.identity import IdentityError
-
         try:
             store = ProfileStore(Path(args.root), args.handle)
             where = ("cv", "generated", args.offer, f"v{args.version}")
             if not store.path(*where).is_dir():
                 raise MeasureError(f"{'/'.join(where)} is not a generated version")
+            if store.path(*where, _SEND_DIR).exists():
+                raise MeasureError(
+                    f"{'/'.join(where)} already has {_SEND_DIR}/: its palette cannot be rewritten"
+                )
             record(store, where, args.site, counts)
         except (OSError, MeasureError, IdentityError, ValueError) as exc:
             print(f"brand_measure: {exc}", file=sys.stderr)
