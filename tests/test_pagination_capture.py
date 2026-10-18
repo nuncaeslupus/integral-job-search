@@ -1774,3 +1774,237 @@ def test_the_exit_code_is_non_zero_when_the_t152_scan_is_unmeasured(
     monkeypatch.setattr(pc, "MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES", 10_000)
 
     assert pc._main(["pagination_capture", str(tmp_path / "T113.json")]) == 1
+
+
+def test_a_library_too_small_to_measure_reports_unmeasured(
+    library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pc, "MINIMUM_REQUEST_KEYS", 100)
+    _real_board(library)
+    _write_capture(
+        library, captured_at="2026-09-08", url=f"https://{_REAL_SITE}/jobs?page=1", status=200
+    )
+
+    measured = pc.measure(library)
+
+    assert measured["gate_status"] == "unmeasured"
+    assert "floor 100" in measured["unmeasured_reason"]
+
+
+def test_a_library_too_small_to_scan_reports_unmeasured_for_duplicate_keys(
+    library: Path,
+) -> None:
+    """The floor refuses a clean zero over a library nobody read — a
+    one-package fixture with a single query key is exactly that."""
+    measured = pc.measure_duplicate_page_keys(library)
+    assert measured["gate_status"] == "unmeasured"
+    assert "query-key occurrence" in measured["unmeasured_reason"]
+
+
+def test_a_capture_cannot_cite_itself_as_the_request_it_was_transcribed_from(
+    library: Path, provenance_floor: None
+) -> None:
+    """A record is not a source for itself.
+
+    `captured.json` carries its own `url` and its own `body` by construction, so
+    a containment check pointed at it answers every question it can ask. That
+    makes self-citation the cheapest forgery the module could leave open — one
+    line, no new file, no command — sitting behind `transcribed`, the word that
+    sounds like somebody checked. The POST spelling matters as much as the GET
+    one: pretty-printed JSON happens to break the compact body needles, and
+    formatting is not a boundary — re-serialised compactly, the same forgery is
+    the same forgery.
+    """
+    _real_board(library)
+    repo_root = library.parent
+    myself = f"connectors/{_REFERENCE.name}/probe/captured.json"
+    url = f"https://{_REAL_SITE}/search"
+
+    # GET: the record's own `url` is the whole of what a containment check reads.
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from=myself,
+    )
+    (finding,) = _provenance_findings(library, repo_root=repo_root)
+    assert finding["claim"] == pc.TRANSCRIBED
+    assert "own probe/" in finding["reason"], finding["reason"]
+
+    # POST, written compactly so the body needles match the file byte for byte.
+    record = {
+        "captured_at": "2026-09-08",
+        "url": url,
+        "method": "POST",
+        "body": {"Keyword": "python", "ResultsPerPage": 25},
+        "status": 200,
+        "provenance": pc.TRANSCRIBED,
+        "transcribed_from": myself,
+    }
+    path = _package(library) / "probe" / "captured.json"
+    path.write_text(json.dumps(record, separators=(",", ":")), encoding="utf-8")
+    assert '"Keyword":"python"' in path.read_text(encoding="utf-8")
+
+    (finding,) = _provenance_findings(library, repo_root=repo_root)
+    assert finding["claim"] == pc.TRANSCRIBED
+    assert "own probe/" in finding["reason"], finding["reason"]
+
+
+def test_a_transcribed_source_reached_through_a_symlink_is_not_committed_here(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """`transcribed_from` refuses `..` and an absolute path, which constrains
+    the string. A symlink is how that constraint is walked around: a path that
+    reads as repo-relative, resolving to a file the repository does not carry
+    at that path. "Committed here" is the claim, and a link is not it —
+    including a link whose target is in the tree, which is why the reason no
+    longer says "does not resolve inside this repo" about an input that plainly
+    does. A second reader caught that sentence being false about its own case:
+    the verdict was right and the words were not."""
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside.sh"
+    outside.write_text(f"curl -s '{url}'\n", encoding="utf-8")
+    (repo / "inside.sh").write_text(f"curl -s '{url}'\n", encoding="utf-8")
+
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="ledger.yaml",
+    )
+
+    # Out of the tree, and — the case the old sentence lied about — in it.
+    for target in (outside, Path("inside.sh")):
+        (repo / "ledger.yaml").unlink(missing_ok=True)
+        (repo / "ledger.yaml").symlink_to(target)
+        (finding,) = _provenance_findings(library, repo_root=repo)
+        assert "is not the file this repo commits at that path" in finding["reason"], target
+
+
+def test_a_symlinked_package_borrows_the_capture_it_reads_as_holding(
+    library: Path, provenance_floor: None
+) -> None:
+    """`test_a_probe_linked_at_a_sibling_package_is_not_this_packages_capture`,
+    one directory further up — and the fix for that one is what left this open.
+
+    The containment rule resolves its **base** by design, so whatever it is
+    asked from is the one path it cannot see. Asked from the package, the
+    package directory is exempt: a package that is a committed symlink at a
+    sibling — git stores one as mode `120000`, so this is a diff a reviewer
+    receives — answers `probe/captured.json`, `response.file`, the byte count
+    and the digest out of the sibling's artefact, all of them honest, none of
+    them **its**. A package committing no capture at all then reads as an
+    enforced `live`, which is exactly `test_deleting_the_capture_is_not_the_
+    cheapest_way_to_pass` reached by a link instead of a deletion, and it reads
+    as a pass rather than as a finding.
+
+    So the question is asked with the **library** as the base and the package's
+    own name as the first component of the path.
+    """
+    _real_board(library)
+    donor = _package(library)
+    probe = _capture_probe(library)
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.LIVE,
+        response=_live_response(probe),
+    )
+    # The donor's own claim is fully substantiated, so nothing below is about a
+    # broken capture: it is about which package holds it.
+    assert _provenance_findings(library, today=date(2026, 9, 8)) == []
+
+    borrower = library / "newboard_es"
+    borrower.symlink_to(Path(donor.name), target_is_directory=True)
+
+    measured = cp.measure(library, today=date(2026, 9, 8))
+    assert measured["captures_scanned"] == 2
+    (finding,) = measured["findings"]
+    assert finding["package"] == borrower.name
+    assert finding["claim"] == "absent"
+    assert "symlinked package" in finding["reason"], finding["reason"]
+    assert finding["direction"] == "fail-open"
+    # The donor's `live` is counted once, by the package that holds it. A
+    # borrowed claim is not a claim, so the tally does not read two.
+    assert measured["claims"]["live"] == 1
+
+    # And `check_capture` refuses it when handed the package directly, so the
+    # guarantee does not rest on `measure` having got there first — the shape
+    # `check_live` was blocked for in round three.
+    direct = cp.check_capture(borrower, today=date(2026, 9, 8))
+    assert direct is not None and "symlinked package" in direct.reason
+
+    # Nor on `check_capture` having got there first. `_borrowed_package` is a
+    # verdict about a package; the containment rule underneath it is a verdict
+    # about a path, and each reader has to hold on its own — a mutant that
+    # reverts the rule to asking from the package survived every assertion
+    # above, because the verdict was answering first. That is the exact defect
+    # F4 was blocked for, sitting inside F4's own fix, so it is pinned the way
+    # F4's was: by asking the readers directly.
+    record = json.loads((donor / "probe" / "captured.json").read_text(encoding="utf-8"))
+    assert cp.read_record(borrower) is None
+    reasons = cp.check_live(borrower, record, date(2026, 9, 8))
+    assert any("own probe/" in reason for reason in reasons), reasons
+
+    # The rule's own new argument. Making the package's name a component of the
+    # path means the name is now something that can point out of the library,
+    # and `..` is how: it resolves away to the parent, which is the shape the
+    # comparison is built to notice. Fail-closed, which is the safe direction
+    # for a name nothing legitimate spells.
+    assert cp._committed_in_package(library / "..", Path("probe")) is False
+
+
+def test_a_needle_that_is_not_there_covers_nothing(library: Path) -> None:
+    """What the fix above introduces, asked about before something else asks.
+
+    Independence is now a map of the character ranges the needles occupy, and
+    an **empty** needle occupies none. Recording its zero-length spans would
+    make it overlap every match instead — a span at 3 sits inside a match from
+    2 to 6 — so a single empty string would refuse every transcribed claim in
+    the library on the strength of something that is not in the file. It also
+    constrains nothing, `"" in line` being true of every line, so it was never
+    evidence to begin with.
+
+    Nothing produces one today: `_body_needles` renders through `json.dumps`,
+    whose shortest output is two characters, and `check_transcribed` refuses an
+    empty `url` before the list is built. This is the guard for the caller that
+    forgets, pinned rather than left to the next reader to rediscover — the
+    same reason `_committed_at`'s absolute-path behaviour is written down.
+    """
+    url = f"https://{_REAL_SITE}/search"
+    assert cp._issues_the_request(f"curl -s '{url}'", ["", url]) is True
+
+    # And the scan advances one character rather than one needle, so
+    # overlapping occurrences are all mapped: a span missed is a span a client
+    # word can hide behind.
+    assert cp._needle_spans("aaa", ["aa"]) == [(0, 2), (1, 3)]
+    assert cp._needle_spans("abc", [""]) == []
+
+
+def test_a_breached_floor_writes_nothing_and_fails_the_gate(
+    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two properties in one place because they are one decision. The record is
+    not written (a run that could not measure must not leave behind an artefact
+    asserting the floor it never met), and the exit status is **1** rather than
+    the 3 `make evidence` prints as `unmeasured (recorded)` and walks past —
+    T115's finding, which a module written after it has no reason to reproduce.
+    """
+    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 100)
+    monkeypatch.setattr(cp, "DEFAULT_CONNECTORS_DIR", library)
+    target = tmp_path / "T153.json"
+
+    cp.write_evidence(target, library)
+    assert not target.exists()
+
+    assert cp._main(["capture_provenance", str(target)]) == 1
+    assert not target.exists()
