@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from integral import send_gate, send_set
+from integral.identity import ProfileStore, create_profile
 
 
 def test_the_gate_reads_zero_over_every_candidate() -> None:
@@ -106,3 +109,31 @@ def test_a_scan_that_examines_too_few_folders_is_unmeasured(
     measured = send_gate.measure()
     assert measured["gate_status"] == "unmeasured"
     assert measured["send_folders_missing_a_sendable_document"] == -1
+
+
+@pytest.mark.parametrize(
+    ("display", "family", "stem"),
+    [
+        ("José María García López", "García", "Jose-Garcia"),
+        ("Núria Ferrer i Puig", "Ferrer", "Nuria-Ferrer"),
+        ("José María García López", None, "Jose-Lopez"),
+        ("Núria Ferrer i Puig", "", "Nuria-Puig"),
+    ],
+)
+def test_file_names_use_the_family_name_when_identity_gives_one(
+    display: str, family: str | None, stem: str
+) -> None:
+    assert send_set.name_stem(display, family) == stem
+    texts = {send_set.CV_MD: "# CV\n\nSkills\n", send_set.LETTER_MD: "Dear team\n"}
+    made = send_set.derive(display, "en", texts, send_set.fixture_renderer, family_name=family)
+    assert f"{stem}-CV.pdf" in made
+    assert f"{stem}-Application.pdf" in made
+    assert f"{stem}-CV.pdf" in send_set.derived_names(display, list(texts), family)
+    assert f"{stem}-CV.pdf" in send_set.pdf_references(display, "en", texts, family)
+
+
+def test_identity_family_name_is_optional_and_round_trips(tmp_path: Path) -> None:
+    assert create_profile(tmp_path, "Ana Ruiz", handle="ana").family_name is None
+    made = create_profile(tmp_path, "José García López", handle="jose", family_name="García")
+    assert made.family_name == "García"
+    assert ProfileStore(tmp_path, "jose").path("identity.json").read_text().count("García") == 2

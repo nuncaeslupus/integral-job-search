@@ -130,6 +130,9 @@ class Identity(Strict):
     # by `list_identities`, which is the reader — a mark nothing checks is
     # decoration.
     fiction: bool = False
+    # Optional: the surname in use, for `<First>-<Last>` file names when it is not
+    # the last token (`José María García López` -> `Jose-Garcia`).
+    family_name: str | None = Field(default=None, min_length=1, max_length=100)
 
     def summary(self) -> str:
         """How the tool refers to this person out loud."""
@@ -478,6 +481,7 @@ def create_profile(
     handle: str | None = None,
     now: datetime | None = None,
     fiction: bool = False,
+    family_name: str | None = None,
 ) -> Identity:
     """Create a profile — always an explicit act (§6.1 case 4).
 
@@ -513,6 +517,7 @@ def create_profile(
         locale=locale or language,
         created_at=stamp,
         fiction=fiction,
+        family_name=family_name,
     )
     store = ProfileStore(root, chosen)
     payload = json.dumps(identity.model_dump(), indent=2, ensure_ascii=False, sort_keys=True) + "\n"
