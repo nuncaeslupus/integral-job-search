@@ -812,3 +812,46 @@ def test_round_6_the_omitted_cues_are_claim_traces_own_named_constant() -> None:
     # the list is cited, not restated: and none of them is a cue there, which is why it exists
     assert {"without", "sin", "sense", "zero"} == set(claim_trace.NON_CUE_NEGATIONS)
     assert not any(claim_trace.is_denial(f"I did {w} it") for w in claim_trace.NON_CUE_NEGATIONS)
+
+
+# --- issue #828: Q1 punctuation inside a quote, Q2 a year is not a list marker, spaced "non EU" --
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "I do not need visa sponsorship only, a permit.",  # comma moved inside the quote
+        "I do not need visa sponsorship, only a permit",  # closing full stop dropped
+        "I do not need visa sponsorship; only a permit.",  # comma turned into a semicolon
+        "I do not need visa sponsorship, only a permit!",  # terminator changed
+    ],
+)
+def test_q1_a_quote_whose_punctuation_differs_from_its_row_is_not_verbatim(
+    store: ProfileStore, answer: str
+) -> None:
+    cited = _row(store, "statement", "I do not need visa sponsorship, only a permit.")
+    assert any(d.startswith("denial:") for d in _refused(store, _ans(answer, cited)))
+    assert not _refused(store, _ans("I do not need visa sponsorship, only a permit.", cited))
+
+
+@pytest.mark.parametrize("year", ["2019.", "2019)"])
+def test_q2_a_year_opening_a_wrapped_line_is_not_stripped_as_a_list_marker(
+    store: ProfileStore, year: str
+) -> None:
+    row = f"I have not held a UK work permit since\n{year} Before that I did."
+    cited = _row(store, "statement", row)
+    dropped = "I have not held a UK work permit since Before that I did."
+    assert any(d.startswith("denial:") for d in _refused(store, _ans(dropped, cited)))
+    whole = f"I have not held a UK work permit since {year} Before that I did."
+    assert not _refused(store, _ans(whole, cited))
+
+
+@pytest.mark.parametrize(
+    "row", ["I am a non EU citizen.", "I am a non-EU citizen.", "I am a no EU citizen."]
+)
+def test_a_spaced_non_eu_cannot_be_reversed_by_dropping_the_prefix(
+    store: ProfileStore, row: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert _refused(store, _ans("I am an EU citizen.", cited))
+    assert not _refused(store, _ans(row, cited))
