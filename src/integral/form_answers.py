@@ -67,6 +67,7 @@ import json
 import re
 import sys
 import tempfile
+import unicodedata
 from collections import Counter
 from collections.abc import Collection, Sequence
 from pathlib import Path
@@ -98,6 +99,7 @@ _WORD = re.compile(r"[^\W\d_]+")
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 # Where a clause of the ANSWER is cut to find the denials in it. Cutting finely only finds more
 # denials; what a denial must be quoted with is decided by the row's lines, never by this cut.
+_TERMINATORS = ".!?…:;"
 _CLAUSE_END = re.compile(r"[.!?…:;]+(?=\s|$)|\n+")
 SOURCE_DEFECT = "source"
 
@@ -195,7 +197,10 @@ def _holds_negation(text: str) -> bool:
 # A spaced "non EU" is the same compound as "non-EU": joined before tokenising, so dropping the
 # "non" leaves a token no cited row holds. (A spaced "no EU" needs nothing: "no" is a cue, so
 # the row is guarded and its words back an answer only inside a whole-row quote.)
-_DASHES = "\u2010\u2011\u2012\u2013\u2014\u2212\\-"
+# Every Unicode dash (category Pd) and the minus sign, derived rather than listed.
+_DASHES = re.escape(
+    "".join(c for c in map(chr, range(0x110000)) if unicodedata.category(c) == "Pd") + "\u2212"
+)
 _SPACED_NON = re.compile(rf"(?<![\w'-])non[\s{_DASHES}]+(?=[^\W_])", re.IGNORECASE)
 
 
@@ -291,7 +296,7 @@ def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
             covered.update(range(start, end))
             # A row quoted whole that has no terminator of its own may take the clause terminator
             # the answer adds after it; a row that ends in one must keep that exact one.
-            if _is_word(quote[-1]) and end in finals and not _is_word(mine[end]):
+            if _is_word(quote[-1]) and end in finals and mine[end] in _TERMINATORS:
                 covered.add(end)
     defects = []
     offset = 0

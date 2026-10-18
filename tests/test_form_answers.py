@@ -885,3 +885,20 @@ def test_f2_a_terminator_added_after_a_row_with_none_is_not_an_uncovered_token(
     assert _refused(store, _ans("I do not need visa sponsorship, only a permit?", dotted))
     # an added terminator only closes the clause that ends the quote
     assert _refused(store, _ans("I do not need visa sponsorship and X. I hold a permit.", denial))
+
+
+@pytest.mark.parametrize("dash", ["\u2015", "\u2e3a", "\u301c", "\ufe58", "\uff0d", "\u058a"])
+def test_r2_a_non_eu_written_with_any_unicode_dash_cannot_be_reversed(
+    store: ProfileStore, dash: str
+) -> None:
+    cited = _row(store, "statement", f"I am a non{dash}EU citizen.")
+    assert _refused(store, _ans("I am an EU citizen.", cited))
+
+
+@pytest.mark.parametrize("suffix", ["%", "\u20ac", "+", "*", ")", '"', " -"])
+def test_r2_only_a_clause_terminator_may_be_added_after_a_quoted_denial(
+    store: ProfileStore, suffix: str
+) -> None:
+    cited = _row(store, "statement", "My salary floor is not under 50")
+    assert not _refused(store, _ans("My salary floor is not under 50.", cited))
+    assert _refused(store, _ans(f"My salary floor is not under 50{suffix}", cited))
