@@ -919,6 +919,11 @@ def test_we_our_us_in_a_question_count_as_first_person(
         ("Are you authorised to work in the US?", False),
         ("Why us?", True),
         ("Why US and not us?", True),
+        ("Why US-based and us?", True),
+        ("Why \uff55\uff53?", True),
+        ("Why u\u200bs?", True),
+        ("Why \u00fas?", True),
+        ("Why \uff35\uff53?", True),
     ],
 )
 def test_us_counts_as_first_person_only_in_lowercase(

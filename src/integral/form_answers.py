@@ -266,7 +266,7 @@ def _question_defects(question: str) -> list[str]:
     if denial_sentences(q):
         why.append("a denial")
     first = set(_FIRST_PERSON & set(toks))
-    if "us" in first and all(m == "US" for m in re.findall(r"\bus\b", q, re.IGNORECASE)):
+    if "us" in first and toks.count("us") == _TOKEN.findall(q).count("US"):
         first.discard("us")  # "US", the country, is not a first-person pronoun
     if first:
         why.append("a first-person claim")
