@@ -247,13 +247,18 @@ def propose(
 ) -> tuple[Verdict, str | None]:
     """`assess`, and for a proposal only, one ledger row. Never applies anything.
 
-    A reply that had standing also binds its read id to its read time."""
+    A read that happened under a yes binds its read id to its read time, whether
+    or not a proposal follows."""
     clock = now or datetime.now(UTC)
     verdict = assess(store, reply, am.load(store), now=clock)
+    # Every read that really happened under a yes is recorded, whatever became of
+    # its reply; a read that failed for want of a yes, or lies in the future, is not.
+    read_at = am._moment(reply.pointer.read_at)
+    if verdict.outcome is not Outcome.REFUSED and read_at is not None and read_at <= clock:
+        _bind_read(store, reply.pointer, clock.isoformat(timespec="seconds"))
     if verdict.outcome in REFUSALS:
         return verdict, None
     stamp = clock.isoformat(timespec="seconds")
-    _bind_read(store, reply.pointer, stamp)
     if verdict.outcome is not Outcome.PROPOSED:
         return verdict, None
     proposal_id = f"reply-{uuid.uuid4().hex}"
@@ -289,7 +294,7 @@ def _pending(store: ProfileStore, proposal_id: str) -> dict[str, Any]:
     return proposed[0]
 
 
-def _recheck_permission(store: ProfileStore, row: dict[str, Any]) -> None:
+def _recheck_permission(store: ProfileStore, row: dict[str, Any]) -> am.AlertPointer:
     """The ledger row is not trusted: the permission it cites must still hold for its read."""
     permissions = am.load(store)
     held = [p for p in permissions if p.permission_id == row.get("permission_id")]
@@ -304,25 +309,50 @@ def _recheck_permission(store: ProfileStore, row: dict[str, Any]) -> None:
     )
     if (why := am.refusal(pointer, permissions)) is not None:
         raise ProposalError(f"{row.get('proposal_id')!r} no longer has a yes for its read: {why}")
+    return pointer
+
+
+def _recheck_visibility(
+    store: ProfileStore, row: dict[str, Any], pointer: am.AlertPointer, now: datetime
+) -> None:
+    """The reply must still be provably visible to its read, and the read id still bound to it."""
+    stored = Reply(ReplyKind.REJECTION, "", "", str(row.get("received_at") or ""), pointer)
+    if (hidden := _visibility_refusal(store, stored, now)) is not None:
+        raise ProposalError(
+            f"{row.get('proposal_id')!r} is no longer visible to its read: {hidden.value}"
+        )
 
 
 def confirm(
-    store: ProfileStore, proposal_id: str, *, informative_reason: str | None = None
+    store: ProfileStore,
+    proposal_id: str,
+    *,
+    informative_reason: str | None = None,
+    now: datetime | None = None,
 ) -> None:
     """Apply a pending proposal, once, after the candidate said yes.
 
     The change goes through `applications.mark`, which refuses what the
-    lifecycle table forbids before writing anything; the ledger row follows, so
-    a refused change leaves the proposal pending."""
+    lifecycle table forbids before writing anything. The stored row is not
+    trusted: its permission, the reply's visibility to its read and the read-id
+    binding are judged again. A refused confirm marks the proposal `refused`, so
+    it no longer blocks later replies for the application."""
     row = _pending(store, proposal_id)
-    _recheck_permission(store, row)
-    mark(
-        store,
-        str(row["offer_id"]),
-        str(row["to_status"]),
-        at=str(row["received_at"]),
-        reason=informative_reason,
-    )
+    try:
+        pointer = _recheck_permission(store, row)
+        _recheck_visibility(store, row, pointer, now or datetime.now(UTC))
+        mark(
+            store,
+            str(row["offer_id"]),
+            str(row["to_status"]),
+            at=str(row["received_at"]),
+            reason=informative_reason,
+        )
+    except (ValueError, LifecycleError):
+        store.append_jsonl(
+            {"proposal_id": proposal_id, "state": "refused", "at": _now()}, *LEDGER_PARTS
+        )
+        raise
     store.append_jsonl(
         {"proposal_id": proposal_id, "state": "confirmed", "at": _now()}, *LEDGER_PARTS
     )
