@@ -68,7 +68,6 @@ from integral.connector_contract import (
 from integral.connector_shape import measure as shape_measure
 from integral.connectors import DEFAULT_CONNECTORS_DIR, PROBE_DIRNAME, connector_packages
 from integral.pagination_capture import measure as pagination_measure
-from integral.repo_gate import PROBE_BASENAME
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _LIBRARY = _REPO_ROOT / "connectors"
@@ -863,27 +862,15 @@ def _listed_files(repo: Path) -> list[str]:
 
 
 def _quads_in(repo: Path, names: list[str]) -> dict[tuple[str, str], None]:
-    """The scanning half, split out so the two rules it ends with can be pinned
-    against a `names` list a test chooses rather than against the live tree.
-
-    That split is what makes the race testable honestly: a name that is not on
-    disk *is* a file git listed a moment before it went away, so the case needs
-    no patched builtin and no writing into the working tree."""
+    """The scanning half, split out so it can be pinned against a `names` list a
+    test chooses rather than against the live tree."""
     import ipaddress
 
     v4 = re.compile(r"(?<![\w.])(\d{1,3})([.-])(\d{1,3})\2(\d{1,3})\2(\d{1,3})(?![\w-])")
     v6 = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])")
     found: dict[tuple[str, str], None] = {}
-    skipped: list[str] = []
     for name in names:
-        try:
-            text = (repo / name).read_bytes().decode("latin-1")
-        except FileNotFoundError:
-            # Listed, gone by the time it is read. Which files may do that is
-            # decided below, not here — a permission error is not this race and
-            # still raises.
-            skipped.append(name)
-            continue
+        text = (repo / name).read_bytes().decode("latin-1")
         for match in v4.finditer(text):
             if text[max(0, match.start() - 2) : match.start()].rstrip().endswith("§"):
                 continue  # `§2.3.1.3`: an RFC section number, however many are cited
@@ -899,26 +886,7 @@ def _quads_in(repo: Path, names: list[str]) -> dict[tuple[str, str], None]:
                 continue
             if address.is_global:
                 found[(name, str(address))] = None
-    # Two rules, and neither implies the other.
-    #
-    # The floor is whether the scan ran at all, and its denominator is what was
-    # READ. Listing and reading were the same number until the `continue` above
-    # existed; now a defect that made every read raise would leave git's listing
-    # at its usual 1126 and the scan at zero.
-    scanned = len(names) - len(skipped)
-    assert scanned > 1000, (
-        f"git listed {len(names)} files and {scanned} were read — the scan did not run"
-    )
-    # The second is whether that `continue` stayed narrow, and it is a rule
-    # rather than a count because a count cannot say it. `repo_gate`'s
-    # evidence-stability measurement writes probe files into the live tree and
-    # unlinks them again, and under `make test`'s parallelism that happens on
-    # another worker while this scan is running — nothing the repository ships.
-    # Any OTHER file that is listed and then gone is a git operation racing the
-    # scan, or a defect, and a gate whose whole job is to refuse committed IP
-    # literals must not drop a file and report a clean pass.
-    unexpected = sorted(n for n in skipped if Path(n).name != PROBE_BASENAME)
-    assert not unexpected, f"listed, then unreadable, and not evidence probes: {unexpected}"
+    assert len(names) > 1000, f"git listed {len(names)} files — the scan did not run"
     return found
 
 
@@ -979,116 +947,6 @@ def test_the_listing_is_gits_answer_and_not_the_filesystems(tmp_path: Path) -> N
     (tmp_path / "staged-then-deleted.md").unlink()
 
     assert _listed_files(tmp_path) == ["staged-then-deleted.md"]
-
-
-def test_the_scan_survives_a_probe_file_that_vanishes_between_listing_and_reading() -> None:
-    """`repo_gate`'s evidence-stability measurement writes probe files into the
-    live working tree and unlinks them again. `make test` puts that file and
-    this one on different xdist workers, so a probe can be listed here and be
-    gone before it is read — a state the serial suite could not reach.
-
-    Pinned rather than trusted: the remedy is one `except` clause, the run it
-    protects goes red a few times in a hundred, and a green suite is therefore
-    the expected outcome whether the clause is there or not. Being right is not
-    being pinned.
-
-    The vanished name is sited where no writer can reach, and the absence is
-    asserted rather than assumed. `docs/<PROBE_BASENAME>` is one of the eight
-    paths `repo_gate` really writes, so appending *that* gave a case that stopped
-    being a case exactly when the writer was mid-run on another worker — the file
-    resolves, nothing is skipped, and the only assertion left is one the live
-    gate already makes. Measured by the second reader at ~2.7s of a ~20.7s
-    `tests/test_repo_gate.py` run: a fixture whose execution path need not
-    arrive."""
-    repo = _LIBRARY.parent
-    vanished = f"docs/never-written/{PROBE_BASENAME}"
-    assert not (repo / vanished).exists(), "the case needs a name no writer can reach"
-    names = [*_listed_files(repo), vanished]
-
-    found = _quads_in(repo, names)
-
-    sentinel = next(iter(_NOT_ADDRESSES))
-    assert sentinel in found, "the scan stopped at the vanished probe instead of continuing"
-
-
-def test_a_file_that_vanishes_and_is_not_a_probe_is_not_silently_skipped(
-    tmp_path: Path,
-) -> None:
-    """The `except` above is for one known writer of one known filename. A file
-    that is listed and then gone for any other reason is a git operation racing
-    the scan, or a defect — and a gate whose whole job is to refuse committed IP
-    literals cannot drop a file and still report a clean pass. Widening the
-    clause to every vanished path is the reflex the first time this goes red in
-    CI, and it is the fail-open direction.
-
-    One case could not say that, and a second case would not either. The reader
-    widened the predicate by a single clause — `and not n.startswith("corpus/")`,
-    exempting the directory where whole job adverts live, the files likeliest to
-    carry an address — and the whole file stayed green, because the only case it
-    had named a path in `docs/`. A third case moves the surviving mutation to a
-    fourth directory. So the axis is derived from the tree rather than named: one
-    vanished name per top-level entry git lists, all in one scan, and every one
-    of them has to appear in the refusal. A directory added later is covered
-    without anyone remembering to.
-
-    Deriving the axis was only half of it, and the other half was a proxy for
-    two rounds running. First `name in str(refusal.value)` read the rendered
-    list as a haystack, so a point that is a suffix of another was never
-    observable — `arsenal/…` sits inside `claude-arsenal/…`, and the `.` top's
-    bare `vanished-mid-scan.md` inside all fifteen others. Recovering that list
-    and comparing sets fixed the comparison and left the observable alone, and
-    the observable was the trouble: a message is not a decision. `unexpected` is
-    rendered by the f-string and tested by the assert's condition, two
-    independent expressions over one variable. Widen the condition alone and the
-    message still names all sixteen points — so a check reading the message
-    stays green — while the scan returns a hit and refuses nothing. Measured,
-    not argued. So each point is now its own scan and the observation is whether
-    `_quads_in` raised at all, which is the decision itself and has no rendering
-    to read.
-
-    The population is synthetic for cost: sixteen scans of the real tree are
-    19.8s, and 1001 empty files in a `tmp_path` are 0.3s — cheaper than the one
-    real scan this test used to do, while still clearing the floor inside
-    `_quads_in`."""
-    repo = _LIBRARY.parent
-    tops = {name.partition("/")[0] if "/" in name else "." for name in _listed_files(repo)}
-    vanished = sorted(str(Path(top) / "vanished-mid-scan.md") for top in tops)
-    # Its own denominator: an axis derived from an empty listing is no axis, and
-    # the emptiness would otherwise read as every point passing.
-    assert len(vanished) > 5, f"the axis collapsed to {vanished}"
-
-    population = [f"f{index}.md" for index in range(1001)]
-    for name in population:
-        (tmp_path / name).write_bytes(b"")
-
-    # The control, and it is load-bearing rather than a courtesy: every refusal
-    # below is observed as "an AssertionError came out", and the floor assert is
-    # an AssertionError too. If the population failed to clear it, all sixteen
-    # points would "refuse" for the wrong reason and the loop would be vacuous.
-    _quads_in(tmp_path, population)
-
-    unrefused = []
-    for name in vanished:
-        try:
-            _quads_in(tmp_path, [*population, name])
-        except AssertionError:
-            continue
-        unrefused.append(name)
-    assert not unrefused, f"vanished, and the scan returned instead of refusing: {unrefused}"
-
-
-def test_the_floor_counts_the_files_read_and_not_the_files_listed() -> None:
-    """The floor's denominator is the whole of its value, and counting git's
-    listing was green over a scan that read nothing at all. The two came apart
-    the moment a read could be skipped: a tree whose every listed file has gone
-    satisfies the narrowness rule above completely — they are all probes — so
-    the listing floor passes too, and the IP gate certifies a clean pass having
-    opened zero files."""
-    repo = _LIBRARY.parent
-    names = [f"docs/d{i}/{PROBE_BASENAME}" for i in range(1200)]
-
-    with pytest.raises(AssertionError, match="the scan did not run"):
-        _quads_in(repo, names)
 
 
 def test_the_scan_still_raises_on_a_file_it_may_not_read(monkeypatch: pytest.MonkeyPatch) -> None:

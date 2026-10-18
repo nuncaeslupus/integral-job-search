@@ -43,9 +43,7 @@ test:  ## run the test suite
 	# no gate could enforce.
 	# Parallel is not free of consequence either. Running the suite concurrently
 	# made one cross-process race reachable that a single process could not, and
-	# the fix rides with this change: tests/test_connector_contract.py's scan
-	# lists untracked files, and repo_gate's evidence-stability measurement
-	# writes eight of them into the live tree and deletes them again.
+	# the fix rides with this change.
 	uv run --extra dev --extra collect pytest -n auto
 
 gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
@@ -56,26 +54,14 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 	exit $$rc
 
 # Every module that owns a gate writes its own evidence file. Regenerating them
-# all and refusing any diff is what keeps a committed number honest: evidence
-# is measured once, at release, and nothing afterwards notices when a later
-# commit changes what the measurement would now say. The module list is
-# derived, never listed here — a hardcoded list silently stops covering the
-# next module somebody adds, which is the failure this target exists to catch.
+# all and refusing any diff is what keeps a committed number honest. The module
+# list is derived, never listed here: any src/integral module with a `__main__`
+# that mentions evidence is run, so a new one is covered without an edit.
 #
-# Derived by `integral.repo_gate --list-evidence-modules`, not by grepping for
-# a naming convention on the module's entry-point function (T85): that used to
-# be `grep -l '^def _main'`, and three modules that write evidence through a
-# function named `main` instead were invisible to it and never drift-checked.
-#
-# Exit 3 is "unmeasured", and it is a verdict, not a failure: the check ran and
-# found that it cannot be scored yet. This target's job is to REGENERATE the
-# record and refuse drift; adjudicating the number is `verify-gates`'s. Treating
-# every non-zero alike meant a module that exists and honestly reports it cannot
-# measure could not have its record written at all — D-12's defect ("an
-# unmeasured gate has no way to be recorded") reappearing one layer up. Any
-# other non-zero is still a hard stop.
+# Exit 3 is "unmeasured", and it is a verdict, not a failure: the record is
+# still written. Any other non-zero is a hard stop.
 evidence:  ## regenerate every module's gate evidence and fail on any drift
-	@for m in $$(uv run python -m integral.repo_gate --list-evidence-modules); do \
+	@for m in $$(grep -l '__main__' src/integral/*.py | xargs grep -lE 'status/evidence|"evidence"|EVIDENCE' | sed 's|.*/||; s|\.py$$||'); do \
 		printf '  %-18s ' "$$m"; \
 		uv run python -m integral.$$m >/dev/null; status=$$?; \
 		case $$status in \

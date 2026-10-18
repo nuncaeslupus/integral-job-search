@@ -604,7 +604,8 @@ the disk half and does nothing for this one.
 normally either a real change or a conflict. There is a third case, met on
 2026-09-09 merging #425.
 
-Both sides moved `status/evidence/T85.json`'s `gate_modules_discovered` from 104
+Both sides moved a census key (`gate_modules_discovered`, since pruned with its
+gate) from 104
 to **105** — the branch because it added `gate_reader_agreement.py`, main because
 #423 had added `capture_provenance.py`. Two different modules, **the same
 resulting text**. Git saw identical content on both sides, merged it silently
@@ -733,19 +734,7 @@ make evidence       # regenerate every measurement, fail on drift
 make verify-gates   # every done/merged task can still show its measurement
 ```
 
-**One evidence key is archive-*driven* by design.**
-Since D-27, `S8.json`'s `merged_tasks_with_an_unticked_plan_row` requires every task
-archived in `arsenal/tasks/_history/` with `status: merged` to carry a ticked `☑` row
-in `status/plan.md`. So **ticking the row is part of archiving the task**: a task PR
-that moves its file and leaves the plan alone turns `make evidence` red, by
-construction. That red is the check working — tick the row in the same commit. The
-denominator `merged_tasks_compared` is committed as a floor, so it does not
-move.
-
-`host-gate` is the name `claude-arsenal` points a worker at, and
-`integral.repo_gate` checks that every target listed here is real and is
-reached by it — so a fifth line added above cannot quietly go unrun (D-22).
-Note `make gate` is a different thing: it records T1's lint exit code, one
+`host-gate` is the name `claude-arsenal` points a worker at. Note `make gate` is a different thing: it records T1's lint exit code, one
 check, and is not the repo gate.
 
 ## A `ClaudeBot` disallow does not bind this tool — and this has been re-litigated twice

@@ -17,8 +17,7 @@
 # making a red check blocking while that class of fault is undetected wedges the
 # repository. T101 landed, `ci_targets_missing_from_makefile` reads 0, and the
 # latest `CI` run on `main` had concluded `success` — the two preconditions
-# `integral.merge_policy` re-reads on every `make evidence`, so this value cannot
-# quietly outlive the conditions it was set under.
+# that were checked when this value was set.
 #
 # This is not a weakened `after-ci-and-review`; it is the other axis. `after-ci`
 # is "the machines agree"; `after-review` is "a reader agrees" — and the reader
@@ -63,9 +62,7 @@ merge-policy = "after-ci-and-review"
 #     requires before a merge was enforced by nothing, since Actions had no
 #     runner minutes and the helper only ran the task's own payload gate.
 #
-# `make host-gate` and not `make ci`: `integral.repo_gate` asserts that every
-# target `CLAUDE.md` lists is real and is reached by this one (D-22), so a fifth
-# line added there cannot quietly go unrun.
+# `make host-gate` and not `make ci`: the name `CLAUDE.md` lists.
 host-gate = "make host-gate"
 
 # test-first writes a failing test before the change; test-after writes tests

@@ -6,6 +6,7 @@ deps: [t-44c70ded]
 tags: [CI]
 workspace: BACKEND
 status: merged
+retired: "repo_gate / merge_policy (D-22, T103) gate, pruned 2026-10-17 by owner decision"
 ---
 
 Imported from issue #182. It was filed to be done *once runners return*; they

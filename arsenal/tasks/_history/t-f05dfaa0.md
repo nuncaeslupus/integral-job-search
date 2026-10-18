@@ -3,6 +3,7 @@ id: t-f05dfaa0
 title: "T125: The repo has never been ruff-format clean, because make lint does not check it"
 priority: 5
 status: merged
+retired: "repo_gate (T125) gate, pruned 2026-10-17 by owner decision"
 ---
 
 Imported from issue #345

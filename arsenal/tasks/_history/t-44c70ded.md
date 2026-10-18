@@ -5,6 +5,7 @@ priority: 5
 tags: [CI]
 workspace: BACKEND
 status: merged
+retired: "repo_gate (D-22) gate, pruned 2026-10-17 by owner decision"
 ---
 
 Imported from issue #269. **Its steps 1 and 3 are already done** — PR #267 deleted

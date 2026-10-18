@@ -32,8 +32,6 @@ from pathlib import Path
 
 import pytest
 
-from integral import arsenal_source, repo_gate
-
 REPO = Path(__file__).resolve().parent.parent
 SKILL = REPO / ".claude" / "skills" / "connector-new" / "SKILL.md"
 
@@ -207,7 +205,10 @@ def _git(root: Path, *args: str) -> None:
 
 
 def _copy_tracked_tree(destination: Path) -> None:
-    for relative in arsenal_source.tracked_files(REPO):
+    tracked = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files"], capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    for relative in tracked:
         source = REPO / relative
         if not source.is_file():
             continue
@@ -219,11 +220,21 @@ def _copy_tracked_tree(destination: Path) -> None:
     _git(destination, "commit", "-q", "-m", "base")
 
 
+def _evidence_modules() -> list[str]:
+    """Modules with a `__main__` that mention evidence: the Makefile's selection."""
+    names = []
+    for path in sorted((REPO / "src" / "integral").glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "__main__" in text and re.search(r'status/evidence|"evidence"|EVIDENCE', text):
+            names.append(path.stem)
+    return names
+
+
 def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
     """Run every evidence-writing module against `root`; return what they wrote.
 
-    The module list is `repo_gate.evidence_writing_modules`, the discovery
-    `make evidence` uses, so a module added tomorrow is measured too. Each runs in
+    The module list is `_evidence_modules`, the same selection `make evidence`
+    makes, so a module added tomorrow is measured too. Each runs in
     a fresh subprocess pointed at the copy's own `src/`.
     """
     env = {**os.environ, "PYTHONPATH": str(root / "src"), "PYTHONDONTWRITEBYTECODE": "1"}
@@ -241,7 +252,7 @@ def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
 
     # Each module writes its own record, so they are independent of one another.
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(run, repo_gate.evidence_writing_modules()))
+        results = list(pool.map(run, _evidence_modules()))
     for module, code, stderr in results:
         # A module's own verdict (0 pass, 3 unmeasured, 1 red) is not this test's
         # subject: a module can go red on the host's task state, not on a package. What

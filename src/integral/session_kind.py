@@ -323,22 +323,6 @@ def read_recorded_kind(root: Path, *, session_id: str) -> SessionKind | None:
 # ---------------------------------------------------------------------------
 # the gate
 #
-# Not declared as a `repo_gate.EVIDENCE_SOURCES` registrant (T150), and that is
-# a considered omission rather than an oversight: that registry is for a
-# census over *this repository's own tree* — `naming.measure`/`arsenal_source.
-# measure` each count a population of files, and T150's mutation moves them by
-# really adding or archiving one (`repo_gate.EvidenceSource.measure(repo_root,
-# **population)`). `measure` below counts misclassifications over constructed
-# temp directories that have nothing to do with `repo_root` — neither tree
-# mutation would ever change its result, which is exactly the shape of a
-# registrant that must decline to register: a source
-# `repo_gate.measure_evidence_stability` cannot move is reported as "moved by
-# no mutation" and turns *that* gate `unmeasured` over a registrant that was
-# never going to move. `status/evidence/T137.json` is still produced and
-# drift-checked every run — through T85's broader, separate mechanism
-# (`repo_gate.evidence_writing_modules`, which finds any module that
-# constructs a `status/evidence/*.json` path, this one included, and needs no
-# registration at all).
 
 
 @dataclass(frozen=True)

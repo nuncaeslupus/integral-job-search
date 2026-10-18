@@ -184,8 +184,7 @@ next time a measurement gains a key. Decide each move by the rule below.
   keys "should" move.
 
 To see which keys can be package-sensitive, derive them rather than recall them:
-`uv run python -m integral.repo_gate --list-evidence-modules` lists every module that
-writes evidence, and each module's measurement says what it counts.
+`make evidence` runs every `src/integral` module with a `__main__` that mentions evidence; and each module's measurement says what it counts.
 
 ## Step 7 — run it against the live board, not its fixture
 
