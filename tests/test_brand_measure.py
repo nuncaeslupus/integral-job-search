@@ -341,6 +341,9 @@ _CSS_COLOUR_4 = [
     ("oklab(0.62796 0.22486 0.12585)", "#ff0000", 1),
     ("lab(54.29 80.8 69.89)", "#ff0000", 1),
     ("lch(54.29 106.84 40.85)", "#ff0000", 1),
+    # CSS Color 4 percentages: lab/lch L 100% = 100, lab a/b 100% = 125, lch C 100% = 150.
+    ("lab(54.29% 64.64% 55.912%)", "#ff0000", 1),
+    ("lch(54.29% 71.22667% 40.85)", "#ff0000", 1),
     ("color(srgb 0.95 0.4 0)", "#f26600", 1),
     ("color(srgb-linear 1 0 0)", "#ff0000", 1),
     ("color(display-p3 1 0 0)", "#ff0000", 1),  # out of the sRGB gamut: clamped
@@ -393,3 +396,9 @@ def test_the_snippet_refuses_a_colour_function_it_cannot_read(value: str) -> Non
     with pytest.raises(subprocess.CalledProcessError) as raised:
         _run_snippet([{"style": {**_BASE, "color": value}}])
     assert "cannot read the computed colour" in raised.value.stderr
+
+
+def test_the_send_dir_repeated_here_is_approvals() -> None:
+    from integral import approval, brand_measure
+
+    assert brand_measure._SEND_DIR == approval.SEND_DIR
