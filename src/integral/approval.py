@@ -931,6 +931,7 @@ def stage_send(
                 {name: raw.decode("utf-8") for name, raw in contents.items()},
                 renderer,
                 palette=palette,
+                family_name=identity.family_name,
             )
         )
     except (SendSetError, RenderError, IdentityError, MeasureError) as exc:
@@ -996,11 +997,13 @@ def verify_send(
         defects.append("send.json was staged over a different payload than the one on disk")
     try:
         identity = store.identity()
-        derived = derived_names(identity.display_name, payload.documents)
+        derived = derived_names(identity.display_name, payload.documents, identity.family_name)
         approved = {
             name: store.path(*where, name).read_text(encoding="utf-8") for name in payload.documents
         }
-        pdf_expected = pdf_references(identity.display_name, identity.language, approved)
+        pdf_expected = pdf_references(
+            identity.display_name, identity.language, approved, identity.family_name
+        )
     except (SendSetError, IdentityError, OSError, ValueError) as exc:
         return [*defects, f"the sendable set cannot be derived: {exc}"]
     if sorted(recorded) != sorted((*payload.documents, *derived)):

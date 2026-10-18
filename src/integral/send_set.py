@@ -59,8 +59,11 @@ class SendSetError(ValueError):
     """The sendable set cannot be derived."""
 
 
-def name_stem(display_name: str) -> str:
+def name_stem(display_name: str, family_name: str | None = None) -> str:
     """`First-Last` from a display name: accents folded, first and last word kept.
+
+    `family_name` (identity.json, optional) replaces the last word as `<Last>`, for
+    names whose surname in use is not the final token (`José María García López`).
 
     Only ASCII letters and digits survive (a name is a file name); a name with none
     falls back to `FALLBACK_STEM` rather than refusing.
@@ -75,12 +78,20 @@ def name_stem(display_name: str) -> str:
         # A name with no Latin letters or digits (Cyrillic, CJK, Greek) must not stop
         # the whole folder staging: the files take a neutral stem instead.
         return FALLBACK_STEM
+    if family_name:
+        family = "".join(
+            c for c in unicodedata.normalize("NFKD", family_name) if c.isascii() and c.isalnum()
+        )
+        if family:
+            return f"{words[0]}-{family}"
     return words[0] if len(words) == 1 else f"{words[0]}-{words[-1]}"
 
 
-def derived_names(display_name: str, documents: Sequence[str]) -> tuple[str, ...]:
+def derived_names(
+    display_name: str, documents: Sequence[str], family_name: str | None = None
+) -> tuple[str, ...]:
     """The files `send/` holds beyond `documents`, by name, sorted."""
-    stem = name_stem(display_name)
+    stem = name_stem(display_name, family_name)
     names: list[str] = []
     if CV_MD in documents:
         names.append(f"{stem}-CV.pdf")
@@ -113,13 +124,14 @@ def derive(
     texts: Mapping[str, str],
     render: Renderer | None = None,
     palette: BrandPalette | None = None,
+    family_name: str | None = None,
 ) -> dict[str, bytes]:
     """Every derived file's bytes, from the approved Markdown in `texts` (name -> text).
 
     `palette` (T342) is the employer's measured palette, rendered into every page.
     """
     render = render or render_pdf_pages
-    stem = name_stem(display_name)
+    stem = name_stem(display_name, family_name)
     made: dict[str, bytes] = {}
     letter = cv = ""
     if LETTER_MD in texts:
@@ -221,14 +233,17 @@ def read_pdf_text(pdf: bytes) -> str:
 
 
 def pdf_references(
-    display_name: str, lang: str, texts: Mapping[str, str]
+    display_name: str,
+    lang: str,
+    texts: Mapping[str, str],
+    family_name: str | None = None,
 ) -> dict[str, tuple[str, ...]]:
     """Each derived PDF's name -> the ordered text streams its text layer must hold.
 
     Built from the approved Markdown only, never from a staged file: this is the
     independent reference. The combined file is the letter, then the CV.
     """
-    stem = name_stem(display_name)
+    stem = name_stem(display_name, family_name)
     letter = cv = ""
     refs: dict[str, tuple[str, ...]] = {}
     if LETTER_MD in texts:
