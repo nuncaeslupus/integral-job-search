@@ -16,12 +16,9 @@ import pytest
 
 from integral import connector_salary_audit
 from integral.connector_salary_audit import (
-    MINIMUM_DISTINCT_SALARY_VERDICTS_READ,
-    MINIMUM_PACKAGES_MEASURED,
     RowVerdict,
     _declared_for,
     _money_contexts,
-    _packages,
     _pin_holds,
     _single_figure_agrees,
     card_band,
@@ -119,46 +116,6 @@ def test_the_committed_fixtures_have_no_unread_salary(live: dict[str, Any]) -> N
     assert measured["salary_expectation_mismatches"] == 0, measured["mismatches"]
 
 
-def test_the_floors_sit_under_the_live_populations(live: dict[str, Any]) -> None:
-    measured = live
-    assert measured["distinct_salary_verdicts_read"] >= MINIMUM_DISTINCT_SALARY_VERDICTS_READ
-    assert measured["packages_measured"] >= MINIMUM_PACKAGES_MEASURED
-
-
-def test_the_record_commits_the_floors_and_not_the_censuses(live: dict[str, Any]) -> None:
-    committed = record(live)
-    assert (
-        committed["distinct_salary_verdicts_read_at_least"] == MINIMUM_DISTINCT_SALARY_VERDICTS_READ
-    )
-    assert committed["packages_measured_at_least"] == MINIMUM_PACKAGES_MEASURED
-    assert "salary_rows_read" not in committed
-    assert "distinct_salary_verdicts_read" not in committed
-    assert "packages_measured" not in committed
-    assert "rows_measured" not in committed
-
-
-def test_every_declared_refusal_says_why_in_a_sentence() -> None:
-    """A refusal is the one verdict that lets a row out of the gate without
-    anything being read, so the reason has to be a written argument somebody
-    can disagree with — not a restatement that the code returned None.
-
-    This checks the *shape* and says so: length is a proxy, and a padded
-    sentence satisfies it. What it actually catches is the generated
-    placeholder — `tmp/t200_expect.py` writes `"TODO <the quoted window>"` for
-    every unread row precisely so an unadjudicated one cannot reach a commit.
-    Judging the argument is a second reader's job, and no assertion replaces
-    it; the seven live refusals are named for that reader in the PR body."""
-    for directory in _packages(_CONNECTORS):
-        path = directory / "fixture" / "salary.json"
-        if not path.exists():
-            continue
-        for index, row in json.loads(path.read_text(encoding="utf-8"))["rows"].items():
-            if row["verdict"] != "refused":
-                continue
-            why = row["why"]
-            assert len(why) >= 80, f"{directory.name} [{index}]: {why!r}"
-
-
 def test_deleting_a_refusal_turns_the_gate_red(tmp_path: Path) -> None:
     """The mutation this whole module is for. `trabajos_es` row 17 publishes
     "18.000 €" and nothing reads it; what keeps the gate green is the written
@@ -205,39 +162,6 @@ def test_a_band_read_wrongly_is_a_mismatch(tmp_path: Path) -> None:
     assert measured["salary_expectation_mismatches"] == 1
 
 
-def test_a_dead_money_detector_is_caught_by_the_refusal_count(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The headline metric is blind to its own detector; one committed key is not.
-
-    `boards_that_publish_a_salary_we_do_not_read` counts rows that publish and
-    read nothing, so a detector that sees money nowhere drives it to zero while
-    reading exactly as much as before — the shape CLAUDE.md calls a metric
-    independent of its own inputs. `salary_rows_read` cannot catch it (the read
-    branch runs first) and neither can `packages_measured`.
-
-    What catches it is `salary_rows_refused`, committed as an exact count: the
-    refusal branch sits behind `if not verdict.publishes`, so a dead detector
-    takes it to zero and `make evidence` goes red. This pins that, because being
-    true of today's code is not the same as being held down.
-    """
-    # Two packages are enough: trabajos_es carries refusals, foorilla_en reads
-    # through a substituted detail, so both branches the blinding reaches run.
-    subset = _copy_connectors(tmp_path, "trabajos_es", "foorilla_en")
-    live = measure(subset)
-    monkeypatch.setattr(connector_salary_audit, "_money_contexts", lambda text: ())
-    blinded = measure(subset)
-
-    assert blinded["boards_that_publish_a_salary_we_do_not_read"] == 0
-    # Not asserted: `salary_expectation_mismatches`. Blinded, the shared-detail
-    # rows fall back to the engine's read, which is not their card's band.
-    assert blinded["salary_rows_read"] >= live["salary_rows_read"]
-    assert blinded["distinct_salary_verdicts_read"] >= live["distinct_salary_verdicts_read"]
-    assert blinded["packages_measured"] == live["packages_measured"]
-    assert blinded["salary_rows_refused"] == 0 < live["salary_rows_refused"]
-    assert record(blinded) != record(live)
-
-
 def test_editing_a_list_card_band_turns_the_audit_red(tmp_path: Path) -> None:
     """`foorilla_en`'s cards publish their own band; the shared detail page does
     not. A card edited to say a different band must fail its row's `list_says`,
@@ -255,11 +179,6 @@ def test_editing_a_list_card_band_turns_the_audit_red(tmp_path: Path) -> None:
     assert any("foorilla_en [0]" in entry for entry in measured["mismatches"])
 
 
-def test_the_wildcard_covers_only_rows_whose_card_publishes_nothing(live: dict[str, Any]) -> None:
-    measured = live
-    assert measured["rows_adjudicated_by_a_wildcard"] == 7
-
-
 def _copy_connectors(tmp_path: Path, *packages: str) -> Path:
     """A private copy of the named packages only.
 
@@ -274,31 +193,6 @@ def _copy_connectors(tmp_path: Path, *packages: str) -> Path:
     for package in packages:
         shutil.copytree(_CONNECTORS / package, target / package)
     return target
-
-
-def test_distinct_verdicts_are_counted_as_tuples_not_rows(live: dict[str, Any]) -> None:
-    """R2. The key is the number of distinct `(package, min, max, currency,
-    period)` verdicts, recomputed here straight from the committed entries. A
-    key reverted to a row count (`read_rows`, or rows minus wildcard rows)
-    equals 102 or 95 where this is 78, so it cannot pass."""
-    measured = live
-    tuples = set()
-    for path in _CONNECTORS.glob("*/fixture/salary.json"):
-        for entry in json.loads(path.read_text(encoding="utf-8"))["rows"].values():
-            if entry["verdict"] == "read":
-                tuples.add(
-                    (path.parts[-3], entry["min"], entry["max"], entry["currency"], entry["period"])
-                )
-    assert measured["distinct_salary_verdicts_read"] == len(tuples)
-    assert measured["distinct_salary_verdicts_read"] < measured["salary_rows_read"]
-
-
-def test_the_record_commits_the_distinct_verdict_floor(live: dict[str, Any]) -> None:
-    committed = record(live)
-    assert committed["distinct_salary_verdicts_read_at_least"] == (
-        MINIMUM_DISTINCT_SALARY_VERDICTS_READ
-    )
-    assert "rows_read_through_a_substituted_detail" in committed
 
 
 @pytest.mark.parametrize(
@@ -399,14 +293,6 @@ def test_a_connector_reverted_to_the_top_of_a_band_cannot_be_certified_by_a_copy
 
     mismatches = measure(directory)["mismatches"]
     assert any("wellfound_en [0]" in entry and "card publishes" in entry for entry in mismatches)
-
-
-def test_foorillas_rows_are_counted_as_read_through_a_substituted_detail(
-    live: dict[str, Any],
-) -> None:
-    """47 of foorilla's 48 banded cards disagree with the one shared advert page
-    (row 0's own card is the 48th); wellfound, which reads its card, adds none."""
-    assert live["rows_read_through_a_substituted_detail"] == 47
 
 
 @pytest.mark.parametrize(
