@@ -403,3 +403,15 @@ def test_a_refused_confirm_does_not_block_the_next_reply(
         mr.confirm(store, proposal, now=_NOW)
     verdict = mr.propose(store, mr._reply(), now=_NOW)[0]
     assert verdict.outcome is Outcome.PROPOSED
+
+
+def test_confirm_with_no_clock_judges_against_the_real_one(
+    store: ProfileStore, ids: dict[str, str]
+) -> None:
+    future = mr._reply(read_id="r3", permission_id="p3", read_at="2099-01-01T00:00:00+00:00")
+    verdict, proposal = mr.propose(store, future, now=datetime(2100, 1, 1, tzinfo=UTC))
+    assert verdict.outcome is Outcome.PROPOSED
+    assert proposal
+    with pytest.raises(ProposalError, match="no longer visible"):
+        mr.confirm(store, proposal)
+    assert _state(store, ids["acme"]) == ("applied", "applied")
