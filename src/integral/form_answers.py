@@ -79,6 +79,7 @@ from integral.claim_trace import (
     DENIAL_KIND,
     NON_CUE_NEGATIONS,
     fold,
+    fold_cased,
     is_denial,
     paragraph_defects,
 )
@@ -211,6 +212,11 @@ def _tokens(text: str) -> list[str]:
     return _TOKEN.findall(_SPACED_NON.sub("non-", fold(text)))
 
 
+def _cased_tokens(text: str) -> list[str]:
+    """`_tokens` with case kept, so "US" the country can be told from "us"."""
+    return _TOKEN.findall(_SPACED_NON.sub("non-", fold_cased(text)))
+
+
 # A quote is compared on words AND punctuation, so a comma, a full stop or a question mark moved
 # inside it is a different quote. Curly double quotes are the same punctuation as straight ones.
 _QUOTE_TOKEN = re.compile(rf"{_TOKEN.pattern}|[^\w\s]")
@@ -266,7 +272,12 @@ def _question_defects(question: str) -> list[str]:
     if denial_sentences(q):
         why.append("a denial")
     first = set(_FIRST_PERSON & set(toks))
-    if "us" in first and toks.count("us") == _TOKEN.findall(q).count("US"):
+    cased = _cased_tokens(q)
+    if (
+        "us" in first
+        and [t.lower() for t in cased] == toks
+        and all(t == "US" for t in cased if t.lower() == "us")
+    ):
         first.discard("us")  # "US", the country, is not a first-person pronoun
     if first:
         why.append("a first-person claim")

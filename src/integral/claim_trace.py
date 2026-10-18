@@ -125,7 +125,12 @@ _APOSTROPHE_FOLD = str.maketrans(dict.fromkeys(_APOSTROPHE_VARIANTS, "'"))
 
 
 def fold(text: str) -> str:
-    """NFKC, marks and format characters stripped, apostrophes folded to a straight one, lowered.
+    """`fold_cased`, lowered."""
+    return fold_cased(text).lower()
+
+
+def fold_cased(text: str) -> str:
+    """NFKC, marks and format characters stripped, apostrophes folded to a straight one.
 
     Applied to the text and to every cue, so a spelling the vocabulary already holds is
     seen however it is written: fullwidth, decomposed, accentless, or with a look-alike
@@ -140,7 +145,7 @@ def fold(text: str) -> str:
         for c in unicodedata.normalize("NFD", text)
         if not unicodedata.combining(c) and unicodedata.category(c) != "Cf"
     )
-    return text.lower()
+    return text
 
 
 _NEGATORS_FOLDED = frozenset(fold(word) for word in NEGATORS)
