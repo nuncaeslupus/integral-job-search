@@ -19,8 +19,8 @@ The rules, each pinned by its own test and by a probe in ``measure``:
   set of articles, linking verbs, "and"/"or" and prepositions is exempt, so an invented
   permit, certification or tool (UK, EU, PhD, AWS, Go) brings a token no cited row holds.
 * **A hyphenated word is one token** ("non-EU", "ex-employee"), so a prefix cannot be dropped
-  from it: the bare word is a token no cited row holds. No prefix list. A spaced "non EU" is two
-  tokens and stays a gap, as does "well known" against "well-known" (refused, fail-closed).
+  from it: the bare word is a token no cited row holds. No prefix list. A spaced "non EU" is read
+  as "non-EU"; "well known" against "well-known" is two tokens against one (refused, fail-closed).
 * **A row that holds a denial is quoted whole, or not used.** A cited row with a negation cue
   anywhere in it (any line, any sentence) is *guarded*: a cue is what ``claim_trace.is_denial``
   sees, or one of ``claim_trace.NON_CUE_NEGATIONS`` ("without", "sin", "sense", "zero", which a
@@ -67,6 +67,7 @@ import json
 import re
 import sys
 import tempfile
+import unicodedata
 from collections import Counter
 from collections.abc import Collection, Sequence
 from pathlib import Path
@@ -98,6 +99,7 @@ _WORD = re.compile(r"[^\W\d_]+")
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 # Where a clause of the ANSWER is cut to find the denials in it. Cutting finely only finds more
 # denials; what a denial must be quoted with is decided by the row's lines, never by this cut.
+_TERMINATORS = ".!?…:;"
 _CLAUSE_END = re.compile(r"[.!?…:;]+(?=\s|$)|\n+")
 SOURCE_DEFECT = "source"
 
@@ -192,16 +194,57 @@ def _holds_negation(text: str) -> bool:
     )
 
 
+# A spaced "non EU" is the same compound as "non-EU": joined before tokenising, so dropping the
+# "non" leaves a token no cited row holds. (A spaced "no EU" needs nothing: "no" is a cue, so
+# the row is guarded and its words back an answer only inside a whole-row quote.)
+# Every Unicode dash (category Pd) and the minus sign, derived rather than listed.
+_DASHES = re.escape(
+    "".join(c for c in map(chr, range(0x110000)) if unicodedata.category(c) == "Pd") + "\u2212"
+)
+_SPACED_NON = re.compile(rf"(?<![\w'-])non[\s{_DASHES}]+(?=[^\W_])", re.IGNORECASE)
+
+
 def _tokens(text: str) -> list[str]:
-    return _TOKEN.findall(fold(text))
+    return _TOKEN.findall(_SPACED_NON.sub("non-", fold(text)))
 
 
-_LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*\u2022])\s+")
+# A quote is compared on words AND punctuation, so a comma, a full stop or a question mark moved
+# inside it is a different quote. Curly double quotes are the same punctuation as straight ones.
+_QUOTE_TOKEN = re.compile(rf"{_TOKEN.pattern}|[^\w\s]")
+_QUOTE_FOLD = str.maketrans(dict.fromkeys("\u201c\u201d\u201e\u00ab\u00bb", '"'))
+
+
+def _quote_tokens(text: str) -> list[str]:
+    return _QUOTE_TOKEN.findall(_SPACED_NON.sub("non-", fold(text)).translate(_QUOTE_FOLD))
+
+
+def _is_word(token: str) -> bool:
+    return _TOKEN.fullmatch(token) is not None
+
+
+# A real list marker is a short number ("1." "12)") or a bullet. A four-digit number is a year
+# that a wrapped line may begin with ("2019. I left"), and stripping it would drop it from a quote.
+_LIST_MARKER = re.compile(r"^\s*(?:\d{1,3}[.)]|[-*\u2022])\s+")
 
 
 def _row_tokens(row: str) -> list[str]:
-    """The tokens of a whole row, line by line, each line's leading list marker (1. - *) dropped."""
-    return [t for line in row.splitlines() for t in _tokens(_LIST_MARKER.sub("", line))]
+    """The tokens of a whole row, line by line, each line's leading list marker (1. - *) dropped.
+    Punctuation is kept as tokens: the row is quoted whole, punctuation included."""
+    return [t for line in row.splitlines() for t in _quote_tokens(_LIST_MARKER.sub("", line))]
+
+
+def _clause_pieces(text: str) -> list[tuple[str, list[str]]]:
+    """Each clause of the answer with its quote tokens, the clause's own terminator included."""
+    out: list[tuple[str, list[str]]] = []
+    pos = 0
+    for m in [*_CLAUSE_END.finditer(text), None]:
+        end = len(text) if m is None else m.start()
+        term = "" if m is None or m.group().startswith("\n") else m.group()
+        clause = (text[pos:end] + term).strip()
+        if clause:
+            out.append((clause, _quote_tokens(clause)))
+        pos = end if m is None else m.end()
+    return out
 
 
 def _at(haystack: Sequence[str], needle: Sequence[str]) -> list[int]:
@@ -239,20 +282,30 @@ def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
         t for row in cited if not _holds_negation(" ".join(row.split())) for t in _row_tokens(row)
     }
     free |= _FUNCTION_WORDS
-    pieces = [_tokens(c) for c in _clauses(text)]
-    mine = [t for piece in pieces for t in piece]
+    clauses = _clause_pieces(text)
+    mine = [t for _, piece in clauses for t in piece]
     covered: set[int] = set()
+    finals: set[int] = set()
+    offset = 0
+    for _, piece in clauses:
+        offset += len(piece)
+        finals.add(offset - 1)
     for quote in guarded:
         for start in _at(mine, quote):
-            covered.update(range(start, start + len(quote)))
+            end = start + len(quote)
+            covered.update(range(start, end))
+            # A row quoted whole that has no terminator of its own may take the clause terminator
+            # the answer adds after it; a row that ends in one must keep that exact one.
+            if _is_word(quote[-1]) and end in finals and mine[end] in _TERMINATORS:
+                covered.add(end)
     defects = []
     offset = 0
-    for clause, piece in zip(_clauses(text), pieces, strict=True):
+    for clause, piece in clauses:
         span = range(offset, offset + len(piece))
         offset += len(piece)
         if _holds_negation(clause) and not all(i in covered for i in span):
             defects.append(f"denial: {clause!r} is not a whole-row quote of a cited row")
-    held = {t for quote in guarded for t in quote if not _holds_negation(t)}
+    held = {t for quote in guarded for t in quote if _is_word(t) and not _holds_negation(t)}
     for quote in guarded:
         if not _at(mine, quote):
             defects.append(

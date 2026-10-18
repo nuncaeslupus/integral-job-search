@@ -812,3 +812,93 @@ def test_round_6_the_omitted_cues_are_claim_traces_own_named_constant() -> None:
     # the list is cited, not restated: and none of them is a cue there, which is why it exists
     assert {"without", "sin", "sense", "zero"} == set(claim_trace.NON_CUE_NEGATIONS)
     assert not any(claim_trace.is_denial(f"I did {w} it") for w in claim_trace.NON_CUE_NEGATIONS)
+
+
+# --- issue #828: Q1 punctuation inside a quote, Q2 a year is not a list marker, spaced "non EU" --
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "I do not need visa sponsorship only, a permit.",  # comma moved inside the quote
+        "I do not need visa sponsorship, only a permit",  # closing full stop dropped
+        "I do not need visa sponsorship; only a permit.",  # comma turned into a semicolon
+        "I do not need visa sponsorship, only a permit!",  # terminator changed
+    ],
+)
+def test_q1_a_quote_whose_punctuation_differs_from_its_row_is_not_verbatim(
+    store: ProfileStore, answer: str
+) -> None:
+    cited = _row(store, "statement", "I do not need visa sponsorship, only a permit.")
+    assert any(d.startswith("denial:") for d in _refused(store, _ans(answer, cited)))
+    assert not _refused(store, _ans("I do not need visa sponsorship, only a permit.", cited))
+
+
+@pytest.mark.parametrize("year", ["2019.", "2019)"])
+def test_q2_a_year_opening_a_wrapped_line_is_not_stripped_as_a_list_marker(
+    store: ProfileStore, year: str
+) -> None:
+    row = f"I have not held a UK work permit since\n{year} Before that I did."
+    cited = _row(store, "statement", row)
+    dropped = "I have not held a UK work permit since Before that I did."
+    assert any(d.startswith("denial:") for d in _refused(store, _ans(dropped, cited)))
+    whole = f"I have not held a UK work permit since {year} Before that I did."
+    assert not _refused(store, _ans(whole, cited))
+
+
+@pytest.mark.parametrize(
+    "row", ["I am a non EU citizen.", "I am a non-EU citizen.", "I am a no EU citizen."]
+)
+def test_a_spaced_non_eu_cannot_be_reversed_by_dropping_the_prefix(
+    store: ProfileStore, row: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert _refused(store, _ans("I am an EU citizen.", cited))
+    assert not _refused(store, _ans(row, cited))
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "I am a non-\nEU citizen.",  # wrapped at the hyphen
+        "I am a non - EU citizen.",
+        "I am a non\u2011EU citizen.",  # non-breaking hyphen
+        "I am a non\u2013EU citizen.",  # en dash
+    ],
+)
+def test_f1_a_non_eu_written_with_any_hyphen_or_wrap_cannot_be_reversed(
+    store: ProfileStore, row: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert _refused(store, _ans("I am an EU citizen.", cited))
+
+
+def test_f2_a_terminator_added_after_a_row_with_none_is_not_an_uncovered_token(
+    store: ProfileStore,
+) -> None:
+    denial = _row(store, "statement", "I do not need visa sponsorship")
+    permit = _row(store, "statement", "I hold a permit for Spain.")
+    both = "I do not need visa sponsorship. I hold a permit for Spain."
+    assert not _refused(store, _ans(both, denial, permit))
+    # a terminator the row has is kept exactly; a row's own full stop is never swapped
+    dotted = _row(store, "statement", "I do not need visa sponsorship, only a permit.")
+    assert _refused(store, _ans("I do not need visa sponsorship, only a permit?", dotted))
+    # an added terminator only closes the clause that ends the quote
+    assert _refused(store, _ans("I do not need visa sponsorship and X. I hold a permit.", denial))
+
+
+@pytest.mark.parametrize("dash", ["\u2015", "\u2e3a", "\u301c", "\ufe58", "\uff0d", "\u058a"])
+def test_r2_a_non_eu_written_with_any_unicode_dash_cannot_be_reversed(
+    store: ProfileStore, dash: str
+) -> None:
+    cited = _row(store, "statement", f"I am a non{dash}EU citizen.")
+    assert _refused(store, _ans("I am an EU citizen.", cited))
+
+
+@pytest.mark.parametrize("suffix", ["%", "\u20ac", "+", "*", ")", '"', " -"])
+def test_r2_only_a_clause_terminator_may_be_added_after_a_quoted_denial(
+    store: ProfileStore, suffix: str
+) -> None:
+    cited = _row(store, "statement", "My salary floor is not under 50")
+    assert not _refused(store, _ans("My salary floor is not under 50.", cited))
+    assert _refused(store, _ans(f"My salary floor is not under 50{suffix}", cited))
