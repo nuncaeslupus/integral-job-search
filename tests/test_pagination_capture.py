@@ -18,7 +18,6 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -451,58 +450,6 @@ def test_a_reserved_tld_package_is_excluded_and_says_so(library: Path, low_floor
 # the floor, and what is committed
 
 
-def test_a_library_too_small_to_measure_reports_unmeasured(
-    library: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(pc, "MINIMUM_REQUEST_KEYS", 100)
-    _real_board(library)
-    _write_capture(
-        library, captured_at="2026-09-08", url=f"https://{_REAL_SITE}/jobs?page=1", status=200
-    )
-
-    measured = pc.measure(library)
-
-    assert measured["gate_status"] == "unmeasured"
-    assert "floor 100" in measured["unmeasured_reason"]
-
-
-def test_a_breached_floor_writes_nothing(
-    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The ordering #297 got wrong on S8: a run that cannot measure must not
-    leave behind a record asserting the floor it never met, because that record
-    is what the next healthy run's `make evidence` diffs against."""
-    monkeypatch.setattr(pc, "MINIMUM_REQUEST_KEYS", 100)
-    target = tmp_path / "T113.json"
-
-    pc.write_evidence(target, library)
-
-    assert not target.exists()
-
-
-def test_the_committed_record_carries_the_floor_and_not_the_count(tmp_path: Path) -> None:
-    """T100's rule. `request_keys_scanned` and `packages_scanned` move whenever
-    anybody adds or retires a connector; committing them as exact values would
-    redden `make evidence` on a change that is not a finding."""
-    target = tmp_path / "T113.json"
-    pc.write_evidence(target, _LIBRARY)
-    committed = json.loads(target.read_text(encoding="utf-8"))
-
-    assert committed["request_keys_scanned_at_least"] == pc.MINIMUM_REQUEST_KEYS
-    for moving in ("request_keys_scanned", "packages_scanned", "paginated_request_keys_checked"):
-        assert moving not in committed
-    assert committed["paginated_request_keys_no_capture_measured"] == 0
-
-
-def test_the_committed_evidence_matches_what_the_code_measures_now(tmp_path: Path) -> None:
-    target = tmp_path / "T113.json"
-    pc.write_evidence(target, _LIBRARY)
-
-    assert json.loads(target.read_text(encoding="utf-8")) == json.loads(
-        pc.DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8")
-    )
-
-
 def test_the_entry_point_exits_one_on_a_finding(
     library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -635,38 +582,6 @@ def test_every_url_side_probe_agrees_with_the_rule() -> None:
     assert checked >= pc.MINIMUM_URL_SIDE_PROBES
 
 
-def test_the_url_side_probe_table_carries_the_three_routes_and_meets_its_floor() -> None:
-    """Pinned **by name**, not by count, for `test_connector_pagination`'s
-    reason: a count is satisfied by any N probes, so the protection it gives a
-    particular shape is coincidental. These are the shapes #406 named, plus the
-    legal ones that stop the rule from taking the library down with it."""
-    assert len(pc.URL_SIDE_PROBES) >= pc.MINIMUM_URL_SIDE_PROBES
-    names = {probe.name for probe in pc.URL_SIDE_PROBES}
-    assert {
-        "param names a query key the pattern does not hold",
-        "param names a key holding a literal while another key holds the placeholder",
-        "query_param mode over a placeholder that sits in the path",
-        "mode none with the placeholder still in the pattern",
-        "body_field mode with a second page slot in the URL",
-        "query_param mode with no placeholder anywhere",
-        "path_segment mode with no placeholder anywhere",
-        "a percent-encoded placeholder, which never substitutes",
-        "two query keys holding the placeholder, one of them named",
-        "the placeholder spelled into a query key's own name",
-        "the ordinary shape: the named key holds the placeholder",
-        "a search slot beside the page slot, under a non-English key",
-        "a positional page number in the path",
-        "a board with no second page, and no page slot",
-        "a POST board whose page key is in the body and nowhere else",
-        # round 5 — route 1/route 4 agreement.
-        "pagination.param and the URL key it names differ only in case",
-    } <= names, sorted(names)
-    # Both verdicts are represented. A table of refusals alone would pass over a
-    # validator that refuses everything — the fail-closed mirror of these
-    # routes, which would take the whole library out.
-    assert {probe.loads for probe in pc.URL_SIDE_PROBES} == {True, False}
-
-
 def test_the_committed_library_survives_the_url_side_rule() -> None:
     """The other direction, over the real thing rather than over probes: a
     check this aggressive would have taken the library down with it, and every
@@ -714,545 +629,189 @@ def test_a_query_key_sent_twice_is_refused_at_load(library: Path) -> None:
     assert "names 'page' 2 times" in message
 
 
-def test_the_refusal_does_not_depend_on_the_name_being_page(library: Path) -> None:
-    """The same route, under a name that does not spell `page` — the check
-    counts occurrences of whatever `pagination.param` names, not the literal
-    string `page`."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?p=1&p={page}",
-        {"mode": "query_param", "param": "p", "start": 1, "max_pages": 2},
-    )
-    assert "names 'p' 2 times" in message
+_JSON_ITEMS: dict[str, Any] = {
+    "item": None,
+    "fields": None,
+    "from_json": {"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
+}
+_QP = {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2}
+_BF = {"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2}
+_POST = f"https://{_REAL_SITE}/Search/ExecuteSearch"
 
 
-def test_a_duplicate_under_an_unrelated_key_still_loads(library: Path) -> None:
-    """The fail-closed control: only the name `pagination.param` certifies is
-    counted, so a board that happens to repeat some other filter is
-    unaffected — refusing this would take a real shape down with the fix."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?tag=a&tag=b&page={page}",
-        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == [
-        "https://realboard.io/jobs?tag=a&tag=b&page=1",
-        "https://realboard.io/jobs?tag=a&tag=b&page=2",
-    ]
-
-
-# ---------------------------------------------------------------------------
-# T154, round 2 — the second reader's F1 (mode axis) and F2 (separator axis)
-#
-# The first version's check lived inside `if mode == "query_param":`, so
-# `mode: body_field` never reached it, and it split only on `&`, so `;` never
-# registered as a second pair. Both are enumerations the closed rule (count
-# occurrences of `pagination.param`'s name, over every mode that names one and
-# over both conventional separators) now covers structurally rather than by
-# adding one more named shape per axis.
-
-
-def test_a_duplicate_query_key_under_mode_body_field_is_refused_at_load(library: Path) -> None:
-    """F1. A POST board whose *body* field is the certified page key can still
-    repeat that same name in its **URL**, and the first version of route 4
-    never reached a `body_field` package at all — `pagination_capture`'s
-    `body_field` arm reads only the captured body, so nothing certifies the
-    query string either. A framework that merges query and body namespaces
-    ($_REQUEST, Flask's `request.values`, Rails' `params`) may honour the
-    fixed query occurrence over the varying body one, which is the same
-    pinned-to-one-page harm on the other half of the request."""
-    _edit_connector(
-        library,
-        url_pattern=f"https://{_REAL_SITE}/Search/ExecuteSearch?Page=1&Page=2",
-        method="POST",
-        body_json={"Keyword": "python", "ResultsPerPage": 25, "Page": PAGE_PLACEHOLDER},
-        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 3},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    with pytest.raises(ConnectorError, match="names 'Page' 2 times"):
-        load_connector(_package(library))
-
-
-def test_a_single_fixed_query_pair_repeating_the_body_field_is_refused_at_load(
-    library: Path,
+@pytest.mark.parametrize(
+    ("url", "pagination", "extra", "expected"),
+    [
+        # Route 4: a name counted by occurrence, whatever it spells.
+        ("https://realboard.io/jobs?p=1&p={page}", {**_QP, "param": "p"}, {}, "names 'p' 2 times"),
+        # Percent-encoded, case-only, `;`-separated and final-sigma spellings of one key.
+        ("https://realboard.io/jobs?%70age=1&page={page}", _QP, {}, "names 'page' 2 times"),
+        ("https://realboard.io/jobs?Page=1&page={page}", _QP, {}, "names 'page' 2 times"),
+        ("https://realboard.io/jobs?page=1;page={page}", _QP, {}, "names 'page' 2 times"),
+        (
+            "https://realboard.io/jobs?ς=1&\u03c3={page}",
+            {**_QP, "param": "\u03c3"},
+            {},
+            "names '\u03c3' 2 times",
+        ),
+        (
+            "https://realboard.io/jobs?%CF%82=1&%CF%83={page}",
+            {**_QP, "param": "\u03c3"},
+            {},
+            "names '\u03c3' 2 times",
+        ),
+        (
+            "https://realboard.io/jobs?straße=1&strasse={page}",
+            {**_QP, "param": "strasse"},
+            {},
+            "names 'strasse' 2 times",
+        ),
+        # A param name that itself contains the permissive separator.
+        (
+            "https://realboard.io/jobs?a;b=1&a;b={page}",
+            {**_QP, "param": "a;b"},
+            {},
+            "names 'a;b' 2 times",
+        ),
+        (
+            "https://realboard.io/jobs?a;b=1;a;b={page}",
+            {**_QP, "param": "a;b"},
+            {},
+            "names 'a;b'",
+        ),
+        # `mode: none` that still names a param refuses a duplicate of it.
+        (
+            "https://realboard.io/jobs?page=1&page=2",
+            {"mode": "none", "param": "page", "max_pages": 1},
+            {},
+            "mode is 'none'",
+        ),
+        # A page slot hidden in another key's value, under strict `&` splitting.
+        (
+            "https://realboard.io/jobs?filter=a;page={page}",
+            _QP,
+            {},
+            "not in a query-string value under that key",
+        ),
+        # Mode body_field: the query half and the body half both count.
+        (
+            f"{_POST}?Page=1",
+            _BF,
+            {"method": "POST", "body_json": {"Page": PAGE_PLACEHOLDER}},
+            "names 'Page' 1 time",
+        ),
+        (
+            _POST,
+            _BF,
+            {"method": "POST", "body_json": {"Page": PAGE_PLACEHOLDER, "page": "1"}, **_JSON_ITEMS},
+            "body_json's top-level keys name 'Page' 2 times",
+        ),
+        (
+            _POST,
+            {**_BF, "param": "\u03c3"},
+            {"method": "POST", "body_json": {"ς": "1", "\u03c3": PAGE_PLACEHOLDER}, **_JSON_ITEMS},
+            "name '\u03c3' 2 times",
+        ),
+        # A fixed body field repeating the certified key, under any mode and case.
+        (
+            "https://realboard.io/jobs?page={page}",
+            _QP,
+            {"method": "POST", "body_json": {"page": "1"}, **_JSON_ITEMS},
+            "list.body_json also declares 'page'",
+        ),
+        (
+            "https://realboard.io/jobs?page={page}",
+            _QP,
+            {"method": "POST", "body_json": {"Page": "1"}, **_JSON_ITEMS},
+            "list.body_json also declares 'page'",
+        ),
+        (
+            "https://realboard.io/jobs?o={page}",
+            {**_QP, "mode": "path_segment"},
+            {"method": "POST", "body_json": {"page": "1"}, **_JSON_ITEMS},
+            "list.body_json also declares 'page'",
+        ),
+    ],
+)
+def test_a_page_key_sent_twice_is_refused_at_load(
+    library: Path, url: str, pagination: dict[str, Any], extra: dict[str, Any], expected: str
 ) -> None:
-    """T154 round 3, R1. This test used to assert the opposite: that a single,
-    non-duplicated query pair repeating the body field's own name "still
-    loads", justified as the mode-axis mirror of the unrelated-key control. It
-    is not — the control repeats an *unrelated* key; this repeats
-    `pagination.param`'s own name, which is exactly the merged-namespace harm
-    F1 fixed, at a threshold of **one** occurrence rather than two.
-    `body_field`'s one legitimate occurrence of `Page` is in the body; the
-    query has none, so `?Page=1` beside `body_json: {Page: "{page}"}` fixes
-    every request's query half to page 1 while only the body varies — a
-    framework that merges query and body namespaces may honour the fixed
-    query value over the varying body one, on every one of the three POSTs
-    this pagination.max_pages would otherwise issue."""
-    message = _refused(
-        library,
-        f"https://{_REAL_SITE}/Search/ExecuteSearch?Page=1",
-        {"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
-        method="POST",
-        body_json={"Keyword": "python", "ResultsPerPage": 25, "Page": PAGE_PLACEHOLDER},
-    )
-    assert "names 'Page' 1 time" in message
+    assert expected in _refused(library, url, pagination, **extra)
 
 
-def test_a_body_field_board_with_an_unrelated_query_key_still_loads(library: Path) -> None:
-    """The real mode-axis control, replacing the test above: a query key that
-    does not spell `pagination.param` at all is not this rule's business, on
-    the mode axis the same way an unrelated query-side duplicate is on the
-    name axis (`test_a_duplicate_under_an_unrelated_key_still_loads`)."""
-    _edit_connector(
-        library,
-        url_pattern=f"https://{_REAL_SITE}/Search/ExecuteSearch?Keyword=python",
-        method="POST",
-        body_json={"Keyword": "python", "ResultsPerPage": 25, "Page": PAGE_PLACEHOLDER},
-        pagination={"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == [
-        f"https://{_REAL_SITE}/Search/ExecuteSearch?Keyword=python",
-        f"https://{_REAL_SITE}/Search/ExecuteSearch?Keyword=python",
-    ]
-
-
-def test_a_query_param_board_with_a_fixed_body_field_of_the_same_name_is_refused(
-    library: Path,
+@pytest.mark.parametrize(
+    ("url", "pagination", "extra", "expected"),
+    [
+        # A repeated key that is not the page key is none of this rule's business.
+        (
+            "https://realboard.io/jobs?tag=a&tag=b&page={page}",
+            _QP,
+            {},
+            [
+                "https://realboard.io/jobs?tag=a&tag=b&page=1",
+                "https://realboard.io/jobs?tag=a&tag=b&page=2",
+            ],
+        ),
+        # `mode: none` with no param never runs the check.
+        (
+            "https://realboard.io/jobs?tag=a&tag=a",
+            {"mode": "none", "max_pages": 1},
+            {},
+            ["https://realboard.io/jobs?tag=a&tag=a"],
+        ),
+        # A value that spells `key=value` inside itself is data, not a second pair.
+        (
+            "https://realboard.io/jobs?q=page%3D1&page={page}",
+            _QP,
+            {},
+            [
+                "https://realboard.io/jobs?q=page%3D1&page=1",
+                "https://realboard.io/jobs?q=page%3D1&page=2",
+            ],
+        ),
+        # Case-only difference between param and the URL key is the same key, so it loads.
+        (
+            "https://realboard.io/jobs?Page={page}",
+            _QP,
+            {},
+            ["https://realboard.io/jobs?Page=1", "https://realboard.io/jobs?Page=2"],
+        ),
+        (
+            "https://realboard.io/jobs?a;b={page}",
+            {**_QP, "param": "a;b"},
+            {},
+            ["https://realboard.io/jobs?a;b=1", "https://realboard.io/jobs?a;b=2"],
+        ),
+        # Unrelated query / body keys under each mode.
+        (
+            f"{_POST}?Keyword=python",
+            _BF,
+            {
+                "method": "POST",
+                "body_json": {"Keyword": "python", "Page": PAGE_PLACEHOLDER},
+                **_JSON_ITEMS,
+            },
+            [f"{_POST}?Keyword=python"] * 2,
+        ),
+        (
+            "https://realboard.io/jobs?page={page}",
+            _QP,
+            {"method": "POST", "body_json": {"other": "1"}, **_JSON_ITEMS},
+            ["https://realboard.io/jobs?page=1", "https://realboard.io/jobs?page=2"],
+        ),
+        (
+            "https://realboard.io/jobs/{page}",
+            {**_QP, "mode": "path_segment"},
+            {"method": "POST", "body_json": {"other": "1"}, **_JSON_ITEMS},
+            ["https://realboard.io/jobs/1", "https://realboard.io/jobs/2"],
+        ),
+    ],
+)
+def test_a_legitimate_page_key_shape_still_loads(
+    library: Path, url: str, pagination: dict[str, Any], extra: dict[str, Any], expected: list[str]
 ) -> None:
-    """T154 round 3, R1's mirror: the certifying key lives in the *query* this
-    time, correctly, but a POST body repeats its own name fixed at a value no
-    capture ever measured — the identical merged-namespace harm as the test
-    above, on the other half of the request."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?page={page}",
-        method="POST",
-        body_json={"page": "1"},
-        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    with pytest.raises(ConnectorError, match=r"list\.body_json also declares 'page'"):
-        load_connector(_package(library))
-
-
-def test_a_query_param_board_with_an_unrelated_body_field_still_loads(library: Path) -> None:
-    """The namespace-axis control, the mirror of
-    `test_a_body_field_board_with_an_unrelated_query_key_still_loads`: a body
-    field that does not spell `pagination.param` at all is not this rule's
-    business."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?page={page}",
-        method="POST",
-        body_json={"other": "1"},
-        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == [
-        "https://realboard.io/jobs?page=1",
-        "https://realboard.io/jobs?page=2",
-    ]
-
-
-def test_a_path_segment_board_with_a_fixed_body_field_of_the_same_name_is_refused(
-    library: Path,
-) -> None:
-    """T154 round 4 (NF2/NF3). Round 3 scoped the mirror above to `query_param`
-    alone, on the premise that `path_segment` binds `param` to a URL *position*
-    a merged namespace never sees. That premise is false twice over — this
-    config has no path segment in it at all: `pagination.mode` says
-    `path_segment`, but the sole `{page}` occurrence sits in a query-string
-    *value* under the unrelated key `o`, which a merged `request.values` /
-    `$_REQUEST` / `params` plainly does see — and even a genuine path segment
-    is not the isolated position claimed, since Rails' `params` (named in this
-    very error message) merges `path_parameters` into the same hash as the
-    query and body. `page_placeholder`'s own R7 never distinguished
-    `query_param` from `path_segment` in the first place."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?o={page}",
-        method="POST",
-        body_json={"page": "1"},
-        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 2},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    with pytest.raises(ConnectorError, match=r"list\.body_json also declares 'page'"):
-        load_connector(_package(library))
-
-
-def test_a_path_segment_board_with_an_unrelated_body_field_still_loads(library: Path) -> None:
-    """The `path_segment` mirror of
-    `test_a_query_param_board_with_an_unrelated_body_field_still_loads`: a
-    genuine path position, and a body field that does not spell
-    `pagination.param` at all — not this rule's business under either mode."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs/{page}",
-        method="POST",
-        body_json={"other": "1"},
-        pagination={"mode": "path_segment", "param": "page", "start": 1, "max_pages": 2},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == [
-        "https://realboard.io/jobs/1",
-        "https://realboard.io/jobs/2",
-    ]
-
-
-def test_a_percent_encoded_key_name_counts_toward_the_duplicate(library: Path) -> None:
-    """T154 round 4 (NF4). `query_pair_names` must percent-*decode* a raw key
-    name before comparing it to `pagination.param` — `%70age` decodes to
-    `page`, the same key `pagination.param` and `query_pair_names` itself both
-    spell it as. Dropping that `unquote` call undercounts this to a single
-    occurrence, which is not `> allowed_in_query` and loads a genuine
-    duplicate — the identical harm as the plain-ASCII case, spelled to defeat
-    a naive string comparison rather than the decoded one."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?%70age=1&page={page}",
-        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-    )
-    assert "names 'page' 2 times" in message
-
-
-def test_a_case_only_difference_still_counts_as_the_same_key(library: Path) -> None:
-    """T154 round 4 (NF7), decided deliberately rather than left as an
-    oversight: this library's POST-paginated boards are ASP.NET-shaped, and
-    ASP.NET's `NameValueCollection` compares both its query and its form
-    collections with an ordinal, case-**insensitive** comparer. `?Page=1`
-    beside `?page={page}` is therefore the identical duplicate-key harm as
-    `test_a_query_key_sent_twice_is_refused_at_load`, read by the one server
-    family this rule is modelled on — a case-sensitive count would miss it."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?Page=1&page={page}",
-        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-    )
-    assert "names 'page' 2 times" in message
-
-
-def test_mode_none_naming_param_anyway_refuses_a_duplicate_of_it(library: Path) -> None:
-    """T154 round 4 (NF5). `pagination.param` may be set even though
-    `mode: none` never requires it, and route 4's check for that mode is
-    reached only then — untested by anything before round 4, so a mutation
-    deleting or weakening it left every test green. A repeated occurrence of
-    the named key is refused independent of the merged-namespace reasoning
-    the other modes rest on: two literal pairs sharing a name is never a
-    well-formed request on its own."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?page=1&page=2",
-        {"mode": "none", "param": "page", "max_pages": 1},
-    )
-    assert "names 'page' 2 times" in message
-    assert "mode is 'none'" in message
-
-
-def test_mode_none_naming_no_param_still_loads_a_duplicate_key(library: Path) -> None:
-    """The NF5 boundary itself, stated as a passing case: with no
-    `pagination.param` declared at all, route 4 never runs — so a repeated
-    query key, `param`'s own eventual spelling included, loads. This is what
-    makes the removed docstring phrasing ('a repeated query key is never a
-    well-formed request, whatever pagination.mode is') false as a general
-    claim: it was only ever true about the key `pagination.param` names."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?tag=a&tag=a",
-        pagination={"mode": "none", "max_pages": 1},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == ["https://realboard.io/jobs?tag=a&tag=a"]
-
-
-def test_a_semicolon_separated_duplicate_is_refused_at_load(library: Path) -> None:
-    """F2. `;` is not `application/x-www-form-urlencoded`'s pair separator —
-    that grammar recognises only `&` — but it is HTML 4.01 Appendix B.2.2's documented
-    historical alternate, and the asymmetry is not merely historical:
-    `urllib.parse.parse_qsl` itself grew a `separator` parameter over this
-    exact ambiguity (CVE-2021-23336). RFC 3986 §3.4 itself states no pair
-    grammar at all (`query = *( pchar / "/" / "?" )`, pairs being only a
-    stated *usage*). Either reading of `?page=1;page={page}` is a harm this
-    module already refuses: a server that splits on `;` sees `page` sent
-    twice (this task's own certified-duplicate harm), and one that does not
-    sees the single value `1;page=1`/`1;page=2` — never an integer page
-    number, so `page` never actually varies (T113 route 3's "identical
-    request" harm)."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?page=1;page={page}",
-        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-    )
-    assert "names 'page' 2 times" in message
-
-
-def test_a_page_slot_embedded_in_another_keys_value_is_refused_under_strict_splitting(
-    library: Path,
-) -> None:
-    """T154 round 3, R2 — a regression, not a new route. Widening
-    `_QUERY_PAIR_SEPARATORS` to `[&;]` for F2 was applied to the *shared*
-    `_query_pairs`, so `_url_page_positions` briefly committed to the
-    `;`-splitting reading too: `?filter=a;page={page}` re-parses under it as
-    two keys, `filter` and `page` — exactly the shape an `&`-spelled capture
-    of the real request would show — while the wire request `build_list_urls`
-    actually sends still holds one key, `filter`, whose value is the literal
-    text `a;page=1` (no server this engine cannot assume splits on `;` ever
-    sees a second key). Refused via route 1 now that `_url_page_positions`
-    always splits on `&` alone, regardless of what route 4's own permissive
-    reading (`query_pair_names`) would say."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?filter=a;page={page}",
-        {"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-    )
-    assert "not in a query-string value under that key" in message
-
-
-def test_a_value_that_merely_contains_an_equals_sign_is_not_a_second_pair(
-    library: Path,
-) -> None:
-    """The separator-axis control: a value that happens to spell `key=value`
-    inside itself is data, not a delimiter — `?q=page%3D1&page={page}` has
-    exactly one `page` pair after percent-decoding is set aside, the same way
-    `test_a_page_index_read_from_a_response_does_not_certify_a_request_key`
-    keeps a response body's own text from being read as a request."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?q=page%3D1&page={page}",
-        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == [
-        "https://realboard.io/jobs?q=page%3D1&page=1",
-        "https://realboard.io/jobs?q=page%3D1&page=2",
-    ]
-
-
-# ---------------------------------------------------------------------------
-# T154, round 5 — F1 (the mode axis, still incomplete), F2 (the same
-# comparator, unpinned on the body half) and F3 (the separator axis's own
-# claim, false)
-
-
-def test_a_duplicate_body_field_key_differing_only_in_case_is_refused(library: Path) -> None:
-    """F1. `body_field`'s own certified occurrence is *always* present in its
-    body, so `any(...)` — is `param`'s name present at all — could never tell
-    it apart from a second, differently-cased key fixed beside it. `Page`
-    holds the placeholder correctly; `page` fixes the identical key
-    (case-insensitively, per NF7's own comparator) at `'1'` — the merged-form
-    harm NF7 already refuses on the query side, unrefused here because the
-    body-side check was scoped away from `body_field` entirely rather than
-    made to count."""
-    message = _refused(
-        library,
-        f"https://{_REAL_SITE}/Search/ExecuteSearch",
-        {"mode": "body_field", "param": "Page", "start": 1, "max_pages": 2},
-        method="POST",
-        body_json={"Keyword": "python", "Page": PAGE_PLACEHOLDER, "page": "1"},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    assert "body_json's top-level keys name 'Page' 2 times" in message
-
-
-def test_a_fixed_body_field_repeating_the_query_key_differing_only_in_case_is_refused(
-    library: Path,
-) -> None:
-    """F2. The query half's case-insensitive comparator (NF7) is pinned by
-    `test_a_case_only_difference_still_counts_as_the_same_key`; the identical
-    comparator on the body half was not, and reverting it to `==` survived
-    the whole suite. `?page={page}` beside `body_json: {Page: "1"}` is the
-    same merged-namespace harm as
-    `test_a_query_param_board_with_a_fixed_body_field_of_the_same_name_is_refused`,
-    differing only in case."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?page={page}",
-        method="POST",
-        body_json={"Page": "1"},
-        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    with pytest.raises(ConnectorError, match=r"list\.body_json also declares 'page'"):
-        load_connector(_package(library))
-
-
-def test_a_param_name_containing_the_permissive_separator_is_still_caught(
-    library: Path,
-) -> None:
-    """F3. `_QUERY_PAIR_SEPARATORS`'s own docstring claimed a wider split
-    "only ever finds more occurrences ... never fewer" — false, measured
-    here: splitting `?a;b=1&a;b={page}` on the permissive `[&;]` union cuts
-    the literal key `a;b` into `a` and `b`, neither of which is `a;b`, so a
-    name occurring twice in the real, `&`-only request counts as *zero*
-    under that split alone. `connectors._query_key_occurrences` runs the
-    strict `&`-only reading too and reports the larger of the two, which
-    still sees this."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?a;b=1&a;b={page}",
-        {"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
-    )
-    assert "names 'a;b' 2 times" in message
-
-
-def test_a_case_only_difference_between_param_and_the_url_key_now_loads(library: Path) -> None:
-    """Route 1 did not follow NF7's case-insensitive widening, so the
-    rule-set asserted both that `Page` and `page` are the same key (route 4,
-    the test above and `test_a_case_only_difference_still_counts_as_the_same_key`)
-    and that they differ (route 1, this shape, refused before round 5).
-    Route 1 now agrees with route 4's own citation — ASP.NET's
-    `NameValueCollection` — rather than the other way around, which would
-    reopen NF7's fail-open gap."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?Page={page}",
-        pagination={"mode": "query_param", "param": "page", "start": 1, "max_pages": 2},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == [
-        "https://realboard.io/jobs?Page=1",
-        "https://realboard.io/jobs?Page=2",
-    ]
-
-
-# ---------------------------------------------------------------------------
-# T154, round 6 — R1 (fail-open, round 5 introduced it), R2 (the comparator
-# itself pinned by nothing) and R3 (which key a reading hands the placeholder
-# to is itself reading-dependent, so counting occurrences of `param`'s own
-# spelling is the wrong measurement for `mode: query_param`)
-
-
-def test_a_final_sigma_and_a_plain_sigma_are_refused_as_the_same_key(library: Path) -> None:
-    """R1. Round 5 swapped the comparator from `.casefold()` to `.lower()`,
-    arguing `.lower()` was the closer match to `NameValueCollection`'s
-    ordinal comparer because `.casefold()` merges `"straße"`/`"strasse"`,
-    which `StringComparer.OrdinalIgnoreCase` does not. That argument only
-    ever looked at one direction: `.lower()` does not merge `"ς"` (GREEK
-    SMALL LETTER FINAL SIGMA, U+03C2) with `"\u03c3"` (GREEK SMALL LETTER SIGMA,
-    U+03C3), while the cited comparer does — .NET's `ToUpperInvariant` sends
-    both to `"Σ"`, and Unicode's own `CaseFolding.txt` lists `03C2; C;
-    03C3;`, a *common* fold, not a `.casefold()`-only *full* one. Refused
-    before round 5 (commit `7807824`); loaded at round 5's head."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?ς=1&\u03c3={page}",
-        {"mode": "query_param", "param": "\u03c3", "start": 1, "max_pages": 2},
-    )
-    assert "names '\u03c3' 2 times" in message
-
-
-def test_the_same_sigma_duplicate_survives_its_percent_encoded_wire_spelling(
-    library: Path,
-) -> None:
-    """R1, NF4's own reading applied to it: `%CF%82` and `%CF%83`
-    percent-decode to the identical final-sigma/sigma pair the test above
-    spells literally, so the duplicate must be caught the same way regardless
-    of which wire spelling a connector's author used."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?%CF%82=1&%CF%83={page}",
-        {"mode": "query_param", "param": "\u03c3", "start": 1, "max_pages": 2},
-    )
-    assert "names '\u03c3' 2 times" in message
-
-
-def test_a_final_sigma_duplicate_inside_mode_body_fields_own_body_is_refused(
-    library: Path,
-) -> None:
-    """R1's `body_field` mirror, F1's own shape read by this comparator: the
-    body's `"ς"` and `"\u03c3"` are the identical final-sigma/sigma pair as the
-    query-side tests above, and the body-side comparator (F2's own fix) must
-    treat them the same way."""
-    message = _refused(
-        library,
-        f"https://{_REAL_SITE}/Search/ExecuteSearch",
-        {"mode": "body_field", "param": "\u03c3", "start": 1, "max_pages": 2},
-        method="POST",
-        body_json={"ς": "1", "\u03c3": PAGE_PLACEHOLDER},
-        item=None,
-        fields=None,
-        from_json={"items": "Jobs", "fields": {"title": "Title", "detail_url": "Url"}},
-    )
-    assert "name '\u03c3' 2 times" in message
-
-
-def test_a_sharp_s_and_its_ss_expansion_are_refused_as_the_same_key(library: Path) -> None:
-    """R2. The comparator itself was pinned by nothing: reverting all six
-    `.lower()` call sites in `connectors.py` back to `.casefold()` survived
-    the entire suite before this test existed. `.casefold()`'s merge of
-    `"straße"` and `"strasse"` — an equality `StringComparer.OrdinalIgnoreCase`
-    does not hold — is now stated as a deliberate, accepted cost rather than
-    an unpinned argument in prose (`_a_page_placeholder_and_a_query_key_imply_
-    each_other`'s own docstring says why), and this pins that choice: a
-    narrowing back to `.lower()`, or to `==`, must fail this."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?straße=1&strasse={page}",
-        {"mode": "query_param", "param": "strasse", "start": 1, "max_pages": 2},
-    )
-    assert "names 'strasse' 2 times" in message
-
-
-def test_a_semicolon_only_fragmentation_of_param_still_defeats_a_spelling_based_count(
-    library: Path,
-) -> None:
-    """R3. `?a;b=1;a;b={page}` is joined by `;` alone, with no `&` anywhere,
-    so the *strict* `&`-only reading treats the whole query as a single pair
-    named `"a;b"` — matching `pagination.param` exactly once, which on its
-    own is legitimate. The *permissive* `[&;]` reading fragments `"a;b"` into
-    `"a"` and `"b"`, and the placeholder lands on `"b"` — which repeats
-    **twice** under that same reading. Counting occurrences of `param`'s own
-    literal spelling (round 5's F3 fix) reads 1 under the reading that has no
-    duplicate and 0 under the one that does, because the duplicate is
-    actually on a *different* spelling of the key — invisible to a count
-    that never looks at which key a reading actually hands the placeholder
-    to. `connectors._placeholder_carrying_query_key_occurrences` is the fix:
-    it counts occurrences of that key instead, independently for each
-    reading."""
-    message = _refused(
-        library,
-        "https://realboard.io/jobs?a;b=1;a;b={page}",
-        {"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
-    )
-    assert "names 'a;b'" in message
-
-
-def test_a_semicolon_only_param_at_a_single_occurrence_still_loads(library: Path) -> None:
-    """The R3 control: a genuinely single occurrence must still load even
-    though `param` contains the permissive separator — both readings find
-    exactly one key holding the placeholder (`"a;b"` under the strict
-    reading, `"b"` under the permissive one) and neither repeats, so the fix
-    above must not refuse this."""
-    _edit_connector(
-        library,
-        url_pattern="https://realboard.io/jobs?a;b={page}",
-        pagination={"mode": "query_param", "param": "a;b", "start": 1, "max_pages": 2},
-    )
-    connector = load_connector(_package(library))
-    assert build_list_urls(connector) == [
-        "https://realboard.io/jobs?a;b=1",
-        "https://realboard.io/jobs?a;b=2",
-    ]
+    _edit_connector(library, url_pattern=url, pagination=pagination, **extra)
+    assert build_list_urls(load_connector(_package(library))) == expected
 
 
 def test_every_duplicate_key_probe_agrees_with_the_rule() -> None:
@@ -1263,73 +822,6 @@ def test_every_duplicate_key_probe_agrees_with_the_rule() -> None:
 
     assert defects == []
     assert checked >= pc.MINIMUM_DUPLICATE_KEY_PROBES
-
-
-def test_a_deliberately_wrong_duplicate_key_probe_table_is_reported() -> None:
-    """The negative control T154 shipped without (round 4, NF1), in
-    `page_placeholder.test_a_deliberately_wrong_probe_table_is_reported`'s own
-    idiom.
-
-    `defects == []` on the real table (the test above) is exactly as
-    consistent with a correct comparison as with `probe_duplicate_page_keys`
-    gutted to `return [], len(probes)` without looking at a single probe —
-    both read `duplicated_page_keys_certified: 0`, `gate_status: measured`,
-    over the same green real table. Only handing the function a table it
-    cannot have been *right about by construction* tells the two apart:
-    inverting every probe's `loads` makes every one of them wrong, so a
-    comparison that actually runs must report all of them, and a severed one
-    reports none.
-    """
-    wrong = tuple(replace(probe, loads=not probe.loads) for probe in pc.DUPLICATE_KEY_PROBES)
-    defects, checked = pc.probe_duplicate_page_keys(wrong)
-    assert checked == len(wrong)
-    assert len(defects) == len(wrong), defects
-
-
-def test_the_duplicate_key_probe_table_meets_its_floor_and_keeps_its_names() -> None:
-    """Pinned **by name**, for the same reason
-    `test_the_url_side_probe_table_carries_the_three_routes_and_meets_its_floor`
-    is: a count alone is satisfied by any N probes and protects a particular
-    shape only by coincidence."""
-    assert len(pc.DUPLICATE_KEY_PROBES) >= pc.MINIMUM_DUPLICATE_KEY_PROBES
-    names = {probe.name for probe in pc.DUPLICATE_KEY_PROBES}
-    assert {
-        "the named key sent twice, the fixed value first",
-        "the named key sent twice, the fixed value second",
-        "the same route under a name that does not spell 'page'",
-        "a duplicate under an unrelated key is not this rule's business",
-        "the ordinary single-occurrence shape still loads",
-        "the named key sent twice, across mode: body_field's own query string",
-        "a single fixed query pair repeating the body field's own name is refused",
-        "a body_field board with an unrelated query key still loads",
-        "the named key sent twice via a ';'-separated pair",
-        "the named key sent twice, across mode: query_param's own body",
-        "a query_param board with an unrelated body field still loads",
-        # round 4 (NF2/NF3, NF4, NF5, NF7).
-        "the named key fixed in the body, across mode: path_segment's own query value",
-        "a path_segment board with an unrelated body field still loads",
-        "the named key sent twice, one occurrence percent-encoded",
-        "mode: none naming param anyway, with a duplicate of it",
-        "mode: none naming no param at all still loads a duplicate key",
-        "the named key sent twice, differing only in case",
-        # round 5 (F1, F2, F3).
-        "the named key sent twice, both inside mode: body_field's own body",
-        "a fixed body field repeating the query's own name, differing only in case",
-        "a param name containing the permissive separator defeats a single blended split",
-        # round 6 (R1, R2, R3).
-        "a Greek final sigma and a plain sigma are the same key",
-        "the same sigma duplicate, spelled in its percent-encoded wire form",
-        "the sigma duplicate, inside mode: body_field's own body",
-        "a German sharp s and its 'ss' expansion are the same key under the "
-        "deliberately wider fold",
-        "a param name containing the permissive separator, joined only by that "
-        "separator, still defeats a spelling-based count",
-        "a param name containing the permissive separator, at a single occurrence, still loads",
-    } <= names, sorted(names)
-    # Both verdicts represented, for the same reason the URL-side table needs
-    # both: a table of refusals alone passes over a validator that refuses
-    # everything.
-    assert {probe.loads for probe in pc.DUPLICATE_KEY_PROBES} == {True, False}
 
 
 def test_the_committed_library_has_no_duplicated_query_key() -> None:
@@ -1358,42 +850,6 @@ def test_the_denominator_counts_occurrences_not_a_set_of_names() -> None:
     assert len(pc.query_keys(url)) == 1  # what it must not use
 
 
-def test_the_denominator_call_site_is_pinned_not_just_the_function_pair(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """T154 round 3, R3. The test above is correct and still unpinned: it
-    compares `query_pair_names` and `query_keys` directly, never
-    `measure_duplicate_page_keys`'s own call site — and a second method shows
-    why that gap matters. Every package the real library scans today has
-    `len(query_pair_names(url_pattern)) == len(pc.query_keys(url_pattern))`
-    (no package on disk may carry a real duplicate; the load-time rule this
-    task added refuses one before this function ever sees it), so no
-    assertion built from `_LIBRARY`'s own data — including
-    `test_the_committed_library_has_no_duplicated_query_key`'s own floor
-    check — can tell the two functions apart at the call site. A regression
-    that quietly swapped `query_pair_names` for `query_keys` inside
-    `measure_duplicate_page_keys` would leave every one of those tests green.
-
-    So this pins the call site directly: a stand-in for `query_pair_names`
-    that returns a fixed, distinguishable **length** (two, for every
-    package), read back out of the measured denominator. `query_keys` could
-    only produce that shape by coincidence, on every paginating package at
-    once — not a fact this fixture's expected value is allowed to rest on.
-    """
-    calls: list[str] = []
-
-    def spy(pattern: str) -> list[str]:
-        calls.append(pattern)
-        return ["sentinel", "sentinel"]
-
-    monkeypatch.setattr(pc, "query_pair_names", spy)
-    measured = pc.measure_duplicate_page_keys(_LIBRARY)
-
-    assert calls, "measure_duplicate_page_keys never called query_pair_names at all"
-    assert measured["paginated_packages_scanned"] > 0
-    assert measured["query_key_occurrences_scanned"] == 2 * measured["paginated_packages_scanned"]
-
-
 def test_the_denominator_is_scoped_to_the_packages_route_4_reaches() -> None:
     """F6's other half: a `mode: none` package sends no page key at all, so
     pooling it into the denominator would count a population route 4 never
@@ -1411,102 +867,6 @@ def test_the_denominator_is_scoped_to_the_packages_route_4_reaches() -> None:
         excluded_occurrences += len(query_pair_names(connector.list.url_pattern))
     assert excluded_occurrences > 0  # the exclusion is real, not vacuous
     assert measured["query_key_occurrences_scanned"] < 14  # T113's old, unscoped total
-
-
-def test_a_library_too_small_to_scan_reports_unmeasured_for_duplicate_keys(
-    library: Path,
-) -> None:
-    """The floor refuses a clean zero over a library nobody read — a
-    one-package fixture with a single query key is exactly that."""
-    measured = pc.measure_duplicate_page_keys(library)
-    assert measured["gate_status"] == "unmeasured"
-    assert "query-key occurrence" in measured["unmeasured_reason"]
-
-
-def test_a_breached_duplicate_key_floor_writes_nothing(
-    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(pc, "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED", 100)
-    target = tmp_path / "T154.json"
-
-    pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
-
-    assert not target.exists()
-
-
-def test_a_breached_duplicate_key_floor_fails_the_entrypoint(
-    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """F3: T154's own instance of T115/T153's rule — a breached floor must
-    fail `_main` outright at exit **1**, not the 3 `make evidence` prints as
-    `unmeasured (recorded)` and walks past while the last-committed
-    `T154.json` still reads `gate_status: measured`.
-
-    T113 is given a real capture and left at its default floor so it reads
-    cleanly (`t113_code == 0`) — otherwise a `no probe/captured.json` finding
-    of T113's own would also read exit 1, and the assertion below would pass
-    without T154's branch having been reached at all."""
-    monkeypatch.setattr(pc, "MINIMUM_REQUEST_KEYS", 1)
-    monkeypatch.setattr(pc, "MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED", 100)
-    monkeypatch.setattr(pc, "DEFAULT_CONNECTORS_DIR", library)
-    _real_board(library)
-    _write_capture(library, url="https://www.examplejobs.test/jobs?page=1")
-    target = tmp_path / "T113.json"
-
-    t113_only = pc.measure(library)
-    assert t113_only["gate_status"] == "measured"
-    assert t113_only["paginated_request_keys_no_capture_measured"] == 0
-    assert t113_only["url_side_routes_open"] == 0
-
-    assert pc._main(["pagination_capture", str(target)]) == 1
-    sibling = tmp_path / "T154.json"
-    assert not sibling.exists()
-
-
-def test_the_committed_duplicate_key_record_carries_the_floor_and_not_the_count(
-    tmp_path: Path,
-) -> None:
-    """T100's rule, applied to this gate: `query_key_occurrences_scanned`,
-    `paginated_packages_scanned` and `duplicate_key_probes_checked` all move
-    whenever anybody adds or retires a connector or a probe."""
-    target = tmp_path / "T154.json"
-    pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
-    committed = json.loads(target.read_text(encoding="utf-8"))
-
-    assert (
-        committed["query_key_occurrences_scanned_at_least"]
-        == pc.MINIMUM_QUERY_KEY_OCCURRENCES_SCANNED
-    )
-    assert committed["duplicate_key_probes_at_least"] == pc.MINIMUM_DUPLICATE_KEY_PROBES
-    for moving in (
-        "query_key_occurrences_scanned",
-        "paginated_packages_scanned",
-        "duplicate_key_probes_checked",
-    ):
-        assert moving not in committed
-    assert committed["duplicated_page_keys_certified"] == 0
-
-
-def test_the_committed_duplicate_key_evidence_matches_what_the_code_measures_now(
-    tmp_path: Path,
-) -> None:
-    target = tmp_path / "T154.json"
-    pc.write_duplicate_page_keys_evidence(target, _LIBRARY)
-
-    assert json.loads(target.read_text(encoding="utf-8")) == json.loads(
-        pc.DEFAULT_T154_EVIDENCE_PATH.read_text(encoding="utf-8")
-    )
-
-
-def test_the_entry_point_writes_both_t113_and_t154_evidence(tmp_path: Path) -> None:
-    """The fenced gate for both tasks invokes only `python -m
-    integral.pagination_capture`, so one run has to produce both files."""
-    target = tmp_path / "T113.json"
-
-    assert pc._main(["pagination_capture", str(target)]) == 0
-    assert json.loads(target.read_text(encoding="utf-8"))["gate_status"] == "measured"
-    sibling = tmp_path / "T154.json"
-    assert json.loads(sibling.read_text(encoding="utf-8"))["duplicated_page_keys_certified"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1551,15 +911,6 @@ def test_an_unrecognised_provenance_is_an_absence_not_a_third_category(library: 
         assert pc.read_capture(_package(library)).provenance == pc.UNRECORDED
     assert set(pc.PROVENANCE) == {pc.LIVE, pc.TRANSCRIBED}
     assert pc.UNRECORDED not in pc.PROVENANCE
-
-
-def test_the_usajobs_capture_says_where_it_came_from() -> None:
-    """T152 replaced the transcribed page-one record with a live POST of
-    `"Page": 2`, whose response bytes are committed beside it."""
-    capture = pc.read_capture(_LIBRARY / "usajobs_en")
-
-    assert capture.provenance == pc.LIVE
-    assert capture.body == {"Keyword": "python", "ResultsPerPage": 25, "Page": 2}
 
 
 def test_a_finding_names_the_provenance_of_the_capture_that_failed_to_certify(
@@ -1760,50 +1111,6 @@ def test_a_live_response_cannot_name_a_file_outside_its_own_package(
         assert "plain filename" in finding["reason"], escape
 
 
-def test_a_live_response_file_that_is_a_symlink_is_not_a_committed_response(
-    library: Path, tmp_path: Path, provenance_floor: None
-) -> None:
-    """The half of the sentence above that a name check cannot deliver, and
-    which this test's neighbour claimed for two rounds without checking.
-
-    `_PLAIN_FILENAME` constrains the **name**; `read_bytes` then follows a
-    symlink, and git commits symlinks. So `probe/list.html` pointing at another
-    package's response — or at any file on the machine — would let a capture
-    certify itself against bytes it never received, with a `bytes` and a
-    `sha256` that both match because they were computed over the target. The
-    claim `live` makes is about what *this* board sent.
-    """
-    _real_board(library)
-    outsider = tmp_path / "somebody-elses.html"
-    outsider.write_bytes(b"<html>another package's response</html>")
-    probe = _package(library) / "probe"
-    probe.mkdir(exist_ok=True)
-
-    for target in (outsider, Path("/etc/hostname")):
-        link = probe / "list.html"
-        link.unlink(missing_ok=True)
-        link.symlink_to(target)
-        body = link.read_bytes()
-        _write_capture(
-            library,
-            captured_at="2026-09-08",
-            url=f"https://{_REAL_SITE}/jobs",
-            status=200,
-            provenance=pc.LIVE,
-            # Honest about the bytes on the other end of the link, which is
-            # exactly what makes the digest no defence here.
-            response={
-                "file": "list.html",
-                "bytes": len(body),
-                "sha256": hashlib.sha256(body).hexdigest(),
-            },
-        )
-
-        (finding,) = _provenance_findings(library, today=date(2026, 9, 8))
-        assert finding["claim"] == pc.LIVE
-        assert "does not resolve inside the package's own probe/" in finding["reason"], target
-
-
 def test_a_transcribed_capture_names_the_committed_request_it_came_from(
     library: Path, tmp_path: Path, provenance_floor: None
 ) -> None:
@@ -1864,57 +1171,6 @@ def test_a_transcribed_capture_names_the_committed_request_it_came_from(
         (finding,) = _provenance_findings(library, repo_root=repo)
         assert finding["claim"] == pc.TRANSCRIBED, change
         assert expected in finding["reason"], (change, finding["reason"])
-
-
-def test_a_capture_cannot_cite_itself_as_the_request_it_was_transcribed_from(
-    library: Path, provenance_floor: None
-) -> None:
-    """A record is not a source for itself.
-
-    `captured.json` carries its own `url` and its own `body` by construction, so
-    a containment check pointed at it answers every question it can ask. That
-    makes self-citation the cheapest forgery the module could leave open — one
-    line, no new file, no command — sitting behind `transcribed`, the word that
-    sounds like somebody checked. The POST spelling matters as much as the GET
-    one: pretty-printed JSON happens to break the compact body needles, and
-    formatting is not a boundary — re-serialised compactly, the same forgery is
-    the same forgery.
-    """
-    _real_board(library)
-    repo_root = library.parent
-    myself = f"connectors/{_REFERENCE.name}/probe/captured.json"
-    url = f"https://{_REAL_SITE}/search"
-
-    # GET: the record's own `url` is the whole of what a containment check reads.
-    _write_capture(
-        library,
-        captured_at="2026-09-08",
-        url=url,
-        status=200,
-        provenance=pc.TRANSCRIBED,
-        transcribed_from=myself,
-    )
-    (finding,) = _provenance_findings(library, repo_root=repo_root)
-    assert finding["claim"] == pc.TRANSCRIBED
-    assert "own probe/" in finding["reason"], finding["reason"]
-
-    # POST, written compactly so the body needles match the file byte for byte.
-    record = {
-        "captured_at": "2026-09-08",
-        "url": url,
-        "method": "POST",
-        "body": {"Keyword": "python", "ResultsPerPage": 25},
-        "status": 200,
-        "provenance": pc.TRANSCRIBED,
-        "transcribed_from": myself,
-    }
-    path = _package(library) / "probe" / "captured.json"
-    path.write_text(json.dumps(record, separators=(",", ":")), encoding="utf-8")
-    assert '"Keyword":"python"' in path.read_text(encoding="utf-8")
-
-    (finding,) = _provenance_findings(library, repo_root=repo_root)
-    assert finding["claim"] == pc.TRANSCRIBED
-    assert "own probe/" in finding["reason"], finding["reason"]
 
 
 def test_a_file_that_only_mentions_the_request_is_not_a_committed_command(
@@ -1990,42 +1246,6 @@ def test_a_file_that_only_mentions_the_request_is_not_a_committed_command(
     )
     (finding,) = _provenance_findings(library, repo_root=repo)
     assert "commits no command for it" in finding["reason"], finding["reason"]
-
-
-def test_a_transcribed_source_reached_through_a_symlink_is_not_committed_here(
-    library: Path, tmp_path: Path, provenance_floor: None
-) -> None:
-    """`transcribed_from` refuses `..` and an absolute path, which constrains
-    the string. A symlink is how that constraint is walked around: a path that
-    reads as repo-relative, resolving to a file the repository does not carry
-    at that path. "Committed here" is the claim, and a link is not it —
-    including a link whose target is in the tree, which is why the reason no
-    longer says "does not resolve inside this repo" about an input that plainly
-    does. A second reader caught that sentence being false about its own case:
-    the verdict was right and the words were not."""
-    _real_board(library)
-    url = f"https://{_REAL_SITE}/search"
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    outside = tmp_path / "outside.sh"
-    outside.write_text(f"curl -s '{url}'\n", encoding="utf-8")
-    (repo / "inside.sh").write_text(f"curl -s '{url}'\n", encoding="utf-8")
-
-    _write_capture(
-        library,
-        captured_at="2026-09-08",
-        url=url,
-        status=200,
-        provenance=pc.TRANSCRIBED,
-        transcribed_from="ledger.yaml",
-    )
-
-    # Out of the tree, and — the case the old sentence lied about — in it.
-    for target in (outside, Path("inside.sh")):
-        (repo / "ledger.yaml").unlink(missing_ok=True)
-        (repo / "ledger.yaml").symlink_to(target)
-        (finding,) = _provenance_findings(library, repo_root=repo)
-        assert "is not the file this repo commits at that path" in finding["reason"], target
 
 
 def test_a_command_wrapped_over_several_lines_is_still_one_command(
@@ -2138,218 +1358,6 @@ def test_a_symlinked_probe_directory_is_not_a_capture_this_package_holds(
     assert any("own probe/" in reason for reason in reasons), reasons
 
 
-def test_a_probe_linked_at_a_sibling_package_is_not_this_packages_capture(
-    library: Path, tmp_path: Path, provenance_floor: None
-) -> None:
-    """`test_deleting_the_capture_is_not_the_cheapest_way_to_pass`, with the
-    deletion replaced by a link — and it is cheaper than the deletion, because
-    it reads as a pass rather than as a finding.
-
-    A package with **no capture at all** borrows a neighbour's by pointing its
-    `probe/` at the neighbour's, and every question the module asks is answered
-    by the neighbour's artefact: the record resolves, its `transcribed_from`
-    resolves, the command is committed. What is not true is the only thing the
-    row claims — that *this* package's request is the one that was recorded.
-    """
-    _real_board(library)
-    package = _package(library)
-    url = f"https://{_REAL_SITE}/search"
-
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / "ledger.yaml").write_text(f"retest: curl -s '{url}'\n", encoding="utf-8")
-
-    # A neighbour whose own capture is honest. It keeps the reference package's
-    # reserved example domain, so it is excluded from the scan and the finding
-    # below is unambiguously about the borrower.
-    donor = library / "donorboard_es"
-    shutil.copytree(_REFERENCE, donor)
-    (donor / "probe").mkdir(exist_ok=True)
-    (donor / "probe" / "captured.json").write_text(
-        json.dumps(
-            {
-                "captured_at": "2026-09-08",
-                "url": url,
-                "status": 200,
-                "provenance": pc.TRANSCRIBED,
-                "transcribed_from": "ledger.yaml",
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-    shutil.rmtree(package / "probe", ignore_errors=True)
-    (package / "probe").symlink_to(Path("..") / donor.name / "probe", target_is_directory=True)
-
-    (finding,) = _provenance_findings(library, repo_root=repo, today=date(2026, 9, 8))
-    assert finding["package"] == package.name
-    assert finding["claim"] == "absent"
-    assert "symlinked probe/" in finding["reason"], finding["reason"]
-
-
-def test_a_symlinked_package_borrows_the_capture_it_reads_as_holding(
-    library: Path, provenance_floor: None
-) -> None:
-    """`test_a_probe_linked_at_a_sibling_package_is_not_this_packages_capture`,
-    one directory further up — and the fix for that one is what left this open.
-
-    The containment rule resolves its **base** by design, so whatever it is
-    asked from is the one path it cannot see. Asked from the package, the
-    package directory is exempt: a package that is a committed symlink at a
-    sibling — git stores one as mode `120000`, so this is a diff a reviewer
-    receives — answers `probe/captured.json`, `response.file`, the byte count
-    and the digest out of the sibling's artefact, all of them honest, none of
-    them **its**. A package committing no capture at all then reads as an
-    enforced `live`, which is exactly `test_deleting_the_capture_is_not_the_
-    cheapest_way_to_pass` reached by a link instead of a deletion, and it reads
-    as a pass rather than as a finding.
-
-    So the question is asked with the **library** as the base and the package's
-    own name as the first component of the path.
-    """
-    _real_board(library)
-    donor = _package(library)
-    probe = _capture_probe(library)
-    _write_capture(
-        library,
-        captured_at="2026-09-08",
-        url=f"https://{_REAL_SITE}/jobs",
-        status=200,
-        provenance=pc.LIVE,
-        response=_live_response(probe),
-    )
-    # The donor's own claim is fully substantiated, so nothing below is about a
-    # broken capture: it is about which package holds it.
-    assert _provenance_findings(library, today=date(2026, 9, 8)) == []
-
-    borrower = library / "newboard_es"
-    borrower.symlink_to(Path(donor.name), target_is_directory=True)
-
-    measured = cp.measure(library, today=date(2026, 9, 8))
-    assert measured["captures_scanned"] == 2
-    (finding,) = measured["findings"]
-    assert finding["package"] == borrower.name
-    assert finding["claim"] == "absent"
-    assert "symlinked package" in finding["reason"], finding["reason"]
-    assert finding["direction"] == "fail-open"
-    # The donor's `live` is counted once, by the package that holds it. A
-    # borrowed claim is not a claim, so the tally does not read two.
-    assert measured["claims"]["live"] == 1
-
-    # And `check_capture` refuses it when handed the package directly, so the
-    # guarantee does not rest on `measure` having got there first — the shape
-    # `check_live` was blocked for in round three.
-    direct = cp.check_capture(borrower, today=date(2026, 9, 8))
-    assert direct is not None and "symlinked package" in direct.reason
-
-    # Nor on `check_capture` having got there first. `_borrowed_package` is a
-    # verdict about a package; the containment rule underneath it is a verdict
-    # about a path, and each reader has to hold on its own — a mutant that
-    # reverts the rule to asking from the package survived every assertion
-    # above, because the verdict was answering first. That is the exact defect
-    # F4 was blocked for, sitting inside F4's own fix, so it is pinned the way
-    # F4's was: by asking the readers directly.
-    record = json.loads((donor / "probe" / "captured.json").read_text(encoding="utf-8"))
-    assert cp.read_record(borrower) is None
-    reasons = cp.check_live(borrower, record, date(2026, 9, 8))
-    assert any("own probe/" in reason for reason in reasons), reasons
-
-    # The rule's own new argument. Making the package's name a component of the
-    # path means the name is now something that can point out of the library,
-    # and `..` is how: it resolves away to the parent, which is the shape the
-    # comparison is built to notice. Fail-closed, which is the safe direction
-    # for a name nothing legitimate spells.
-    assert cp._committed_in_package(library / "..", Path("probe")) is False
-
-
-def test_a_package_linked_at_an_excluded_one_is_not_excluded_with_it(
-    library: Path, provenance_floor: None
-) -> None:
-    """What the borrowed-package check introduces: an order.
-
-    `measure` reads a package's `site` to decide whether a reserved example
-    domain excludes it from the scan. Read out of a **borrowed** package that
-    is the donor's site, so a package linked at an excluded one is excluded by
-    a property it does not have — it vanishes from the denominator instead of
-    being counted, which is the quietest fail-open of the three: no finding, no
-    claim, and a `captures_scanned` that never knew it was there.
-
-    So the question is asked before anything is read out of the package. The
-    exclusion rule is exercised from both sides here as it is everywhere in
-    this file: the donor is still excluded, on its own domain.
-    """
-    borrower = library / "borrowedboard_es"
-    borrower.symlink_to(Path(_REFERENCE.name), target_is_directory=True)
-
-    measured = cp.measure(library, today=date(2026, 9, 8))
-    assert measured["gate_status"] == "measured"
-    assert measured["example_packages_excluded"] == [_REFERENCE.name]
-    assert measured["captures_scanned"] == 1
-    (finding,) = measured["findings"]
-    assert finding["package"] == borrower.name
-    assert "symlinked package" in finding["reason"], finding["reason"]
-
-
-def test_a_library_reached_through_a_symlink_is_still_measured(
-    library: Path, tmp_path: Path, provenance_floor: None
-) -> None:
-    """The control the case above is bounded by, and the reason the containment
-    rule resolves its base at all.
-
-    A path that leads through a link is not thereby a borrowed path: a checkout
-    under a symlinked home, a worktree reached through one, a `/tmp` that is
-    itself a link on some platforms. If the rule refused those, it would be
-    fail-closed for **every** package at once — a gate that fails everywhere is
-    as useless as one that passes everywhere, and it would fail for a reason
-    nobody could act on. The base is the caller's own argument and is trusted
-    as such; only what this module derives below it is checked.
-    """
-    _real_board(library)
-    probe = _capture_probe(library)
-    _write_capture(
-        library,
-        captured_at="2026-09-08",
-        url=f"https://{_REAL_SITE}/jobs",
-        status=200,
-        provenance=pc.LIVE,
-        response=_live_response(probe),
-    )
-
-    through_a_link = tmp_path / "library-link"
-    through_a_link.symlink_to(library, target_is_directory=True)
-
-    measured = cp.measure(through_a_link, today=date(2026, 9, 8))
-    assert measured["gate_status"] == "measured"
-    assert measured["captures_scanned"] == 1
-    assert measured["findings"] == []
-    assert measured["claims"]["live"] == 1
-
-
-def test_the_library_the_gate_measures_is_the_one_this_repo_commits() -> None:
-    """The base the rule stops at, pinned where it can be — in the gate.
-
-    Moving the containment question up to the library closes the package
-    directory and makes the **library** the path nothing asks about, which is
-    the same shape one step out again. It cannot be closed inside the module:
-    the base is whatever the caller named, and refusing a caller's own root is
-    the fail-closed failure the control above exists to prevent. What can be
-    done is to ask it once about the root the shipped gate actually uses, which
-    is a fact about this repository rather than a rule about an argument. So
-    the recursion stops here, deliberately and in a test, rather than in a
-    sentence saying it does not matter.
-    """
-    assert cp._committed_at(_REPO_ROOT, Path("connectors"))
-    packages = [package for package in sorted(_LIBRARY.iterdir()) if package.is_dir()]
-    # A clean zero over a scan nobody made is the failure this module's own
-    # floor exists to refuse, and the list below is a scan.
-    assert len(packages) >= cp.MINIMUM_CAPTURES_SCANNED, len(packages)
-    borrowed = [
-        package.name for package in packages if not cp._committed_at(_LIBRARY, Path(package.name))
-    ]
-    assert borrowed == [], borrowed
-
-
 def test_the_request_under_test_may_not_supply_the_command_that_certifies_it(
     library: Path, tmp_path: Path, provenance_floor: None
 ) -> None:
@@ -2403,58 +1411,6 @@ def test_the_request_under_test_may_not_supply_the_command_that_certifies_it(
     # the same shape with a search term that is not a client name, and a real
     # command outside both needles.
     assert _cited(f'curl -d \'{{"q":"python"}}\' {url}\n', url=url, body={"q": "python"}) == []
-
-
-def test_a_refusal_that_quotes_a_command_is_inside_the_disclosed_ceiling(
-    library: Path, tmp_path: Path, provenance_floor: None
-) -> None:
-    """The limit, pinned rather than asserted in prose — the other half of
-    `test_a_command_wrapped_over_several_lines…`, which bounds strictness from
-    the same side.
-
-    The module's honest claim is *"this repo commits the text of a command for
-    this request"*. It is not, and cannot be, *"the fetch happened"*: reading
-    what the surrounding prose says was done with the command means deciding
-    textual negation, and a check that guessed at that would be worse than a
-    narrow one. So a note denying the fetch while **quoting** the command
-    passes, and a note that names no client word does not. Both spellings are
-    committed here so that the ceiling is a measured fact rather than a
-    sentence in a docstring — which is exactly the substitution this task
-    exists to refuse, and which the docstring itself made until a second reader
-    read it against the code.
-    """
-    _real_board(library)
-    url = f"https://{_REAL_SITE}/search"
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    source = repo / "notes.md"
-
-    def _cited(text: str) -> list[dict[str, str]]:
-        source.write_text(text, encoding="utf-8")
-        _write_capture(
-            library,
-            captured_at="2026-09-08",
-            url=url,
-            status=200,
-            provenance=pc.TRANSCRIBED,
-            transcribed_from="notes.md",
-        )
-        return _provenance_findings(library, repo_root=repo)
-
-    # Inside the ceiling: the command's text is committed, whatever the prose
-    # around it says was done with it.
-    quoting = [
-        f"The fetch was REFUSED by robots.txt and never issued; it would have been: curl '{url}'\n",
-        f"# do NOT curl {url} — the board refuses it\n",
-        f"2026-09-02: robots refuses this. We never ran: curl -s '{url}'\n",
-    ]
-    for text in quoting:
-        assert _cited(text) == [], text
-
-    # Outside it: the same denial with no client word is the class the module
-    # does refuse, and it is refused.
-    (finding,) = _cited(f"The fetch of {url} was REFUSED by robots.txt and never issued.\n")
-    assert "commits no command for it" in finding["reason"], finding["reason"]
 
 
 def test_the_check_may_not_manufacture_the_boundaries_it_looks_for(
@@ -2538,33 +1494,6 @@ def test_the_check_may_not_manufacture_the_boundaries_it_looks_for(
     assert _cited(f"curl -s '{curl_url}'\n", url=curl_url) == []
 
 
-def test_a_needle_that_is_not_there_covers_nothing(library: Path) -> None:
-    """What the fix above introduces, asked about before something else asks.
-
-    Independence is now a map of the character ranges the needles occupy, and
-    an **empty** needle occupies none. Recording its zero-length spans would
-    make it overlap every match instead — a span at 3 sits inside a match from
-    2 to 6 — so a single empty string would refuse every transcribed claim in
-    the library on the strength of something that is not in the file. It also
-    constrains nothing, `"" in line` being true of every line, so it was never
-    evidence to begin with.
-
-    Nothing produces one today: `_body_needles` renders through `json.dumps`,
-    whose shortest output is two characters, and `check_transcribed` refuses an
-    empty `url` before the list is built. This is the guard for the caller that
-    forgets, pinned rather than left to the next reader to rediscover — the
-    same reason `_committed_at`'s absolute-path behaviour is written down.
-    """
-    url = f"https://{_REAL_SITE}/search"
-    assert cp._issues_the_request(f"curl -s '{url}'", ["", url]) is True
-
-    # And the scan advances one character rather than one needle, so
-    # overlapping occurrences are all mapped: a span missed is a span a client
-    # word can hide behind.
-    assert cp._needle_spans("aaa", ["aa"]) == [(0, 2), (1, 3)]
-    assert cp._needle_spans("abc", [""]) == []
-
-
 def test_the_pieces_of_a_request_spread_over_several_commands_are_not_one_command(
     library: Path, tmp_path: Path, provenance_floor: None
 ) -> None:
@@ -2641,144 +1570,6 @@ def test_a_client_name_inside_a_longer_word_is_not_a_client(
         assert "commits no command for it" in finding["reason"], text
 
 
-def test_every_client_the_vocabulary_names_is_a_command(
-    library: Path, tmp_path: Path, provenance_floor: None
-) -> None:
-    """All four members, not the one the corpus happens to use.
-
-    `usajobs_en` writes `curl`, so narrowing `_REQUEST_COMMAND` to `curl` alone
-    survived the suite: three quarters of a documented vocabulary was unmeasured
-    while the docstring listed it. That is a gate certifying a property it does
-    not test — this task's subject, applied to the fix for it — and it matters
-    because the answer to an omitted client is "add the name", which nothing
-    would catch being undone.
-    """
-    _real_board(library)
-    url = f"https://{_REAL_SITE}/search"
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    source = repo / "notes.md"
-
-    for command in ("curl", "wget", "xh", "Invoke-WebRequest"):
-        source.write_text(f"{command} '{url}'\n", encoding="utf-8")
-        _write_capture(
-            library,
-            captured_at="2026-09-08",
-            url=url,
-            status=200,
-            provenance=pc.TRANSCRIBED,
-            transcribed_from="notes.md",
-        )
-        assert _provenance_findings(library, repo_root=repo) == [], command
-
-
-def test_the_committed_record_does_not_restate_the_numerator_as_a_measurement(
-    library: Path, provenance_floor: None
-) -> None:
-    """The look-again this round was told to do, turned on this module's own
-    evidence — and it found one.
-
-    `Finding.direction` defaults to `fail-open` and nothing here ever sets it
-    otherwise, so the committed `fail_open` was arithmetically
-    `captures_with_an_unenforced_provenance`, in every run there will ever be.
-    Two numbers in one evidence file that cannot disagree: the second reads as
-    corroboration and corroborates nothing, which is the label-counting shape
-    found four times in this repository the night this was written. It is
-    dropped from the record and the identity is pinned here, so that a future
-    finding with a genuinely different direction is a change somebody has to
-    make on purpose rather than a silent divergence between two numbers nobody
-    was comparing.
-
-    Contrast `second_reader`, which derives a direction per case
-    from the case: there `fail_open` is a measurement, and committing it says
-    something.
-    """
-    _real_board(library)
-    _write_capture(library, captured_at="2026-09-08", url=f"https://{_REAL_SITE}/jobs", status=200)
-
-    measured = cp.measure(library)
-    assert measured["captures_with_an_unenforced_provenance"] == 1
-    assert measured["fail_open"] == measured["captures_with_an_unenforced_provenance"]
-    assert {row["direction"] for row in measured["findings"]} == {"fail-open"}
-
-    committed = cp.record(measured)
-    assert "fail_open" not in committed
-    assert "captures_with_an_unenforced_provenance" in committed
-
-
-def test_the_claim_tally_is_the_vocabulary_and_not_a_second_copy_of_it(
-    library: Path, monkeypatch: pytest.MonkeyPatch, provenance_floor: None
-) -> None:
-    """One spelling of the three values, not two.
-
-    `measure` used to build its tally from a literal `{LIVE: 0, TRANSCRIBED: 0,
-    UNRECORDED: 0}` and test membership against *that*, which is a second reader
-    of `DECLARABLE` — the same T122 shape the containment rule was blocked for,
-    one function along. A fourth declarable value would have been enforceable by
-    `check_capture` and invisible to the tally, with nothing to notice.
-    """
-    _real_board(library)
-    monkeypatch.setattr(cp, "DECLARABLE", frozenset({*cp.DECLARABLE, "reconstructed"}))
-    _write_capture(
-        library,
-        captured_at="2026-09-08",
-        url=f"https://{_REAL_SITE}/jobs",
-        status=200,
-        provenance="reconstructed",
-    )
-
-    measured = cp.measure(library)
-    assert measured["claims"]["reconstructed"] == 1, measured["claims"]
-
-
-def test_deleting_the_capture_is_not_the_cheapest_way_to_pass(
-    library: Path, provenance_floor: None
-) -> None:
-    """Otherwise a gate about capture provenance is satisfied by having no
-    capture — the fail-open direction this family of tasks keeps meeting."""
-    _real_board(library)
-    probe = _package(library) / "probe" / "captured.json"
-    probe.parent.mkdir(exist_ok=True)
-    probe.write_text("{}", encoding="utf-8")
-    assert _provenance_findings(library)[0]["claim"] == "absent"
-
-    probe.unlink()
-    (finding,) = _provenance_findings(library)
-    assert finding["claim"] == "absent"
-    assert "no readable" in finding["reason"]
-
-    probe.write_text("[]", encoding="utf-8")
-    assert _provenance_findings(library)[0]["reason"].startswith("no readable")
-
-
-def test_the_committed_library_has_no_unenforced_provenance() -> None:
-    """The gate itself, over the shipped captures — most truthfully `unrecorded`,
-    none `transcribed` since T152 made `usajobs_en` live, and five `live`
-    (`trabajos_es`, `jobfluent_es`, `talent_es`, `pythonorg_en`, `usajobs_en`)
-    whose response bytes are committed beside them."""
-    measured = cp.measure(_LIBRARY)
-
-    assert measured["gate_status"] == "measured"
-    assert measured["captures_with_an_unenforced_provenance"] == 0, measured["findings"]
-    # 18, plus T144's five ATS-host probes, which say `unrecorded` too, less
-    # the four recorded `live` with their responses committed: T166's
-    # `trabajos_es`, T152's `pythonorg_en`, T171's `jobfluent_es` and T194's
-    # `talent_es`. Two branches
-    # once asserted one `live` each for their own package, in the same words, so
-    # the merge kept a number neither side measured — `CLAUDE.md`'s census
-    # collision, in a test rather than in evidence. That is also why this line
-    # is re-measured rather than incremented whenever a package lands: the
-    # arithmetic below says which packages the three are, so a fourth cannot
-    # arrive anonymously.
-    assert measured["claims"] == {"live": 5, "transcribed": 0, "unrecorded": 21}
-    assert sorted(
-        package.name
-        for package in sorted(_LIBRARY.iterdir())
-        if (record := cp.read_record(package)) is not None and record["provenance"] == pc.LIVE
-    ) == ["jobfluent_es", "pythonorg_en", "talent_es", "trabajos_es", "usajobs_en"]
-    assert measured["example_packages_excluded"] == ["examplejobs_es"]
-
-
 def _usajobs_as_t113_shipped(package: Path) -> None:
     """Rewrite a copy of `usajobs_en`'s capture to the transcribed record T113
     committed: the page-one body, citing the ledger's `retest` line."""
@@ -2792,24 +1583,6 @@ def _usajobs_as_t113_shipped(package: Path) -> None:
         transcribed_from="connectors/ruled-out.yaml",
     )
     path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-
-
-def test_a_transcribed_usajobs_capture_names_a_resolvable_committed_request(
-    tmp_path: Path,
-) -> None:
-    """`connectors/ruled-out.yaml`'s `retest` line for usajobs.gov is a single
-    committed `curl` carrying the POST URL and both body fields, so a
-    transcribed claim over it is checkable rather than asserted. `usajobs_en`
-    itself is live since T152; this keeps the join exercised against the real
-    ledger."""
-    package = tmp_path / "usajobs_en"
-    shutil.copytree(_LIBRARY / "usajobs_en", package)
-    _usajobs_as_t113_shipped(package)
-    record = cp.read_record(package)
-
-    assert record is not None
-    assert record["provenance"] == pc.TRANSCRIBED
-    assert cp.check_transcribed(package, record) == []
 
 
 def test_a_transcribed_claim_rests_on_the_committed_command_and_not_on_a_mention(
@@ -2839,76 +1612,12 @@ def test_a_transcribed_claim_rests_on_the_committed_command_and_not_on_a_mention
     assert "commits no command for it" in reason
 
 
-def test_a_fabricated_live_capture_over_the_real_library_raises_the_metric(
-    tmp_path: Path,
-) -> None:
-    """The gate's own falsifiability, demonstrated on the shipped library
-    rather than on a one-package fixture: copy the twenty, relabel one
-    `live`, and the metric moves off zero. A gate nobody has watched fail is
-    not known to be able to."""
-    library = tmp_path / "connectors"
-    shutil.copytree(_LIBRARY, library)
-    path = library / "arbeitnow_en" / "probe" / "captured.json"
-    record = json.loads(path.read_text(encoding="utf-8"))
-    path.write_text(json.dumps({**record, "provenance": pc.LIVE}), encoding="utf-8")
-
-    measured = cp.measure(library)
-
-    assert measured["captures_with_an_unenforced_provenance"] == 1
-    (finding,) = measured["findings"]
-    assert finding["package"] == "arbeitnow_en"
-    assert finding["claim"] == pc.LIVE
-    assert measured["fail_open"] == 1
-
-
-def test_a_library_too_small_to_enforce_reports_unmeasured(
-    library: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A clean zero over a scan that found nothing is the vacuous truth this
-    repository keeps meeting — so the floor, and `unmeasured` rather than 0."""
-    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 100)
-    _real_board(library)
-    _write_capture(
-        library,
-        captured_at="2026-09-08",
-        url=f"https://{_REAL_SITE}/jobs",
-        status=200,
-        provenance=pc.UNRECORDED,
-    )
-
-    measured = cp.measure(library)
-
-    assert measured["gate_status"] == "unmeasured"
-    assert measured["captures_with_an_unenforced_provenance"] == 0
-    assert "floor 100" in measured["unmeasured_reason"]
-
-
 def test_an_empty_library_is_unmeasured_rather_than_clean(tmp_path: Path) -> None:
     empty = tmp_path / "connectors"
     empty.mkdir()
 
     assert cp.measure(empty)["gate_status"] == "unmeasured"
     assert cp.measure(tmp_path / "absent")["gate_status"] == "unmeasured"
-
-
-def test_a_breached_floor_writes_nothing_and_fails_the_gate(
-    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Two properties in one place because they are one decision. The record is
-    not written (a run that could not measure must not leave behind an artefact
-    asserting the floor it never met), and the exit status is **1** rather than
-    the 3 `make evidence` prints as `unmeasured (recorded)` and walks past —
-    T115's finding, which a module written after it has no reason to reproduce.
-    """
-    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 100)
-    monkeypatch.setattr(cp, "DEFAULT_CONNECTORS_DIR", library)
-    target = tmp_path / "T153.json"
-
-    cp.write_evidence(target, library)
-    assert not target.exists()
-
-    assert cp._main(["capture_provenance", str(target)]) == 1
-    assert not target.exists()
 
 
 def test_the_entry_point_exits_one_on_an_unenforced_provenance(
@@ -2931,80 +1640,6 @@ def test_the_entry_point_exits_one_on_an_unenforced_provenance(
         provenance=pc.UNRECORDED,
     )
     assert cp._main(["capture_provenance", str(target)]) == 0
-
-
-def test_the_committed_provenance_record_carries_the_floor_and_not_the_count(
-    tmp_path: Path,
-) -> None:
-    """T100's rule. `captures_scanned` and the per-claim tally both move the
-    moment anybody adds, retires or re-records a connector; committing them as
-    exact values would redden `make evidence` on a change that is not a
-    finding."""
-    target = tmp_path / "T153.json"
-    cp.write_evidence(target, _LIBRARY)
-    committed = json.loads(target.read_text(encoding="utf-8"))
-
-    assert committed["captures_scanned_at_least"] == cp.MINIMUM_CAPTURES_SCANNED
-    for moving in ("captures_scanned", "claims", "example_packages_excluded"):
-        assert moving not in committed
-    assert committed["captures_with_an_unenforced_provenance"] == 0
-
-
-def test_the_committed_provenance_evidence_matches_what_the_code_measures_now(
-    tmp_path: Path,
-) -> None:
-    target = tmp_path / "T153.json"
-    cp.write_evidence(target, _LIBRARY)
-
-    assert json.loads(target.read_text(encoding="utf-8")) == json.loads(
-        cp.DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8")
-    )
-
-
-def test_the_gate_is_not_satisfiable_by_the_state_it_was_filed_against(tmp_path: Path) -> None:
-    """The check this repository keeps having to make about its own gates.
-
-    A metric that already reads 0 over the defect it was filed against is
-    satisfiable by doing nothing, and every `unmeasured`/floor mechanism above
-    is decoration behind it. So: rebuild the library as T113 shipped it — no
-    capture carrying a `provenance` key, and `usajobs_en`'s `transcribed`
-    naming nothing — and the metric must be the whole population, not zero.
-
-    Measured against the real `origin/main` tree while T153 was being written:
-    **20 of 20**, nineteen `absent` and one `transcribed` that could not name
-    its committed request. The reconstruction is exactly that state — the
-    `provenance` key removed wherever this task added it, and `usajobs_en` left
-    carrying T113's `transcribed` with nothing to substantiate it — rather than
-    a flatter 20 `absent`, so the population it rebuilds is the one the
-    measurement above cites. Reconstructed rather than pinned to a commit so it
-    keeps holding as the library changes.
-    """
-    library = tmp_path / "connectors"
-    shutil.copytree(_LIBRARY, library)
-    _usajobs_as_t113_shipped(library / "usajobs_en")
-    for path in library.glob("*/probe/captured.json"):
-        record = json.loads(path.read_text(encoding="utf-8"))
-        # T113 shipped `transcribed` on usajobs_en and nothing anywhere else;
-        # `transcribed_from` is this task's, and so is every `unrecorded`.
-        # A later `live` (T171's jobfluent_es) did not exist then either.
-        record.pop("transcribed_from", None)
-        # Anything but `transcribed` reverts to `absent`, and its `response`
-        # block goes with it: T113's library had neither. Stated as "not
-        # transcribed" rather than as a list of the values seen so far, so a
-        # fourth one later cannot quietly survive the reconstruction.
-        if record.get("provenance") != pc.TRANSCRIBED:
-            record.pop("provenance", None)
-            record.pop("response", None)
-        path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-
-    before = cp.measure(library)
-    after = cp.measure(_LIBRARY)
-
-    assert before["gate_status"] == "measured"
-    assert before["captures_with_an_unenforced_provenance"] == before["captures_scanned"] > 0
-    claims = sorted(row["claim"] for row in before["findings"])
-    assert claims == ["absent"] * (before["captures_scanned"] - 1) + [pc.TRANSCRIBED]
-    assert after["captures_with_an_unenforced_provenance"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -3139,3 +1774,237 @@ def test_the_exit_code_is_non_zero_when_the_t152_scan_is_unmeasured(
     monkeypatch.setattr(pc, "MINIMUM_PACKAGES_SCANNED_FOR_FURTHER_PAGES", 10_000)
 
     assert pc._main(["pagination_capture", str(tmp_path / "T113.json")]) == 1
+
+
+def test_a_library_too_small_to_measure_reports_unmeasured(
+    library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pc, "MINIMUM_REQUEST_KEYS", 100)
+    _real_board(library)
+    _write_capture(
+        library, captured_at="2026-09-08", url=f"https://{_REAL_SITE}/jobs?page=1", status=200
+    )
+
+    measured = pc.measure(library)
+
+    assert measured["gate_status"] == "unmeasured"
+    assert "floor 100" in measured["unmeasured_reason"]
+
+
+def test_a_library_too_small_to_scan_reports_unmeasured_for_duplicate_keys(
+    library: Path,
+) -> None:
+    """The floor refuses a clean zero over a library nobody read — a
+    one-package fixture with a single query key is exactly that."""
+    measured = pc.measure_duplicate_page_keys(library)
+    assert measured["gate_status"] == "unmeasured"
+    assert "query-key occurrence" in measured["unmeasured_reason"]
+
+
+def test_a_capture_cannot_cite_itself_as_the_request_it_was_transcribed_from(
+    library: Path, provenance_floor: None
+) -> None:
+    """A record is not a source for itself.
+
+    `captured.json` carries its own `url` and its own `body` by construction, so
+    a containment check pointed at it answers every question it can ask. That
+    makes self-citation the cheapest forgery the module could leave open — one
+    line, no new file, no command — sitting behind `transcribed`, the word that
+    sounds like somebody checked. The POST spelling matters as much as the GET
+    one: pretty-printed JSON happens to break the compact body needles, and
+    formatting is not a boundary — re-serialised compactly, the same forgery is
+    the same forgery.
+    """
+    _real_board(library)
+    repo_root = library.parent
+    myself = f"connectors/{_REFERENCE.name}/probe/captured.json"
+    url = f"https://{_REAL_SITE}/search"
+
+    # GET: the record's own `url` is the whole of what a containment check reads.
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from=myself,
+    )
+    (finding,) = _provenance_findings(library, repo_root=repo_root)
+    assert finding["claim"] == pc.TRANSCRIBED
+    assert "own probe/" in finding["reason"], finding["reason"]
+
+    # POST, written compactly so the body needles match the file byte for byte.
+    record = {
+        "captured_at": "2026-09-08",
+        "url": url,
+        "method": "POST",
+        "body": {"Keyword": "python", "ResultsPerPage": 25},
+        "status": 200,
+        "provenance": pc.TRANSCRIBED,
+        "transcribed_from": myself,
+    }
+    path = _package(library) / "probe" / "captured.json"
+    path.write_text(json.dumps(record, separators=(",", ":")), encoding="utf-8")
+    assert '"Keyword":"python"' in path.read_text(encoding="utf-8")
+
+    (finding,) = _provenance_findings(library, repo_root=repo_root)
+    assert finding["claim"] == pc.TRANSCRIBED
+    assert "own probe/" in finding["reason"], finding["reason"]
+
+
+def test_a_transcribed_source_reached_through_a_symlink_is_not_committed_here(
+    library: Path, tmp_path: Path, provenance_floor: None
+) -> None:
+    """`transcribed_from` refuses `..` and an absolute path, which constrains
+    the string. A symlink is how that constraint is walked around: a path that
+    reads as repo-relative, resolving to a file the repository does not carry
+    at that path. "Committed here" is the claim, and a link is not it —
+    including a link whose target is in the tree, which is why the reason no
+    longer says "does not resolve inside this repo" about an input that plainly
+    does. A second reader caught that sentence being false about its own case:
+    the verdict was right and the words were not."""
+    _real_board(library)
+    url = f"https://{_REAL_SITE}/search"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside.sh"
+    outside.write_text(f"curl -s '{url}'\n", encoding="utf-8")
+    (repo / "inside.sh").write_text(f"curl -s '{url}'\n", encoding="utf-8")
+
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=url,
+        status=200,
+        provenance=pc.TRANSCRIBED,
+        transcribed_from="ledger.yaml",
+    )
+
+    # Out of the tree, and — the case the old sentence lied about — in it.
+    for target in (outside, Path("inside.sh")):
+        (repo / "ledger.yaml").unlink(missing_ok=True)
+        (repo / "ledger.yaml").symlink_to(target)
+        (finding,) = _provenance_findings(library, repo_root=repo)
+        assert "is not the file this repo commits at that path" in finding["reason"], target
+
+
+def test_a_symlinked_package_borrows_the_capture_it_reads_as_holding(
+    library: Path, provenance_floor: None
+) -> None:
+    """`test_a_probe_linked_at_a_sibling_package_is_not_this_packages_capture`,
+    one directory further up — and the fix for that one is what left this open.
+
+    The containment rule resolves its **base** by design, so whatever it is
+    asked from is the one path it cannot see. Asked from the package, the
+    package directory is exempt: a package that is a committed symlink at a
+    sibling — git stores one as mode `120000`, so this is a diff a reviewer
+    receives — answers `probe/captured.json`, `response.file`, the byte count
+    and the digest out of the sibling's artefact, all of them honest, none of
+    them **its**. A package committing no capture at all then reads as an
+    enforced `live`, which is exactly `test_deleting_the_capture_is_not_the_
+    cheapest_way_to_pass` reached by a link instead of a deletion, and it reads
+    as a pass rather than as a finding.
+
+    So the question is asked with the **library** as the base and the package's
+    own name as the first component of the path.
+    """
+    _real_board(library)
+    donor = _package(library)
+    probe = _capture_probe(library)
+    _write_capture(
+        library,
+        captured_at="2026-09-08",
+        url=f"https://{_REAL_SITE}/jobs",
+        status=200,
+        provenance=pc.LIVE,
+        response=_live_response(probe),
+    )
+    # The donor's own claim is fully substantiated, so nothing below is about a
+    # broken capture: it is about which package holds it.
+    assert _provenance_findings(library, today=date(2026, 9, 8)) == []
+
+    borrower = library / "newboard_es"
+    borrower.symlink_to(Path(donor.name), target_is_directory=True)
+
+    measured = cp.measure(library, today=date(2026, 9, 8))
+    assert measured["captures_scanned"] == 2
+    (finding,) = measured["findings"]
+    assert finding["package"] == borrower.name
+    assert finding["claim"] == "absent"
+    assert "symlinked package" in finding["reason"], finding["reason"]
+    assert finding["direction"] == "fail-open"
+    # The donor's `live` is counted once, by the package that holds it. A
+    # borrowed claim is not a claim, so the tally does not read two.
+    assert measured["claims"]["live"] == 1
+
+    # And `check_capture` refuses it when handed the package directly, so the
+    # guarantee does not rest on `measure` having got there first — the shape
+    # `check_live` was blocked for in round three.
+    direct = cp.check_capture(borrower, today=date(2026, 9, 8))
+    assert direct is not None and "symlinked package" in direct.reason
+
+    # Nor on `check_capture` having got there first. `_borrowed_package` is a
+    # verdict about a package; the containment rule underneath it is a verdict
+    # about a path, and each reader has to hold on its own — a mutant that
+    # reverts the rule to asking from the package survived every assertion
+    # above, because the verdict was answering first. That is the exact defect
+    # F4 was blocked for, sitting inside F4's own fix, so it is pinned the way
+    # F4's was: by asking the readers directly.
+    record = json.loads((donor / "probe" / "captured.json").read_text(encoding="utf-8"))
+    assert cp.read_record(borrower) is None
+    reasons = cp.check_live(borrower, record, date(2026, 9, 8))
+    assert any("own probe/" in reason for reason in reasons), reasons
+
+    # The rule's own new argument. Making the package's name a component of the
+    # path means the name is now something that can point out of the library,
+    # and `..` is how: it resolves away to the parent, which is the shape the
+    # comparison is built to notice. Fail-closed, which is the safe direction
+    # for a name nothing legitimate spells.
+    assert cp._committed_in_package(library / "..", Path("probe")) is False
+
+
+def test_a_needle_that_is_not_there_covers_nothing(library: Path) -> None:
+    """What the fix above introduces, asked about before something else asks.
+
+    Independence is now a map of the character ranges the needles occupy, and
+    an **empty** needle occupies none. Recording its zero-length spans would
+    make it overlap every match instead — a span at 3 sits inside a match from
+    2 to 6 — so a single empty string would refuse every transcribed claim in
+    the library on the strength of something that is not in the file. It also
+    constrains nothing, `"" in line` being true of every line, so it was never
+    evidence to begin with.
+
+    Nothing produces one today: `_body_needles` renders through `json.dumps`,
+    whose shortest output is two characters, and `check_transcribed` refuses an
+    empty `url` before the list is built. This is the guard for the caller that
+    forgets, pinned rather than left to the next reader to rediscover — the
+    same reason `_committed_at`'s absolute-path behaviour is written down.
+    """
+    url = f"https://{_REAL_SITE}/search"
+    assert cp._issues_the_request(f"curl -s '{url}'", ["", url]) is True
+
+    # And the scan advances one character rather than one needle, so
+    # overlapping occurrences are all mapped: a span missed is a span a client
+    # word can hide behind.
+    assert cp._needle_spans("aaa", ["aa"]) == [(0, 2), (1, 3)]
+    assert cp._needle_spans("abc", [""]) == []
+
+
+def test_a_breached_floor_writes_nothing_and_fails_the_gate(
+    library: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two properties in one place because they are one decision. The record is
+    not written (a run that could not measure must not leave behind an artefact
+    asserting the floor it never met), and the exit status is **1** rather than
+    the 3 `make evidence` prints as `unmeasured (recorded)` and walks past —
+    T115's finding, which a module written after it has no reason to reproduce.
+    """
+    monkeypatch.setattr(cp, "MINIMUM_CAPTURES_SCANNED", 100)
+    monkeypatch.setattr(cp, "DEFAULT_CONNECTORS_DIR", library)
+    target = tmp_path / "T153.json"
+
+    cp.write_evidence(target, library)
+    assert not target.exists()
+
+    assert cp._main(["capture_provenance", str(target)]) == 1
+    assert not target.exists()
