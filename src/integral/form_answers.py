@@ -79,6 +79,7 @@ from integral.claim_trace import (
     DENIAL_KIND,
     NON_CUE_NEGATIONS,
     fold,
+    fold_cased,
     is_denial,
     paragraph_defects,
 )
@@ -161,7 +162,10 @@ def _words(text: str) -> set[str]:
 _TOKEN = re.compile(r"[^\W_]+(?:['-][^\W_]+)*")
 # The candidate's own voice. An employer's question is addressed to "you", so a question that
 # speaks as "I" is a claim placed where no citation is looked for.
-_FIRST_PERSON = frozenset({"i", "i'm", "i've", "i'd", "i'll", "me", "my", "mine", "myself"})
+_FIRST_PERSON = frozenset(
+    {"i", "i'm", "i've", "i'd", "i'll", "me", "my", "mine", "myself"}
+    | {"we", "we're", "we've", "we'd", "we'll", "our", "ours", "ourselves", "us"}
+)
 # The only tokens an answer may use without finding them in a cited row: articles, linking
 # verbs, "and"/"or" and plain prepositions. Every other token of any length (UK, US, EU, PhD,
 # AWS, Go, C) must occur in a cited row, so a short word that carries a claim is never exempt.
@@ -206,6 +210,11 @@ _SPACED_NON = re.compile(rf"(?<![\w'-])non[\s{_DASHES}]+(?=[^\W_])", re.IGNORECA
 
 def _tokens(text: str) -> list[str]:
     return _TOKEN.findall(_SPACED_NON.sub("non-", fold(text)))
+
+
+def _cased_tokens(text: str) -> list[str]:
+    """`_tokens` with case kept, so "US" the country can be told from "us"."""
+    return _TOKEN.findall(_SPACED_NON.sub("non-", fold_cased(text)))
 
 
 # A quote is compared on words AND punctuation, so a comma, a full stop or a question mark moved
@@ -262,7 +271,15 @@ def _question_defects(question: str) -> list[str]:
         why.append("a number")
     if denial_sentences(q):
         why.append("a denial")
-    if _FIRST_PERSON & set(toks):
+    first = set(_FIRST_PERSON & set(toks))
+    cased = _cased_tokens(q)
+    if (
+        "us" in first
+        and [t.lower() for t in cased] == toks
+        and all(t == "US" for t in cased if t.lower() == "us")
+    ):
+        first.discard("us")  # "US", the country, is not a first-person pronoun
+    if first:
         why.append("a first-person claim")
     if len(toks) > (25 if q.endswith("?") else 6):
         why.append("too long for a question or a label")
