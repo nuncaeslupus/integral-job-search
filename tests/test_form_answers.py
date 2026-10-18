@@ -911,3 +911,19 @@ def test_we_our_us_in_a_question_count_as_first_person(
     q = f"Tell {marker} the notice period" if marker == "us" else f"Is {marker} notice period fine"
     bad = _answer(notice).model_copy(update={"question": q})
     assert any("first-person" in d for d in answer_defects(bad, _live(store), ())), q
+
+
+@pytest.mark.parametrize(
+    ("q", "refused"),
+    [
+        ("Are you authorised to work in the US?", False),
+        ("Why us?", True),
+        ("Why US and not us?", True),
+    ],
+)
+def test_us_counts_as_first_person_only_in_lowercase(
+    store: ProfileStore, notice: str, q: str, refused: bool
+) -> None:
+    bad = _answer(notice).model_copy(update={"question": q})
+    defects = answer_defects(bad, _live(store), ())
+    assert any("first-person" in d for d in defects) is refused, defects

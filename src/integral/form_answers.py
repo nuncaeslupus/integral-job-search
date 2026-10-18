@@ -265,7 +265,10 @@ def _question_defects(question: str) -> list[str]:
         why.append("a number")
     if denial_sentences(q):
         why.append("a denial")
-    if _FIRST_PERSON & set(toks):
+    first = set(_FIRST_PERSON & set(toks))
+    if "us" in first and all(m == "US" for m in re.findall(r"\bus\b", q, re.IGNORECASE)):
+        first.discard("us")  # "US", the country, is not a first-person pronoun
+    if first:
         why.append("a first-person claim")
     if len(toks) > (25 if q.endswith("?") else 6):
         why.append("too long for a question or a label")
