@@ -855,3 +855,33 @@ def test_a_spaced_non_eu_cannot_be_reversed_by_dropping_the_prefix(
     cited = _row(store, "statement", row)
     assert _refused(store, _ans("I am an EU citizen.", cited))
     assert not _refused(store, _ans(row, cited))
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "I am a non-\nEU citizen.",  # wrapped at the hyphen
+        "I am a non - EU citizen.",
+        "I am a non\u2011EU citizen.",  # non-breaking hyphen
+        "I am a non\u2013EU citizen.",  # en dash
+    ],
+)
+def test_f1_a_non_eu_written_with_any_hyphen_or_wrap_cannot_be_reversed(
+    store: ProfileStore, row: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert _refused(store, _ans("I am an EU citizen.", cited))
+
+
+def test_f2_a_terminator_added_after_a_row_with_none_is_not_an_uncovered_token(
+    store: ProfileStore,
+) -> None:
+    denial = _row(store, "statement", "I do not need visa sponsorship")
+    permit = _row(store, "statement", "I hold a permit for Spain.")
+    both = "I do not need visa sponsorship. I hold a permit for Spain."
+    assert not _refused(store, _ans(both, denial, permit))
+    # a terminator the row has is kept exactly; a row's own full stop is never swapped
+    dotted = _row(store, "statement", "I do not need visa sponsorship, only a permit.")
+    assert _refused(store, _ans("I do not need visa sponsorship, only a permit?", dotted))
+    # an added terminator only closes the clause that ends the quote
+    assert _refused(store, _ans("I do not need visa sponsorship and X. I hold a permit.", denial))

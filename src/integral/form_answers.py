@@ -195,7 +195,8 @@ def _holds_negation(text: str) -> bool:
 # A spaced "non EU" is the same compound as "non-EU": joined before tokenising, so dropping the
 # "non" leaves a token no cited row holds. (A spaced "no EU" needs nothing: "no" is a cue, so
 # the row is guarded and its words back an answer only inside a whole-row quote.)
-_SPACED_NON = re.compile(r"(?<![\w'-])non\s+(?=[^\W_])")
+_DASHES = "\u2010\u2011\u2012\u2013\u2014\u2212\\-"
+_SPACED_NON = re.compile(rf"(?<![\w'-])non[\s{_DASHES}]+(?=[^\W_])", re.IGNORECASE)
 
 
 def _tokens(text: str) -> list[str]:
@@ -279,9 +280,19 @@ def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
     clauses = _clause_pieces(text)
     mine = [t for _, piece in clauses for t in piece]
     covered: set[int] = set()
+    finals: set[int] = set()
+    offset = 0
+    for _, piece in clauses:
+        offset += len(piece)
+        finals.add(offset - 1)
     for quote in guarded:
         for start in _at(mine, quote):
-            covered.update(range(start, start + len(quote)))
+            end = start + len(quote)
+            covered.update(range(start, end))
+            # A row quoted whole that has no terminator of its own may take the clause terminator
+            # the answer adds after it; a row that ends in one must keep that exact one.
+            if _is_word(quote[-1]) and end in finals and not _is_word(mine[end]):
+                covered.add(end)
     defects = []
     offset = 0
     for clause, piece in clauses:
