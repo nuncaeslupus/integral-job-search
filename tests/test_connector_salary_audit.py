@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -31,6 +32,16 @@ from integral.connector_salary_audit import (
 from integral.connectors import _CURRENCIES
 
 _CONNECTORS = Path(__file__).resolve().parents[1] / "connectors"
+
+
+@pytest.fixture(scope="module")
+def live() -> dict[str, Any]:
+    """The audit over the committed tree, measured once for the module.
+
+    Every live-tree test reads this; none mutates it. Re-measuring the whole
+    library per test was ~4 s each, and the answer cannot differ between them.
+    """
+    return measure(_CONNECTORS)
 
 
 def _verdict(
@@ -102,20 +113,20 @@ def test_a_row_of_its_own_outranks_the_wildcard() -> None:
 # --- the live tree ---
 
 
-def test_the_committed_fixtures_have_no_unread_salary() -> None:
-    measured = measure()
+def test_the_committed_fixtures_have_no_unread_salary(live: dict[str, Any]) -> None:
+    measured = live
     assert measured["boards_that_publish_a_salary_we_do_not_read"] == 0, measured["unread"]
     assert measured["salary_expectation_mismatches"] == 0, measured["mismatches"]
 
 
-def test_the_floors_sit_under_the_live_populations() -> None:
-    measured = measure()
+def test_the_floors_sit_under_the_live_populations(live: dict[str, Any]) -> None:
+    measured = live
     assert measured["distinct_salary_verdicts_read"] >= MINIMUM_DISTINCT_SALARY_VERDICTS_READ
     assert measured["packages_measured"] >= MINIMUM_PACKAGES_MEASURED
 
 
-def test_the_record_commits_the_floors_and_not_the_censuses() -> None:
-    committed = record(measure())
+def test_the_record_commits_the_floors_and_not_the_censuses(live: dict[str, Any]) -> None:
+    committed = record(live)
     assert (
         committed["distinct_salary_verdicts_read_at_least"] == MINIMUM_DISTINCT_SALARY_VERDICTS_READ
     )
@@ -154,15 +165,13 @@ def test_deleting_a_refusal_turns_the_gate_red(tmp_path: Path) -> None:
     refusal. Remove the refusal and the row must come back as a defect — if it
     does not, the expectations are decorative and the gate is measuring its own
     declarations."""
-    import shutil
-
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    path = tmp_path / "connectors" / "trabajos_es" / "fixture" / "salary.json"
+    directory = _copy_connectors(tmp_path, "trabajos_es")
+    path = directory / "trabajos_es" / "fixture" / "salary.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     del data["rows"]["17"]
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    measured = measure(tmp_path / "connectors")
+    measured = measure(directory)
     assert measured["boards_that_publish_a_salary_we_do_not_read"] == 1
     assert any("trabajos_es [17]" in entry for entry in measured["unread"])
 
@@ -171,15 +180,13 @@ def test_a_refusal_written_over_a_row_we_actually_read_is_a_mismatch(tmp_path: P
     """The opposite direction, and the one a floor cannot see. Answering a gap
     by refusing it instead of reading it leaves `salary_rows_read` where it was,
     so the mismatch key is what makes a stale refusal visible."""
-    import shutil
-
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    path = tmp_path / "connectors" / "trabajos_es" / "fixture" / "salary.json"
+    directory = _copy_connectors(tmp_path, "trabajos_es")
+    path = directory / "trabajos_es" / "fixture" / "salary.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     data["rows"]["9"] = {"verdict": "refused", "why": "x" * 80}
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    measured = measure(tmp_path / "connectors")
+    measured = measure(directory)
     assert measured["salary_expectation_mismatches"] == 1
     assert any("trabajos_es [9]" in entry for entry in measured["mismatches"])
 
@@ -188,20 +195,18 @@ def test_a_band_read_wrongly_is_a_mismatch(tmp_path: Path) -> None:
     """And the third direction: the numbers themselves. A connector edited so it
     reads 15.000 where the advert says 18.000 keeps every count in this record
     identical, and only the declared figures catch it."""
-    import shutil
-
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    path = tmp_path / "connectors" / "trabajos_es" / "fixture" / "salary.json"
+    directory = _copy_connectors(tmp_path, "trabajos_es")
+    path = directory / "trabajos_es" / "fixture" / "salary.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     data["rows"]["9"]["min"] = 1.0
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    measured = measure(tmp_path / "connectors")
+    measured = measure(directory)
     assert measured["salary_expectation_mismatches"] == 1
 
 
 def test_a_dead_money_detector_is_caught_by_the_refusal_count(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The headline metric is blind to its own detector; one committed key is not.
 
@@ -216,9 +221,12 @@ def test_a_dead_money_detector_is_caught_by_the_refusal_count(
     takes it to zero and `make evidence` goes red. This pins that, because being
     true of today's code is not the same as being held down.
     """
-    live = measure(_CONNECTORS)
+    # Two packages are enough: trabajos_es carries refusals, foorilla_en reads
+    # through a substituted detail, so both branches the blinding reaches run.
+    subset = _copy_connectors(tmp_path, "trabajos_es", "foorilla_en")
+    live = measure(subset)
     monkeypatch.setattr(connector_salary_audit, "_money_contexts", lambda text: ())
-    blinded = measure(_CONNECTORS)
+    blinded = measure(subset)
 
     assert blinded["boards_that_publish_a_salary_we_do_not_read"] == 0
     # Not asserted: `salary_expectation_mismatches`. Blinded, the shared-detail
@@ -234,10 +242,8 @@ def test_editing_a_list_card_band_turns_the_audit_red(tmp_path: Path) -> None:
     """`foorilla_en`'s cards publish their own band; the shared detail page does
     not. A card edited to say a different band must fail its row's `list_says`,
     which a `"*"` over the shared detail fixture could never notice."""
-    import shutil
-
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    fixture = tmp_path / "connectors" / "foorilla_en" / "fixture"
+    directory = _copy_connectors(tmp_path, "foorilla_en")
+    fixture = directory / "foorilla_en" / "fixture"
     data = json.loads((fixture / "salary.json").read_text(encoding="utf-8"))
     assert "150K-190K" in data["rows"]["0"]["list_says"]
     band = "CAD 150K-190K"
@@ -245,28 +251,37 @@ def test_editing_a_list_card_band_turns_the_audit_red(tmp_path: Path) -> None:
     assert band in html
     (fixture / "list.html").write_text(html.replace(band, "1 USD - 2 USD", 1), encoding="utf-8")
 
-    measured = measure(tmp_path / "connectors")
+    measured = measure(directory)
     assert any("foorilla_en [0]" in entry for entry in measured["mismatches"])
 
 
-def test_the_wildcard_covers_only_rows_whose_card_publishes_nothing() -> None:
-    measured = measure(_CONNECTORS)
+def test_the_wildcard_covers_only_rows_whose_card_publishes_nothing(live: dict[str, Any]) -> None:
+    measured = live
     assert measured["rows_adjudicated_by_a_wildcard"] == 7
 
 
-def _copy_connectors(tmp_path: Path) -> Path:
+def _copy_connectors(tmp_path: Path, *packages: str) -> Path:
+    """A private copy of the named packages only.
+
+    `measure` judges each package on its own, so a mutation to one package is
+    seen over a copy of that package; copying (and re-measuring) the other
+    twenty-odd would only repeat what the live-tree tests already measure.
+    """
     import shutil
 
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    return tmp_path / "connectors"
+    target = tmp_path / "connectors"
+    target.mkdir(parents=True)
+    for package in packages:
+        shutil.copytree(_CONNECTORS / package, target / package)
+    return target
 
 
-def test_distinct_verdicts_are_counted_as_tuples_not_rows() -> None:
+def test_distinct_verdicts_are_counted_as_tuples_not_rows(live: dict[str, Any]) -> None:
     """R2. The key is the number of distinct `(package, min, max, currency,
     period)` verdicts, recomputed here straight from the committed entries. A
     key reverted to a row count (`read_rows`, or rows minus wildcard rows)
     equals 102 or 95 where this is 78, so it cannot pass."""
-    measured = measure(_CONNECTORS)
+    measured = live
     tuples = set()
     for path in _CONNECTORS.glob("*/fixture/salary.json"):
         for entry in json.loads(path.read_text(encoding="utf-8"))["rows"].values():
@@ -278,8 +293,8 @@ def test_distinct_verdicts_are_counted_as_tuples_not_rows() -> None:
     assert measured["distinct_salary_verdicts_read"] < measured["salary_rows_read"]
 
 
-def test_the_record_commits_the_distinct_verdict_floor() -> None:
-    committed = record(measure(_CONNECTORS))
+def test_the_record_commits_the_distinct_verdict_floor(live: dict[str, Any]) -> None:
+    committed = record(live)
     assert committed["distinct_salary_verdicts_read_at_least"] == (
         MINIMUM_DISTINCT_SALARY_VERDICTS_READ
     )
@@ -325,7 +340,7 @@ def test_an_entry_copied_from_the_engines_read_over_a_different_card_is_a_mismat
     """R1, the exact defect: an entry whose `list_says` matches its card but
     whose money is another advert's. Row 1's card says USD 174K-252K; declaring
     the shared page's CAD 150K-190K beside it must be red."""
-    directory = _copy_connectors(tmp_path)
+    directory = _copy_connectors(tmp_path, "foorilla_en")
     path = directory / "foorilla_en" / "fixture" / "salary.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     row = data["rows"]["1"]
@@ -338,7 +353,7 @@ def test_an_entry_copied_from_the_engines_read_over_a_different_card_is_a_mismat
 
 
 def test_a_single_figure_card_cannot_be_declared_read(tmp_path: Path) -> None:
-    directory = _copy_connectors(tmp_path)
+    directory = _copy_connectors(tmp_path, "foorilla_en")
     path = directory / "foorilla_en" / "fixture" / "salary.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     row = data["rows"]["34"]
@@ -366,7 +381,7 @@ def test_a_connector_reverted_to_the_top_of_a_band_cannot_be_certified_by_a_copy
     the engine, so only the card can call it wrong — and it must."""
     import re
 
-    directory = _copy_connectors(tmp_path)
+    directory = _copy_connectors(tmp_path, "wellfound_en")
     yaml_path = directory / "wellfound_en" / "connector.yaml"
     text = yaml_path.read_text(encoding="utf-8")
     stripped = re.sub(
@@ -386,10 +401,12 @@ def test_a_connector_reverted_to_the_top_of_a_band_cannot_be_certified_by_a_copy
     assert any("wellfound_en [0]" in entry and "card publishes" in entry for entry in mismatches)
 
 
-def test_foorillas_rows_are_counted_as_read_through_a_substituted_detail() -> None:
+def test_foorillas_rows_are_counted_as_read_through_a_substituted_detail(
+    live: dict[str, Any],
+) -> None:
     """47 of foorilla's 48 banded cards disagree with the one shared advert page
     (row 0's own card is the 48th); wellfound, which reads its card, adds none."""
-    assert measure(_CONNECTORS)["rows_read_through_a_substituted_detail"] == 47
+    assert live["rows_read_through_a_substituted_detail"] == 47
 
 
 @pytest.mark.parametrize(
@@ -421,7 +438,7 @@ _DROP = object()
 
 
 def _edit_entry(tmp_path: Path, package: str, row: str, **changes: object) -> Path:
-    directory = _copy_connectors(tmp_path)
+    directory = _copy_connectors(tmp_path, package)
     path = directory / package / "fixture" / "salary.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     for key, value in changes.items():
@@ -433,10 +450,10 @@ def _edit_entry(tmp_path: Path, package: str, row: str, **changes: object) -> Pa
     return directory
 
 
-def test_no_row_that_reads_a_salary_leaves_its_card_money_uncompared() -> None:
+def test_no_row_that_reads_a_salary_leaves_its_card_money_uncompared(live: dict[str, Any]) -> None:
     """T215's key. Driven to zero over the committed tree, and the count of rows
     that carry a declared reason is exact so it cannot grow unseen."""
-    measured = measure(_CONNECTORS)
+    measured = live
     assert measured["rows_read_whose_card_money_was_not_compared"] == 0, measured["uncompared"]
     assert measured["rows_read_with_a_declared_uncomparable_card"] == 5
     assert "rows_read_whose_card_money_was_not_compared" in record(measured)
@@ -465,10 +482,14 @@ def test_an_entry_that_disagrees_with_a_card_the_old_slice_missed_is_red(
 
 
 def test_an_uncomparable_card_without_a_reason_is_counted_not_skipped(tmp_path: Path) -> None:
+    pristine = measure(_copy_connectors(tmp_path / "pristine", "getmanfred_es"))
     directory = _edit_entry(tmp_path, "getmanfred_es", "0", card_uncomparable=_DROP)
     measured = measure(directory)
     assert measured["rows_read_whose_card_money_was_not_compared"] == 1
-    assert measured["rows_read_with_a_declared_uncomparable_card"] == 4
+    # One fewer than the untouched package declares: the dropped reason was one of them.
+    assert measured["rows_read_with_a_declared_uncomparable_card"] == (
+        pristine["rows_read_with_a_declared_uncomparable_card"] - 1
+    )
     assert any("getmanfred_es [0]" in entry for entry in measured["uncompared"])
 
 
@@ -498,7 +519,7 @@ def test_a_declared_read_must_match_the_one_figure_the_card_prints(
 def _repoint_himalayas_max(tmp_path: Path) -> Path:
     """The engine now reads 70-70 from the list row: its `salary_max` field is
     pointed at `minSalary`. The card (JSON, `maxSalary` 90) is untouched."""
-    directory = _copy_connectors(tmp_path)
+    directory = _copy_connectors(tmp_path, "himalayas_en")
     path = directory / "himalayas_en" / "connector.yaml"
     text = path.read_text(encoding="utf-8")
     assert "salary_max: maxSalary" in text
@@ -540,8 +561,10 @@ def test_a_waiver_must_pin_figures_that_are_on_the_card(
     assert measured["salary_expectation_mismatches"] >= 1, measured
 
 
-def test_the_cli_exits_nonzero_on_an_uncompared_row(monkeypatch: pytest.MonkeyPatch) -> None:
-    clean = measure(_CONNECTORS)
+def test_the_cli_exits_nonzero_on_an_uncompared_row(
+    live: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clean = live
     dirty = {**clean, "rows_read_whose_card_money_was_not_compared": 1}
     monkeypatch.setattr(connector_salary_audit, "write_evidence", lambda *a, **k: dirty)
     assert connector_salary_audit._main(["audit"]) == 1

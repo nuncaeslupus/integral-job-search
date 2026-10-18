@@ -56,7 +56,6 @@ from integral.connector_contract import (
     _seeds_a_block,
     captures,
     check_capture_redaction,
-    check_library,
     check_package,
     evidence_target,
     measure,
@@ -107,6 +106,37 @@ def package(tmp_path: Path) -> Path:
     return target
 
 
+@pytest.fixture(scope="module")
+def library_measure() -> dict[str, Any]:
+    """`measure` over the committed library, taken once for the module.
+
+    Measuring walks every capture of every package (~12 s), and six tests below
+    asked for the same answer. None of them mutates it.
+    """
+    return measure(_LIBRARY)
+
+
+@pytest.fixture
+def cached_library_measure(
+    monkeypatch: pytest.MonkeyPatch, library_measure: dict[str, Any]
+) -> dict[str, Any]:
+    """Make `connector_contract.measure` answer the committed library from cache.
+
+    Only that one directory is served from the cache, so `_main` and
+    `write_evidence` keep their real behaviour (arguments, exit codes, the file
+    written) and any other directory is still measured for real.
+    """
+    real = connector_contract.measure
+
+    def serve(directory: Path = _LIBRARY) -> dict[str, Any]:
+        if Path(directory).resolve() == _LIBRARY.resolve():
+            return library_measure
+        return real(directory)
+
+    monkeypatch.setattr(connector_contract, "measure", serve)
+    return library_measure
+
+
 def _edit_meta(package: Path, mutate: Callable[[dict[str, Any]], object]) -> None:
     meta_path = package / "meta.yaml"
     meta = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
@@ -118,16 +148,20 @@ def _edit_meta(package: Path, mutate: Callable[[dict[str, Any]], object]) -> Non
 # the gate, as a test
 
 
-def test_the_committed_library_conforms() -> None:
+def test_the_committed_library_conforms(library_measure: dict[str, Any]) -> None:
     """The gate: every package in the library satisfies all six rules.
+
+    That includes the capture redaction (rule 7): `client_ip` in `meta.yaml` once
+    said the captures had been re-scanned for an address, nothing read it, and
+    `check_package` now does — so this one sweep is the check that the committed
+    captures carry nobody who fetched them.
 
     And it is checked over something — `packages_checked` is asserted too,
     because "0 violations" over an empty directory reads exactly like
     "0 violations" over a directory that was examined.
     """
-    report = check_library(_LIBRARY)
-    assert report.violations == []
-    assert len(report.packages) >= MINIMUM_PACKAGES
+    assert library_measure["violations"] == []
+    assert library_measure["packages_checked"] >= MINIMUM_PACKAGES
 
 
 def test_every_pagination_key_a_package_sends_appears_in_a_capture() -> None:
@@ -343,6 +377,7 @@ def test_the_capture_date_gate_measures_zero_over_its_floor() -> None:
     [(0, 0, "measured", 0), (1, 0, "measured", 1), (0, 1, "measured", 1), (0, 0, "unmeasured", 3)],
 )
 def test_main_records_t105_and_escalates_its_status(
+    cached_library_measure: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     accepted: int,
@@ -442,7 +477,9 @@ def test_the_check_runs_offline(package: Path, monkeypatch: pytest.MonkeyPatch) 
     assert check_package(package).violations == ()
 
 
-def test_the_gate_records_the_measurement_it_made(tmp_path: Path) -> None:
+def test_the_gate_records_the_measurement_it_made(
+    tmp_path: Path, cached_library_measure: dict[str, Any]
+) -> None:
     evidence = tmp_path / "T53.json"
     measured = write_evidence(evidence, _LIBRARY)
     assert evidence.is_file()
@@ -515,14 +552,16 @@ def test_the_contributors_command_leaves_our_committed_evidence_alone(tmp_path: 
     assert DEFAULT_EVIDENCE_PATH.read_bytes() == before
 
 
-def test_the_foreign_write_metric_is_measured_over_the_real_decision(tmp_path: Path) -> None:
+def test_the_foreign_write_metric_is_measured_over_the_real_decision(
+    tmp_path: Path, library_measure: dict[str, Any]
+) -> None:
     """D-11's gate asks `evidence_target` itself, not a copy of the rule.
 
     A gate that restates the rule agrees with prose the code has stopped
     following — the shape of every hole review found on #77. So the number comes
     from the same function `_main` calls, and this pins both of its answers.
     """
-    assert measure()["evidence_writes_for_a_foreign_library"] == 0
+    assert library_measure["evidence_writes_for_a_foreign_library"] == 0
 
     # The contributor's shape: a foreign library, no destination named.
     assert evidence_target((), own_library=False) is None
@@ -535,7 +574,9 @@ def test_the_foreign_write_metric_is_measured_over_the_real_decision(tmp_path: P
     assert evidence_target((str(named),), own_library=True) == named
 
 
-def test_the_gate_still_records_when_the_caller_names_a_destination(tmp_path: Path) -> None:
+def test_the_gate_still_records_when_the_caller_names_a_destination(
+    tmp_path: Path, cached_library_measure: dict[str, Any]
+) -> None:
     """The other half of D-11: suppressing the accident must not suppress the gate.
 
     `make evidence` runs the bare form over this repository's own library, and
@@ -1243,21 +1284,6 @@ def test_an_html_attribute_repeating_a_removed_value_goes_with_it() -> None:
 
     assert 'value="redacted"' in scrubbed
     assert "Barcelona, Barcelona, ES" in scrubbed
-
-
-def test_the_committed_captures_carry_nobody_who_fetched_them() -> None:
-    """Over the real library — the check `meta.yaml`'s `client_ip` line now has.
-
-    That line said the captures had been "re-scanned for an IPv4 and an IPv6
-    literal". It was true, it was written by the session that did the scanning,
-    and nothing read it: `connector_exchange.py` prints it in a table row.
-    """
-    offenders = {
-        package.name: violations
-        for package in sorted(p for p in _LIBRARY.iterdir() if p.is_dir())
-        if (violations := check_capture_redaction(package))
-    }
-    assert not offenders, offenders
 
 
 def test_the_run_window_is_bounded_on_both_sides() -> None:
