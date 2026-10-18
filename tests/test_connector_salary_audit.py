@@ -179,6 +179,36 @@ def test_editing_a_list_card_band_turns_the_audit_red(tmp_path: Path) -> None:
     assert any("foorilla_en [0]" in entry for entry in measured["mismatches"])
 
 
+def test_a_card_whose_entry_names_another_list_says_is_a_mismatch(tmp_path: Path) -> None:
+    """The pin itself, with the band left correct. Row 0's declared read still
+    equals its card, so only `list_says` can call the entry wrong; an entry not
+    tied to the card it answers for is one more declaration."""
+    directory = _copy_connectors(tmp_path, "foorilla_en")
+    path = directory / "foorilla_en" / "fixture" / "salary.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["rows"]["0"]["list_says"] = "USD 1-2 somewhere else"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    mismatches = measure(directory)["mismatches"]
+    assert any("foorilla_en [0]" in entry and "the entry says" in entry for entry in mismatches)
+
+
+def test_list_route_refusals_are_counted(tmp_path: Path) -> None:
+    """trabajos_es adjudicates three list-route rows as refused and reads three.
+    The refusal count is the only thing separating a refusal from a gap once the
+    unread list is empty, so it has to be the number of refusals declared."""
+    directory = _copy_connectors(tmp_path, "trabajos_es")
+    data = json.loads(
+        (directory / "trabajos_es" / "fixture" / "salary.json").read_text(encoding="utf-8")
+    )
+    declared = sum(1 for row in data["rows"].values() if row["verdict"] == "refused")
+    assert declared == 3
+
+    measured = measure(directory)
+    assert measured["salary_rows_refused"] == declared
+    assert measured["salary_rows_read"] == 3
+
+
 def _copy_connectors(tmp_path: Path, *packages: str) -> Path:
     """A private copy of the named packages only.
 
