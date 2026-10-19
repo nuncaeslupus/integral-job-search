@@ -372,6 +372,9 @@ def test_a_capitalised_or_all_caps_rag_in_another_trade_is_not_the_ai_term() -> 
         "RAG Status Reporting Analyst",
         "RAG Rating Analyst",
         "RAG Trade Buyer",
+        "RAG-Status Analyst",
+        "RAG / Status Reporting",
+        "RAG: Status Reporting Analyst",
     ],
 )
 def test_rag_as_project_status_is_not_the_ai_term(title: str) -> None:
@@ -393,6 +396,11 @@ def test_rag_status_inside_brackets_is_not_the_ai_term() -> None:
         "Engineer - RAG",
         "Tech Lead (RAG)",
         "RAG Engineer",
+        "RAG Platform Engineer",
+        "RAG Data Engineer",
+        "RAG Search Engineer",
+        "RAG Infrastructure Engineer",
+        "RAG Agent Developer",
     ],
 )
 def test_real_rag_titles_stay_relevant(title: str) -> None:

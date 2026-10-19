@@ -155,21 +155,19 @@ def _words(text: str) -> set[str]:
     return words(text)
 
 
-#: An upper-case `RAG` is the AI term when nothing is attached to it (`Head of RAG`,
-#: `Tech Lead (RAG)`, `RAG & Retrieval Engineer`: the next thing is the end or a
-#: punctuation mark) or when the word right after it is a role (`RAG Lead`). A common
-#: word right after it makes it the Red/Amber/Green status sense (`RAG Status
-#: Reporting Analyst`, `RAG Rating Analyst`, `PMO Lead (RAG reporting)`).
+#: An upper-case `RAG` is the AI term by default (`RAG Platform Engineer`, `Head of RAG`).
+#: It is the Red/Amber/Green status sense only when the next word, past any
+#: punctuation joining the two, is a reporting word (`RAG Status Reporting Analyst`,
+#: `RAG-Status`, `RAG / Status`, `PMO Lead (RAG reporting)`, `RAG Trade Buyer`).
 _UPPER_RAG = re.compile(
     r"(?<![A-Za-z])RAG(?![A-Za-z])"
-    r"(?=\s*(?:[^\w\s]|$)|\s+(?i:engineers?|developers?|architects?|specialists?|scientists?"
-    r"|leads?|heads?|managers?|experts?|ai|llm|ml|nlp|pipelines?|systems?)\b)",
+    r"(?![\s,/:&-]*(?i:status|reporting|report|rating|rated|trade|tracker|dashboard)\b)"
 )
 
 
 def _fold(text: str) -> str:
     """The text as the table reads it. An upper-case `RAG` is the AI term unless a
-    common word follows it (the status sense, see `_UPPER_RAG`); `Rag Trade Buyer`
+    reporting word follows it (the status sense, see `_UPPER_RAG`); `Rag Trade Buyer`
     and a multi-word all-caps title are not read that way."""
     if not (text.isupper() and len(text.split()) > 1):
         text = _UPPER_RAG.sub(" llm ", text)
