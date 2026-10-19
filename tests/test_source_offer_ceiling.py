@@ -31,6 +31,7 @@ from integral.sourcing import (
     board_share,
     source,
     source_every_phrase,
+    term_share,
 )
 
 AT = "2026-01-01T00:00:00+00:00"
@@ -176,14 +177,17 @@ def test_a_flood_board_cannot_starve_another_board_or_the_later_terms(
     terms = _terms(PHRASE_CEILING + 2)  # two windows
     run = _walk(store, world, Aim(state="stated", terms=terms))
 
-    share = board_share(2)
-    assert _added(run, "flood") == share
+    # T310: the share is split per term, so the flood board is asked every term
+    # too and keeps its fixed part of each (25 // 8 = 3), not 25 on the first
+    per_term = term_share(board_share(2), len(terms))
+    assert _added(run, "flood") == per_term * len(terms)
+    assert {t for s, t in world.asked if s == "flood"} == set(terms)
     # the other board is asked every term, and keeps what each of them gave it
     assert {t for s, t in world.asked if s == "small"} == set(terms)
     assert _added(run, "small") == 3 * len(terms)
     # the walk was not ended early: nothing unsearched, nothing to resume
     assert run.unsearched == () and run.next_offset is None
-    assert run.added == share + 3 * len(terms) <= OFFER_CEILING
+    assert run.added == per_term * len(terms) + 3 * len(terms) <= OFFER_CEILING
 
 
 # --- out-of-reach rows are not counted ---------------------------------------
@@ -250,17 +254,19 @@ def test_the_summary_names_a_capped_board_and_what_it_lost(
     terms = _terms(3)
     run = _walk(store, world, Aim(state="stated", terms=terms))
     share = board_share(2)
-    # term0 fills the share; the 45 - share rows left are counted; terms 1 and 2
-    # are never sent to the board that is already full
-    assert run.capped == {"flood_en": (45 - share, 0, ("term1", "term2"))}
+    per_term = term_share(share, len(terms))  # 25 // 3 = 8
+    # every term gets its fixed part; the rest of each term's 45 rows is counted,
+    # and no term is left unsent (T310)
+    lost = len(terms) * (45 - per_term)
+    assert run.capped == {"flood_en": (lost, 0, ())}
     line = (
         f"CAPPED  flood_en: held to its {share}-offer share of the {OFFER_CEILING}-offer "
-        f"ceiling — {45 - share} matching row(s) not collected, 0 further request(s) not made"
-        "; never searched for: term1, term2"
+        f"ceiling ({per_term} per term) — {lost} matching row(s) not collected, "
+        "0 further request(s) not made"
     )
     assert line in run.summary()
     assert "small_en" not in "".join(x for x in run.summary().splitlines() if "CAPPED" in x)
-    assert [t for s, t in world.asked if s == "flood"] == ["term0"]
+    assert [t for s, t in world.asked if s == "flood"] == list(terms)
 
 
 def test_a_board_under_its_share_is_not_reported_capped(store: ProfileStore, world: World) -> None:
@@ -284,14 +290,15 @@ def test_a_cap_does_not_move_unsearched_or_next_offset(
     world.board("beta", lambda term: [IN_REACH] * 9)
     terms = _terms(PHRASE_CEILING + 1)
     run = _walk(store, world, Aim(state="stated", terms=terms))
-    # `alpha` lost 7 of its 9 rows to its own share; `beta` stopped at the same
-    # row count because the run's ceiling filled - said as the ceiling, not a cap
-    assert run.capped == {"alpha_en": (7, 0, ("term1", "term2", "term3", "term4", "term5"))}
-    beta = next(o for o in run.outcomes if o.connector == "beta_en" and o.items)
-    assert beta.over_ceiling == 7 and beta.over_board_cap == 0
+    # share 2 over 7 terms is 1 per term (the floor): `alpha` writes term0 and
+    # term1, then its share is spent and term2..term5 are never sent to it.
+    assert run.capped["alpha_en"] == (16, 0, ("term2", "term3", "term4", "term5"))
+    # `beta` writes its two and the run's ceiling then fills (4)
+    beta = [o for o in run.outcomes if o.connector == "beta_en" and o.items]
+    assert [o.added for o in beta] == [1, 1]
     assert run.added == 4
     assert run.next_offset == 0
-    assert run.unsearched == terms[1:]  # term0 reached both boards; b's term1 onward did not
+    assert run.unsearched == terms[2:]  # both boards reached term0 and term1
     assert "offset=0" in run.summary()
 
 
