@@ -424,3 +424,15 @@ def test_employer_spellings_that_are_one_company(a: str, b: str) -> None:
 )
 def test_a_bare_spa_or_a_location_is_not_the_employer(a: str, b: str) -> None:
     assert not same_vacancy(a, "Backend Engineer", b, "Backend Engineer")
+
+
+@pytest.mark.parametrize("amount", ["£50k", "$120k", "$85,000", "€60.000", "EUR 60.000", "60.000€"])
+def test_an_amount_after_a_grade_does_not_swallow_the_grade(amount: str) -> None:
+    title = f"Software Engineer 2 {amount}"
+    assert not same_vacancy("Acme", title, "Acme", "Software Engineer 3")
+    assert same_vacancy("Acme", title, "Acme", "Software Engineer 2")
+
+
+def test_a_bare_scoop_is_a_word_not_a_legal_form() -> None:
+    assert not same_vacancy("Ice Cream Scoop", "Backend Engineer", "Ice Cream", "Backend Engineer")
+    assert same_vacancy("Scoop", "Backend Engineer", "Scoop", "Backend Engineer")

@@ -55,7 +55,7 @@ TITLE_THRESHOLD = 0.75
 _LEGAL_FORMS = frozenset(
     {
         "sl", "slu", "sa", "sau", "gmbh", "ltd", "limited", "inc", "llc", "bv", "ag",
-        "plc", "corp", "co", "srl", "ab", "oy", "kg", "sas", "sll", "pty", "as", "scoop",
+        "plc", "corp", "co", "srl", "ab", "oy", "kg", "sas", "sll", "pty", "as", "scoopform",
     }
 )  # fmt: skip
 
@@ -89,7 +89,8 @@ _G = r"(?:[mwfdhx]|divers[e]?)"
 # Money, percentages, years and thousands-grouped figures a board appends to a
 # title (`60.000€`, `$80k`, `10%`, `2026`) are not grades and are dropped.
 _AMOUNT = re.compile(
-    r"[€$£]\s*\d[\d.,]*\s*k?|\b\d[\d.,]*\s*(?:k\b|[€$£%]|eur\b|usd\b|gbp\b)"
+    r"(?:[€$£]|\b(?:eur|usd|gbp)\b)\s*\d[\d.,]*\s*k?"
+    r"|\b\d[\d.,]*(?:\s*k\b|\s*%|\s*(?:[€$£]|eur\b|usd\b|gbp\b)(?!\s*\d))"
     r"|\b\d{1,3}(?:[.,]\d{3})+\b",
     re.IGNORECASE,
 )
@@ -121,7 +122,8 @@ def _join_initials(words: list[str]) -> list[str]:
 # `S.p.A.` / `SpA` is the Italian legal form, but a bare `Spa` is a word
 # (`Hotel Spa`): only the dotted or mixed-case spelling is a legal form.
 _SPA_FORM = re.compile(r"\b[sS]\.\s*[pP]\.\s*[aA]\b|\bSpA\b")
-_SCOOP = re.compile(r"\bs\.?\s*coop\b", re.IGNORECASE)
+# `S. Coop.` / `S.Coop`; a bare `Scoop` is a word (`Ice Cream Scoop`).
+_SCOOP = re.compile(r"\bs(?:\.\s*|\s+)coop\b", re.IGNORECASE)
 _TRAILING_PARENS = re.compile(r"(?:\s*\([^()]*\))+\s*$")
 
 
@@ -135,7 +137,7 @@ def employer_key(company: str | None) -> tuple[str, ...] | None:
     raw = normalise_name(company)
     spa_is_form = bool(_SPA_FORM.search(str(company)))
     raw = _TRAILING_PARENS.sub("", raw)
-    text = _ascii_fold(_SCOOP.sub("scoop", raw)).replace(".", "")
+    text = _ascii_fold(_SCOOP.sub("scoopform", raw)).replace(".", "")
     words = _join_initials([w for w in re.split(r"[\W_]+", text) if w])
     # Legal forms count only as a trailing run (`Foo GmbH & Co. KG`): `Spa
     # Resort Group`, `SA Power Networks` and `Co-op` name their employer with
