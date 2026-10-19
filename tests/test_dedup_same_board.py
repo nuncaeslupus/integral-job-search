@@ -14,7 +14,12 @@ from pathlib import Path
 import pytest
 
 from integral.identity import ProfileStore, create_profile
-from integral.lifecycle import collect_offer, same_board_twin
+from integral.lifecycle import (
+    SAME_BOARD_TEXT_THRESHOLD,
+    collect_offer,
+    same_board_body_similarity,
+    same_board_twin,
+)
 from integral.offers import Location, Offer, compute_offer_id
 
 NOW = "2026-01-01T00:00:00+00:00"
@@ -142,3 +147,176 @@ def test_an_advert_naming_no_employer_is_never_a_twin(store: ProfileStore) -> No
     assert not same_board_twin(a, b)
     assert collect_offer(store, a, at=NOW).added_as_new
     assert collect_offer(store, b, at=NOW).added_as_new
+
+
+# --- T276 review: realistic boilerplate (second reader, PR #871) -------------
+#
+# Distinct vacancies at one employer and one title share the employer's
+# boilerplate, so on a long advert they look alike. The five pairs below are the
+# reviewer's, measured on a ~450-word body; every one must stay stored twice.
+
+BOILER = """
+About the company. We build reliable, interpretable and steerable software that helps
+organisations make better decisions, and we do it as a public benefit corporation whose
+mission is to make the arrival of powerful technology go well for people. Our team is a
+quickly growing group of researchers, engineers, operators, policy experts and business
+leaders who care about the long term consequences of what we ship. We work as one
+collaborative group, favour a small number of large projects over many small ones, and
+treat communication as a core skill. Few of us have the exact background this role lists,
+and we encourage you to apply even if you do not meet every single qualification.
+
+How we are different. We believe the highest impact comes from careful empirical work.
+Our research agenda is shaped by evidence, written down in public, and revisited when the
+evidence changes. Colleagues review each other's work openly and kindly, and we value
+people who change their mind when shown a better argument. You will have a real say in
+what we build and how we build it, and you will be trusted to make decisions without
+waiting for permission.
+
+Logistics. We expect staff to be in the office at least three days a week, because
+working side by side makes the hardest problems easier. We do offer relocation support and
+we can sponsor work visas, although we are not able to do so for every role or location,
+and we will tell you honestly where a particular posting stands. Candidates are welcome to
+tell us what adjustments would help them in the interview process, and we will gladly make
+them. Our interviews consist of a recruiter conversation, a technical exercise you can
+complete in your own environment, a conversation with future colleagues, and a final
+discussion about values and working style. We aim to give a decision within two weeks of
+the final round and to give feedback to every candidate who reaches the technical stage.
+
+Benefits. We offer competitive salary and equity, generous leave, a learning budget,
+comprehensive health cover for you and your dependents, flexible parental leave, a
+retirement plan with employer contributions, daily lunches in the office, and a wellbeing
+allowance you can spend as you see fit. We encourage you to read our principles on the
+careers page before you apply. We are an equal opportunity employer and we consider
+applicants without regard to race, colour, religion, sex, gender identity, sexual
+orientation, national origin, age, disability or veteran status. Please do not send us
+unsolicited resumes through recruiters unless you have a signed agreement with us in place,
+because we review each application ourselves. Your personal data is handled under our
+candidate privacy notice, which we will send you with the first message, and you may ask us
+to delete it at any time during or after the process.
+"""
+
+TEAM_A = (
+    "The Inference team. You will build the serving stack that turns trained models into "
+    "low latency, high throughput endpoints: batching, scheduling, caching of attention state, "
+    "and the accelerator kernels underneath. You will profile production traffic and own the "
+    "capacity plan for the fleet."
+)
+TEAM_B = (
+    "The Pretraining Infrastructure team. You will build the distributed training stack that "
+    "keeps thousands of accelerators busy for weeks: sharding, checkpointing, fault tolerance, "
+    "and the data loading pipeline feeding it. You will debug stragglers and own the cluster "
+    "health tooling."
+)
+
+
+def _long(role: str, **kw: str | None) -> Offer:
+    text = f"{role}\n{BOILER}"
+    return _offer(
+        text,
+        url=f"https://g.test/{compute_offer_id(text)}",
+        location="London",
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _words(text: str) -> int:
+    return len(text.split())
+
+
+def test_the_realistic_boilerplate_is_realistically_long() -> None:
+    # A short body is what hid this defect: the fixture's bodies were half role text.
+    assert 380 <= _words(BOILER) <= 520
+
+
+def test_p1_two_teams_with_heavy_boilerplate_stay_separate(store: ProfileStore) -> None:
+    a, b = _long(TEAM_A), _long(TEAM_B)
+    assert not same_board_twin(a, b)
+    assert collect_offer(store, a, at=NOW).added_as_new
+    assert collect_offer(store, b, at=NOW).added_as_new
+
+
+def test_p2_one_template_with_a_different_team_sentence_stays_separate() -> None:
+    template = "You will own a service end to end, from design to on call. {team} Ship weekly."
+    a = _long(template.format(team="You join the Consumer team, building the chat product."))
+    b = _long(template.format(team="You join the Developer Platform team, building the API."))
+    assert not same_board_twin(a, b)
+
+
+def test_p3_a_different_contract_type_stays_separate() -> None:
+    a = _long("Engagement: permanent, full-time. " + TEAM_A)
+    b = _long("Engagement: twelve month fixed-term contract. " + TEAM_A)
+    assert not same_board_twin(a, b)
+
+
+def test_p4_a_different_level_and_pay_band_stays_separate() -> None:
+    a = _long("Level: L4. Pay band 180,000 to 220,000 USD. " + TEAM_A)
+    b = _long("Level: L6. Pay band 300,000 to 405,000 USD. " + TEAM_A)
+    assert not same_board_twin(a, b)
+
+
+def test_p5_an_agencys_two_clients_stay_separate() -> None:
+    footer = "Hays is a leading recruiter. " + BOILER
+    a = _offer(
+        "Our client, a large insurer, needs a Java developer to modernise claims systems. "
+        + footer,
+        url="https://g.test/h1",
+        location="Leeds",
+        company="Hays",
+        title="Java Developer",
+    )
+    b = _offer(
+        "Our client, a growth stage fintech, needs a Java developer to build payment rails. "
+        + footer,
+        url="https://g.test/h2",
+        location="Leeds",
+        company="Hays",
+        title="Java Developer",
+    )
+    assert not same_board_twin(a, b)
+
+
+def test_a_real_multi_office_twin_with_the_office_in_the_body_still_merges(
+    store: ProfileStore,
+) -> None:
+    def office(place: str) -> Offer:
+        text = f"{TEAM_A}\nLocation: {place}\n{BOILER}"
+        return _offer(text, url=f"https://g.test/{place}", location=place)
+
+    first, second = office("London"), office("Dublin")
+    assert collect_offer(store, first, at=NOW).added_as_new
+    assert collect_offer(store, second, at=NOW).duplicate_of == first.id
+
+
+def test_a_body_naming_another_city_than_its_location_is_not_rewritten() -> None:
+    # Only the offer's own declared place is removed, never a list of cities.
+    a = _offer(f"{TEAM_A} Based in Paris. {BOILER}", url="https://g.test/p", location="London")
+    b = _offer(f"{TEAM_A} Based in Berlin. {BOILER}", url="https://g.test/q", location="London")
+    assert not same_board_twin(a, b)
+
+
+def test_the_threshold_is_pinned_from_both_sides() -> None:
+    base = f"{TEAM_A}\n{BOILER}"
+    words = base.split()
+    end = list(words)
+    end[-1] = "CHANGED"  # one word of ~450: the closest a different advert can get
+    noise = base.upper().replace(".", ";").replace("\n", "  ")  # case, punctuation, spacing
+
+    def offer(text: str, n: int) -> Offer:
+        return _offer(text, url=f"https://g.test/t{n}", location="London")
+
+    original = offer(base, 0)
+    just_under, just_over = offer(" ".join(end), 1), offer(noise, 2)
+    # Guard the fixture: the two pairs straddle the threshold, closely.
+    under_score = same_board_body_similarity(original, just_under)
+    over_score = same_board_body_similarity(original, just_over)
+    assert 0.99 < under_score < SAME_BOARD_TEXT_THRESHOLD <= over_score
+    assert not same_board_twin(original, just_under)
+    assert same_board_twin(original, just_over)
+
+
+def test_a_stub_body_never_merges() -> None:
+    # Fewer words than one shingle: equal text says nothing about equal vacancies.
+    a = _offer("Software Engineer London, UK", url="https://g.test/s1", location="London")
+    b = _offer("Software Engineer London, UK ", url="https://g.test/s2", location="London")
+    assert not same_board_twin(a, b)
+    assert same_board_body_similarity(a, b) == 0.0
