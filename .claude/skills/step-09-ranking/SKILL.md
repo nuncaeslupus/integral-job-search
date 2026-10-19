@@ -26,6 +26,8 @@ Extractions for the live offers, and `profile/constraints.json`. Weights are opt
 
 **Reads:** `extractions/*`; `profile/constraints.json`; `profile/weights.json` — optional; `profile/traits.json` (every dimension with evidence is priced or named as unpriced, T243); `cv/master.json` and the skill statements in `profile/evidence.jsonl`, through `integral.stack_fit` (T219) and `integral.fit` (T244).
 
+**Which copy of an offer is read.** When the brief resolved the employer's own posting, the offer to rank and cite is `integral.canonical_ad.primary_offer(store, offer_id)` (the employer copy if one was fetched, else the offer itself), never the aggregator copy that `offer_id` names: its text, salary and location are the ones to quote, and the archived aggregator copy is provenance only.
+
 ## Protocol — the manner, not the mechanism
 
 - No questions — this step presents. **Presentation is half the specification**, not a rendering detail. Show a handful at a time, not forty.

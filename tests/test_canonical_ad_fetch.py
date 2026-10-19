@@ -31,7 +31,7 @@ from integral.lifecycle import (
     track_new_offer,
     transition,
 )
-from integral.offers import connect_manual, load_offer, load_offers
+from integral.offers import connect_manual, load_offer, load_offers, save_offer
 from integral.robots import Robots
 
 URL = "https://careers.real.example/jobs/42"
@@ -41,9 +41,8 @@ AT = "2026-10-19T09:00:00Z"
 
 def _page(posting: Mapping[str, object] | None, extra: str = "") -> str:
     ld = f'<script type="application/ld+json">{json.dumps(posting)}</script>' if posting else ""
-    return (
-        f"<html><head><title>Backend</title>{ld}</head><body><h1>Backend</h1>{extra}</body></html>"
-    )
+    head = f"<title>Backend Engineer</title>{ld}"
+    return f"<html><head>{head}</head><body><h1>Backend Engineer</h1>{extra}</body></html>"
 
 
 POSTING: dict[str, object] = {
@@ -71,7 +70,7 @@ def _robots(text: str = "User-agent: *\nAllow: /\n") -> Robots:
 def _setup(tmp_path: Path, url: str | None = URL) -> tuple[ProfileStore, str]:
     identity = create_profile(tmp_path, "Candidate", handle="candidate")
     store = ProfileStore(tmp_path, identity.handle)
-    offer = connect_manual("Backend en Barcelona.", title="Backend", company="Aggregator")
+    offer = connect_manual("Backend en Barcelona.", title="Backend Engineer", company="Aggregator")
     save_lifecycle_offer(store, offer, track_new_offer(offer, at=AT))
     record_brief(
         store,
@@ -147,13 +146,13 @@ def test_missing_employer_fields_are_filled_from_the_aggregator(tmp_path: Path) 
     bare = {
         "@type": "JobPosting",
         "hiringOrganization": "Real SL",
-        "title": "Backend",
+        "title": "Backend Engineer",
         "description": "Plain description of the role.",
     }
     _run(store, agg_id, Response(200, _page(bare), URL))
     employer = primary_offer(store, agg_id)
     assert employer.id != agg_id
-    assert employer.title == "Backend" and employer.company == "Real SL"
+    assert employer.title == "Backend Engineer" and employer.company == "Real SL"
 
 
 @pytest.mark.parametrize(
@@ -170,7 +169,13 @@ def test_missing_employer_fields_are_filled_from_the_aggregator(tmp_path: Path) 
         (
             Response(
                 200,
-                _page({"@type": "JobPosting", "hiringOrganization": "Real SL", "title": "Backend"}),
+                _page(
+                    {
+                        "@type": "JobPosting",
+                        "hiringOrganization": "Real SL",
+                        "title": "Backend Engineer",
+                    }
+                ),
                 URL,
             ),
             "parse_failure",
@@ -232,7 +237,7 @@ def test_brief_cli_fetches_so_the_downstream_reader_sees_employer_fields(
 
     identity = create_profile(tmp_path, "Candidate", handle="candidate")
     store = ProfileStore(tmp_path, identity.handle)
-    offer = connect_manual("Backend en Barcelona.", title="Backend", company="Aggregator")
+    offer = connect_manual("Backend en Barcelona.", title="Backend Engineer", company="Aggregator")
     save_lifecycle_offer(store, offer, track_new_offer(offer, at=AT))
     calls: list[str] = []
 
@@ -285,7 +290,7 @@ def test_b2_the_matching_posting_is_chosen_among_several(tmp_path: Path) -> None
 
 def test_b2_an_ambiguous_page_is_not_promoted(tmp_path: Path) -> None:
     store, agg_id = _setup(tmp_path)
-    twin = {**POSTING, "title": "Backend Developer"}
+    twin = {**POSTING, "description": "<p>The same role, listed twice.</p>"}
     result, _ = _run(store, agg_id, Response(200, _page({"@graph": [POSTING, twin]}), URL))
     _fell_back(store, agg_id, result, "mismatch")
     result, _ = _run(store, agg_id, Response(200, _page({"@graph": [OTHER]}), URL))
@@ -392,7 +397,7 @@ def test_n3_a_protocol_error_is_a_fetch_error(tmp_path: Path) -> None:
 
 
 def _second_aggregator(store: ProfileStore) -> str:
-    offer = connect_manual("Backend, otra copia.", title="Backend", company="Aggregator2")
+    offer = connect_manual("Backend, otra copia.", title="Backend Engineer", company="Aggregator2")
     save_lifecycle_offer(store, offer, track_new_offer(offer, at=AT))
     record_brief(
         store,
@@ -442,3 +447,51 @@ def test_r1_a_tombstoned_employer_copy_is_not_recreated(tmp_path: Path) -> None:
     assert result.outcome == "fallback" and result.reason == "tombstoned"
     assert not store.path("offers", f"{employer_id}.json").exists()
     assert primary_offer(store, second).id == second
+
+
+def _promotes(tmp_path: Path, posting: dict[str, object]) -> bool:
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(store, agg_id, Response(200, _page(posting), URL))
+    return result.outcome == "canonical"
+
+
+def test_r2_an_advert_with_no_title_promotes_nothing(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    save_offer(store, load_offer(store, agg_id).model_copy(update={"title": None}))
+    result, _ = _run(store, agg_id, Response(200, _page(POSTING, "Backend Engineer"), URL))
+    _fell_back(store, agg_id, result, "mismatch")
+
+
+def test_r3_a_title_is_matched_whole_not_by_substring(tmp_path: Path) -> None:
+    assert not _promotes(tmp_path / "a", {**POSTING, "title": "Backend Engineer Sales Lead"})
+    assert not _promotes(tmp_path / "b", {**POSTING, "title": "Engineer"})
+    assert _promotes(tmp_path / "c", {**POSTING, "title": "backend  ENGINEER"})
+
+
+def test_r3_an_employer_is_matched_whole_not_by_prefix(tmp_path: Path) -> None:
+    for i, name in enumerate(["Real Estate Staffing Agency", "Re", "Realty SL"]):
+        assert not _promotes(tmp_path / str(i), {**POSTING, "hiringOrganization": {"name": name}})
+    assert _promotes(tmp_path / "ok", {**POSTING, "hiringOrganization": {"name": "Real, S.L."}})
+
+
+def test_r5_a_second_run_keeps_the_existing_promotion(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    first, _ = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert first.outcome == "canonical"
+    second, _ = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert second.outcome == "canonical" and second.canonical_id == first.canonical_id
+    record = load_result(store, agg_id)
+    assert record and record["outcome"] == "canonical"
+    assert primary_offer(store, agg_id).id == first.canonical_id != agg_id
+
+
+def test_r6_an_aggregator_copy_with_no_lifecycle_record_leaves_the_new_pool(
+    tmp_path: Path,
+) -> None:
+    store, agg_id = _setup(tmp_path)
+    store.path("offers", "lifecycle", f"{agg_id}.json").unlink()
+    result, _ = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert result.outcome == "canonical"
+    kept, record = load_lifecycle_offer(store, agg_id)
+    assert kept.status == "archived" and kept.duplicate_of == result.canonical_id
+    assert record.current_status == "archived"

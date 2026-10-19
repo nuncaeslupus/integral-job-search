@@ -41,10 +41,11 @@ from integral.lifecycle import (
     collect_offer,
     load_lifecycle_offer,
     save_lifecycle_offer,
+    track_new_offer,
     transition,
 )
 from integral.liveness import read_response
-from integral.offers import Location, Offer, Salary, compute_offer_id, load_offer, save_offer
+from integral.offers import Location, Offer, Salary, compute_offer_id, load_offer
 from integral.robots import USER_AGENT, Robots, RobotsError
 from integral.salary_period import normalize_period
 
@@ -167,20 +168,34 @@ def _job_postings(body: str) -> list[dict[str, Any]]:
     return found
 
 
-def _norm(value: str) -> str:
-    return re.sub(r"[\W_]+", "", value.casefold())
+def _tokens(value: str) -> list[str]:
+    return re.findall(r"[^\W_]+", value.casefold().replace(".", ""))
+
+
+#: Legal-form words that differ between how a brief and a page write one company name.
+_LEGAL_FORM = frozenset(
+    {"sl", "slu", "sa", "sau", "sc", "inc", "ltd", "llc", "gmbh", "ag", "bv", "plc", "co", "corp"}
+)
+
+
+def _company_tokens(value: str) -> list[str]:
+    tokens = _tokens(value)
+    while len(tokens) > 1 and tokens[-1] in _LEGAL_FORM:
+        tokens.pop()
+    return tokens
 
 
 def _same_employer(posting: dict[str, Any], employer: str) -> bool:
+    """Whole-name equality, legal form aside: `Real` is not `Real Estate Staffing Agency`."""
     org = posting.get("hiringOrganization")
-    name = _norm(_text(org.get("name") if isinstance(org, dict) else org) or "")
-    want = _norm(employer)
-    return bool(name and want and (name == want or name.startswith(want) or want.startswith(name)))
+    name = _company_tokens(_text(org.get("name") if isinstance(org, dict) else org) or "")
+    return bool(name) and name == _company_tokens(employer)
 
 
 def _same_title(posting: dict[str, Any], title: str | None) -> bool:
-    mine, theirs = _norm(title or ""), _norm(_text(posting.get("title")) or "")
-    return not mine or (bool(theirs) and (mine in theirs or theirs in mine))
+    """Whole-title equality; an advert with no title promotes nothing."""
+    mine, theirs = _tokens(title or ""), _tokens(_text(posting.get("title")) or "")
+    return bool(mine) and mine == theirs
 
 
 def _text(value: Any) -> str | None:
@@ -340,6 +355,19 @@ def resolve_canonical(
         return fallback("no_source_url", "the brief names no source posting")
     if brief.exclusions_tripped:
         return fallback("brief_excluded", "the brief tripped an exclusion: nothing is fetched")
+    prior = load_result(store, offer_id)
+    if prior and prior.get("outcome") == "canonical" and prior.get("canonical_offer_id"):
+        kept = str(prior["canonical_offer_id"])
+        if aggregator.duplicate_of == kept:  # already promoted: keep that, do not overwrite it
+            return CanonicalResult(
+                offer_id,
+                "canonical",
+                kept,
+                None,
+                str(prior.get("detail") or ""),
+                prior.get("source_posting_url"),
+                str(prior.get("checked_at") or stamp),
+            )
     if aggregator.status != "new":
         return fallback("already_in_progress", f"the advert is already {aggregator.status}")
     checker = robots or Robots()
@@ -422,7 +450,12 @@ def _retire_aggregator(store: ProfileStore, aggregator: Offer, employer_id: str,
         archived, record = transition(
             linked, record, "archived", at=at, reason=f"canonical copy {employer_id}"
         )
-    except LifecycleError:
-        save_offer(store, linked)
+    except LifecycleError:  # a legacy or hand-made record with no lifecycle: give it one
+        fresh = linked.model_copy(update={"status": "new"})
+        record = track_new_offer(fresh, at=at)
+        archived, record = transition(
+            fresh, record, "archived", at=at, reason=f"canonical copy {employer_id}"
+        )
+        save_lifecycle_offer(store, archived, record)
         return
     save_lifecycle_offer(store, archived, record)

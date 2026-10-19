@@ -1,7 +1,7 @@
 {
   "offers_presented_without_a_liveness_check": 0,
   "scenarios_probed": 15,
-  "dead_phrases_known": 12,
+  "dead_phrases_known": 14,
   "violations": [],
   "readings": [
     {

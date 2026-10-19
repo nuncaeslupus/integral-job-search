@@ -433,3 +433,11 @@ def test_the_padding_clears_the_scan_window_and_a_shorter_one_is_reported() -> N
         shapes=(Shape("buried", short_padding, SHAPES[-1].moved, moves_marker=True),)
     )
     assert found["fixture_shape_cells_that_relocate_nothing"] == 10, found
+
+
+@pytest.mark.parametrize("notice", ["This job has expired.", "Applications are closed."])
+def test_r4_further_closure_notices_read_dead(notice: str) -> None:
+    page = f"<html><body><h1>Engineer</h1><p>{notice}</p></body></html>"
+    check = liveness.read_response("r", 200, page)
+    assert check.liveness == "dead", check.reason
+    assert liveness.dead_phrase_in(notice) is not None
