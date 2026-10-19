@@ -680,7 +680,7 @@ def test_render_pdf_hands_the_engine_a_fetcher_that_refuses_everything(
     monkeypatch: pytest.MonkeyPatch, with_fetcher_class: bool
 ) -> None:
     seen = _fake_engine(monkeypatch, with_fetcher_class=with_fetcher_class)
-    dr.render_pdf(dr.render(dr.sample_letter()))
+    dr.render_pdf(dr.render(dr.sample_letter()), check_widows=False)  # the fake has no layout
     fetcher = seen.get("url_fetcher")
     assert fetcher is not None, "render_pdf left the engine its default fetcher"
     for url in _FETCH_URLS:
