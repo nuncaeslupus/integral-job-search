@@ -2,8 +2,10 @@
 id: t-771dcb2a
 title: "T302: T225 follow-ups: unmeasured plan metric, purge drops hold-back, over-merge risk"
 priority: 5
-requires: [human:gate]
+status: cancelled
 ---
+
+> **Cancelled 2026-10-19 — owner decision.** Process/meta work, out of scope under the owner policy on meta code (E). Not done.
 
 Imported from issue #703
 

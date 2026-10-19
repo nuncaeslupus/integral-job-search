@@ -2,7 +2,6 @@
 id: t-ec531aff
 title: "T276: Deduplication does not fire: the same advert is stored four times from one board"
 priority: 5
-requires: [human:gate]
 ---
 
 Imported from issue #551
@@ -48,6 +47,5 @@ Filed from a live candidate round, 2026-09-22.
      everything. -->
 
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
+uv run python -m pytest -n0 -q tests/test_dedup_same_board.py
 ```

@@ -2,8 +2,10 @@
 id: t-19aea9f7
 title: "T299: T224 follow-ups: optional findings from the #697 second read"
 priority: 5
-requires: [human:gate]
+status: cancelled
 ---
+
+> **Cancelled 2026-10-19 — owner decision.** Process/meta work, out of scope under the owner policy on meta code (E). Not done.
 
 Imported from issue #698
 

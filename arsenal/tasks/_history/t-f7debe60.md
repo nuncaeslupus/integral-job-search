@@ -2,8 +2,10 @@
 id: t-f7debe60
 title: "T301: T237 follow-ups: dead n=0 past-the-end case; summary should name next offset"
 priority: 5
-requires: [human:gate]
+status: cancelled
 ---
+
+> **Cancelled 2026-10-19 — owner decision.** Process/meta work, out of scope under the owner policy on meta code (E). Not done.
 
 Imported from issue #702
 
