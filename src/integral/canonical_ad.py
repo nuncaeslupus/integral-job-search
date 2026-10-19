@@ -38,9 +38,9 @@ from integral.employer_brief import load_brief, save_brief
 from integral.identity import IdentityError, ProfileStore
 from integral.lifecycle import (
     LifecycleError,
+    collect_offer,
     load_lifecycle_offer,
     save_lifecycle_offer,
-    track_new_offer,
     transition,
 )
 from integral.liveness import read_response
@@ -60,6 +60,7 @@ Reason = Literal[
     "mismatch",
     "brief_excluded",
     "already_in_progress",
+    "tombstoned",
 ]
 
 DEFAULT_DELAY_FLOOR = 1.0
@@ -396,12 +397,20 @@ def resolve_canonical(
     if employer is None or employer.id == offer_id:
         return fallback("parse_failure", "the JobPosting has no usable description")
 
-    save_lifecycle_offer(store, employer, track_new_offer(employer, at=stamp))
-    save_brief(store, brief.model_copy(update={"offer_id": employer.id}))
-    _retire_aggregator(store, aggregator, employer.id, stamp)
+    # The §7.4 gate, never a bare save: an employer copy already tracked (possibly applied)
+    # must keep its status and history, and a tombstoned one must not be re-created.
+    collected = collect_offer(store, employer, at=stamp)
+    if collected.matched_tombstone is not None:
+        return fallback(
+            "tombstoned", f"the employer copy was purged: {collected.matched_tombstone}"
+        )
+    kept_id = employer.id if collected.added_as_new else collected.duplicate_of or employer.id
+    if load_brief(store, kept_id) is None:
+        save_brief(store, brief.model_copy(update={"offer_id": kept_id}))
+    _retire_aggregator(store, aggregator, kept_id, stamp)
     return _record(
         store,
-        CanonicalResult(offer_id, "canonical", employer.id, None, check.reason, url, stamp),
+        CanonicalResult(offer_id, "canonical", kept_id, None, check.reason, url, stamp),
     )
 
 

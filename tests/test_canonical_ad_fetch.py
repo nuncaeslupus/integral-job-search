@@ -24,6 +24,8 @@ from integral.canonical_ad import (
 from integral.employer_brief import load_brief, record_brief, save_brief
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import (
+    _append_tombstone,
+    build_tombstone,
     load_lifecycle_offer,
     save_lifecycle_offer,
     track_new_offer,
@@ -387,3 +389,56 @@ def test_n3_a_protocol_error_is_a_fetch_error(tmp_path: Path) -> None:
     store, agg_id = _setup(tmp_path)
     result, _ = _run(store, agg_id, http.client.IncompleteRead(b"x"))
     _fell_back(store, agg_id, result, "fetch_error")
+
+
+def _second_aggregator(store: ProfileStore) -> str:
+    offer = connect_manual("Backend, otra copia.", title="Backend", company="Aggregator2")
+    save_lifecycle_offer(store, offer, track_new_offer(offer, at=AT))
+    record_brief(
+        store,
+        offer.id,
+        real_employer="Real SL",
+        resolved_via="apply_link",
+        live_at_source="unknown",
+        checked_at="2026-10-19T08:00:00Z",
+        what_they_do="logistics software",
+        sector="logistics",
+        pay="not published",
+        hires_in_candidate_country="true",
+        source_posting_url=URL,
+    )
+    return offer.id
+
+
+def test_r1_an_applied_employer_copy_is_not_reset_by_a_second_aggregator(tmp_path: Path) -> None:
+    store, first = _setup(tmp_path)
+    employer_id = _run(store, first, Response(200, _page(POSTING), URL))[0].canonical_id
+    assert employer_id
+    offer, record = load_lifecycle_offer(store, employer_id)
+    offer, record = transition(offer, record, "shortlisted", at=AT)
+    offer, record = transition(offer, record, "applied", at=AT)
+    save_lifecycle_offer(store, offer, record)
+
+    second = _second_aggregator(store)
+    result, _ = _run(store, second, Response(200, _page(POSTING), URL))
+    assert result.outcome == "canonical" and result.canonical_id == employer_id
+    kept, kept_record = load_lifecycle_offer(store, employer_id)
+    assert kept.status == "applied" and len(kept_record.history) == 3
+    assert load_offer(store, second).duplicate_of == employer_id
+    assert load_offer(store, second).status == "archived"
+
+
+def test_r1_a_tombstoned_employer_copy_is_not_recreated(tmp_path: Path) -> None:
+    store, first = _setup(tmp_path)
+    employer_id = _run(store, first, Response(200, _page(POSTING), URL))[0].canonical_id
+    assert employer_id
+    offer, record = load_lifecycle_offer(store, employer_id)
+    _append_tombstone(store, build_tombstone(offer, record, purged_at=AT))
+    store.path("offers", f"{employer_id}.json").unlink()
+    store.path("offers", "lifecycle", f"{employer_id}.json").unlink()
+
+    second = _second_aggregator(store)
+    result, _ = _run(store, second, Response(200, _page(POSTING), URL))
+    assert result.outcome == "fallback" and result.reason == "tombstoned"
+    assert not store.path("offers", f"{employer_id}.json").exists()
+    assert primary_offer(store, second).id == second
