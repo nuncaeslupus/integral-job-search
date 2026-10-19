@@ -1135,10 +1135,13 @@ Take = Literal[
     "range_high",
     "currency",
     "period",
+    "first_text_node",
     "last_text_node",
     "html_text",
     "escaped_html_text",
 ]
+
+_TEXT_NODE_TAKES = ("first_text_node", "last_text_node")
 
 #: Currency tokens recognised by `take: currency`, symbol or ISO code. A closed
 #: table for the same reason the vocabulary is closed, and deliberately small:
@@ -1341,9 +1344,9 @@ class FieldSelector(Strict):
 
     @model_validator(mode="after")
     def _take_and_attr_are_compatible(self) -> FieldSelector:
-        if self.take == "last_text_node" and self.attr is not None:
+        if self.take in _TEXT_NODE_TAKES and self.attr is not None:
             raise ValueError(
-                "take: last_text_node reads the element's text, so it cannot be "
+                f"take: {self.take} reads the element's text, so it cannot be "
                 "combined with attr — pick one"
             )
         return self
@@ -1690,13 +1693,13 @@ class JsonField(Strict):
 
     @model_validator(mode="after")
     def _take_is_one_a_json_value_can_answer(self) -> JsonField:
-        if self.take == "last_text_node":
-            # It reads the *final text piece of an element*, and a JSON scalar
+        if self.take in _TEXT_NODE_TAKES:
+            # It reads *one text piece of an element*, and a JSON scalar
             # has no elements. Refused at load rather than silently returning
             # the whole string at parse time, which would look exactly like a
             # `take` nobody asked for.
             raise ValueError(
-                "take: last_text_node reads a markup element's last text piece, and a "
+                f"take: {self.take} reads a markup element's own text piece, and a "
                 "JSON value has no elements — use html_text or escaped_html_text if the "
                 "value carries markup"
             )
@@ -3933,6 +3936,11 @@ def _extract(node: Node, selector: FieldSelector, compiled: SimpleSelector) -> s
         return None
     if selector.attr is not None:
         value = match.attrs.get(selector.attr)
+    elif selector.take == "first_text_node":
+        # T305: the mirror image. foorilla's card puts the place first and a
+        # marker span (`[R]`, `[WH]`) after it, so the first piece is the place.
+        pieces = [piece.strip() for piece in match._iter_text() if piece.strip()]
+        value = " ".join(pieces[0].split()) if pieces else None
     elif selector.take == "last_text_node":
         # The element's final text piece rather than the concatenation of all
         # of them. #356's own suggestion, and it adds no syntax: on every one

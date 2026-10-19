@@ -2,6 +2,7 @@
 id: t-c2d5ad8b
 title: "T305: Follow-ups from T235 (#708): foorilla location markers and truncated place lists"
 priority: 5
+status: merged
 ---
 
 Imported from issue #710
@@ -14,13 +15,7 @@ Optional findings from the second reader on #708, not done there:
 
 ## Acceptance gate
 
-<!-- This task came from an issue, so its "gate" is prose. Write a real check
-     below, then DELETE the `requires: [human:gate]` line in the front matter.
-     Until that line is gone the selector will not offer this task, which is
-     deliberate: a prose gate runs nothing, and a gate that runs nothing passes
-     everything. -->
-
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
+uv run python -m pytest -n0 -q tests/test_employer_published.py -k foorilla
+uv run python -m pytest -n0 -q tests/test_connectors.py -k first_text_node
 ```
