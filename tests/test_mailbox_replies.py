@@ -305,6 +305,8 @@ def test_a_refused_reply_does_not_bind_its_read_id(
 ) -> None:
     refused = mr._reply(permission_id=None, read_at="2026-10-05T10:00:00+00:00")
     assert mr.propose(store, refused, now=_NOW)[0].outcome is Outcome.REFUSED
+    # deliberate: a refused read saw nothing, so it fixes no read time and its id stays free
+    assert not store.exists(*mr.READS_PARTS)
     assert mr.propose(store, mr._reply(), now=_NOW)[0].outcome is Outcome.PROPOSED
 
 
@@ -386,6 +388,25 @@ def test_confirm_judges_visibility_and_the_read_binding_again(
             mr.confirm(store, proposal, now=_NOW)
         assert _state(store, ids["acme"]) == ("applied", "applied")
         path.write_text(original, encoding="utf-8")
+
+
+@pytest.mark.parametrize("how", ["deleted", "emptied", "read_at_edited"])
+def test_confirm_refuses_when_the_read_binding_is_gone_or_edited(
+    store: ProfileStore, ids: dict[str, str], how: str
+) -> None:
+    _v, proposal = mr.propose(store, mr._reply(), now=_NOW)
+    assert proposal
+    reads = store.path(*mr.READS_PARTS)
+    if how == "deleted":
+        reads.unlink()
+    elif how == "emptied":
+        reads.write_text("", encoding="utf-8")
+    else:
+        rows = [{**r, "read_at": mr._LATER_READ} for r in store.read_jsonl(*mr.READS_PARTS)]
+        reads.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    with pytest.raises(ProposalError, match="no longer visible"):
+        mr.confirm(store, proposal, now=_NOW)
+    assert _state(store, ids["acme"]) == ("applied", "applied")
 
 
 def test_a_refused_confirm_does_not_block_the_next_reply(

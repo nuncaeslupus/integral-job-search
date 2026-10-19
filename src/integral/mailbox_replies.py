@@ -252,7 +252,9 @@ def propose(
     clock = now or datetime.now(UTC)
     verdict = assess(store, reply, am.load(store), now=clock)
     # Every read that really happened under a yes is recorded, whatever became of
-    # its reply; a read that failed for want of a yes, or lies in the future, is not.
+    # its reply; a read that failed for want of a yes, or lies in the future, is not. Binding a
+    # refused read would let a caller with no yes claim any read id first and make the real read
+    # of that id READ_TIME_REBOUND; a refused read saw nothing, so it fixes no read time.
     read_at = am._moment(reply.pointer.read_at)
     if verdict.outcome is not Outcome.REFUSED and read_at is not None and read_at <= clock:
         _bind_read(store, reply.pointer, clock.isoformat(timespec="seconds"))
@@ -316,6 +318,13 @@ def _recheck_visibility(
     store: ProfileStore, row: dict[str, Any], pointer: am.AlertPointer, now: datetime
 ) -> None:
     """The reply must still be provably visible to its read, and the read id still bound to it."""
+    # `propose` binds the read id before it writes any proposal, so a proposal whose read id has
+    # no binding lost it (the reads file was deleted or emptied) and is not trusted on its own row.
+    if _bound_read_at(store, pointer.read_id) is None:
+        raise ProposalError(
+            f"{row.get('proposal_id')!r} is no longer visible to its read: "
+            "the read id has no recorded read time"
+        )
     stored = Reply(ReplyKind.REJECTION, "", "", str(row.get("received_at") or ""), pointer)
     if (hidden := _visibility_refusal(store, stored, now)) is not None:
         raise ProposalError(
