@@ -34,7 +34,6 @@ from integral.reaction_elicit import (
     SOURCE_HOSTS,
     ElicitationError,
     _hostname,
-    check_stimulus,
     collect_stimuli,
     connector_hosts,
     corpus_stimuli,
@@ -43,9 +42,15 @@ from integral.reaction_elicit import (
     permitted_live_sources,
     stimulus_from_ad,
 )
+from integral.reaction_elicit import check_stimulus as _check_stimulus
 
 _AT = "2026-08-23T21:00:00+00:00"
 _TEXT = "Buscamos cocinero para restaurante en Girona. " * 12
+
+
+def check_stimulus(offer: Offer, *, collected_at: str | None = _AT) -> None:
+    """The provenance clock is the lifecycle `collected_at` (T281); these tests default it."""
+    _check_stimulus(offer, collected_at=collected_at)
 
 
 def _ad(ad_id: str, split: Split, text: str = _TEXT) -> LabelledAd:
@@ -138,8 +143,8 @@ def test_no_stimulus_is_invented() -> None:
     # the model wrote.
     with pytest.raises(ElicitationError, match="url"):
         check_stimulus(_live_offer(url=None))
-    with pytest.raises(ElicitationError, match="fetched_at"):
-        check_stimulus(_live_offer(fetched_at=None))
+    with pytest.raises(ElicitationError, match="collected_at"):
+        check_stimulus(_live_offer(), collected_at=None)
 
     check_stimulus(_live_offer())
 
@@ -191,7 +196,9 @@ def test_the_recorded_measurement_reports_no_overlap() -> None:
     # what is asserted here is that the probe still ran the cases the module's
     # guards exist for. A `>= 6` over a length would be satisfied by six
     # scenarios aimed at one rule.
-    assert {"blocked_board", "rewritten_text", "no_url", "no_fetched_at"} <= set(probed["refusals"])
+    assert {"blocked_board", "rewritten_text", "no_url", "no_collected_at"} <= set(
+        probed["refusals"]
+    )
     assert "board_advert_on_its_list_host" in probed["acceptances"]
 
 

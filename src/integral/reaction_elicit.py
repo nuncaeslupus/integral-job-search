@@ -75,8 +75,8 @@ import yaml
 
 from integral.harness import DEFAULT_STORE_PATH, LabelledAd, load_store
 from integral.identity import ProfileStore, create_profile
-from integral.lifecycle import collect_offer
-from integral.offers import Offer, compute_offer_id
+from integral.lifecycle import LifecycleError, collect_offer, load_lifecycle_offer
+from integral.offers import Offer, OfferError, compute_offer_id
 from integral.profile import EvidenceLog, EvidenceSubject
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -286,8 +286,17 @@ class ElicitationError(Exception):
     """A stimulus that may not be shown, or a source that may not be used."""
 
 
-def check_stimulus(offer: Offer) -> None:
-    """Refuse anything that cannot show where it came from."""
+def check_stimulus(offer: Offer, *, collected_at: str | None = None) -> None:
+    """Refuse anything that cannot show where it came from.
+
+    The provenance clock is the lifecycle record's `collected_at` (T281, owner
+    decision 2026-10-19), passed in as `collected_at`. `Offer.fetched_at` is not
+    read: a connector may not invent fields (§5.2), so nothing on the sourcing
+    path sets it, and a second clock here would be one nothing writes. With no
+    `collected_at` a live stimulus is refused: that is the default, because
+    failing open is the worse error. Use `check_stored_stimulus` for an offer
+    already in the store.
+    """
     if offer.id != compute_offer_id(offer.text):
         raise ElicitationError(
             f"{offer.id}: id does not content-address this text — the text was rewritten "
@@ -306,8 +315,8 @@ def check_stimulus(offer: Offer) -> None:
         raise ElicitationError(
             f"{offer.id}: a live stimulus must carry the url it was fetched from"
         )
-    if not offer.fetched_at:
-        raise ElicitationError(f"{offer.id}: a live stimulus must carry fetched_at")
+    if not collected_at:
+        raise ElicitationError(f"{offer.id}: a live stimulus must carry a lifecycle collected_at")
     if urlparse(offer.url).scheme != "https":
         raise ElicitationError(f"{offer.id}: a live stimulus must be fetched over https")
     permitted = SOURCE_HOSTS[offer.source]
@@ -318,6 +327,22 @@ def check_stimulus(offer: Offer) -> None:
             f"{sorted(permitted)} — but the url names {host!r}, and the source and the "
             "url disagree about where this came from"
         )
+
+
+def check_stored_stimulus(store: ProfileStore, offer_id: str) -> Offer:
+    """`check_stimulus` for a stored offer, with the clock read off its lifecycle record.
+
+    An offer with no lifecycle record (or an unreadable one) has no provenance
+    and is refused, whatever `Offer.fetched_at` says.
+    """
+    try:
+        offer, record = load_lifecycle_offer(store, offer_id)
+    except (LifecycleError, OfferError) as exc:
+        raise ElicitationError(
+            f"{offer_id}: no lifecycle record to take provenance from: {exc}"
+        ) from exc
+    check_stimulus(offer, collected_at=record.collected_at)
+    return offer
 
 
 def stimulus_from_ad(ad: LabelledAd, *, evaluation_ids: frozenset[str] | set[str]) -> Offer:
@@ -387,7 +412,9 @@ def stimulus_from_record(record: dict[str, Any]) -> Offer:
         text=text,
         status="new",
     )
-    check_stimulus(offer)
+    # The collector's own fetch stamp is this record's collection time; the
+    # lifecycle record that `collect_stimuli` writes will carry the same moment.
+    check_stimulus(offer, collected_at=record.get("fetched_at"))
     return offer
 
 
@@ -408,7 +435,8 @@ def collect_stimuli(store: ProfileStore, offers: Iterable[Offer], *, at: str) ->
     """
     batch = list(offers)
     for offer in batch:
-        check_stimulus(offer)
+        # `collect_offer` below stamps the lifecycle record's collected_at with `at`.
+        check_stimulus(offer, collected_at=at)
     stored = []
     for offer in batch:
         outcome = collect_offer(store, offer, at=at)
@@ -532,37 +560,41 @@ def probe_elicitation() -> dict[str, Any]:
     must_refuse(
         "rewritten_text",
         "does not content-address this text",
-        lambda: check_stimulus(live.model_copy(update={"text": other})),
+        lambda: check_stimulus(live.model_copy(update={"text": other}), collected_at=at),
     )
     must_refuse(
         "no_url",
         "must carry the url it was fetched from",
-        lambda: check_stimulus(live.model_copy(update={"url": None})),
+        lambda: check_stimulus(live.model_copy(update={"url": None}), collected_at=at),
     )
     must_refuse(
-        "no_fetched_at",
-        "must carry fetched_at",
-        lambda: check_stimulus(live.model_copy(update={"fetched_at": None})),
+        "no_collected_at",
+        "must carry a lifecycle collected_at",
+        lambda: check_stimulus(live, collected_at=None),
     )
     must_refuse(
         "blocked_board",
         "robots.txt disallows us on this board",
-        lambda: check_stimulus(live.model_copy(update={"source": "remoteok"})),
+        lambda: check_stimulus(live.model_copy(update={"source": "remoteok"}), collected_at=at),
     )
     must_refuse(
         "unchecked_board",
         "is not a permitted stimulus source",
-        lambda: check_stimulus(live.model_copy(update={"source": "nobody"})),
+        lambda: check_stimulus(live.model_copy(update={"source": "nobody"}), collected_at=at),
     )
     must_refuse(
         "url_host_disagrees_with_source",
         "disagree about where this came from",
-        lambda: check_stimulus(live.model_copy(update={"url": "https://unapproved.example/ad"})),
+        lambda: check_stimulus(
+            live.model_copy(update={"url": "https://unapproved.example/ad"}), collected_at=at
+        ),
     )
     must_refuse(
         "plain_http",
         "must be fetched over https",
-        lambda: check_stimulus(live.model_copy(update={"url": "http://remotive.com/ad/1"})),
+        lambda: check_stimulus(
+            live.model_copy(update={"url": "http://remotive.com/ad/1"}), collected_at=at
+        ),
     )
     # Four hosts that end with a permitted host's spelling and are not it. The
     # first two were ACCEPTED while this check read `netloc`; the third is what
@@ -579,7 +611,9 @@ def probe_elicitation() -> dict[str, Any]:
         must_refuse(
             label,
             "disagree about where this came from",
-            lambda url=forged: check_stimulus(live.model_copy(update={"url": url})),
+            lambda url=forged: check_stimulus(
+                live.model_copy(update={"url": url}), collected_at=at
+            ),
         )
     must_refuse(
         "url_host_is_a_ledger_refused_sibling_of_the_list_host",
@@ -590,7 +624,8 @@ def probe_elicitation() -> dict[str, Any]:
                     "source": "greenhouse",
                     "url": "https://boards.greenhouse.io/acme/jobs/1",
                 }
-            )
+            ),
+            collected_at=at,
         ),
     )
     must_refuse(
@@ -599,13 +634,14 @@ def probe_elicitation() -> dict[str, Any]:
         lambda: check_stimulus(
             live.model_copy(
                 update={"source": "examplejobs", "url": "https://www.examplejobs.test/ad/1"}
-            )
+            ),
+            collected_at=at,
         ),
     )
     accepted: list[str] = []
 
     def must_accept(label: str, offer: Offer) -> None:
-        check_stimulus(offer)
+        check_stimulus(offer, collected_at=at)
         accepted.append(label)
 
     must_accept("board_advert_on_its_list_host", live)

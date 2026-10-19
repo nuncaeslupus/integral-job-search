@@ -233,4 +233,4 @@ def test_a_second_copy_of_a_greenhouse_offer_is_still_caught_as_a_duplicate(
 
 def test_a_greenhouse_offer_is_still_a_permitted_live_stimulus() -> None:
     offer = _greenhouse_offer("A job.").model_copy(update={"fetched_at": "2026-01-01T00:00:00Z"})
-    check_stimulus(offer)
+    check_stimulus(offer, collected_at="2026-01-01T00:00:00Z")

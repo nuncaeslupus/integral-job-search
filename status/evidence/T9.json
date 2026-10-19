@@ -6,7 +6,7 @@
     "blocked_board",
     "duplicate_text_across_splits",
     "evaluation_split_ad",
-    "no_fetched_at",
+    "no_collected_at",
     "no_url",
     "plain_http",
     "rewritten_text",
