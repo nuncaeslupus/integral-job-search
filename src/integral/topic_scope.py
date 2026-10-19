@@ -136,11 +136,12 @@ _EMPLOYER_STEM = re.compile(
     r"our story|our mission|the company|company overview|la empresa|nuestra empresa)"
 )
 #: An employer-section stem followed by any separator ("About us - perks",
-#: "Sobre nosotros: beneficios"): the stem decides, the tail is not read.
+#: "Sobre nosotros: beneficios", "About us · perks"): the stem decides, the tail
+#: is not read.
 _STEM_THEN_SEPARATOR = re.compile(
     r"(?:about us|sobre nosotros|who we are|quienes somos|our company|our story|"
     r"our mission|the company|company overview|la empresa|nuestra empresa)"
-    r"\s*[:\-\u2013\u2014/|]+\s*\S"
+    r"\s*[^\w\s]+\s*\S"
 )
 #: Words after "about" that make the tail a description of the perks ("About our
 #: benefits"), not a name ("About Perks Inc").
@@ -289,6 +290,11 @@ def _ends_skip(line: str, employer_key: str) -> bool:
     shaped = _is_heading(line_clean, previous_blank=True)
     # A wording needs no more shape than the heading length limit: "About <long
     # company name>" has more than five words.
+    # Any employer-section stem with a separator ends it, connective or not, and
+    # heading markup ("## About us - perks") does not hide it.
+    bare = _plain(re.sub(r"^[#*_\s]+|[*_\s]+$", "", line_clean))
+    if 0 < len(line_clean) <= _HEADING_LIMIT and _STEM_THEN_SEPARATOR.match(bare):
+        return True
     if 0 < len(line_clean) <= _HEADING_LIMIT and _SECTION_OF_THE_ADVERT.fullmatch(plain):
         return _wording_ends_skip(plain, _plain(line_clean), employer_key)
     if shaped and _mentions_off_topic_word(plain):
