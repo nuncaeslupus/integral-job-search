@@ -74,12 +74,21 @@ list:
     detail_url:
       css: "a.stretched-link"
       attr: "hx-get"
-    # The location sits in the card's right-hand `div.text-end`; the `[R]`
-    # remote marker is a child span, not part of the place. A card with several
-    # places is cut by the board with an ellipsis (`Mountain View, CA, USA;
-    # New York, …`), and that is what the board publishes, so it is stored so.
+    # The location sits in the card's right-hand `div.text-end`. The workplace
+    # marker (`[R]` remote, `[WH]`) is a child span, not part of the place, so
+    # the place is the element's first text node (T305) and the marker is read
+    # on its own as `location_remote`, in the board's own words. A card with
+    # several places is cut by the board with an ellipsis (`Mountain View, CA,
+    # USA; New York, …`), and that is what the list publishes, so it is stored
+    # so. The committed advert page (`fixture/detail.html`) is a one-place
+    # advert and cannot show whether a multi-place one carries the full list;
+    # live pages could not be fetched (403 from the agent proxy), so that is
+    # unverified, not assumed.
     location_raw:
       css: ".text-end"
+      take: "first_text_node"
+    location_remote:
+      css: ".text-success"
     # No `text` here on purpose, and no salary either. The body lives on the
     # advert's own page, which is what `detail` below is for.
 

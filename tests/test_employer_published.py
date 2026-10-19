@@ -386,21 +386,47 @@ def _foorilla() -> Connector:
 
 
 def test_foorilla_reads_the_place_each_card_publishes() -> None:
-    """The expected places are typed from `fixture/list.html` (the `[R]` / `[WH]`
-    markers are the board's own and stay in the raw string). Non-empty is not
-    the property: the card's workplace marker and a second row's place must not
-    be swapped, dropped or shifted by a row."""
+    """The expected places are typed from `fixture/list.html`. The `[R]` / `[WH]`
+    marker is a separate span, not part of the place (#710 O2): it is read as
+    `location_remote`, and the place alone is `location_raw`. Non-empty is not
+    the property: a row's place and marker must not be swapped, dropped or
+    shifted by a row."""
     rows = parse_list_page(_foorilla(), (_FOORILLA / "fixture" / "list.html").read_text("utf-8"))
     assert len(rows) == 50
     assert [row["location_raw"] for row in rows[:6]] == [
-        "Vancouver, British Columbia, Canada [R]",
+        "Vancouver, British Columbia, Canada",
         "Mountain View, CA, USA; New York, \u2026",
-        "Zaragoza, ES, Aragon [R]",
+        "Zaragoza, ES, Aragon",
         "Atlanta, Georgia",
         "San Ramon, California",
         "Middletown, New Jersey",
     ]
-    assert "Santa Clara, CA [WH]" in {row["location_raw"] for row in rows}
+    assert "Santa Clara, CA" in {row["location_raw"] for row in rows}
+
+
+def test_foorilla_marker_maps_to_location_remote_not_into_the_place() -> None:
+    """#710 O2. The card prints `[R]` after the place of 18 cards and `[WH]` after
+    one (counted in `fixture/list.html`); each is the board's remote marker and
+    must reach `location_remote`, while a card with no marker has none."""
+    rows = parse_list_page(_foorilla(), (_FOORILLA / "fixture" / "list.html").read_text("utf-8"))
+    assert rows[0]["location_remote"] == "[R]"  # Vancouver, British Columbia, Canada [R]
+    assert rows[2]["location_remote"] == "[R]"  # Zaragoza, ES, Aragon [R]
+    assert "location_remote" not in rows[1]  # Mountain View ...: no marker
+    assert "location_remote" not in rows[3]  # Atlanta, Georgia: no marker
+    assert [row["location_remote"] for row in rows if "location_remote" in row].count("[R]") == 18
+    [santa_clara] = [row for row in rows if row["location_raw"] == "Santa Clara, CA"]
+    assert santa_clara["location_remote"] == "[WH]"
+    assert all("[" not in row["location_raw"] for row in rows)
+
+
+def test_foorilla_truncated_place_list_is_stored_as_the_board_publishes_it() -> None:
+    """#710 O3. Multi-place cards end in the board's own ellipsis; the committed
+    advert page is a one-place advert, so no full list exists in the fixtures to
+    read instead, and the cut list is kept rather than completed."""
+    rows = parse_list_page(_foorilla(), (_FOORILLA / "fixture" / "list.html").read_text("utf-8"))
+    cut = [row["location_raw"] for row in rows if row["location_raw"].endswith("\u2026")]
+    assert "Mountain View, CA, USA; New York, \u2026" in cut
+    assert "Denver, CO - Hybrid; Las Vegas, \u2026" in cut
 
 
 def test_foorilla_places_agree_with_the_card_markup_read_another_way() -> None:
@@ -408,7 +434,9 @@ def test_foorilla_places_agree_with_the_card_markup_read_another_way() -> None:
     engine's selector, over every row: the engine and the page must agree."""
     html = (_FOORILLA / "fixture" / "list.html").read_text(encoding="utf-8")
     blocks = re.findall(r'<div class="text-end">\s*<small>(.*?)</small>', html, flags=re.S)
-    expected = [" ".join(re.sub(r"<[^>]+>", " ", block).split()) for block in blocks]
+    expected = [
+        " ".join(re.sub(r"<span.*?</span>|<[^>]+>", " ", b, flags=re.S).split()) for b in blocks
+    ]
     rows = parse_list_page(_foorilla(), html)
     assert len(expected) == len(rows) == 50
     assert [row["location_raw"] for row in rows] == expected

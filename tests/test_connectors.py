@@ -3653,3 +3653,32 @@ def test_take_reads_a_magnitude_only_as_a_whole_token(text: str, low: str, high:
 
     assert _take("range_low", text) == low
     assert _take("range_high", text) == high
+
+
+def test_first_text_node_reads_the_place_before_a_marker_child() -> None:
+    from integral.connectors import parse_list_page
+
+    connector = parse_connector(
+        _HTMX_BOARD.replace(
+            '    text: {css: "li.list-group-item"}',
+            '    text: {css: "li.list-group-item"}\n'
+            '    location_raw: {css: ".place", take: first_text_node}',
+        )
+    )
+    html = (
+        '<li class="list-group-item"><a class="stretched-link" hx-get="/x/">T</a>'
+        '<div class="place">  Vienna,  AT <span>[R]</span> tail</div></li>'
+    )
+    [row] = parse_list_page(connector, html)
+    assert row["location_raw"] == "Vienna, AT"
+
+
+def test_first_text_node_cannot_combine_with_attr() -> None:
+    with pytest.raises((ValidationError, ConnectorError)):
+        parse_connector(
+            _HTMX_BOARD.replace(
+                '    text: {css: "li.list-group-item"}',
+                '    text: {css: "li.list-group-item"}\n'
+                '    location_raw: {css: ".place", attr: title, take: first_text_node}',
+            )
+        )
