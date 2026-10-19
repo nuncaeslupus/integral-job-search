@@ -377,3 +377,62 @@ def test_withheld_offers_are_counted_per_reason_and_stay_stored(store: ProfileSt
 
     for offer_id in [applied, rejected, *copies]:
         load_lifecycle_offer(store, offer_id)
+
+
+@pytest.mark.parametrize(
+    "decorated",
+    [
+        "Backend Engineer II \u2013 60.000\u20ac",
+        "Backend Engineer II 45,000 EUR",
+        "Backend Engineer II $80k",
+        "Backend Engineer II 10%",
+        "Backend Engineer II 2026",
+        "Backend Engineer II \u20ac55000",
+    ],
+)
+def test_a_salary_year_or_percent_is_not_a_grade(decorated: str) -> None:
+    assert same_vacancy("Cala", decorated, "Cala", "Backend Engineer II")
+    assert same_vacancy("Cala", "Backend Engineer II", "Cala", decorated)
+    assert not same_vacancy("Cala", decorated, "Cala", "Backend Engineer III")
+
+
+def test_a_real_grade_beside_a_salary_still_disagrees_with_another_grade() -> None:
+    assert title_similarity("Engineer 2 60.000€", "Engineer 3") == 0.0
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Ferrari S.p.A.", "Ferrari"),
+        ("Ferrari SpA", "Ferrari"),
+        ("J.P. Morgan", "JPMorgan"),
+        ("Foo A/S", "Foo"),
+        ("Foo S. Coop.", "Foo"),
+        ("Foo S.Coop", "Foo"),
+        ("Foo GmbH (Berlin)", "Foo"),
+        ("Foo (Madrid)", "Foo GmbH"),
+    ],
+)
+def test_employer_spellings_that_are_one_company(a: str, b: str) -> None:
+    assert same_vacancy(a, "Backend Engineer", b, "Backend Engineer")
+    assert same_vacancy(b, "Backend Engineer", a, "Backend Engineer")
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [("Hotel Spa", "Hotel"), ("Day Spa", "Day"), ("Foo (Berlin)", "Bar (Berlin)")],
+)
+def test_a_bare_spa_or_a_location_is_not_the_employer(a: str, b: str) -> None:
+    assert not same_vacancy(a, "Backend Engineer", b, "Backend Engineer")
+
+
+@pytest.mark.parametrize("amount", ["£50k", "$120k", "$85,000", "€60.000", "EUR 60.000", "60.000€"])
+def test_an_amount_after_a_grade_does_not_swallow_the_grade(amount: str) -> None:
+    title = f"Software Engineer 2 {amount}"
+    assert not same_vacancy("Acme", title, "Acme", "Software Engineer 3")
+    assert same_vacancy("Acme", title, "Acme", "Software Engineer 2")
+
+
+def test_a_bare_scoop_is_a_word_not_a_legal_form() -> None:
+    assert not same_vacancy("Ice Cream Scoop", "Backend Engineer", "Ice Cream", "Backend Engineer")
+    assert same_vacancy("Scoop", "Backend Engineer", "Scoop", "Backend Engineer")

@@ -19,7 +19,8 @@ applied to or rejected came back as new.
    vacancies, however much else they share. Numbers and roman numerals count
    the same way only when *both* titles carry one (`Engineer II` is not
    `Engineer III`); a number on one side alone is a salary, a year or a
-   percentage a board appended, and is ignored;
+   percentage a board appended, and is ignored (so are amounts such as
+   `60.000€`, `$80k`, `10%` on both sides);
 3. the Jaccard overlap of the titles' significant words is at least
    `TITLE_THRESHOLD` (0.75).
 
@@ -54,7 +55,7 @@ TITLE_THRESHOLD = 0.75
 _LEGAL_FORMS = frozenset(
     {
         "sl", "slu", "sa", "sau", "gmbh", "ltd", "limited", "inc", "llc", "bv", "ag",
-        "plc", "corp", "co", "srl", "spa", "ab", "oy", "kg", "sas", "sll", "pty",
+        "plc", "corp", "co", "srl", "ab", "oy", "kg", "sas", "sll", "pty", "as", "scoopform",
     }
 )  # fmt: skip
 
@@ -85,6 +86,14 @@ _SYNONYMS = {
 _COMPOUNDS = re.compile(r"\b(full|front|back)[\s-]*(stack|end)\b")
 
 _G = r"(?:[mwfdhx]|divers[e]?)"
+# Money, percentages, years and thousands-grouped figures a board appends to a
+# title (`60.000€`, `$80k`, `10%`, `2026`) are not grades and are dropped.
+_AMOUNT = re.compile(
+    r"(?:[€$£]|\b(?:eur|usd|gbp)\b)\s*\d[\d.,]*\s*k?"
+    r"|\b\d[\d.,]*(?:\s*k\b|\s*%|\s*(?:[€$£]|eur\b|usd\b|gbp\b)(?!\s*\d))"
+    r"|\b\d{1,3}(?:[.,]\d{3})+\b",
+    re.IGNORECASE,
+)
 _GENDER = re.compile(rf"\(?\b{_G}\s*[/\\-]\s*{_G}(?:\s*[/\\-]\s*{_G})?\b\)?|\(?\ball genders\b\)?")
 
 
@@ -110,19 +119,32 @@ def _join_initials(words: list[str]) -> list[str]:
     return joined
 
 
+# `S.p.A.` / `SpA` is the Italian legal form, but a bare `Spa` is a word
+# (`Hotel Spa`): only the dotted or mixed-case spelling is a legal form.
+_SPA_FORM = re.compile(r"\b[sS]\.\s*[pP]\.\s*[aA]\b|\bSpA\b")
+# `S. Coop.` / `S.Coop`; a bare `Scoop` is a word (`Ice Cream Scoop`).
+_SCOOP = re.compile(r"\bs(?:\.\s*|\s+)coop\b", re.IGNORECASE)
+_TRAILING_PARENS = re.compile(r"(?:\s*\([^()]*\))+\s*$")
+
+
 def employer_key(company: str | None) -> tuple[str, ...] | None:
     """The comparable form of an employer name, or `None` when it names no one
-    (or only a legal form, e.g. `S.L.`)."""
+    (or only a legal form, e.g. `S.L.`). The words are run together so that
+    `J.P. Morgan` and `JPMorgan` are one key; a trailing parenthesis
+    (`GmbH (Berlin)`) is a location, not part of the name."""
     if not names_an_employer(company):
         return None
-    text = _ascii_fold(normalise_name(company)).replace(".", "")
+    raw = normalise_name(company)
+    spa_is_form = bool(_SPA_FORM.search(str(company)))
+    raw = _TRAILING_PARENS.sub("", raw)
+    text = _ascii_fold(_SCOOP.sub("scoopform", raw)).replace(".", "")
     words = _join_initials([w for w in re.split(r"[\W_]+", text) if w])
     # Legal forms count only as a trailing run (`Foo GmbH & Co. KG`): `Spa
     # Resort Group`, `SA Power Networks` and `Co-op` name their employer with
     # the word, and stripping it would merge them with a different company.
-    while words and words[-1] in _LEGAL_FORMS:
+    while words and (words[-1] in _LEGAL_FORMS or (spa_is_form and words[-1] == "spa")):
         words.pop()
-    return tuple(words) or None
+    return ("".join(words),) if words else None
 
 
 def title_words(title: str | None) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
@@ -130,6 +152,7 @@ def title_words(title: str | None) -> tuple[frozenset[str], frozenset[str], froz
     numerals are kept apart from the words: whether they matter depends on the
     other title (see `title_similarity`)."""
     text = _ascii_fold(normalise_name(title))
+    text = _AMOUNT.sub(" ", text)
     text = _GENDER.sub(" ", text)
     text = _COMPOUNDS.sub(r"\1\2", text)
     words: set[str] = set()
@@ -148,6 +171,10 @@ def title_words(title: str | None) -> tuple[frozenset[str], frozenset[str], froz
     return frozenset(words), frozenset(levels), frozenset(numbers)
 
 
+def _is_year(number: str) -> bool:
+    return len(number) == 4 and number[:2] in ("19", "20")
+
+
 def title_similarity(a: str | None, b: str | None) -> float:
     """Jaccard overlap of the significant words; 0.0 when either has none or
     the level words differ."""
@@ -158,8 +185,13 @@ def title_similarity(a: str | None, b: str | None) -> float:
     # A number is a grade (`Engineer II`, `Engineer 3`) when both titles carry
     # one, and then they must agree; when only one does it is a salary, a year
     # or a percentage appended by one board, and says nothing about the role.
-    if numbers_a and numbers_b and numbers_a != numbers_b:
-        return 0.0
+    # A year is likewise ignored when only one title has it, but two different
+    # years (`Graduate Programme 2025` / `2026`) are two intakes.
+    for is_year in (False, True):
+        part_a = {n for n in numbers_a if _is_year(n) == is_year}
+        part_b = {n for n in numbers_b if _is_year(n) == is_year}
+        if part_a and part_b and part_a != part_b:
+            return 0.0
     return len(words_a & words_b) / len(words_a | words_b)
 
 
