@@ -31,9 +31,12 @@ that line is the skill, which names this command and forbids the hand walk, and
 `tests/test_step0_open.py` pins that it does.
 """
 
+# ruff: noqa: RUF001
+
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 import tempfile
@@ -122,12 +125,46 @@ def _ago(then: str | None, now: datetime) -> str | None:
     return f"about {round(days / 30)} months ago"
 
 
+# Cyrillic and Greek letters that read as a Latin one (a subset of UTS #39's
+# confusables, enough for names; the key is the casefolded letter).
+_LOOKALIKES = str.maketrans(
+    {
+        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y",
+        "і": "i", "ј": "j", "ѕ": "s", "к": "k", "м": "m", "н": "h", "т": "t",
+        "в": "b", "ԁ": "d", "ԛ": "q", "ԝ": "w", "ο": "o", "α": "a", "ν": "v",
+        "ι": "i", "κ": "k", "ρ": "p", "τ": "t", "υ": "u", "χ": "x", "ε": "e",
+        "β": "b", "η": "n", "μ": "u", "ɑ": "a", "ӏ": "l", "ǀ": "l",
+        "ł": "l", "ø": "o", "đ": "d",
+    }
+)  # fmt: skip
+
+# Greek capitals read as a Latin capital, but casefold turns them into small letters
+# that look like something else (capital Nu is N; small nu is v), so they are mapped
+# before the fold.
+_CAPITAL_LOOKALIKES = str.maketrans(
+    {
+        "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K",
+        "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+    }
+)  # fmt: skip
+
+
+def name_skeleton(name: str) -> str:
+    """What two display names must share to be the same person as far as a human can tell.
+
+    Compatibility forms folded (fullwidth), invisible format characters dropped
+    (zero-width space), accents dropped, case folded, Cyrillic/Greek look-alikes
+    mapped to Latin, spaces collapsed. Used only to *compare*; never shown.
+    """
+    folded = unicodedata.normalize("NFKC", name)
+    decomposed = unicodedata.normalize("NFD", folded)
+    kept = "".join(c for c in decomposed if unicodedata.category(c) not in ("Cf", "Mn", "Cc"))
+    return " ".join(kept.translate(_CAPITAL_LOOKALIKES).casefold().translate(_LOOKALIKES).split())
+
+
 def _same_name(left: str, right: str) -> bool:
-    """Display names compare as people read them: NFC, then caseless."""
-    return (
-        unicodedata.normalize("NFC", left).casefold()
-        == unicodedata.normalize("NFC", right).casefold()
-    )
+    """Display names compare by skeleton: look-alikes, accents and case do not tell people apart."""
+    return name_skeleton(left) == name_skeleton(right)
 
 
 def _names(identities: tuple[Identity, ...]) -> str:
@@ -254,6 +291,53 @@ def derive_candidate_handle(text: str) -> str:
         return ""
 
 
+OFFER_FILE = ".step0_offer.json"
+
+
+#: How long a question stays open for its yes. A marker older than this (or from the
+#: future) is a different conversation's, not an answer to this one.
+OFFER_TTL = timedelta(minutes=15)
+
+
+def _offered(root: Path, handle: str, moment: datetime) -> bool:
+    try:
+        recorded = json.loads((root / OFFER_FILE).read_text(encoding="utf-8"))
+        at = datetime.fromisoformat(recorded["at"])
+        if at.tzinfo is None:
+            return False
+        return bool(recorded.get("handle") == handle and timedelta(0) <= moment - at <= OFFER_TTL)
+    except (OSError, ValueError, AttributeError, KeyError, TypeError):
+        return False
+
+
+def _record_offer(root: Path, handle: str, moment: datetime) -> None:
+    # No marker means the next --confirmed asks again: fails closed.
+    with contextlib.suppress(OSError):
+        (root / OFFER_FILE).write_text(
+            json.dumps({"handle": handle, "at": moment.isoformat()}), encoding="utf-8"
+        )
+
+
+def _clear_offer(root: Path) -> None:
+    with contextlib.suppress(OSError):
+        (root / OFFER_FILE).unlink()
+
+
+def _confirm_or_open(
+    root: Path, identity: Identity, moment: datetime, confirmed: bool, question: str
+) -> Opened:
+    """Open only if this profile was offered by an earlier call and the human said yes.
+
+    `--confirmed` on its own is a claim, not an answer: without the recorded offer
+    the question is asked (and recorded) instead of the profile opened.
+    """
+    if confirmed and _offered(root, identity.handle, moment):
+        _clear_offer(root)
+        return _open(root, identity, moment)
+    _record_offer(root, identity.handle, moment)
+    return Opened(outcome="confirm", say=question)
+
+
 def _open(root: Path, identity: Identity, moment: datetime) -> Opened:
     store = ProfileStore(root, identity.handle)
     sessions = SessionStore(store)
@@ -295,6 +379,29 @@ def run(
     now: datetime | None = None,
     include_fiction: bool = False,
 ) -> Opened:
+    """One call of step 0. Any outcome that is not a fresh question forgets the last one."""
+    opened = _run(
+        root,
+        name=name,
+        handle=handle,
+        confirmed=confirmed,
+        now=now,
+        include_fiction=include_fiction,
+    )
+    if opened.outcome != "confirm":
+        _clear_offer(root)
+    return opened
+
+
+def _run(
+    root: Path,
+    *,
+    name: str | None = None,
+    handle: str | None = None,
+    confirmed: bool = False,
+    now: datetime | None = None,
+    include_fiction: bool = False,
+) -> Opened:
     """One call of step 0: resolve, and once resolved, open.
 
     The two inputs are kept apart, because one string can be a stranger's handle
@@ -323,20 +430,21 @@ def run(
         started = _started_on(hit, identities)
         if isinstance(started, Opened):
             return started
-        if not confirmed:
-            return Opened(
-                outcome="confirm",
-                say=f"Is this {hit.display_name}, whose profile was started on {started}?",
-            )
-        return _open(root, hit, moment)
+        return _confirm_or_open(
+            root,
+            hit,
+            moment,
+            confirmed,
+            f"Is this {hit.display_name}, whose profile was started on {started}?",
+        )
 
     if name is not None and name.strip():
         wanted = name.strip()
         matches = [i for i in identities if _same_name(i.display_name, wanted)]
         if len(matches) == 1:
-            if not confirmed:
-                return Opened(outcome="confirm", say=f"Is this {matches[0].display_name}?")
-            return _open(root, matches[0], moment)
+            return _confirm_or_open(
+                root, matches[0], moment, confirmed, f"Is this {matches[0].display_name}?"
+            )
         if len(matches) > 1:
             return Opened(
                 outcome="choose",
@@ -349,7 +457,15 @@ def run(
             Resolution(outcome="create", reason="no profile matches that name")
         )
 
-    resolution = resolve_handle(root, confirmed=confirmed, include_fiction=include_fiction)
+    resolution = resolve_handle(root, confirmed=False, include_fiction=include_fiction)
+    if resolution.outcome == "confirm" and resolution.candidate is not None:
+        return _confirm_or_open(
+            root,
+            resolution.candidate,
+            moment,
+            confirmed,
+            f"Is this {resolution.candidate.display_name}?",
+        )
     if resolution.is_resolved and resolution.candidate is not None:
         return _open(root, resolution.candidate, moment)
     return _unreadable("", root, include_fiction) or _unresolved(resolution)
