@@ -203,6 +203,21 @@ def test_a_matcher_broken_for_one_row_turns_the_gate_red(
     assert live._main(["x", str(tmp_path / "T203.json")]) == 1  # red, not merely unmeasured
 
 
+def test_an_employer_held_for_want_of_an_employer_still_counts_as_tripped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """R5: `ruled_out_by` reports "<about> (employer unknown)" for an advert that
+    names no employer; that is the exclusion tripping, not an exclusion that never did."""
+    monkeypatch.setattr(live, "LIVE_ROUND_EXCLUSIONS", (("employer:Acme", "Acme no", ()),))
+    ads = [{"id": f"a{i}", "title": "Engineer", "text": "Join Acme today"} for i in range(5)]
+    ads += [{"id": f"b{i}", "title": "Engineer", "text": "plain work"} for i in range(30)]
+    corpus = tmp_path / "ads.jsonl"
+    corpus.write_text("\n".join(json.dumps(a) for a in ads) + "\n", encoding="utf-8")
+    measured = live.measure_live_round(corpus)
+    assert measured["never_tripped"] == []
+    assert measured["exclusions_never_tripped"] == 0
+
+
 # --- F1: offers stored before the topic was ruled out -----------------------
 
 

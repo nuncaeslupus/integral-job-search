@@ -153,6 +153,15 @@ _FORMS = [
     "Sociedad Limitada Profesional", "Sociedad Cooperativa", "Sociedad Cooperativa Andaluza",
     "Comunidad de Bienes", "Sociedad Anónima Laboral", "Sociedad Civil", "Sociedad Colectiva",
     "Sociedad Comanditaria", "Sociedad Limitada Nueva Empresa", "S.L. logo",
+    # T319 S1: the bare written-out cooperative, with no "Sociedad" to anchor it.
+    "Cooperativa",
+    # T319 S2: Catalan written-out forms (Llei de societats de capital), accented or not.
+    "Societat Limitada", "Societat Anònima", "Societat Anonima",
+    "Societat Cooperativa Catalana Limitada", "Societat Cooperativa Catalana",
+    "Societat Limitada Unipersonal",
+    # T319 S4: unspaced initialisms, and "Sociedad en Comandita" spelt as initials.
+    "S.Coop.And.", "S.Coop.Mad.", "S. en C.", "S.en C.", "S. en C. por A.",
+    "S.R.C.", "S.A.T.", "SAT",
 ]  # fmt: skip
 
 

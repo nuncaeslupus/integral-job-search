@@ -386,6 +386,8 @@ _INITIALISMS = frozenset(
         "scomm",
         "sca",
         "scoop",
+        "src",
+        "sat",
         "sccl",
         "scp",
         "cb",
@@ -434,6 +436,8 @@ _INITIALISMS = frozenset(
 _FORM_WORDS = frozenset(
     [
         "sociedad",
+        "societat",
+        "catalana",
         "limitada",
         "anonima",
         "cooperativa",
@@ -461,13 +465,15 @@ _FORM_WORDS = frozenset(
         "responsabilidad",
     ]
 )
-_ANCHOR_WORDS = frozenset({"sociedad", "comunidad", "agrupacion"})
+_ANCHOR_WORDS = frozenset({"sociedad", "societat", "cooperativa", "comunidad", "agrupacion"})
 _PHRASES = (
     (("s", "de", "r", "l"), "sderl"),
     (("sa", "de", "cv"), "sadecv"),
     (("s", "de", "rl"), "sderl"),
     (("sp", "z", "oo"), "spzoo"),
     (("s", "coop"), "scoop"),
+    (("s", "en", "c", "por", "a"), "sca"),
+    (("s", "en", "c"), "scom"),
 )
 _COOPERATIVES = frozenset({"scoop", "coop", "cooperativa", "sccl"})
 #: Where a separator may stand between a legal form and more text.
@@ -480,7 +486,14 @@ def _tokens(text: str) -> list[str]:
     "Co." keeps its dot as a mark ("co.") because only the dotted abbreviation is
     a legal form: "Madrid Company" and "Foo Co" are names, "Acme Co." is not.
     """
-    words = re.sub(r"[^0-9a-z.]+", " ", _fold(text, " ")).split()
+    words = []
+    for raw in re.sub(r"[^0-9a-z.]+", " ", _fold(text, " ")).split():
+        # "S.Coop.And." is "S. Coop. And.": a dot between letters breaks a word that
+        # has a longer segment; "o.o." and "s.l.u." stay whole and join as initialisms
+        if any(len(part) > 1 for part in raw.strip(".").split(".")):
+            words.extend(re.sub(r"(?<=[a-z])\.(?=[a-z])", ". ", raw).split())
+        else:
+            words.append(raw)
     out: list[str] = []
     run = ""
     for word in words:
