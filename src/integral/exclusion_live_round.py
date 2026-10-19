@@ -35,6 +35,7 @@ from typing import Any
 from integral.corpus_scope import DEFAULT_LABELLED_ADS
 from integral.identity import ProfileStore
 from integral.sourcing_exclusions import (
+    EMPLOYER_UNKNOWN,
     Candidate,
     Exclusion,
     candidate_of,
@@ -227,7 +228,14 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
     removed_unexcluded = [url for url in unexcluded_served if url not in stored]
     reported = sum(outcome.excluded for outcome in run.outcomes)
     removed = len(by_url) - len(stored)
-    tripped_abouts = {about for url in excluded_served for about in tripped(by_url[url])}
+    # an employer exclusion held only for want of an employer reads "<about> (employer
+    # unknown)"; it is still that exclusion tripping, so compare the bare `about`
+    unknown_suffix = f" ({EMPLOYER_UNKNOWN})"
+    tripped_abouts = {
+        about.removesuffix(unknown_suffix)
+        for url in excluded_served
+        for about in tripped(by_url[url])
+    }
     never_tripped = [e.about for e in exclusions if e.about not in tripped_abouts]
 
     failures: list[str] = []
