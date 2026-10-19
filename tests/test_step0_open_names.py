@@ -3,7 +3,7 @@
 # ruff: noqa: RUF001
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -91,3 +91,76 @@ def test_a_yes_is_spent_once_opened(tmp_path: Path) -> None:
     run(root, name="Marcos", now=NOW)
     assert run(root, name="Marcos", confirmed=True, now=NOW).outcome == "opened"
     assert run(root, name="Marcos", confirmed=True, now=NOW).outcome == "confirm"
+
+
+# B1: Greek capitals read as the Latin capital they resemble (capital Nu is N, not v).
+@pytest.mark.parametrize(
+    ("latin", "greek"),
+    [
+        ("Nina", "Νina"),
+        ("Hana", "Ηana"),
+        ("Mia", "Μia"),
+        ("Yara", "Υara"),
+        ("Zoe", "Ζoe"),
+        ("Eva", "Εva"),
+    ],
+    ids=["nu", "eta", "mu", "upsilon", "zeta", "epsilon"],
+)
+def test_a_greek_capital_twin_collides_with_its_latin_twin(
+    tmp_path: Path, latin: str, greek: str
+) -> None:
+    root = tmp_path / "profiles"
+    handle = latin.lower()
+    _profile(root, handle, latin)
+    _profile(root, f"{handle}-2", greek)
+    assert run(root, name=latin, now=NOW).outcome == "choose"
+    assert run(root, handle=handle, now=NOW).outcome == "ambiguous"
+
+
+# O2: letters with no accent decomposition that read as a plain one.
+@pytest.mark.parametrize(
+    ("plain", "stroked"),
+    [("Lukasz", "Łukasz"), ("Oystein", "Øystein"), ("Dorde", "Đorde")],
+    ids=["l-stroke", "o-slash", "d-stroke"],
+)
+def test_stroked_letters_match_their_plain_spelling(
+    tmp_path: Path, plain: str, stroked: str
+) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "someone", stroked)
+    result = run(root, name=plain, now=NOW)
+    assert result.outcome == "confirm" and result.say == f"Is this {stroked}?"
+
+
+# B2: a question's yes does not outlive the conversation it was asked in.
+def test_a_yes_after_an_unrelated_call_asks_again(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    assert run(root, now=NOW).outcome == "confirm"
+    assert run(root, name="Nobody", now=NOW).outcome == "create"
+    assert run(root, confirmed=True, now=NOW).outcome == "confirm"
+
+
+def test_an_unknown_handle_forgets_the_question(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    assert run(root, now=NOW).outcome == "confirm"
+    assert run(root, handle="ghost", now=NOW).outcome == "create"
+    assert run(root, name="Marcos", confirmed=True, now=NOW).outcome == "confirm"
+
+
+def test_a_stale_question_from_an_earlier_session_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    assert run(root, now=NOW).outcome == "confirm"
+    later = NOW + timedelta(hours=3)
+    assert run(root, confirmed=True, now=later).outcome == "confirm"
+    # the fresh question is answerable
+    assert run(root, confirmed=True, now=later + timedelta(minutes=1)).outcome == "opened"
+
+
+def test_a_question_asked_in_the_future_is_not_an_answer(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    _profile(root, "marcos", "Marcos")
+    assert run(root, now=NOW + timedelta(days=1)).outcome == "confirm"
+    assert run(root, confirmed=True, now=NOW).outcome == "confirm"

@@ -134,6 +134,17 @@ _LOOKALIKES = str.maketrans(
         "в": "b", "ԁ": "d", "ԛ": "q", "ԝ": "w", "ο": "o", "α": "a", "ν": "v",
         "ι": "i", "κ": "k", "ρ": "p", "τ": "t", "υ": "u", "χ": "x", "ε": "e",
         "β": "b", "η": "n", "μ": "u", "ɑ": "a", "ӏ": "l", "ǀ": "l",
+        "ł": "l", "ø": "o", "đ": "d",
+    }
+)  # fmt: skip
+
+# Greek capitals read as a Latin capital, but casefold turns them into small letters
+# that look like something else (capital Nu is N; small nu is v), so they are mapped
+# before the fold.
+_CAPITAL_LOOKALIKES = str.maketrans(
+    {
+        "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K",
+        "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
     }
 )  # fmt: skip
 
@@ -148,7 +159,7 @@ def name_skeleton(name: str) -> str:
     folded = unicodedata.normalize("NFKC", name)
     decomposed = unicodedata.normalize("NFD", folded)
     kept = "".join(c for c in decomposed if unicodedata.category(c) not in ("Cf", "Mn", "Cc"))
-    return " ".join(kept.casefold().translate(_LOOKALIKES).split())
+    return " ".join(kept.translate(_CAPITAL_LOOKALIKES).casefold().translate(_LOOKALIKES).split())
 
 
 def _same_name(left: str, right: str) -> bool:
@@ -283,18 +294,28 @@ def derive_candidate_handle(text: str) -> str:
 OFFER_FILE = ".step0_offer.json"
 
 
-def _offered(root: Path, handle: str) -> bool:
+#: How long a question stays open for its yes. A marker older than this (or from the
+#: future) is a different conversation's, not an answer to this one.
+OFFER_TTL = timedelta(minutes=15)
+
+
+def _offered(root: Path, handle: str, moment: datetime) -> bool:
     try:
         recorded = json.loads((root / OFFER_FILE).read_text(encoding="utf-8"))
-        return bool(recorded.get("handle") == handle)
-    except (OSError, ValueError, AttributeError):
+        at = datetime.fromisoformat(recorded["at"])
+        if at.tzinfo is None:
+            return False
+        return bool(recorded.get("handle") == handle and timedelta(0) <= moment - at <= OFFER_TTL)
+    except (OSError, ValueError, AttributeError, KeyError, TypeError):
         return False
 
 
-def _record_offer(root: Path, handle: str) -> None:
+def _record_offer(root: Path, handle: str, moment: datetime) -> None:
     # No marker means the next --confirmed asks again: fails closed.
     with contextlib.suppress(OSError):
-        (root / OFFER_FILE).write_text(json.dumps({"handle": handle}), encoding="utf-8")
+        (root / OFFER_FILE).write_text(
+            json.dumps({"handle": handle, "at": moment.isoformat()}), encoding="utf-8"
+        )
 
 
 def _clear_offer(root: Path) -> None:
@@ -310,10 +331,10 @@ def _confirm_or_open(
     `--confirmed` on its own is a claim, not an answer: without the recorded offer
     the question is asked (and recorded) instead of the profile opened.
     """
-    if confirmed and _offered(root, identity.handle):
+    if confirmed and _offered(root, identity.handle, moment):
         _clear_offer(root)
         return _open(root, identity, moment)
-    _record_offer(root, identity.handle)
+    _record_offer(root, identity.handle, moment)
     return Opened(outcome="confirm", say=question)
 
 
@@ -350,6 +371,29 @@ def _open(root: Path, identity: Identity, moment: datetime) -> Opened:
 
 
 def run(
+    root: Path,
+    *,
+    name: str | None = None,
+    handle: str | None = None,
+    confirmed: bool = False,
+    now: datetime | None = None,
+    include_fiction: bool = False,
+) -> Opened:
+    """One call of step 0. Any outcome that is not a fresh question forgets the last one."""
+    opened = _run(
+        root,
+        name=name,
+        handle=handle,
+        confirmed=confirmed,
+        now=now,
+        include_fiction=include_fiction,
+    )
+    if opened.outcome != "confirm":
+        _clear_offer(root)
+    return opened
+
+
+def _run(
     root: Path,
     *,
     name: str | None = None,
