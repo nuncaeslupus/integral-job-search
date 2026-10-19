@@ -76,7 +76,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from integral import brand_measure, brand_palette, report_style
+from integral import brand_measure, brand_palette, report_style, widows
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T142.json"
@@ -463,22 +463,40 @@ def _refusing_fetcher() -> Any:
     return _Refusing()
 
 
-def render_pdf(page_html: str, *, max_pages: int | None = None) -> tuple[bytes, int]:
-    """``(pdf bytes, page count)``; needs the optional ``pdf`` extra (WeasyPrint).
-
-    ``max_pages`` makes a budget loud: a document that renders longer raises
-    :class:`RenderError` rather than quietly becoming a page longer.
-    """
+def _engine() -> Any:
     try:
         import weasyprint  # type: ignore[import-not-found,import-untyped,unused-ignore]
     except (ImportError, OSError) as exc:
         raise RenderError(
             "PDF output needs the optional 'pdf' extra (WeasyPrint): `uv sync --extra pdf`"
         ) from exc
-    rendered = weasyprint.HTML(string=page_html, url_fetcher=_refusing_fetcher()).render()
+    return weasyprint
+
+
+def layout_fragments(page_html: str) -> list[widows.Fragment]:
+    """The text fragments of ``page_html`` as the PDF engine lays it out (T143)."""
+    rendered = _engine().HTML(string=page_html, url_fetcher=_refusing_fetcher()).render()
+    return widows.fragments_of_pages(rendered.pages)
+
+
+def render_pdf(
+    page_html: str, *, max_pages: int | None = None, check_widows: bool = True
+) -> tuple[bytes, int]:
+    """``(pdf bytes, page count)``; needs the optional ``pdf`` extra (WeasyPrint).
+
+    ``max_pages`` makes a budget loud: a document that renders longer raises
+    :class:`RenderError` rather than quietly becoming a page longer. So does a widow
+    line (T143, :mod:`integral.widows`) unless ``check_widows`` is false; the error
+    names the page, the text and how many words the line holds.
+    """
+    rendered = _engine().HTML(string=page_html, url_fetcher=_refusing_fetcher()).render()
     pages = len(rendered.pages)
     if max_pages is not None and pages > max_pages:
         raise RenderError(f"the document renders to {pages} pages; the budget is {max_pages}")
+    if check_widows:
+        found = widows.find_widows(widows.fragments_of_pages(rendered.pages))
+        if found:
+            raise RenderError("the document has widow line(s): " + "; ".join(str(w) for w in found))
     return bytes(rendered.write_pdf()), int(pages)
 
 

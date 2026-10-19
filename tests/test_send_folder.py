@@ -646,7 +646,12 @@ def test_no_pdf_engine_refuses_before_anything_is_staged(
 
 
 @pytest.mark.skipif(importlib.util.find_spec("weasyprint") is None, reason="needs the pdf extra")
-def test_the_real_engine_stages_the_same_set(store: ProfileStore, master: CVMaster) -> None:
+@pytest.mark.skipif(importlib.util.find_spec("pypdf") is None, reason="needs the cv extra")
+def test_the_real_engine_stages_the_same_set(
+    store: ProfileStore, master: CVMaster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A real engine writes a real PDF, so it is read with the real reader, not the fixture one.
+    monkeypatch.setattr("integral.send_set.read_pdf_text", read_pdf_text)
     version = _prepare(store, master, (0,))
     stage_send(store, master, OFFER, version, confirms=_confirm(store, version))
     folder = _send(store, version)
