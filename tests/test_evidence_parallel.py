@@ -123,3 +123,19 @@ def test_the_makefile_calls_the_driver_once_and_keeps_the_drift_check() -> None:
     assert target.count("integral.evidence_runner") == 1
     assert "git diff --exit-code --stat status/evidence/" in target
     assert "integral.$$m" not in target
+
+
+def test_a_real_module_failure_fails_main(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The real `_run`, no stub: a module that cannot be imported exits non-zero.
+    monkeypatch.setattr(evidence_runner, "discover", lambda: ["no_such_evidence_module"])
+    assert evidence_runner.main() == 1
+    assert "GATE FAILED" in capsys.readouterr().out
+
+
+def test_the_makefile_does_not_swallow_the_drivers_exit_code() -> None:
+    makefile = (_ROOT / "Makefile").read_text(encoding="utf-8")
+    target = makefile.split("\nevidence:", 1)[1].split("\n\n", 1)[0]
+    runner = [ln for ln in target.splitlines() if "integral.evidence_runner" in ln]
+    assert runner == ["\t@uv run python -m integral.evidence_runner"]
