@@ -104,7 +104,15 @@ from typing import Any, Literal, get_args
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from integral.advert_identity import identity_query_for, restrict_query
-from integral.dedup import Tombstone, load_tombstones, tombstone_match
+from integral.dedup import (
+    SHINGLE_SIZE,
+    Tombstone,
+    jaccard,
+    load_tombstones,
+    normalise_for_comparison,
+    shingles,
+    tombstone_match,
+)
 from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.offers import (
     Offer,
@@ -796,6 +804,87 @@ def stored_copies_of(store: ProfileStore, identity: str, *, excluding: str) -> l
     )
 
 
+#: T276. Two adverts of one board, one employer and one title are one vacancy
+#: only when their bodies are the same text once each offer's own place names
+#: are taken out. A posting listed under several offices differs in `location`
+#: and the URL's query and nowhere else (~0.99, measured on realistic ~450-word
+#: adverts). Distinct vacancies at one employer share the employer's
+#: boilerplate, and that alone scores 0.71-0.96: two teams 0.775, one contract
+#: type apart 0.959, one level apart 0.951, an agency's two clients 0.712. The
+#: threshold must sit above all of them, and a ~450-word advert cannot tell a
+#: one-word difference (a contract type, a level) from noise at any value below
+#: 1.0, since one changed word near the end costs only 1 of ~450 shingles. So
+#: the bodies must be identical once places, case, punctuation and spacing are
+#: normalised away. A LOWER value merges more, and a wrong merge hides a
+#: vacancy the candidate never sees,
+#: while a missed twin only shows the advert twice.
+SAME_BOARD_TEXT_THRESHOLD = 1.0
+
+_PLACE_SPLIT = re.compile(r"[,;/|()\n]+")
+
+
+def _body_without_places(offer: Offer) -> str:
+    """The normalised body with the offer's own `location.raw` removed, whole
+    and part by part (`London, UK` -> `London, UK`, `London`, `UK`), longest
+    first. Only that offer's declared places are removed, never a list of known
+    cities, so a body naming a different city than its location stays different."""
+    body = offer.text
+    raw = offer.location.raw if offer.location else None
+    if raw and raw.strip():
+        names = {raw.strip(), *(p.strip() for p in _PLACE_SPLIT.split(raw))}
+        for name in sorted((n for n in names if len(n) >= 2), key=len, reverse=True):
+            body = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", " ", body, flags=re.IGNORECASE)
+    return normalise_for_comparison(body)
+
+
+def same_board_body_similarity(offer: Offer, other: Offer) -> float:
+    """Shingled Jaccard of the two bodies after `_body_without_places`; 0.0 when
+    either has fewer words than one shingle (a stub's text says nothing, and
+    `shingles` would otherwise score two equal stubs 1.0)."""
+    a, b = _body_without_places(offer), _body_without_places(other)
+    if len(a.split()) < SHINGLE_SIZE or len(b.split()) < SHINGLE_SIZE:
+        return 0.0
+    return jaccard(shingles(a), shingles(b))
+
+
+def same_board_twin(offer: Offer, other: Offer) -> bool:
+    """T276. Whether `other` is another listing of the vacancy `offer` is: the
+    same `source`, the same vacancy by employer and title
+    (`same_vacancy.same_vacancy`), and a body at least
+    `SAME_BOARD_TEXT_THRESHOLD` alike (`same_board_body_similarity`). Never
+    across boards: that is the batch pass's job (`dedup.find_duplicates`). A
+    similarity rule, not a hash: nothing here compares URLs, ids or text bytes
+    for equality."""
+    from integral.same_vacancy import same_vacancy  # same_vacancy imports this module
+
+    if offer.id == other.id or offer.source != other.source:
+        return False
+    if not same_vacancy(offer.company, offer.title, other.company, other.title):
+        return False
+    return same_board_body_similarity(offer, other) >= SAME_BOARD_TEXT_THRESHOLD
+
+
+def stored_same_board_twin(store: ProfileStore, offer: Offer) -> str | None:
+    """T276. The id of a stored advert that `same_board_twin` says is `offer`,
+    or `None`. Candidates are narrowed by the cached `posting_key` (employer and
+    title equal after normalisation), so a 3,000-offer tree costs a handful of
+    reads, not 3,000; a title that only *resembles* a stored one is left for the
+    batch pass rather than risk a merge here."""
+    key = posting_key(offer.title, offer.company)
+    if key is None:
+        return None
+    for stored_id, stored_key in sorted(stored_posting_keys(store).items()):
+        if stored_key != key or stored_id == offer.id:
+            continue
+        try:
+            stored = load_offer(store, stored_id)
+        except OfferError:
+            continue
+        if same_board_twin(offer, stored):
+            return stored_id
+    return None
+
+
 def _legacy_tombstone_for(
     tombstones: Sequence[Tombstone], offer: Offer, identity: str | None
 ) -> Tombstone | None:
@@ -873,6 +962,14 @@ def collect_offer(store: ProfileStore, offer: Offer, *, at: str) -> CollectionOu
     if copies:
         return CollectionOutcome(
             offer.id, added_as_new=False, matched_tombstone=None, duplicate_of=copies[0]
+        )
+    # T276. The same posting listed again under another office: same board,
+    # employer and title, a differing location or URL query, so no identity
+    # matches. Stored a second time it is a second id to rule out.
+    twin = stored_same_board_twin(store, offer)
+    if twin is not None:
+        return CollectionOutcome(
+            offer.id, added_as_new=False, matched_tombstone=None, duplicate_of=twin
         )
     record = track_new_offer(offer, at=at)
     save_lifecycle_offer(store, offer, record)

@@ -2,6 +2,7 @@
 id: t-ec531aff
 title: "T276: Deduplication does not fire: the same advert is stored four times from one board"
 priority: 5
+status: merged
 ---
 
 Imported from issue #551
