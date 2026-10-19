@@ -236,6 +236,16 @@ def test_a_ruled_out_offer_purged_later_is_carried_by_its_tombstone(tmp_path: Pa
     assert unrecorded_discards(store) == []
 
 
+def test_an_undecided_offer_purged_later_does_not_hide_a_flagged_discard(tmp_path: Path) -> None:
+    """G: a tombstone whose `last_status` is still `new` carries no decision."""
+    store = _store(tmp_path)
+    oid = _offer(store)
+    _say_about(store, oid, "nada de banca")
+    purge_offer(store, oid, at="2027-01-01T00:00:00Z", now=datetime(2027, 1, 1, tzinfo=UTC))
+    gaps = unrecorded_discards(store)
+    assert [(g["offer"], g["reason"]) for g in gaps] == [(oid, "nada de banca")]
+
+
 def test_the_feedback_checkpoint_also_asks_about_a_re_shown_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
