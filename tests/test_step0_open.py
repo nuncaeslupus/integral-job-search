@@ -99,6 +99,7 @@ def test_an_unknown_name_offers_to_create(tmp_path: Path) -> None:
 def test_opening_says_when_and_where_and_writes_last_activity(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     store = _profile(root, "marcos", "Marcos")
+    run(root, name="Marcos", now=NOW)
     result = run(root, name="Marcos", confirmed=True, now=NOW)
     assert result.outcome == "opened" and result.handle == "marcos"
     assert "Hello again, Marcos, about 3 weeks ago." in result.say
@@ -110,6 +111,7 @@ def test_opening_says_when_and_where_and_writes_last_activity(tmp_path: Path) ->
 def test_a_first_visit_is_not_told_it_is_a_return(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     create_profile(root, "Ada", language="en", handle="ada")
+    run(root, name="Ada", now=NOW)
     result = run(root, name="Ada", confirmed=True, now=NOW)
     assert result.outcome == "opened"
     assert "again" not in result.say and result.last_activity is None
@@ -235,6 +237,9 @@ def test_a_simulated_candidate_is_reachable_only_when_asked_for(
     base = ["x", "open", "--root", str(root), "--name", "Ada", "--confirmed"]
     assert step0_open._main(base) == 0
     assert json.loads(capsys.readouterr().out)["outcome"] == "create"
+    asking = [x for x in base if x != "--confirmed"]
+    assert step0_open._main([*asking, "--include-fiction"]) == 0
+    assert json.loads(capsys.readouterr().out)["outcome"] == "confirm"
     assert step0_open._main([*base, "--include-fiction"]) == 0
     assert json.loads(capsys.readouterr().out)["outcome"] == "opened"
 
@@ -320,6 +325,7 @@ def test_a_corrupt_state_file_is_reported_not_raised_and_left_alone(tmp_path: Pa
     root = tmp_path / "profiles"
     store = _profile(root, "marcos", "Marcos")
     store.path("session", "state.json").write_text("{not json", encoding="utf-8")
+    run(root, handle="marcos", now=NOW)
     result = run(root, handle="marcos", confirmed=True, now=NOW)
     assert result.outcome == "unreadable" and result.handle == "marcos"
     assert store.path("session", "state.json").read_text(encoding="utf-8") == "{not json"
@@ -354,6 +360,8 @@ def test_the_command_line_prints_one_json_opening(
     root = tmp_path / "profiles"
     _profile(root, "marcos", "Marcos")
     args = ["x", "open", "--root", str(root), "--name", "Marcos", "--confirmed"]
+    assert step0_open._main([a for a in args if a != "--confirmed"]) == 0
+    assert json.loads(capsys.readouterr().out)["outcome"] == "confirm"
     assert step0_open._main(args) == 0
     printed = json.loads(capsys.readouterr().out)
     assert printed["outcome"] == "opened" and printed["handle"] == "marcos"
@@ -454,6 +462,7 @@ def test_a_unique_name_is_not_held_to_the_day_rule(tmp_path: Path) -> None:
     root = tmp_path / "profiles"
     _profile(root, "marcos", "Marcos")
     _profile(root, "nuria", "Núria")  # both created today
+    run(root, handle="marcos", now=NOW)
     assert run(root, handle="marcos", confirmed=True, now=NOW).outcome == "opened"
 
 
