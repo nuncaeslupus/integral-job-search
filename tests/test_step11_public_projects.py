@@ -1,8 +1,10 @@
 """T313 — step 11 surfaces a candidate's public project only as an approved episode.
 
-Decision: no new mechanism. A public project is an `episode` row with the link in
-`text`; the existing per-use approval is the only route to an employer, and the link
-must survive it byte for byte.
+Decision: no new mechanism. A public project in `cv/master.json` is an `episode`
+with the link in `text`; the existing per-use approval is the only route to an
+employer, and the link must survive it byte for byte. Metric:
+`candidate_public_projects_never_linked_at_step_11`. Step 3's evidence-log episodes
+do not reach `cv/master.json` yet; that path is a follow-up, not covered here.
 """
 
 from __future__ import annotations

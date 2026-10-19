@@ -113,7 +113,7 @@ This is not a template with the candidate's phrases pasted in. Whether the lette
 
 ## Public projects
 
-Step 3 records a candidate's own public projects as `episode` rows with the link in `text` and `disclosure: private`. This step surfaces such a link only through the story-bank route, pinned verbatim by its test:
+A public project in `cv/master.json` is an `episode` with the link in `text`; this step surfaces such a link only through the story-bank route, pinned verbatim by its test. (Episodes step 3 writes to `profile/evidence.jsonl` do not reach `cv/master.json` yet, so `approval.prepare` cannot see them; that path is a follow-up.)
 
 ```text
 A public project is offered, never added: when the advert is in software or data and the story bank holds an episode whose text carries a link, propose it for this posting and company.
