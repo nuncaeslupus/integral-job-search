@@ -1723,7 +1723,9 @@ def test_the_board_outcome_unrealized_row_fields_are_todays_eight_terms() -> Non
     none of the original four. `excluded` (T203) is the sixth: a row built into
     an offer and left out because its topic was ruled out. `over_board_cap` and
     `out_of_reach` (T253) are the seventh and eighth: rows left uncollected by a
-    board's share of the ceiling and by the candidate's stated reach."""
+    board's share of the ceiling and by the candidate's stated reach. `off_role`
+    (T202) is the ninth: a row left out because its title is not the role the
+    candidate searches for."""
     from integral.sourcing import _UNREALIZED_ROW_FIELDS
 
     assert set(_UNREALIZED_ROW_FIELDS) == {
@@ -1735,6 +1737,7 @@ def test_the_board_outcome_unrealized_row_fields_are_todays_eight_terms() -> Non
         "excluded",
         "over_board_cap",
         "out_of_reach",
+        "off_role",
     }
 
 
