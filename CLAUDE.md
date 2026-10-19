@@ -94,6 +94,13 @@ otherwise, this section wins; those sections are being pruned.
   and adding a product test, never by building a checker for the class of
   finding. Propose such code to the owner in an issue instead; the default
   answer is no.
+- **F. A PR that changes only `tests/` (plus its archived task file) needs no
+  second reader** (owner, 2026-10-19). A green `CI` check on the head is enough to
+  merge it.
+- **G. Review follow-ups are batched.** Leftovers from one or more reviews go into
+  one task and one PR, not one task per finding.
+- **H. Merge on green without waiting.** Once a PR's merge conditions hold, enable
+  auto-merge (squash) or merge immediately; do not park it for a later event.
 
 ## Suggest compacting once, at a step boundary
 
