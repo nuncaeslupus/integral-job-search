@@ -199,3 +199,28 @@ def test_brief_without_a_source_url_falls_back_without_fetching(tmp_path: Path) 
     store, agg_id = _setup(tmp_path, url=None)
     result, calls = _run(store, agg_id, Response(200, _page(POSTING), URL))
     assert calls == [] and result.reason == "no_source_url"
+
+
+def test_brief_cli_fetches_so_the_downstream_reader_sees_employer_fields(
+    tmp_path: Path,
+) -> None:
+    from integral.employer_brief import _main
+
+    identity = create_profile(tmp_path, "Candidate", handle="candidate")
+    store = ProfileStore(tmp_path, identity.handle)
+    offer = connect_manual("Backend en Barcelona.", title="Backend", company="Aggregator")
+    save_lifecycle_offer(store, offer, track_new_offer(offer, at=AT))
+    calls: list[str] = []
+
+    def fetch(url: str) -> Response:
+        calls.append(url)
+        return Response(200, _page(POSTING), url)
+
+    args = ["record", "--id", "candidate", "--root", str(tmp_path), "--offer", offer.id]
+    args += ["--employer", "Real SL", "--resolved-via", "apply_link", "--live", "unknown"]
+    args += ["--checked-at", "2026-10-19T08:00:00Z", "--what", "x", "--sector", "y"]
+    args += ["--pay", "n/a", "--hires", "true", "--source-url", URL]
+    assert _main(args, fetch=fetch, robots=_robots()) == 0
+    assert calls == [URL]
+    seen = primary_offer(store, offer.id)
+    assert seen.id != offer.id and seen.salary is not None and seen.salary.min == 50000.0

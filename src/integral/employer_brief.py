@@ -31,7 +31,7 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 from pydantic import ValidationError, field_validator
 
@@ -215,7 +215,7 @@ def presented_without_brief(store: ProfileStore) -> list[str]:
     return bad + [i for i in sorted(shown) if not is_briefed(store, i, stated, exclusions)]
 
 
-def _main(argv: list[str]) -> int:
+def _main(argv: list[str], *, fetch: Any = None, robots: Any = None) -> int:
     parser = argparse.ArgumentParser(prog="integral.employer_brief")
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name in ("record", "show", "missing"):
@@ -234,6 +234,9 @@ def _main(argv: list[str]) -> int:
             p.add_argument("--pay", required=True)
             p.add_argument("--hires", required=True, choices=get_args(Tri))
             p.add_argument("--source-url", default=None)
+            p.add_argument(
+                "--no-fetch", action="store_true", help="do not fetch the source posting (#875)"
+            )
     args = parser.parse_args(argv)
     store = ProfileStore(args.root or default_profiles_root(), args.id)
     if args.cmd == "missing":
@@ -258,6 +261,14 @@ def _main(argv: list[str]) -> int:
         source_posting_url=args.source_url,
     )
     print(done.model_dump_json())
+    if done.source_posting_url and done.live_at_source != "false" and not args.no_fetch:
+        # #875: the employer's own copy becomes the primary one when it is live. Imported
+        # here because canonical_ad reads briefs from this module.
+        from integral.canonical_ad import resolve_canonical
+
+        kwargs = {k: v for k, v in (("fetch", fetch), ("robots", robots)) if v is not None}
+        found = resolve_canonical(store, args.offer, **kwargs)
+        print(f"canonical_ad: {found.outcome} primary={found.primary_id} reason={found.reason}")
     return 1 if done.exclusions_tripped else 0
 
 

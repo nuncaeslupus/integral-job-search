@@ -133,6 +133,7 @@ def test_cli_record_show_missing(tmp_path: Path, capsys) -> None:  # type: ignor
         "n/a",
         "--hires",
         "unknown",
+        "--no-fetch",
     ]
     assert _main(args) == 0
     assert _main(["show", *base, "--offer", offer_id]) == 0
