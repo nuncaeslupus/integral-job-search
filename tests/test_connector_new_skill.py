@@ -316,11 +316,19 @@ VALID_PACKAGE_LEAVES_ALONE = (
 
 def test_a_new_package_moves_more_keys_than_the_skill_ever_claimed() -> None:
     with tempfile.TemporaryDirectory(prefix="t197-") as scratch:
-        root = Path(scratch)
-        _copy_tracked_tree(root)
-        before = _regenerate_evidence(root)
-        _add_a_package(root)
-        after = _regenerate_evidence(root)
+        # Two independent copies of the tracked tree, measured at the same time: the
+        # "before" copy is left as committed, the "after" copy gains the package. Neither
+        # measurement reads the other, so running them one after the other only doubled
+        # this file's wall time (the longest single test in the suite).
+        unchanged, with_package = Path(scratch) / "before", Path(scratch) / "after"
+        for root in (unchanged, with_package):
+            root.mkdir()
+            _copy_tracked_tree(root)
+        _add_a_package(with_package)
+        with ThreadPoolExecutor(max_workers=2) as both:
+            measuring_before = both.submit(_regenerate_evidence, unchanged)
+            measuring_after = both.submit(_regenerate_evidence, with_package)
+            before, after = measuring_before.result(), measuring_after.result()
     moved = _moved_keys(before, after)
     assert before, "no committed evidence was read, so nothing was measured"
     # The probe is a *valid* package. If it were broken, these would move and the count
