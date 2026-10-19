@@ -205,9 +205,17 @@ def _holds_negation(text: str) -> bool:
 _DASHES = re.escape(
     "".join(c for c in map(chr, range(0x110000)) if unicodedata.category(c) == "Pd") + "\u2212"
 )
-# The same compound written "non/EU", "non~EU", "non_EU" or "(non-)EU": a slash, tilde, underscore
-# or bracket between the prefix and the word is a separator too, never a reason to read two words.
-_NON_SEPARATORS = re.escape("/\\~_()[]{}|*\u00b7")
+# The same compound written "non/EU", "non~EU", "non_EU" or "(non-)EU": any punctuation or
+# symbol (categories P* and S*, derived rather than listed) between the prefix and the word is a
+# separator too, never a reason to read two words. Only a sentence terminator ends the compound.
+_SENTENCE_TERMINATORS = ".?!\u2026\u3002\uff0e\uff1f\uff01"
+_NON_SEPARATORS = re.escape(
+    "".join(
+        c
+        for c in map(chr, range(0x110000))
+        if unicodedata.category(c)[0] in "PS" and c not in _SENTENCE_TERMINATORS
+    )
+)
 _SPACED_NON = re.compile(rf"(?<![\w'-])non[\s{_DASHES}{_NON_SEPARATORS}]+(?=[^\W_])", re.IGNORECASE)
 
 

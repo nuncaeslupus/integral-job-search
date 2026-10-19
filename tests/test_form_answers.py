@@ -6,6 +6,7 @@ Every claim here is pinned by reverting the one line that makes it true.
 from __future__ import annotations
 
 import json
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -904,6 +905,38 @@ def test_a_non_eu_written_with_any_other_separator_cannot_be_reversed(
     cited = _row(store, "statement", row)
     assert _refused(store, _ans("I am an EU citizen.", cited))
     assert not _refused(store, _ans(row, cited))
+
+
+def _one_per_category() -> list[str]:
+    # The first character of every punctuation and symbol category, derived rather than listed, plus
+    # look-alikes of "/" and "~" from other blocks and the ASCII ones a review found accepted.
+    seen: dict[str, str] = {}
+    for c in map(chr, range(0x110000)):
+        cat = unicodedata.category(c)
+        if cat[0] in "PS" and c not in ".?!" and cat not in seen:
+            seen[cat] = c
+    return [
+        *seen.values(),
+        chr(0x2215),
+        chr(0x2044),
+        chr(0x223C),
+        "+",
+        "&",
+        "=",
+        "<",
+        "#",
+        "@",
+        ",",
+        ":",
+    ]
+
+
+@pytest.mark.parametrize("sep", _one_per_category())
+def test_any_punctuation_or_symbol_between_non_and_the_word_is_a_separator(
+    store: ProfileStore, sep: str
+) -> None:
+    cited = _row(store, "statement", f"I am a non{sep}EU citizen.")
+    assert _refused(store, _ans("I am an EU citizen.", cited))
 
 
 @pytest.mark.parametrize("added", ["?", "!"])
