@@ -2,8 +2,10 @@
 id: t-fb0d5c53
 title: "T314: Follow-ups from #725 (T208): step-3 public-work bullet"
 priority: 5
-requires: [human:gate]
+status: cancelled
 ---
+
+> **Cancelled 2026-10-19 — owner decision.** Process/meta work, out of scope under the owner policy on meta code (E). Not done.
 
 Imported from issue #730
 

@@ -2,8 +2,10 @@
 id: t-2e2ccc10
 title: "T309: Follow-ups from #717 (T238 robots retry): optional review findings"
 priority: 5
-requires: [human:gate]
+status: cancelled
 ---
+
+> **Cancelled 2026-10-19 — owner decision.** Process/meta work, out of scope under the owner policy on meta code (E). Not done.
 
 Imported from issue #721
 

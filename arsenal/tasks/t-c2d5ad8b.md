@@ -2,7 +2,6 @@
 id: t-c2d5ad8b
 title: "T305: Follow-ups from T235 (#708): foorilla location markers and truncated place lists"
 priority: 5
-requires: [human:gate]
 ---
 
 Imported from issue #710

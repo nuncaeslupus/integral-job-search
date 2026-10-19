@@ -2,7 +2,6 @@
 id: t-afc865f7
 title: "T308: Follow-ups from #716 (T250) same-vacancy matching"
 priority: 5
-requires: [human:gate]
 ---
 
 Imported from issue #719

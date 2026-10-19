@@ -2,7 +2,6 @@
 id: t-6f4ce93c
 title: "T286: Retraction still leaks into advice and drafts: held-skill gaps, ATS keywords, draft rendering, and the episodes probe"
 priority: 5
-requires: [human:gate]
 ---
 
 Imported from issue #660
@@ -27,6 +26,5 @@ Follow-up to T186 (#508, PR #658). These are the non-blocking findings from the 
      everything. -->
 
 ```bash
-# arsenal:gate-placeholder — replace with the real check; it may land in this task's own PR
-false
+uv run python -m pytest -n0 -q tests/test_retraction_reaches_drafts.py
 ```

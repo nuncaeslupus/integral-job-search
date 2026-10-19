@@ -2,8 +2,10 @@
 id: t-c9e52bb8
 title: "T315: T248 follow-ups: optional findings from the #722 second-reader rounds"
 priority: 5
-requires: [human:gate]
+status: cancelled
 ---
+
+> **Cancelled 2026-10-19 — owner decision.** Process/meta work, out of scope under the owner policy on meta code (E). Not done.
 
 Imported from issue #731
 
