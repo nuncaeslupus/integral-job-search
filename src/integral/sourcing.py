@@ -81,6 +81,7 @@ from integral.lifecycle import (
     track_new_offer,
 )
 from integral.offers import Offer, SourceKind, compute_offer_id, names_an_employer
+from integral.relevance import RelevanceRule, load_rule
 from integral.robots import Robots, RobotsError, RobotsUnreachable
 from integral.salary_recovery import applied, band_in_text, recover
 from integral.sourcing_exclusions import Exclusion, candidate_of, held_in_words, load_exclusions
@@ -316,6 +317,13 @@ class BoardOutcome:
     #: One entry per row counted in `excluded`: the advert and every `about`
     #: it tripped, so the candidate can be told what was left out and why.
     excluded_because: tuple[str, ...] = ()
+    #: T202. Rows built into an offer and left out because the role is not one
+    #: the candidate's phrases describe (`relevance`): scored on the **title**,
+    #: against the floor the candidate recorded. Counted apart from `off_aim`
+    #: (a body-and-title word test on unsteered boards) and from `excluded`
+    #: (a topic the candidate ruled out). One entry per row, with its score.
+    off_role: int = 0
+    off_role_because: tuple[str, ...] = ()
     #: T236. Offers this pass built and kept with **no employer name** — a
     #: card with a blank employer, and a row every employer-keyed decision
     #: (a ruled-out employer, 'ruled out before' on company and title) cannot
@@ -396,6 +404,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "empty_detail",
         "employers_failed",
         "excluded_because",
+        "off_role_because",
         "no_employer",
         "employer_unpublished",
         "employer_gap",
@@ -754,6 +763,12 @@ class Run:
                     "row(s) are on a topic you ruled out, or have no employer to check "
                     "against one you ruled out — " + "; ".join(outcome.excluded_because)
                 )
+            if outcome.off_role:
+                lines.append(
+                    f"  OFF ROLE {outcome.connector}: {outcome.off_role} of {outcome.items} "
+                    "row(s) are not the role you search for (title scored against your "
+                    "relevance floor) — " + "; ".join(outcome.off_role_because)
+                )
             if outcome.no_employer:
                 if outcome.employer_unpublished:
                     note = f"the board does not publish one — {outcome.employer_unpublished}"
@@ -1099,6 +1114,9 @@ def source(
     # that applies them was correct and tested for as long as nothing on this
     # path called it, and a parameter a caller must remember is the same gap.
     exclusions = load_exclusions(store)
+    # T202. The candidate's own floor, read here for the same reason: no file is
+    # no filter (said by the absence of any OFF ROLE line), a corrupt one raises.
+    relevance = load_rule(store, aim.terms)
     # T174: shared by every board and phrase, so a host's refusal is its
     # answer for the rest of the run rather than for one request.
     refused_origins = {} if refused_origins is None else refused_origins
@@ -1148,6 +1166,7 @@ def source(
                     browser=browser,
                     refused_origins=refused_origins,
                     exclusions=exclusions,
+                    relevance=relevance,
                 )
             )
             board_added[package.name] = board_added.get(package.name, 0) + run.outcomes[-1].added
@@ -1430,6 +1449,7 @@ def _one_board(
     browser: Fetch | None = None,
     refused_origins: dict[str, str] | None = None,
     exclusions: Sequence[Exclusion] = (),
+    relevance: RelevanceRule | None = None,
 ) -> BoardOutcome:
     """One board, asked `query` if it searches, else narrowed to `phrases`.
 
@@ -1486,6 +1506,8 @@ def _one_board(
     refused_rows = 0
     excluded = 0
     excluded_because: list[str] = []
+    off_role = 0
+    off_role_because: list[str] = []
     no_employer = 0
     drop_reason: str | None = None
     stale = False
@@ -1527,6 +1549,8 @@ def _one_board(
             refused_rows=refused_rows,
             excluded=excluded,
             excluded_because=tuple(excluded_because),
+            off_role=off_role,
+            off_role_because=tuple(off_role_because),
             no_employer=no_employer,
             employer_unpublished=connector.employer_unpublished,
             employer_gap=connector.employer_gap,
@@ -1714,6 +1738,11 @@ def _one_board(
                 # on the outcome, so it is on the page the candidate reads.
                 excluded += 1
                 excluded_because.append(f"{offer.title or offer.id} ({', '.join(ruled_out)})")
+                continue
+            if relevance is not None and not (verdict := relevance.judge(offer.title)).relevant:
+                # T202. Left out **and said**, with the score that decided it.
+                off_role += 1
+                off_role_because.append(f"{offer.title or offer.id} ({verdict.because})")
                 continue
             if not names_an_employer(offer.company):
                 # T236. Counted per board, at the one place an offer is built
