@@ -37,6 +37,7 @@ from integral.connectors import (
     load_connector,
 )
 from integral.identity import ProfileStore, create_profile
+from integral.relevance import record as record_relevance
 from integral.robots import Robots
 from integral.sourcing import (
     FETCH_LOG,
@@ -98,7 +99,9 @@ def _spain() -> CandidateConstraints:
 @pytest.fixture
 def store(tmp_path: Path) -> ProfileStore:
     create_profile(tmp_path, "Test", handle="test", language="es", fiction=True)
-    return ProfileStore(tmp_path, "test")
+    store = ProfileStore(tmp_path, "test")
+    record_relevance(store, 0.0)  # the filter is not under test here
+    return store
 
 
 def _captures() -> dict[str, str]:
@@ -1009,6 +1012,7 @@ def test_a_queryless_board_is_filtered_by_the_whole_aim_not_by_its_first_window(
     outcomes = []
     for n, terms in enumerate((first, late)):
         create_profile(tmp_path, f"T{n}", handle=f"t{n}", language="es", fiction=True)
+        record_relevance(ProfileStore(tmp_path, f"t{n}"), 0.0)  # the filter is not under test here
         run = source(
             ProfileStore(tmp_path, f"t{n}"),
             _spain(),

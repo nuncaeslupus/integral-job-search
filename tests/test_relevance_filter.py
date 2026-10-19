@@ -86,8 +86,30 @@ def test_the_reason_names_the_score_and_the_nearest_phrase() -> None:
 # --- the profile file ------------------------------------------------------
 
 
-def test_no_file_is_no_filter(store: ProfileStore) -> None:
-    assert rel.load_rule(store, rel.AIM) is None
+def test_no_file_means_the_default_floor_not_no_filter(store: ProfileStore) -> None:
+    rule = rel.load_rule(store, rel.AIM)
+    assert rule is not None and rule.floor == rel.DEFAULT_FLOOR == 0.5
+    assert rel.load_rule(store, ()) is None  # nothing to score against
+
+
+def test_with_no_file_a_title_below_half_is_dropped_and_half_or_more_is_kept(
+    store: ProfileStore,
+) -> None:
+    rule = rel.load_rule(store, ("applied llm",))
+    assert rule is not None
+    assert rule.score("LLM Specialist")[0] == 0.5 and rule.judge("LLM Specialist").relevant
+    assert rule.score("Account Executive")[0] < 0.5
+    assert not rule.judge("Account Executive").relevant
+
+
+def test_a_floor_in_the_file_wins_over_the_default(store: ProfileStore) -> None:
+    rel.record(store, 1.0)
+    rule = rel.load_rule(store, ("applied llm",))
+    assert rule is not None and rule.floor == 1.0
+    assert not rule.judge("LLM Specialist").relevant  # 0.5 passes the default, not 1.0
+    rel.record(store, 0.0)  # an explicit opt-out
+    rule = rel.load_rule(store, ("applied llm",))
+    assert rule is not None and rule.judge("Account Executive").relevant
 
 
 def test_the_floor_and_wording_come_from_the_profile(store: ProfileStore) -> None:
@@ -165,7 +187,16 @@ def _round(store: ProfileStore, tmp_path: Path):  # type: ignore[no-untyped-def]
     return run, stored
 
 
-def test_without_a_floor_every_offer_is_presented(store: ProfileStore, tmp_path: Path) -> None:
+def test_without_a_file_the_default_floor_filters_the_round(
+    store: ProfileStore, tmp_path: Path
+) -> None:
+    run, stored = _round(store, tmp_path)
+    assert stored == sorted(rel.ON_AIM)
+    assert f"OFF ROLE roles_en: {len(rel.OFF_ROLE)} of" in run.summary()
+
+
+def test_a_zero_floor_presents_every_offer(store: ProfileStore, tmp_path: Path) -> None:
+    rel.record(store, 0.0)
     run, stored = _round(store, tmp_path)
     assert len(stored) == len(rel.OFF_ROLE) + len(rel.ON_AIM)
     assert "OFF ROLE" not in run.summary()
@@ -329,3 +360,49 @@ def test_a_capitalised_or_all_caps_rag_in_another_trade_is_not_the_ai_term() -> 
     rule = rel.RelevanceRule(1.0, ("RAG",))
     assert not rule.judge("Rag Trade Buyer").relevant
     assert not rule.judge("RAG TRADE BUYER").relevant
+
+
+# --- review follow-ups (#876) -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "PMO Analyst - RAG Reporting",
+        "RAG Status Reporting Analyst",
+        "RAG Rating Analyst",
+        "RAG Trade Buyer",
+    ],
+)
+def test_rag_as_project_status_is_not_the_ai_term(title: str) -> None:
+    assert not rel.RelevanceRule(0.5, ("LLM",)).judge(title).relevant
+
+
+def test_rag_status_inside_brackets_is_not_the_ai_term() -> None:
+    rule = rel.RelevanceRule(1.0, ("LLM Lead",))
+    assert not rule.judge("PMO Lead (RAG reporting)").relevant
+    assert rule.judge("RAG Lead").relevant
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "RAG Lead",
+        "Head of RAG",
+        "RAG & Retrieval Engineer",
+        "Engineer - RAG",
+        "Tech Lead (RAG)",
+        "RAG Engineer",
+    ],
+)
+def test_real_rag_titles_stay_relevant(title: str) -> None:
+    assert rel.RelevanceRule(0.5, ("LLM",)).judge(title).relevant
+
+
+@pytest.mark.parametrize(("a", "b"), [("costa", "coste"), ("programa", "manager")])
+def test_the_gender_ending_rule_needs_an_o_a_pair(a: str, b: str) -> None:
+    assert not rel.same_word(a, b)
+
+
+def test_the_gender_ending_rule_still_joins_o_and_a() -> None:
+    assert rel.same_word("abogada", "abogado") and rel.same_word("abogados", "abogada")

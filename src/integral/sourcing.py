@@ -82,6 +82,7 @@ from integral.lifecycle import (
 )
 from integral.offers import Offer, SourceKind, compute_offer_id, names_an_employer
 from integral.relevance import RelevanceRule, load_rule
+from integral.relevance import record as record_relevance
 from integral.robots import Robots, RobotsError, RobotsUnreachable
 from integral.salary_recovery import applied, band_in_text, recover
 from integral.sourcing_exclusions import Exclusion, candidate_of, held_in_words, load_exclusions
@@ -2007,6 +2008,7 @@ def measure_fixture() -> dict[str, Any]:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         create_profile(root, "Fixture", handle="fixture", language="es", fiction=True)
+        record_relevance(ProfileStore(root, "fixture"), 0.0)  # the filter is not under test here
         store = ProfileStore(root, "fixture")
 
         # A robots adjudicator whose fetcher is a constant: the fixture must not
@@ -2514,6 +2516,7 @@ def measure_flood() -> dict[str, Any]:
         for site in _FLOOD_BOARDS:
             pages |= flood_board(directory, site, _FLOOD_GATE_ROWS)
         create_profile(root, "Fixture", handle="fixture", language="en", fiction=True)
+        record_relevance(ProfileStore(root, "fixture"), 0.0)  # the filter is not under test here
         store = ProfileStore(root, "fixture")
         offers_dir = Path(store.path("offers"))
 
@@ -2672,6 +2675,7 @@ def measure_browser_route(directory: Path | None = None) -> dict[str, Any]:
 
     def run_with(root: Path, captures: list[Path] | None) -> Run:
         create_profile(root, "Fixture", handle="fixture", language="es", fiction=True)
+        record_relevance(ProfileStore(root, "fixture"), 0.0)  # the filter is not under test here
         return source(
             ProfileStore(root, "fixture"),
             constraints,

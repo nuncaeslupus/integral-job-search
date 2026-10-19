@@ -57,6 +57,7 @@ from integral.connectors import (
     source_kind_of,
 )
 from integral.offers import SourceKind
+from integral.relevance import record as record_relevance
 from integral.robots import Robots, RobotsError
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -298,6 +299,9 @@ def attribution_round() -> tuple[list[tuple[str, SourceKind | None]], str]:
             )
             (package / "meta.yaml").write_text(meta.replace("GLOBAL", "ES"), encoding="utf-8")
         create_profile(Path(tmp) / "p", "Fixture", handle="fixture", language="en", fiction=True)
+        record_relevance(
+            ProfileStore(Path(tmp) / "p", "fixture"), 0.0
+        )  # the filter is not under test here
         store = ProfileStore(Path(tmp) / "p", "fixture")
         # The `known` advert, already in the store before the round reads it.
         planted = Offer(

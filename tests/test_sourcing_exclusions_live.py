@@ -19,6 +19,7 @@ from integral.connectors import ListRequest
 from integral.corpus_scope import DEFAULT_LABELLED_ADS
 from integral.identity import IdentityError, ProfileStore, create_profile
 from integral.offers import load_offer
+from integral.relevance import record as record_relevance
 from integral.robots import Robots
 from integral.sourcing import Response, flood_board, source
 from integral.sourcing_exclusions import Exclusion, load_exclusions, record_exclusion
@@ -29,6 +30,7 @@ AT = "2026-01-01T00:00:00+00:00"
 @pytest.fixture
 def store(tmp_path: Path) -> ProfileStore:
     create_profile(tmp_path, "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path, "test"), 0.0)  # the filter is not under test here
     return ProfileStore(tmp_path, "test")
 
 
@@ -83,6 +85,7 @@ def test_a_corrupt_file_is_refused_never_read_as_no_exclusions(
 
 def test_the_record_command_writes_what_the_round_reads(tmp_path: Path) -> None:
     create_profile(tmp_path, "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path, "test"), 0.0)  # the filter is not under test here
     argv = ["x", "record", "--handle", "test", "--root", str(tmp_path)]
     assert se._main([*argv, "--about", "sector:banking", "--words", "no banking"]) == 0
     (kept,) = load_exclusions(ProfileStore(tmp_path, "test"))
@@ -364,6 +367,7 @@ def test_a_row_written_before_terms_existed_still_loads(store: ProfileStore) -> 
 
 def test_the_record_command_takes_repeatable_terms(tmp_path: Path) -> None:
     create_profile(tmp_path, "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path, "test"), 0.0)  # the filter is not under test here
     argv = ["x", "record", "--handle", "test", "--root", str(tmp_path)]
     args = ["--about", "sector:banca", "--words", "banca no"]
     assert se._main([*argv, *args, "--term", "banking", "--term", "bancari"]) == 0
