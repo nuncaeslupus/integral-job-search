@@ -887,6 +887,34 @@ def test_f2_a_terminator_added_after_a_row_with_none_is_not_an_uncovered_token(
     assert _refused(store, _ans("I do not need visa sponsorship and X. I hold a permit.", denial))
 
 
+@pytest.mark.parametrize(
+    "row",
+    [
+        "I am a non/EU citizen.",
+        "I am a non~EU citizen.",
+        "I am a non_EU citizen.",
+        "I am a (non-)EU citizen.",
+        "I am a non-/EU citizen.",
+        "I am a non (EU) citizen.",
+    ],
+)
+def test_a_non_eu_written_with_any_other_separator_cannot_be_reversed(
+    store: ProfileStore, row: str
+) -> None:
+    cited = _row(store, "statement", row)
+    assert _refused(store, _ans("I am an EU citizen.", cited))
+    assert not _refused(store, _ans(row, cited))
+
+
+@pytest.mark.parametrize("added", ["?", "!"])
+def test_a_question_or_exclamation_mark_is_not_a_terminator_a_row_may_take(
+    store: ProfileStore, added: str
+) -> None:
+    cited = _row(store, "statement", "I do not need visa sponsorship")
+    assert not _refused(store, _ans("I do not need visa sponsorship.", cited))
+    assert _refused(store, _ans(f"I do not need visa sponsorship{added}", cited))
+
+
 @pytest.mark.parametrize("dash", ["\u2015", "\u2e3a", "\u301c", "\ufe58", "\uff0d", "\u058a"])
 def test_r2_a_non_eu_written_with_any_unicode_dash_cannot_be_reversed(
     store: ProfileStore, dash: str

@@ -205,7 +205,10 @@ def _holds_negation(text: str) -> bool:
 _DASHES = re.escape(
     "".join(c for c in map(chr, range(0x110000)) if unicodedata.category(c) == "Pd") + "\u2212"
 )
-_SPACED_NON = re.compile(rf"(?<![\w'-])non[\s{_DASHES}]+(?=[^\W_])", re.IGNORECASE)
+# The same compound written "non/EU", "non~EU", "non_EU" or "(non-)EU": a slash, tilde, underscore
+# or bracket between the prefix and the word is a separator too, never a reason to read two words.
+_NON_SEPARATORS = re.escape("/\\~_()[]{}|*\u00b7")
+_SPACED_NON = re.compile(rf"(?<![\w'-])non[\s{_DASHES}{_NON_SEPARATORS}]+(?=[^\W_])", re.IGNORECASE)
 
 
 def _tokens(text: str) -> list[str]:
@@ -311,9 +314,10 @@ def _denial_defects(text: str, cited: Sequence[str]) -> list[str]:
         for start in _at(mine, quote):
             end = start + len(quote)
             covered.update(range(start, end))
-            # A row quoted whole that has no terminator of its own may take the clause terminator
-            # the answer adds after it; a row that ends in one must keep that exact one.
-            if _is_word(quote[-1]) and end in finals and mine[end] in _TERMINATORS:
+            # A row quoted whole that has no terminator of its own may take a full stop, the one
+            # terminator that adds no meaning ("?" asks, "!" exclaims); a row that ends in one
+            # must keep that exact one.
+            if _is_word(quote[-1]) and end in finals and mine[end] == ".":
                 covered.add(end)
     defects = []
     offset = 0
