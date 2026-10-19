@@ -18,7 +18,13 @@ import pytest
 
 from integral.decline import DeclineLedger
 from integral.identity import ProfileStore, create_profile
-from integral.lifecycle import purge_offer, save_lifecycle_offer, track_new_offer
+from integral.lifecycle import (
+    load_lifecycle_offer,
+    purge_offer,
+    save_lifecycle_offer,
+    track_new_offer,
+    transition,
+)
 from integral.offers import connect_manual
 from integral.presentation_audit import unpresented_ranking, unrecorded_discards
 from integral.presentation_log import present, rule_out
@@ -234,6 +240,28 @@ def test_a_ruled_out_offer_purged_later_is_carried_by_its_tombstone(tmp_path: Pa
     purge_offer(store, oid, at="2027-01-01T00:00:00Z", now=datetime(2027, 1, 1, tzinfo=UTC))
     assert not store.path("offers", "lifecycle", f"{oid}.json").exists()
     assert unrecorded_discards(store) == []
+
+
+def test_an_undecided_offer_purged_later_does_not_hide_a_flagged_discard(tmp_path: Path) -> None:
+    """G: a tombstone whose `last_status` is still `new` carries no decision."""
+    store = _store(tmp_path)
+    oid = _offer(store)
+    _say_about(store, oid, "nada de banca")
+    purge_offer(store, oid, at="2027-01-01T00:00:00Z", now=datetime(2027, 1, 1, tzinfo=UTC))
+    gaps = unrecorded_discards(store)
+    assert [(g["offer"], g["reason"]) for g in gaps] == [(oid, "nada de banca")]
+
+
+def test_an_expired_offer_purged_later_does_not_hide_a_flagged_discard(tmp_path: Path) -> None:
+    """G: a dead advert (`expired`) is not a decision either; only a ruling-out is."""
+    store = _store(tmp_path)
+    oid = _offer(store)
+    _say_about(store, oid, "nada de banca")
+    offer, record = load_lifecycle_offer(store, oid)
+    save_lifecycle_offer(store, *transition(offer, record, "expired", at="2026-11-01T00:00:00Z"))
+    purge_offer(store, oid, at="2027-01-01T00:00:00Z", now=datetime(2027, 1, 1, tzinfo=UTC))
+    gaps = unrecorded_discards(store)
+    assert [(g["offer"], g["reason"]) for g in gaps] == [(oid, "nada de banca")]
 
 
 def test_the_feedback_checkpoint_also_asks_about_a_re_shown_list(

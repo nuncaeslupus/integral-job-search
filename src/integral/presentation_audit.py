@@ -17,7 +17,8 @@ Two checks, each comparing one record with the record that must accompany it:
   round. A step-5 stimulus reaction, or a step-10 aside recorded as
   `kind="reaction"`, owes no decision and is not read; an offer purged after
   being ruled out (`lifecycle.purge_offer` keeps a tombstone and drops the
-  history) is carried by its tombstone.
+  history) is carried by its tombstone only when it was ruled out: an offer
+  purged while `new`, or after its advert `expired`, had no decision.
 
 Both fail closed: a ranking file that cannot be read or dated is reported as a
 gap, never read as "nothing to check".
@@ -34,7 +35,7 @@ from typing import Any
 from integral.feedback import _lifecycle_records
 from integral.identity import Identity, IdentityError, ProfileStore
 from integral.lifecycle import current_tombstones
-from integral.presentation_log import _rows
+from integral.presentation_log import _RULED_OUT, _rows
 from integral.profile import EvidenceLog
 from integral.profile_standing import standing_for_store
 from integral.stack_fit import fits_for_store
@@ -136,7 +137,9 @@ def unrecorded_discards(store: ProfileStore) -> list[dict[str, str]]:
         for event in record.history:
             if event.from_status is not None and (event.reason or "").strip():
                 carried[(record.offer_id, str(event.reason))] += 1
-    purged = set(current_tombstones(store))
+    # A tombstone carries a decision only if the offer was ruled out: one purged
+    # while `new`, or after its advert `expired`, never had its discard written.
+    purged = {oid for oid, t in current_tombstones(store).items() if t.last_status in _RULED_OUT}
     gaps: list[dict[str, str]] = []
     for row in EvidenceLog(store).effective_rows():
         if row.about is None or row.about.kind != "offer" or row.source != "offer_reaction":
