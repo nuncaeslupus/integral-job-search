@@ -92,6 +92,10 @@ class EmployerBrief(Strict):
         return value
 
 
+def save_brief(store: ProfileStore, brief: EmployerBrief) -> None:
+    store.write_json(brief.model_dump(mode="json"), *_parts(brief.offer_id))
+
+
 def load_brief(store: ProfileStore, offer_id: str) -> EmployerBrief | None:
     """The brief, or `None` when absent or unreadable (an unreadable brief is no brief)."""
     try:

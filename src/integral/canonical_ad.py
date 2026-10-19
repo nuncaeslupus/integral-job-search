@@ -3,7 +3,7 @@
 `employer_brief` records `source_posting_url` for an aggregator copy. This module
 goes and reads that page, through the same pieces every other fetch uses: the
 `integral.robots` check under `USER_AGENT`, the site's crawl-delay, and
-`liveness.read_response` for the live/closed verdict. `http_fetch` is `urllib`
+`liveness.read_response` for the live/closed verdict. `guarded_fetch` is `urllib`
 with the honest agent and nothing else.
 
 When the page is a live posting with a parseable `JobPosting` (schema.org JSON-LD),
@@ -20,6 +20,7 @@ the aggregator copy primary and records the reason in the same file.
 from __future__ import annotations
 
 import html
+import http.client
 import json
 import re
 import time
@@ -33,9 +34,15 @@ from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
-from integral.employer_brief import load_brief
+from integral.employer_brief import load_brief, save_brief
 from integral.identity import IdentityError, ProfileStore
-from integral.lifecycle import save_lifecycle_offer, track_new_offer
+from integral.lifecycle import (
+    LifecycleError,
+    load_lifecycle_offer,
+    save_lifecycle_offer,
+    track_new_offer,
+    transition,
+)
 from integral.liveness import read_response
 from integral.offers import Location, Offer, Salary, compute_offer_id, load_offer, save_offer
 from integral.robots import USER_AGENT, Robots, RobotsError
@@ -50,6 +57,9 @@ Reason = Literal[
     "closed",
     "not_confirmed_live",
     "parse_failure",
+    "mismatch",
+    "brief_excluded",
+    "already_in_progress",
 ]
 
 DEFAULT_DELAY_FLOOR = 1.0
@@ -72,14 +82,48 @@ class Response:
 Fetch = Callable[[str], Response]
 
 
-def http_fetch(url: str, *, timeout: float = 20.0) -> Response:
-    """One GET with the tool's honest agent. An HTTP error status is an answer, not a raise."""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as reply:
-            return Response(reply.status, reply.read().decode("utf-8", "replace"), reply.url)
-    except urllib.error.HTTPError as exc:
-        return Response(exc.code, None, url)
+class RedirectRefused(OSError):
+    """A redirect hop that robots.txt, or the https-only rule, does not allow."""
+
+
+class _GuardedRedirects(urllib.request.HTTPRedirectHandler):
+    """Check every redirect hop like a first request: https only, robots, crawl-delay."""
+
+    def __init__(self, robots: Robots, sleep: Callable[[float], None], floor: float) -> None:
+        self._robots, self._sleep, self._floor = robots, sleep, floor
+
+    def redirect_request(
+        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> Any:
+        if urlsplit(newurl).scheme != "https":
+            raise RedirectRefused(f"redirect off https refused: {newurl}")
+        try:
+            allowed = self._robots.allows(newurl)
+        except RobotsError as exc:
+            raise RedirectRefused(f"robots.txt unreadable for redirect {newurl}: {exc}") from exc
+        if not allowed:
+            raise RedirectRefused(f"robots.txt disallows the redirect target {newurl}")
+        wait = self._robots.delay(newurl, self._floor)
+        if wait > 0:
+            self._sleep(wait)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def guarded_fetch(
+    robots: Robots, sleep: Callable[[float], None] = time.sleep, floor: float = 1.0
+) -> Fetch:
+    """A plain GET with the honest agent, whose redirects are each checked against robots.txt."""
+    opener = urllib.request.build_opener(_GuardedRedirects(robots, sleep, floor))
+
+    def fetch(url: str, timeout: float = 20.0) -> Response:
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        try:
+            with opener.open(request, timeout=timeout) as reply:
+                return Response(reply.status, reply.read().decode("utf-8", "replace"), reply.url)
+        except urllib.error.HTTPError as exc:
+            return Response(exc.code, None, url)
+
+    return fetch
 
 
 @dataclass(frozen=True)
@@ -112,15 +156,30 @@ def _postings(node: Any) -> list[dict[str, Any]]:
     return found + _postings(node.get("@graph"))
 
 
-def _job_posting(body: str) -> dict[str, Any] | None:
+def _job_postings(body: str) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
     for block in _LD_JSON.findall(body):
         try:
-            found = _postings(json.loads(block))
+            found += _postings(json.loads(block))
         except ValueError:
             continue
-        if found:
-            return found[0]
-    return None
+    return found
+
+
+def _norm(value: str) -> str:
+    return re.sub(r"[\W_]+", "", value.casefold())
+
+
+def _same_employer(posting: dict[str, Any], employer: str) -> bool:
+    org = posting.get("hiringOrganization")
+    name = _norm(_text(org.get("name") if isinstance(org, dict) else org) or "")
+    want = _norm(employer)
+    return bool(name and want and (name == want or name.startswith(want) or want.startswith(name)))
+
+
+def _same_title(posting: dict[str, Any], title: str | None) -> bool:
+    mine, theirs = _norm(title or ""), _norm(_text(posting.get("title")) or "")
+    return not mine or (bool(theirs) and (mine in theirs or theirs in mine))
 
 
 def _text(value: Any) -> str | None:
@@ -166,15 +225,18 @@ def _location(posting: dict[str, Any]) -> Location | None:
     return Location(raw=raw, country=country, remote=remote)
 
 
-def _closed(posting: dict[str, Any], now: datetime) -> bool:
+def _open_until(posting: dict[str, Any], now: datetime) -> bool | None:
+    """Whether `validThrough` leaves the posting open: None when it is stated but unreadable."""
     until = _text(posting.get("validThrough"))
     if until is None:
-        return False
+        return True
     try:
+        if len(until) == 10:  # a date: schema.org's last valid day, so today is still open
+            return datetime.fromisoformat(until).date() >= now.date()
         stamp = datetime.fromisoformat(until.replace("Z", "+00:00"))
     except ValueError:
-        return False
-    return (stamp if stamp.tzinfo else stamp.replace(tzinfo=UTC)) < now
+        return None
+    return (stamp if stamp.tzinfo else stamp.replace(tzinfo=UTC)) >= now
 
 
 def _plain(markup: str) -> str:
@@ -254,7 +316,7 @@ def resolve_canonical(
     store: ProfileStore,
     offer_id: str,
     *,
-    fetch: Fetch = http_fetch,
+    fetch: Fetch | None = None,
     robots: Robots | None = None,
     sleep: Callable[[float], None] = time.sleep,
     now: datetime | None = None,
@@ -273,8 +335,12 @@ def resolve_canonical(
             CanonicalResult(offer_id, "fallback", None, reason, detail, url or None, stamp),
         )
 
-    if not url:
+    if brief is None or not url:
         return fallback("no_source_url", "the brief names no source posting")
+    if brief.exclusions_tripped:
+        return fallback("brief_excluded", "the brief tripped an exclusion: nothing is fetched")
+    if aggregator.status != "new":
+        return fallback("already_in_progress", f"the advert is already {aggregator.status}")
     checker = robots or Robots()
     try:
         allowed = checker.allows(url)
@@ -285,31 +351,69 @@ def resolve_canonical(
     wait = checker.delay(url, delay_floor)
     if wait > 0:
         sleep(wait)
+    get = fetch or guarded_fetch(checker, sleep, delay_floor)
     try:
-        reply = fetch(url)
-    except (OSError, ValueError) as exc:
+        reply = get(url)
+    except RedirectRefused as exc:
+        return fallback("robots_refused", str(exc))
+    except (OSError, ValueError, http.client.HTTPException) as exc:
         return fallback("fetch_error", f"the fetch failed: {exc}")
 
     check = read_response(
-        offer_id, reply.status, reply.body, advert_url=url, final_url=reply.final_url
+        offer_id,
+        reply.status,
+        reply.body,
+        advert_url=url,
+        final_url=reply.final_url,
+        title=aggregator.title,
     )
     if check.liveness == "dead":
         reason: Reason = "gone" if reply.status in (404, 410) else "closed"
         return fallback(reason, check.reason)
     if check.liveness != "live" or reply.body is None:
         return fallback("not_confirmed_live", check.reason)
-    posting = _job_posting(reply.body)
-    if posting is None:
+    postings = _job_postings(reply.body)
+    if not postings:
         return fallback("parse_failure", "the page carries no schema.org JobPosting")
-    if _closed(posting, at):
+    matching = [
+        p
+        for p in postings
+        if _same_employer(p, brief.real_employer) and _same_title(p, aggregator.title)
+    ]
+    if len(matching) != 1:
+        return fallback(
+            "mismatch",
+            f"{len(matching)} of {len(postings)} postings match {brief.real_employer!r}"
+            f" and {aggregator.title!r}",
+        )
+    posting = matching[0]
+    still_open = _open_until(posting, at)
+    if still_open is None:
+        return fallback("parse_failure", f"validThrough {posting.get('validThrough')!r} unreadable")
+    if not still_open:
         return fallback("closed", f"validThrough {posting.get('validThrough')} has passed")
     employer = _employer_offer(posting, url, aggregator, at)
     if employer is None or employer.id == offer_id:
         return fallback("parse_failure", "the JobPosting has no usable description")
 
     save_lifecycle_offer(store, employer, track_new_offer(employer, at=stamp))
-    save_offer(store, aggregator.model_copy(update={"duplicate_of": employer.id}))
+    save_brief(store, brief.model_copy(update={"offer_id": employer.id}))
+    _retire_aggregator(store, aggregator, employer.id, stamp)
     return _record(
         store,
         CanonicalResult(offer_id, "canonical", employer.id, None, check.reason, url, stamp),
     )
+
+
+def _retire_aggregator(store: ProfileStore, aggregator: Offer, employer_id: str, at: str) -> None:
+    """Keep the aggregator copy as provenance, out of the live `new` pool."""
+    linked = aggregator.model_copy(update={"duplicate_of": employer_id})
+    try:
+        _, record = load_lifecycle_offer(store, aggregator.id)
+        archived, record = transition(
+            linked, record, "archived", at=at, reason=f"canonical copy {employer_id}"
+        )
+    except LifecycleError:
+        save_offer(store, linked)
+        return
+    save_lifecycle_offer(store, archived, record)

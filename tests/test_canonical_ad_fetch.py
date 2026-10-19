@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import email.message
+import http.client
 import json
+import urllib.request
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,15 +14,22 @@ import pytest
 
 from integral.canonical_ad import (
     CanonicalResult,
+    RedirectRefused,
     Response,
+    _GuardedRedirects,
     load_result,
     primary_offer,
     resolve_canonical,
 )
-from integral.employer_brief import record_brief
+from integral.employer_brief import load_brief, record_brief, save_brief
 from integral.identity import ProfileStore, create_profile
-from integral.lifecycle import save_lifecycle_offer, track_new_offer
-from integral.offers import connect_manual, load_offer
+from integral.lifecycle import (
+    load_lifecycle_offer,
+    save_lifecycle_offer,
+    track_new_offer,
+    transition,
+)
+from integral.offers import connect_manual, load_offer, load_offers
 from integral.robots import Robots
 
 URL = "https://careers.real.example/jobs/42"
@@ -132,11 +142,16 @@ def test_employer_only_fields_reach_the_primary_offer(tmp_path: Path) -> None:
 
 def test_missing_employer_fields_are_filled_from_the_aggregator(tmp_path: Path) -> None:
     store, agg_id = _setup(tmp_path)
-    bare = {"@type": "JobPosting", "description": "Plain description of the role."}
+    bare = {
+        "@type": "JobPosting",
+        "hiringOrganization": "Real SL",
+        "title": "Backend",
+        "description": "Plain description of the role.",
+    }
     _run(store, agg_id, Response(200, _page(bare), URL))
     employer = primary_offer(store, agg_id)
     assert employer.id != agg_id
-    assert employer.title == "Backend" and employer.company == "Aggregator"
+    assert employer.title == "Backend" and employer.company == "Real SL"
 
 
 @pytest.mark.parametrize(
@@ -150,7 +165,14 @@ def test_missing_employer_fields_are_filled_from_the_aggregator(tmp_path: Path) 
             "closed",
         ),
         (Response(200, _page(None), URL), "parse_failure"),
-        (Response(200, _page({"@type": "JobPosting"}), URL), "parse_failure"),
+        (
+            Response(
+                200,
+                _page({"@type": "JobPosting", "hiringOrganization": "Real SL", "title": "Backend"}),
+                URL,
+            ),
+            "parse_failure",
+        ),
         (Response(403, None, URL), "not_confirmed_live"),
         (Response(200, _page(POSTING), "https://careers.real.example/jobs"), "not_confirmed_live"),
         (OSError("connection reset"), "fetch_error"),
@@ -224,3 +246,144 @@ def test_brief_cli_fetches_so_the_downstream_reader_sees_employer_fields(
     assert calls == [URL]
     seen = primary_offer(store, offer.id)
     assert seen.id != offer.id and seen.salary is not None and seen.salary.min == 50000.0
+
+
+OTHER = {**POSTING, "title": "Office Manager", "hiringOrganization": {"name": "Other Corp"}}
+
+
+def _fell_back(store: ProfileStore, agg_id: str, result: CanonicalResult, reason: str) -> None:
+    assert result.outcome == "fallback" and result.reason == reason, result
+    assert primary_offer(store, agg_id).id == agg_id
+
+
+def test_b1_a_different_job_or_employer_is_not_promoted(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    page = _page({**POSTING, "title": "Senior Data Scientist"}, "")
+    result, _ = _run(store, agg_id, Response(200, page, URL))
+    _fell_back(store, agg_id, result, "mismatch")
+    other_org = {**POSTING, "hiringOrganization": {"name": "Other Corp"}}
+    result, _ = _run(store, agg_id, Response(200, _page(other_org), URL))
+    _fell_back(store, agg_id, result, "mismatch")
+
+
+def test_b1_the_page_must_mention_the_advert_title(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    page = "<html><body>Listings</body></html>" + _page(POSTING).replace("Backend", "Other")
+    result, _ = _run(store, agg_id, Response(200, page, URL))
+    _fell_back(store, agg_id, result, "not_confirmed_live")
+
+
+def test_b2_the_matching_posting_is_chosen_among_several(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    graph = {"@graph": [OTHER, POSTING]}
+    result, _ = _run(store, agg_id, Response(200, _page(graph), URL))
+    assert result.outcome == "canonical"
+    assert primary_offer(store, agg_id).title == "Backend Engineer"
+
+
+def test_b2_an_ambiguous_page_is_not_promoted(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    twin = {**POSTING, "title": "Backend Developer"}
+    result, _ = _run(store, agg_id, Response(200, _page({"@graph": [POSTING, twin]}), URL))
+    _fell_back(store, agg_id, result, "mismatch")
+    result, _ = _run(store, agg_id, Response(200, _page({"@graph": [OTHER]}), URL))
+    _fell_back(store, agg_id, result, "mismatch")
+
+
+def test_b3_each_redirect_hop_is_checked_against_robots() -> None:
+    robots = _robots("User-agent: *\nDisallow: /private\n")
+    sleeps: list[float] = []
+    handler = _GuardedRedirects(robots, sleeps.append, 0.0)
+    req = urllib.request.Request(URL)
+    headers = email.message.Message()
+    ok = handler.redirect_request(
+        req, None, 302, "Found", headers, "https://careers.real.example/jobs/43"
+    )
+    assert ok is not None and ok.full_url.endswith("/jobs/43")
+    with pytest.raises(RedirectRefused):
+        handler.redirect_request(
+            req, None, 302, "Found", headers, "https://careers.real.example/private/x"
+        )
+    with pytest.raises(RedirectRefused):
+        handler.redirect_request(req, None, 302, "Found", headers, "http://careers.real.example/x")
+
+
+def test_b3_a_refused_redirect_is_recorded_as_robots_refused(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(store, agg_id, RedirectRefused("robots.txt disallows the redirect target"))
+    _fell_back(store, agg_id, result, "robots_refused")
+
+
+@pytest.mark.parametrize(
+    "notice",
+    [
+        "Applications for this role have closed.",
+        "This position has been filled.",
+        "The position has been filled",
+    ],
+)
+def test_b4_closed_notices_on_a_page_with_json_ld_are_closed(tmp_path: Path, notice: str) -> None:
+    store, agg_id = _setup(tmp_path)
+    page = _page(POSTING, f"<p>{notice}</p>")
+    result, _ = _run(store, agg_id, Response(200, page, URL))
+    _fell_back(store, agg_id, result, "closed")
+
+
+def test_b5_the_aggregator_copy_leaves_the_new_pool_and_the_employer_copy_is_briefed(
+    tmp_path: Path,
+) -> None:
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert result.canonical_id
+    aggregator = load_offer(store, agg_id)
+    assert aggregator.status == "archived" and aggregator.duplicate_of == result.canonical_id
+    assert aggregator.text == "Backend en Barcelona."
+    live = [o.id for o in load_offers(store).offers if o.status == "new"]
+    assert live == [result.canonical_id]
+    brief = load_brief(store, result.canonical_id)
+    assert brief is not None and brief.source_posting_url == URL
+
+
+def test_b5_a_tripped_exclusion_means_no_fetch(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    brief = load_brief(store, agg_id)
+    assert brief is not None
+    save_brief(store, brief.model_copy(update={"exclusions_tripped": ("logistics",)}))
+    result, calls = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert calls == []
+    _fell_back(store, agg_id, result, "brief_excluded")
+
+
+def test_a_started_application_is_not_replaced(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    offer, record = load_lifecycle_offer(store, agg_id)
+    offer, record = transition(offer, record, "shortlisted", at=AT)
+    save_lifecycle_offer(store, offer, record)
+    result, calls = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert calls == []
+    _fell_back(store, agg_id, result, "already_in_progress")
+
+
+def test_n1_an_unreadable_valid_through_is_not_promoted(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    page = _page({**POSTING, "validThrough": "1 October 2026"})
+    result, _ = _run(store, agg_id, Response(200, page, URL))
+    _fell_back(store, agg_id, result, "parse_failure")
+
+
+def test_n2_a_date_only_valid_through_of_today_is_open(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(
+        store, agg_id, Response(200, _page({**POSTING, "validThrough": "2026-10-19"}), URL)
+    )
+    assert result.outcome == "canonical"
+    other, _ = _setup(tmp_path / "y")
+    yesterday = {**POSTING, "validThrough": "2026-10-18"}
+    result, _ = _run(other, _, Response(200, _page(yesterday), URL))
+    assert result.reason == "closed"
+
+
+def test_n3_a_protocol_error_is_a_fetch_error(tmp_path: Path) -> None:
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(store, agg_id, http.client.IncompleteRead(b"x"))
+    _fell_back(store, agg_id, result, "fetch_error")

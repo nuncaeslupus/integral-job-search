@@ -82,6 +82,9 @@ DEAD_PHRASES: tuple[str, ...] = (
     "no longer accepting applications",
     "this job is no longer available",
     "this vacancy has closed",
+    "applications for this role have closed",
+    "this position has been filled",
+    "position has been filled",
 )
 
 _WHITESPACE = re.compile(r"\s+")
