@@ -23,10 +23,12 @@ no job-title blocklist to go stale (the enumeration failure of #547): another
 candidate's `data` aim has its own generic words. A phrase made only of generic
 words uses all of them.
 
-Words match when equal, when one is a prefix of the other (3 letters at least:
-`llm` ~ `llmops`, `eval` ~ `evals`, `agent` ~ `agentic`), or when they share a
-six-letter prefix (`generative` ~ `generativa`, `engineer` ~ `engineering`). Two
-letters is never a stem, so `ai` is not `aerial`.
+Both sides are first normalised by one closed table (`_PHRASES`, `_TOKENS`):
+`GenAI`, `KI`, `IA`, `A.I.`, `Inteligencia Artificial` are `ai`, `Large Language
+Model` is `llm`, `ingeniero/a` is `engineer`, `datos` is `data`. Then whole words
+match, or a word plus a closed suffix (`eval`/`evals`, `llm`/`llmops`,
+`agent`/`agentic`). Never a bare prefix: `java` is not `javascript`, `product` is
+not `production`.
 
 ## The floor is the candidate's, not the code's
 
@@ -49,8 +51,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tempfile
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,10 +92,46 @@ _FUNCTION_WORDS = frozenset(
         "with",
     ]
 )
-_MIN_STEM = 3
-_MIN_SHARED_PREFIX = 6
 #: Offers the gate compares. Under it a clean zero rests on a thin scan.
 MINIMUM_OFFERS_COMPARED = 20
+
+#: One closed table, applied to the title **and** to the candidate's phrases, so
+#: the two sides are always spelled the same way. Candidate-agnostic: it holds
+#: what a word means in the job market (an abbreviation, the Spanish or German
+#: word for a role), never which jobs are wanted.
+_PHRASES = (
+    (r"\ba\.\s?i\.?(?!\w)", "ai"),
+    (r"\binteligencia artificial\b", "ai"),
+    (r"\bkunstliche intelligenz\b", "ai"),
+    (r"\blarge language models?\b", "llm"),
+)
+_TOKENS = {
+    "genai": "generative ai",
+    "gen": "generative",
+    "generativa": "generative",
+    "generativo": "generative",
+    "ia": "ai",
+    "ki": "ai",
+    "rag": "llm",
+    "produktmanager": "product manager",
+    "ingeniero": "engineer",
+    "ingeniera": "engineer",
+    "ingenieur": "engineer",
+    "desarrollador": "developer",
+    "desarrolladora": "developer",
+    "entwickler": "developer",
+    "entwicklerin": "developer",
+    "datos": "data",
+    "daten": "data",
+    "analista": "analyst",
+    "gerente": "manager",
+    "jefe": "manager",
+    "cientifico": "scientist",
+    "cientifica": "scientist",
+}
+#: What may follow a whole word and still be that word: `evals`, `llmops`,
+#: `agentic`, `engineering`. Not `java`+`script` or `product`+`ion`.
+_SUFFIXES = ("s", "es", "ops", "ic", "ing")
 
 
 def _words(text: str) -> set[str]:
@@ -101,22 +141,22 @@ def _words(text: str) -> set[str]:
 
 
 def _significant(text: str) -> frozenset[str]:
-    return frozenset(w for w in _words(text) if w not in _FUNCTION_WORDS)
+    folded = unicodedata.normalize("NFKD", text.casefold())
+    folded = "".join(c for c in folded if not unicodedata.combining(c))
+    for pattern, replacement in _PHRASES:
+        folded = re.sub(pattern, f" {replacement} ", folded)
+    out: set[str] = set()
+    for word in _words(folded):
+        out.update(_TOKENS.get(word, word).split())
+    return frozenset(out - _FUNCTION_WORDS)
 
 
 def same_word(a: str, b: str) -> bool:
-    """Equal, a 3-letter-or-longer prefix of the other, or sharing 6 leading letters."""
-    if a == b:
-        return True
+    """The same whole word, or one with a closed suffix (`eval`/`evals`, `llm`/`llmops`)."""
     short, long_ = sorted((a, b), key=len)
-    if len(short) >= _MIN_STEM and long_.startswith(short):
-        return True
-    shared = 0
-    for x, y in zip(a, b, strict=False):
-        if x != y:
-            break
-        shared += 1
-    return shared >= _MIN_SHARED_PREFIX
+    return short == long_ or (
+        len(short) >= 3 and long_.startswith(short) and long_[len(short) :] in _SUFFIXES
+    )
 
 
 def _has(words: Iterable[str], word: str) -> bool:
@@ -221,7 +261,8 @@ AIM = (
     "generative ai engineer",
     "ai evals",
 )
-RELATED = ("rag engineer", "llmops")
+#: Empty on purpose: the gate must pass on the table and the stems alone.
+RELATED: tuple[str, ...] = ()
 #: Seen on the live round of #552 (the first five), and further jobs that are not AI.
 OFF_ROLE = (
     "Offensive Security Engineer",
@@ -239,6 +280,8 @@ OFF_ROLE = (
     "Administrativo/a de Recursos Humanos",
     "Marketing Manager",
     "DevOps Engineer",
+    "Ingeniero de Datos",
+    "Produktmanager",
 )
 #: Wording the terms do not contain literally.
 ON_AIM = (
@@ -252,6 +295,13 @@ ON_AIM = (
     "LLM Evaluation Specialist - AI Evals",
     "Generative AI Developer",
     "Ingeniero de Prompts",
+    "GenAI Engineer",
+    "Gen-AI Engineer",
+    "Large Language Model Engineer",
+    "A.I. Engineer",
+    "KI Engineer",
+    "Ingeniero/a de IA",
+    "Ingeniera de Inteligencia Artificial",
 )
 
 

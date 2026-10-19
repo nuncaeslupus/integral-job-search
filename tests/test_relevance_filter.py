@@ -28,7 +28,7 @@ def store(tmp_path: Path) -> ProfileStore:
     return ProfileStore(tmp_path, "test")
 
 
-def _rule(floor: float = 0.5, related: tuple[str, ...] = rel.RELATED) -> rel.RelevanceRule:
+def _rule(floor: float = 0.5, related: tuple[str, ...] = ()) -> rel.RelevanceRule:
     return rel.RelevanceRule(floor, rel.AIM, related)
 
 
@@ -58,7 +58,7 @@ def test_the_shared_family_word_alone_proves_nothing() -> None:
 
 def test_a_stem_needs_three_letters_so_ai_is_not_aerial() -> None:
     assert not rel.same_word("ai", "aerial") and not rel.same_word("ai", "air")
-    assert rel.same_word("llm", "llmops") and rel.same_word("generative", "generativa")
+    assert rel.same_word("llm", "llmops") and rel.same_word("eval", "evals")
 
 
 def test_genericness_comes_from_the_candidates_own_phrases() -> None:
@@ -182,3 +182,51 @@ def test_with_a_floor_only_the_role_is_stored_and_the_rest_is_said(
     assert all("score 0.00" in why or "score 0." in why for why in outcome.off_role_because)
     assert any("Offensive Security Engineer" in why for why in outcome.off_role_because)
     assert f"OFF ROLE roles_en: {len(rel.OFF_ROLE)} of" in run.summary()
+
+
+# --- the second reader's findings (#873) ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "GenAI Engineer",
+        "Gen-AI Engineer",
+        "Large Language Model Engineer",
+        "A.I. Engineer",
+        "KI Engineer",
+        "Ingeniero/a de IA",
+        "Ingeniera de Inteligencia Artificial",
+        "RAG Engineer",
+        "LLMOps Engineer",
+    ],
+)
+def test_other_spellings_and_languages_of_the_aim_are_kept_with_no_related_wording(
+    title: str,
+) -> None:
+    assert _rule(related=()).judge(title).relevant
+
+
+@pytest.mark.parametrize(
+    ("aim", "kept", "dropped"),
+    [
+        (("data engineer",), "Ingeniero de Datos", "Ingeniero de Redes"),
+        (("product manager",), "Produktmanager", "Production Manager"),
+        (("java developer",), "Java Developer", "JavaScript Developer"),
+    ],
+)
+def test_the_same_role_in_another_language_and_a_longer_word_is_not_the_role(
+    aim: tuple[str, ...], kept: str, dropped: str
+) -> None:
+    rule = rel.RelevanceRule(0.6, aim)  # a shared role word alone is half a phrase
+    assert rule.judge(kept).relevant and not rule.judge(dropped).relevant
+
+
+def test_javascript_is_not_java_and_production_is_not_product() -> None:
+    assert not rel.same_word("java", "javascript") and not rel.same_word("product", "production")
+
+
+def test_related_wording_still_adds_what_the_table_cannot_know() -> None:
+    title = "Retrieval Specialist"
+    assert not _rule().judge(title).relevant
+    assert _rule(related=("retrieval specialist",)).judge(title).relevant
