@@ -34,6 +34,7 @@ from typing import Any
 
 from integral.corpus_scope import DEFAULT_LABELLED_ADS
 from integral.identity import ProfileStore
+from integral.relevance import record as record_relevance
 from integral.sourcing_exclusions import (
     EMPLOYER_UNKNOWN,
     Candidate,
@@ -176,6 +177,7 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
             f"site: corpus.integral.local\ncountry: {GLOBAL}\nlanguage: en\n", encoding="utf-8"
         )
         create_profile(root, "Fixture", handle="fixture", language="es", fiction=True)
+        record_relevance(ProfileStore(root, "fixture"), 0.0)  # the filter is not under test here
         store = ProfileStore(root, "fixture")
         for exclusion in exclusions:
             record_exclusion(store, exclusion)

@@ -486,6 +486,8 @@ def test_an_amount_written_without_a_space_or_as_a_range_is_dropped(amount: str)
     [
         ("Engineer 3 - 50k", "Engineer 2 - 50k"),
         ("Band 5 - 28k Nurse", "Band 6 - 33k Nurse"),
+        ("Engineer 10 - 50k", "Engineer 11 - 50k"),
+        ("Grade 12 - 40k", "Grade 13 - 40k"),
     ],
 )
 def test_a_grade_before_a_dash_and_an_amount_is_not_a_range(a: str, b: str) -> None:

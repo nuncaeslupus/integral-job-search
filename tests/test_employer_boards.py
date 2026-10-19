@@ -34,6 +34,7 @@ from integral.employer_boards import (
 from integral.identity import ProfileStore, create_profile
 from integral.lifecycle import load_lifecycle_offer
 from integral.offers import SourceKind
+from integral.relevance import record as record_relevance
 from integral.robots import Robots
 from integral.sourcing import FETCH_LOG, Response, source
 
@@ -221,6 +222,7 @@ def test_the_employer_name_fills_a_missing_company_and_never_overrides_one(
 ) -> None:
     directory = _package(tmp_path)
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
     store = ProfileStore(tmp_path / "p", "test")
     bodies = {
         "acme": {"jobs": [{"title": "Python Role A", "body": "about A"}]},
@@ -529,6 +531,7 @@ def _three_employer_run(
         encoding="utf-8",
     )
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
     store = ProfileStore(tmp_path / "p", "test")
     asked: list[str] = []
 
@@ -648,6 +651,7 @@ def test_a_paged_board_stopped_on_page_two_keeps_page_one(
         encoding="utf-8",
     )
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
 
     def fetch(request: ListRequest) -> Response:
         if request.url.endswith("page=1"):
@@ -696,6 +700,7 @@ def _detail_run(
         encoding="utf-8",
     )
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
     pauses: list[float] = []
     monkeypatch.setattr(sourcing, "_pause", pauses.append)
     robots_asked: list[str] = []
@@ -828,6 +833,7 @@ def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> 
         encoding="utf-8",
     )
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
     asked: list[str] = []
 
     def fetch(request: ListRequest) -> Response:

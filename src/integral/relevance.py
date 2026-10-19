@@ -33,8 +33,9 @@ not `production`.
 ## The floor is the candidate's, not the code's
 
 `search/relevance.json` holds `{"floor": 0.5, "related": [...]}`. An offer scoring
-**below** the floor is left out; no file means *no filter* and nothing is
-invented here. `related` is the other wording of the same aim (`rag engineer`,
+**below** the floor is left out; no file means the filter is on at
+`DEFAULT_FLOOR` (0.5), nothing is asked of the candidate, and `"floor": 0` in the
+file opts out. `related` is the other wording of the same aim (`rag engineer`,
 `llmops`) that the step-07 expansion found and the candidate accepted: world
 knowledge no word list in code can hold. A related phrase scores like an aim
 phrase, but it does not decide which words are generic.
@@ -64,6 +65,9 @@ from typing import Any
 from integral.identity import IdentityError, ProfileStore, create_profile
 
 RELEVANCE_FILE = ("search", "relevance.json")
+#: The floor when `search/relevance.json` is absent. One source for the default;
+#: a floor in the file overrides it and `0` opts out.
+DEFAULT_FLOOR = 0.5
 _FUNCTION_WORDS = frozenset(
     [
         "de",
@@ -151,12 +155,22 @@ def _words(text: str) -> set[str]:
     return words(text)
 
 
+#: An upper-case `RAG` is the AI term by default (`RAG Platform Engineer`, `Head of RAG`).
+#: It is the Red/Amber/Green status sense only when the next word, past any
+#: punctuation joining the two, is a reporting word (`RAG Status Reporting Analyst`,
+#: `RAG-Status`, `RAG / Status`, `PMO Lead (RAG reporting)`, `RAG Trade Buyer`).
+_UPPER_RAG = re.compile(
+    r"(?<![A-Za-z])RAG(?![A-Za-z])"
+    r"(?![\s,/:&-]*(?i:status|reporting|report|rating|rated|trade|tracker|dashboard)\b)"
+)
+
+
 def _fold(text: str) -> str:
-    """The text as the table reads it. A standalone upper-case `RAG` is the AI term
-    wherever it stands (`Head of RAG`, `Tech Lead (RAG)`); `Rag Trade Buyer` and an
-    multi-word all-caps title are not read that way."""
+    """The text as the table reads it. An upper-case `RAG` is the AI term unless a
+    reporting word follows it (the status sense, see `_UPPER_RAG`); `Rag Trade Buyer`
+    and a multi-word all-caps title are not read that way."""
     if not (text.isupper() and len(text.split()) > 1):
-        text = re.sub(r"(?<![A-Za-z])RAG(?![A-Za-z])", " llm ", text)
+        text = _UPPER_RAG.sub(" llm ", text)
     folded = unicodedata.normalize("NFKD", text.casefold())
     folded = "".join(c for c in folded if not unicodedata.combining(c))
     for pattern, replacement in _PHRASES:
@@ -174,7 +188,7 @@ def _significant(text: str) -> frozenset[str]:
 
 #: Gender / number endings (`enfermero`, `enfermera`, `abogados`): two words that differ
 #: only by one of these on a stem of `_MIN_STEM` letters or more are the same word.
-_ENDINGS = ("os", "as", "es", "o", "a", "e")
+_ENDINGS = ("os", "as", "o", "a")
 _MIN_STEM = 4
 #: Role nouns that name one family of jobs: `java developer` and `java engineer` are
 #: one aim, so neither noun says which job it is.
@@ -269,13 +283,16 @@ class RelevanceRule:
 
 
 def load_rule(store: ProfileStore, terms: Sequence[str]) -> RelevanceRule | None:
-    """The candidate's rule, or `None` when no floor is recorded (no filter).
+    """The candidate's rule: the file's floor, else `DEFAULT_FLOOR`; `None` only
+    when there are no search terms to score against.
 
     A file that will not parse **raises**: an unreadable floor read as "no
     floor" is the filter quietly stopping.
     """
-    if not terms or not store.exists(*RELEVANCE_FILE):
+    if not terms:
         return None
+    if not store.exists(*RELEVANCE_FILE):
+        return RelevanceRule(DEFAULT_FLOOR, tuple(terms))
     where = "/".join(RELEVANCE_FILE)
     payload = store.read_json(*RELEVANCE_FILE)
     floor = payload.get("floor") if isinstance(payload, dict) else None

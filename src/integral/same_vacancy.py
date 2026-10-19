@@ -90,12 +90,12 @@ _G = r"(?:[mwfdhx]|divers[e]?)"
 # title (`60.000€`, `$80k`, `10%`, `2026`) are not grades and are dropped.
 # A currency beside a bare one- or two-digit number is a grade with a stray symbol
 # (`Engineer 2 €`, `EUR 2 Engineer`), not an amount: an amount has three digits,
-# a separator or a `k`. A range (`50-60k`) needs two digits on its left: `Engineer 3 - 50k`
-# keeps its grade.
+# a separator or a `k`. A range is written tight (`50-60k`): a spaced hyphen after a
+# grade (`Engineer 10 - 50k`, `Grade 12 - 40k`) separates the grade from the pay.
 _FIGURE = r"(?:\d+(?=\s*k\b)|\d{3,}[\d.,]*|\d{1,2}[.,]\d[\d.,]*)"
 _CURRENCY = r"(?:[€$£]|\b(?:eur|usd|gbp)(?![a-z]))"
 _AMOUNT = re.compile(
-    rf"\b\d{{2,}}\s*[-\u2013]\s*\d+\s*k\b"
+    rf"\b\d{{2,}}[-\u2013]\d+\s*k\b"
     rf"|{_CURRENCY}\s*{_FIGURE}\s*k?"
     rf"|\b{_FIGURE}(?:\s*k\b|\s*%|\s*{_CURRENCY}(?!\s*\d))"
     r"|\b\d[\d.,]*\s*%"
