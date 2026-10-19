@@ -135,14 +135,34 @@ _EMPLOYER_STEM = re.compile(
     r"(?:(?:about|sobre)(?:\s+.*)?|who we are(?: and what we do)?|quienes somos|our company|"
     r"our story|our mission|the company|company overview|la empresa|nuestra empresa)"
 )
-#: An employer-section stem followed by any separator ("About us - perks",
-#: "Sobre nosotros: beneficios", "About us · perks"): the stem decides, the tail
-#: is not read.
-_STEM_THEN_SEPARATOR = re.compile(
+#: The wordings that open a section about the employer, as a stem to match at
+#: the start of a (folded) line.
+_STEM = re.compile(
     r"(?:about us|sobre nosotros|who we are|quienes somos|our company|our story|"
     r"our mission|the company|company overview|la empresa|nuestra empresa)"
-    r"\s*[^\w\s]+\s*\S"
 )
+#: A separator set off by whitespace ("About us - perks", "About us · perks").
+_SPACED_SEPARATOR = re.compile(r"\s+[^\w\s]+\s+\S")
+#: A colon straight after the stem, and a tail short enough to be a heading
+#: ("About us: perks"), not a sentence ("Our mission: free lunch for all").
+_COLON_TAIL = re.compile(r"\s*[:\uff1a]\s*(\S+(?:\s+\S+){0,2})\s*$")
+
+
+def _stem_then_separator(text: str) -> bool:
+    """An employer-section stem, then a separator that sets off a heading's tail.
+
+    Not "Our company-paid lunch" (a hyphen inside a word), "The company's pension
+    plan", nor "Our mission: free lunch for all" (a sentence): those are perks
+    lines that merely open with the stem, and ending the skip on them reads the
+    perks. The stem and the separator decide, the tail is not read.
+    """
+    match = _STEM.match(text)
+    if match is None:
+        return False
+    rest = text[match.end() :]
+    return bool(_SPACED_SEPARATOR.match(rest) or _COLON_TAIL.match(rest))
+
+
 #: Words after "about" that make the tail a description of the perks ("About our
 #: benefits"), not a name ("About Perks Inc").
 _ABOUT_DETERMINER = (
@@ -264,7 +284,7 @@ def _wording_ends_skip(plain: str, plain_line: str, employer_key: str) -> bool:
     """
     if employer_key and re.search(rf"\b{re.escape(employer_key)}\b", plain_line):
         return True
-    if _STEM_THEN_SEPARATOR.match(plain_line.strip(_EDGE_PUNCTUATION)):
+    if _stem_then_separator(plain_line.strip(_EDGE_PUNCTUATION)):
         return True
     for part in _CONNECTIVE.split(plain):
         if _EMPLOYER_STEM.fullmatch(part.strip()) and not _mentions_off_topic_word(part):
@@ -292,8 +312,9 @@ def _ends_skip(line: str, employer_key: str) -> bool:
     # company name>" has more than five words.
     # Any employer-section stem with a separator ends it, connective or not, and
     # heading markup ("## About us - perks") does not hide it.
-    bare = _plain(re.sub(r"^[#*_\s]+|[*_\s]+$", "", line_clean))
-    if 0 < len(line_clean) <= _HEADING_LIMIT and _STEM_THEN_SEPARATOR.match(bare):
+    # A list or quote marker ("- About us: perks", "> About us - perks") is not part of it.
+    bare = _plain(re.sub(r"^[#*_\s]+|[*_\s]+$", "", _BULLET.sub("", line_clean)))
+    if 0 < len(line_clean) <= _HEADING_LIMIT and _stem_then_separator(bare):
         return True
     if 0 < len(line_clean) <= _HEADING_LIMIT and _SECTION_OF_THE_ADVERT.fullmatch(plain):
         return _wording_ends_skip(plain, _plain(line_clean), employer_key)

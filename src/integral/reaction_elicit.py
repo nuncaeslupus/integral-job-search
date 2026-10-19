@@ -412,8 +412,9 @@ def stimulus_from_record(record: dict[str, Any]) -> Offer:
         text=text,
         status="new",
     )
-    # The collector's own fetch stamp is this record's collection time; the
-    # lifecycle record that `collect_stimuli` writes will carry the same moment.
+    # The collector's own fetch stamp is this record's collection time. The
+    # lifecycle record that `collect_stimuli` writes carries that function's own
+    # `at`, not this stamp; `check_stored_stimulus` reads the latter.
     check_stimulus(offer, collected_at=record.get("fetched_at"))
     return offer
 

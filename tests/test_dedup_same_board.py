@@ -320,3 +320,84 @@ def test_a_stub_body_never_merges() -> None:
     b = _offer("Software Engineer London, UK ", url="https://g.test/s2", location="London")
     assert not same_board_twin(a, b)
     assert same_board_body_similarity(a, b) == 0.0
+
+
+# --- #865: follow-ups from the second readers of #871 --------------------------
+
+
+def _pair(
+    a_text: str, b_text: str, *, loc_a: str = "London", loc_b: str = "London"
+) -> tuple[Offer, Offer]:
+    return (
+        _offer(a_text, url="https://g.test/n1", location=loc_a),
+        _offer(b_text, url="https://g.test/n2", location=loc_b),
+    )
+
+
+@pytest.mark.parametrize(
+    ("one", "other"),
+    [("C++", "C"), ("C#", "C"), ("C++", "C#"), ("£60,000", "€60,000"), ("$60,000", "€60,000")],
+)
+def test_a_symbol_inside_a_token_makes_a_different_advert(one: str, other: str) -> None:
+    a, b = _pair(f"{TEAM_A} Required: {one}. {BOILER}", f"{TEAM_A} Required: {other}. {BOILER}")
+    assert not same_board_twin(a, b)
+
+
+def test_a_short_country_code_is_stripped_only_in_the_case_it_is_declared() -> None:
+    """`US` in the location must not delete the word `us` from one body only."""
+    a, b = _pair(
+        f"{TEAM_A} Join us. {BOILER}",
+        f"{TEAM_A} Join. {BOILER}",
+        loc_a="New York, US",
+        loc_b="London, UK",
+    )
+    assert not same_board_twin(a, b)
+    c, d = _pair(
+        f"{TEAM_A} Based in New York, US. {BOILER}",
+        f"{TEAM_A} Based in London, UK. {BOILER}",
+        loc_a="New York, US",
+        loc_b="London, UK",
+    )
+    assert same_board_twin(c, d)
+
+
+def test_a_one_word_difference_in_a_very_long_body_is_not_a_twin() -> None:
+    """Pins the threshold at 1.0: at 0.999 a 2,500-word body one word apart merges."""
+    words = [f"w{n}" for n in range(2500)]
+    changed = [*words[:-1], "CHANGED"]
+    a, b = _pair(" ".join(words), " ".join(changed))
+    assert 0.999 <= same_board_body_similarity(a, b) < SAME_BOARD_TEXT_THRESHOLD
+    assert not same_board_twin(a, b)
+
+
+def test_places_are_removed_part_by_part_not_only_whole() -> None:
+    """Only `Hamburg` and `Germany` appear in the body, never `Hamburg, Germany`."""
+    a, b = _pair(
+        f"{TEAM_A} Office: Hamburg. {BOILER} Germany.",
+        f"{TEAM_A} Office: Munich. {BOILER} Germany.",
+        loc_a="Hamburg, Germany",
+        loc_b="Munich, Germany",
+    )
+    assert same_board_twin(a, b)
+
+
+def test_a_title_differing_only_in_punctuation_is_left_to_the_batch_pass(
+    store: ProfileStore,
+) -> None:
+    """The `posting_key` prefilter is the only thing between these two: same vacancy,
+    same body, but the title text differs, so a stored copy is not read for it."""
+    a = _offer(
+        f"{TEAM_A} {BOILER}",
+        url="https://g.test/k1",
+        location="London",
+        title="Backend Engineer (Senior)",
+    )
+    b = _offer(
+        f"{TEAM_A} {BOILER}",
+        url="https://g.test/k2",
+        location="Dublin",
+        title="Backend Engineer, Senior",
+    )
+    assert same_board_twin(a, b)
+    assert collect_offer(store, a, at=NOW).added_as_new
+    assert collect_offer(store, b, at=NOW).added_as_new

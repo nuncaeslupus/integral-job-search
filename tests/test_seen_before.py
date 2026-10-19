@@ -436,3 +436,46 @@ def test_an_amount_after_a_grade_does_not_swallow_the_grade(amount: str) -> None
 def test_a_bare_scoop_is_a_word_not_a_legal_form() -> None:
     assert not same_vacancy("Ice Cream Scoop", "Backend Engineer", "Ice Cream", "Backend Engineer")
     assert same_vacancy("Scoop", "Backend Engineer", "Scoop", "Backend Engineer")
+
+
+# --- #865: same_vacancy follow-ups (from #869, #866) ---------------------------
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Deloitte (Consulting)", "Deloitte (Tax)"),
+        ("Deloitte (Consulting)", "Deloitte"),
+        ("Bob's Coop", "Bob"),
+        ("Unión Cooperativa", "Union"),
+        ("Caja Rural Cooperativa", "Caja Rural"),
+        ("Grupo SAT", "Grupo"),
+    ],
+)
+def test_only_a_location_or_a_trailing_legal_form_is_dropped_from_an_employer(
+    a: str, b: str
+) -> None:
+    assert not same_vacancy(a, "Backend Engineer", b, "Backend Engineer")
+
+
+def test_a_location_parenthesis_is_dropped_and_a_space_only_s_coop_is_a_legal_form() -> None:
+    assert same_vacancy("Deloitte (Madrid, Spain)", "Analyst", "Deloitte", "Analyst")
+    assert same_vacancy("Foo S Coop", "Analyst", "Foo", "Analyst")
+
+
+def test_dotted_brands_keep_their_dots_run_together() -> None:
+    assert employer_key("Booking.com") == ("bookingcom",)
+    assert employer_key("J.Crew") == ("jcrew",)
+
+
+@pytest.mark.parametrize("title", ["Engineer 2 €", "EUR 2 Engineer"])
+def test_a_grade_beside_a_bare_currency_symbol_is_still_a_grade(title: str) -> None:
+    other = title.replace("2", "3")
+    assert not same_vacancy("Acme", title, "Acme", other)
+
+
+@pytest.mark.parametrize("amount", ["usd120,000", "GBP50k", "50-60k"])
+def test_an_amount_written_without_a_space_or_as_a_range_is_dropped(amount: str) -> None:
+    assert same_vacancy("Acme", f"Engineer {amount}", "Acme", "Engineer")
+    assert same_vacancy("Acme", f"Engineer 2 {amount}", "Acme", "Engineer 2")
+    assert not same_vacancy("Acme", f"Engineer 2 {amount}", "Acme", "Engineer 3")

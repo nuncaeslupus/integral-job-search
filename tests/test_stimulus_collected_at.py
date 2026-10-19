@@ -82,3 +82,16 @@ def test_fetched_at_without_a_lifecycle_record_is_refused(tmp_path: Path) -> Non
     save_offer(store, offer)
     with pytest.raises(ElicitationError, match="no lifecycle record"):
         check_stored_stimulus(store, offer.id)
+
+
+def test_an_empty_collected_at_is_refused_even_when_fetched_at_is_set(tmp_path: Path) -> None:
+    """The stored offer's own `fetched_at` must not stand in for the lifecycle clock."""
+    store = _store(tmp_path)
+    offer = _offer(fetched_at=_AT)
+    collect_offer(store, offer, at=_AT)
+    record = LifecycleRecord.model_validate(
+        {**store.read_json("offers", "lifecycle", f"{offer.id}.json"), "collected_at": ""}
+    )
+    save_lifecycle_offer(store, offer, record)
+    with pytest.raises(ElicitationError, match="collected_at"):
+        check_stored_stimulus(store, offer.id)

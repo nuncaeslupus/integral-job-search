@@ -1693,5 +1693,75 @@
     "text": "Perks\nGym\nAbout our benefits\nWe run casinos.",
     "held": false,
     "why": "T330 second reader on #863: a heading that describes the perks themselves keeps the skip running"
+  },
+  {
+    "id": "t347-perk-line-the-companys-pension",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nThe company's pension plan\nCasino night every Friday.",
+    "held": false,
+    "why": "a perks line that only opens with an employer stem is not an employer heading (second reader on #863): 'The company's pension plan'"
+  },
+  {
+    "id": "t347-perk-line-company-paid-lunch",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nOur company-paid lunch\nCasino night every Friday.",
+    "held": false,
+    "why": "a perks line that only opens with an employer stem is not an employer heading (second reader on #863): a hyphen inside a word is no separator"
+  },
+  {
+    "id": "t347-perk-line-mission-free-lunch",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nOur mission: free lunch for all\nCasino night every Friday.",
+    "held": false,
+    "why": "a perks line that only opens with an employer stem is not an employer heading (second reader on #863): a colon then a sentence is not a heading"
+  },
+  {
+    "id": "t347-bulleted-about-us-colon",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\n- About us: perks\nWe run casinos in six countries.",
+    "held": true,
+    "why": "the employer section is still the employer when the heading line carries a list marker (#863 finding)"
+  },
+  {
+    "id": "t347-quoted-about-us-dash",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Benefits\nGym\n> About us - perks\nWe run casinos in six countries.",
+    "held": true,
+    "why": "the employer section is still the employer when the heading line carries a quote marker (#863 finding)"
   }
 ]

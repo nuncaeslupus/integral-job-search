@@ -106,6 +106,18 @@ def test_denials_are_recognised_in_three_languages(text: str) -> None:
 @pytest.mark.parametrize(
     "text",
     [
+        "I have no͏ experience with Kafka.",  # combining grapheme joiner, class 0
+        "Never͏ used Kafka.",
+        "Sin͏ experiencia en Kafka.",
+    ],
+)
+def test_an_invisible_nonspacing_mark_does_not_hide_a_denial(text: str) -> None:
+    assert is_denial(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
         "Used Honeycomb at Flanks.",
         "Built the NoSQL layer.",
         "Migrated billing without downtime.",
