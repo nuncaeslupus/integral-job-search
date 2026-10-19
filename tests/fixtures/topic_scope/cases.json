@@ -1525,5 +1525,75 @@
     "text": "Perks\nGym\n\nAbout us & our benefits\n\nWe run casinos.",
     "held": true,
     "why": "round-7 blocker, spec (task text): the topic is about the employer; as the first, with blank lines around the heading"
+  },
+  {
+    "id": "t330-about-benefit-cosmetics-no-employer",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout Benefit Cosmetics\nWe run casinos.",
+    "held": true,
+    "why": "T330 reviewer case on #759, spec (task text): the topic is about the employer; a heading that begins with an employer-section stem ends a perks skip whatever follows it"
+  },
+  {
+    "id": "t330-about-perks-inc-no-employer",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout Perks Inc\nWe run casinos.",
+    "held": true,
+    "why": "T330 reviewer case on #759, spec (task text): the topic is about the employer; a heading that begins with an employer-section stem ends a perks skip whatever follows it"
+  },
+  {
+    "id": "t330-sobre-nosotros-colon",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nSobre nosotros: beneficios\nWe run casinos.",
+    "held": true,
+    "why": "T330 reviewer case on #759, spec (task text): the topic is about the employer; a heading that begins with an employer-section stem ends a perks skip whatever follows it"
+  },
+  {
+    "id": "t330-about-us-dash",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout us - perks\nWe run casinos.",
+    "held": true,
+    "why": "T330 reviewer case on #759, spec (task text): the topic is about the employer; a heading that begins with an employer-section stem ends a perks skip whatever follows it"
+  },
+  {
+    "id": "t330-about-us-slash",
+    "about": "sector:gambling",
+    "terms": [
+      "casino",
+      "apuestas",
+      "betting"
+    ],
+    "title": "Software Engineer",
+    "employer": null,
+    "text": "Perks\nGym\nAbout us / benefits\nWe run casinos.",
+    "held": true,
+    "why": "T330 reviewer case on #759, spec (task text): the topic is about the employer; a heading that begins with an employer-section stem ends a perks skip whatever follows it"
   }
 ]

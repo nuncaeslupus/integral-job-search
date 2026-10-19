@@ -135,6 +135,19 @@ _EMPLOYER_STEM = re.compile(
     r"(?:(?:about|sobre)(?:\s+.*)?|who we are(?: and what we do)?|quienes somos|our company|"
     r"our story|our mission|the company|company overview|la empresa|nuestra empresa)"
 )
+#: An employer-section stem followed by any separator ("About us - perks",
+#: "Sobre nosotros: beneficios"): the stem decides, the tail is not read.
+_STEM_THEN_SEPARATOR = re.compile(
+    r"(?:about us|sobre nosotros|who we are|quienes somos|our company|our story|"
+    r"our mission|the company|company overview|la empresa|nuestra empresa)"
+    r"\s*[:\-\u2013\u2014/|]+\s*\S"
+)
+#: Words after "about" that make the tail a description of the perks ("About our
+#: benefits"), not a name ("About Perks Inc").
+_ABOUT_DETERMINER = (
+    r"our|your|their|its|the|these|this|all|us|nuestros?|nuestras?|los|las|el|la|sus|tus"
+)
+_ABOUT_TAIL_WORDS = re.compile(rf"\b(?:{_HEADING_VOCAB}|{_HEADING_FUNCTION}|{_ABOUT_DETERMINER})\b")
 _CONNECTIVE = re.compile(r"\s*[&,]\s*|\s+(?:and|y)\s+")
 
 #: A wording, optionally joined by a connective to anything else ("Our Story &
@@ -232,6 +245,14 @@ def _heading_text(line: str) -> str:
     return _plain(re.sub(r"[#*_:]+", " ", line)).strip()
 
 
+def _is_about_a_name(part: str) -> bool:
+    """ "About Perks Inc": the tail holds a word that is not perks vocabulary or a determiner."""
+    head, _, tail = part.partition(" ")
+    if head not in ("about", "sobre") or not tail:
+        return False
+    return any(c.isalpha() for c in _ABOUT_TAIL_WORDS.sub(" ", tail))
+
+
 def _wording_ends_skip(plain: str, plain_line: str, employer_key: str) -> bool:
     """A section wording: does it end the skip, or is it a perks section's own name?
 
@@ -242,8 +263,12 @@ def _wording_ends_skip(plain: str, plain_line: str, employer_key: str) -> bool:
     """
     if employer_key and re.search(rf"\b{re.escape(employer_key)}\b", plain_line):
         return True
+    if _STEM_THEN_SEPARATOR.match(plain_line.strip(_EDGE_PUNCTUATION)):
+        return True
     for part in _CONNECTIVE.split(plain):
         if _EMPLOYER_STEM.fullmatch(part.strip()) and not _mentions_off_topic_word(part):
+            return True
+        if _is_about_a_name(part.strip()):
             return True
     return not _mentions_off_topic_word(plain)
 
