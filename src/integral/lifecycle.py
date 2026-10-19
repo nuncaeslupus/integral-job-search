@@ -109,7 +109,6 @@ from integral.dedup import (
     Tombstone,
     jaccard,
     load_tombstones,
-    normalise_for_comparison,
     shingles,
     tombstone_match,
 )
@@ -823,6 +822,15 @@ SAME_BOARD_TEXT_THRESHOLD = 1.0
 _PLACE_SPLIT = re.compile(r"[,;/|()\n]+")
 
 
+_SAME_BOARD_TOKEN = re.compile(r"[^\W_]+[+#]*|[€$£]")
+
+
+def _same_board_tokens(text: str) -> str:
+    """Words as `normalise_for_comparison` makes them, but `+`, `#` and a currency
+    symbol stay: `C++` / `C#` / `C` and `£60,000` / `€60,000` are different adverts."""
+    return " ".join(_SAME_BOARD_TOKEN.findall(text.lower()))
+
+
 def _body_without_places(offer: Offer) -> str:
     """The normalised body with the offer's own `location.raw` removed, whole
     and part by part (`London, UK` -> `London, UK`, `London`, `UK`), longest
@@ -833,8 +841,12 @@ def _body_without_places(offer: Offer) -> str:
     if raw and raw.strip():
         names = {raw.strip(), *(p.strip() for p in _PLACE_SPLIT.split(raw))}
         for name in sorted((n for n in names if len(n) >= 2), key=len, reverse=True):
-            body = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", " ", body, flags=re.IGNORECASE)
-    return normalise_for_comparison(body)
+            # A short code (`US`, `IN`, `UK`) is a place only in the case it is
+            # declared in: case-insensitively it would delete "us" and "in" from
+            # one body and not the other.
+            flags = 0 if len(name) <= 3 else re.IGNORECASE
+            body = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", " ", body, flags=flags)
+    return _same_board_tokens(body)
 
 
 def same_board_body_similarity(offer: Offer, other: Offer) -> float:

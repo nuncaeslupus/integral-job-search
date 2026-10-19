@@ -6,7 +6,7 @@ from pathlib import Path
 
 from integral.approval import PersonalDetails, measure_prepared, prepare
 from integral.ats import MISSING_GAP, MISSING_HAVE_IT, classify_keyword, keyword_coverage
-from integral.cv_store import ConversationTurn, CVMaster, Experience, Skill, write_master
+from integral.cv_store import ConversationTurn, CVMaster, Episode, Experience, Skill, write_master
 from integral.generate import generate, read_manifest
 from integral.identity import ProfileStore, create_profile
 from integral.profile import EvidenceLog
@@ -122,3 +122,42 @@ def test_a_line_retracted_after_drafting_is_refused_with_the_retraction_named(
     findings = " ".join(measured["unapproved_episodes"])
     assert "the candidate retracted the evidence" in findings
     assert "no per-use approval backs this line" not in findings
+
+
+def test_ats_calls_a_skill_reached_only_through_a_retracted_synonym_a_gap() -> None:
+    """`js` is held, the posting asks for `javascript`: the synonym branch is the only route."""
+    master = CVMaster(
+        skills=(Skill(name="js", provenance=(ConversationTurn(evidence_id="ev-000009"),)),)
+    )
+    assert classify_keyword("nothing here", master, "javascript") == MISSING_HAVE_IT
+    withdrawn = frozenset({"ev-000009"})
+    assert classify_keyword("nothing here", master, "javascript", withdrawn) == MISSING_GAP
+
+
+def test_an_approved_episode_on_a_retracted_turn_is_left_out_and_named(tmp_path: Path) -> None:
+    store, log = _setup(tmp_path)
+    wrong = _say(log, "I shipped the migration alone")
+    master = CVMaster(
+        episodes=(
+            Episode(
+                kind="achievement",
+                text="Shipped the migration alone",
+                provenance=(ConversationTurn(evidence_id=wrong),),
+            ),
+        )
+    )
+    write_master(store, master)
+    before = generate(store, master, offer_id="o-1", advert="x", _approved_episodes=(0,))
+    assert "Shipped the migration" in (
+        store.path("cv", "generated", "o-1", "v1", "letter.md").read_text(encoding="utf-8")
+    )
+    assert before.omissions == ()
+
+    _say(log, "no", retracts=wrong)
+    after = generate(store, master, offer_id="o-2", advert="x", _approved_episodes=(0,))
+    letter = store.path("cv", "generated", "o-2", "v1", "letter.md").read_text(encoding="utf-8")
+    assert "Shipped the migration" not in letter
+    assert [(o.section, o.reason) for o in after.omissions] == [
+        ("episodes", "the candidate retracted the evidence this entry cites")
+    ]
+    assert not any(c.section == "episodes" for c in after.claims)

@@ -213,7 +213,9 @@ def _prepare(store: ProfileStore, master: CVMaster, offer: str = "offer-1"):  # 
     )
 
 
-def test_prepare_refuses_an_experience_claim_on_a_retracted_turn(tmp_path: Path) -> None:
+def test_record_sent_refuses_an_experience_claim_whose_second_turn_is_retracted_after_drafting(
+    tmp_path: Path,
+) -> None:
     store, log = _log(tmp_path)
     live = _add(log, "Dietista at Clinic")
     wrong = _add(log, "Dietista at Other")
@@ -235,18 +237,6 @@ def test_a_restored_twin_is_prepared_and_sent(tmp_path: Path) -> None:
     payload = _prepare(store, master)
     record_sent(store, master, "offer-1", 1, confirms=payload_digest(payload))
     assert store.path("applications", "offer-1", "v1.json").exists()
-
-
-def test_record_sent_refuses_when_the_turn_is_retracted_after_drafting(tmp_path: Path) -> None:
-    store, log = _log(tmp_path)
-    live = _add(log, "Dietista at Clinic")
-    wrong = _add(log, "Dietista at Other")
-    master = _experience_master(store, (live.id, wrong.id))
-    payload = _prepare(store, master)
-    _add(log, "no", retracts=wrong.id)
-    with pytest.raises(ApprovalError):
-        record_sent(store, master, "offer-1", 1, confirms=payload_digest(payload))
-    assert not store.path("applications", "offer-1", "v1.json").exists()
 
 
 def test_every_claimable_section_is_probed_and_the_metric_is_per_section() -> None:

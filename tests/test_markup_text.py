@@ -89,11 +89,10 @@ def test_a_json_field_may_be_a_path_or_a_rule() -> None:
     assert source.fields["text"].take == "escaped_html_text"
 
 
-def test_last_text_node_is_refused_on_a_json_field() -> None:
+@pytest.mark.parametrize("take", ["first_text_node", "last_text_node"])
+def test_a_text_node_take_is_refused_on_a_json_field(take: str) -> None:
     with pytest.raises(ValidationError, match="has no elements"):
-        JsonSource.model_validate(
-            {"fields": {"text": {"path": "content", "take": "last_text_node"}}}
-        )
+        JsonSource.model_validate({"fields": {"text": {"path": "content", "take": take}}})
 
 
 CONNECTOR = """

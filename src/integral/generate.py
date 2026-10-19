@@ -335,6 +335,33 @@ def _trace_filter(
 _RETRACTED_REASON = "the candidate retracted the evidence this entry cites"
 
 
+def _drop_retracted(
+    master: CVMaster, picks: list[tuple[str, int]], withdrawn: frozenset[str]
+) -> tuple[list[tuple[str, int]], list[Omission]]:
+    """Leave out picks that cite a withdrawn turn, naming each in the omissions.
+
+    `_select` does this for the entries it chooses; an approved story-bank episode
+    is chosen by approval, not by `_select`, so without this it would be rendered
+    and `prepare` would then refuse the whole draft.
+    """
+    kept: list[tuple[str, int]] = []
+    omitted: list[Omission] = []
+    for section, index in picks:
+        entry = _entries(master, section)[index]
+        if cites_withdrawn_turn(entry, withdrawn):
+            omitted.append(
+                Omission(
+                    section=section,
+                    entry_index=index,
+                    text=render_entry(section, entry),
+                    reason=_RETRACTED_REASON,
+                )
+            )
+        else:
+            kept.append((section, index))
+    return kept, omitted
+
+
 def _select(
     master: CVMaster,
     advert: str,
@@ -537,11 +564,13 @@ def generate(
     withdrawn = withdrawn_turn_ids(store)
     chosen, omissions = _select(master, advert, asks, withdrawn)
     chosen, voice_omissions = _voice_filter(master, chosen, preferences)
+    episode_picks, episode_retracted = _drop_retracted(master, episode_picks, withdrawn)
     episode_picks, episode_omissions = _voice_filter(master, episode_picks, preferences)
     chosen, trace_omissions = _trace_filter(store, master, chosen)
     episode_picks, episode_trace_omissions = _trace_filter(store, master, episode_picks)
     omissions = [
         *omissions,
+        *episode_retracted,
         *voice_omissions,
         *episode_omissions,
         *trace_omissions,

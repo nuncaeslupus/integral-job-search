@@ -88,9 +88,17 @@ _COMPOUNDS = re.compile(r"\b(full|front|back)[\s-]*(stack|end)\b")
 _G = r"(?:[mwfdhx]|divers[e]?)"
 # Money, percentages, years and thousands-grouped figures a board appends to a
 # title (`60.000€`, `$80k`, `10%`, `2026`) are not grades and are dropped.
+# A currency beside a bare one- or two-digit number is a grade with a stray symbol
+# (`Engineer 2 €`, `EUR 2 Engineer`), not an amount: an amount has three digits,
+# a separator or a `k`. A range (`50-60k`) needs two digits on its left: `Engineer 3 - 50k`
+# keeps its grade.
+_FIGURE = r"(?:\d+(?=\s*k\b)|\d{3,}[\d.,]*|\d{1,2}[.,]\d[\d.,]*)"
+_CURRENCY = r"(?:[€$£]|\b(?:eur|usd|gbp)(?![a-z]))"
 _AMOUNT = re.compile(
-    r"(?:[€$£]|\b(?:eur|usd|gbp)\b)\s*\d[\d.,]*\s*k?"
-    r"|\b\d[\d.,]*(?:\s*k\b|\s*%|\s*(?:[€$£]|eur\b|usd\b|gbp\b)(?!\s*\d))"
+    rf"\b\d{{2,}}\s*[-\u2013]\s*\d+\s*k\b"
+    rf"|{_CURRENCY}\s*{_FIGURE}\s*k?"
+    rf"|\b{_FIGURE}(?:\s*k\b|\s*%|\s*{_CURRENCY}(?!\s*\d))"
+    r"|\b\d[\d.,]*\s*%"
     r"|\b\d{1,3}(?:[.,]\d{3})+\b",
     re.IGNORECASE,
 )
@@ -123,8 +131,43 @@ def _join_initials(words: list[str]) -> list[str]:
 # (`Hotel Spa`): only the dotted or mixed-case spelling is a legal form.
 _SPA_FORM = re.compile(r"\b[sS]\.\s*[pP]\.\s*[aA]\b|\bSpA\b")
 # `S. Coop.` / `S.Coop`; a bare `Scoop` is a word (`Ice Cream Scoop`).
-_SCOOP = re.compile(r"\bs(?:\.\s*|\s+)coop\b", re.IGNORECASE)
-_TRAILING_PARENS = re.compile(r"(?:\s*\([^()]*\))+\s*$")
+# `Bob's Coop` is a possessive and a name, not `S Coop`.
+_SCOOP = re.compile(r"(?<!['\u2019])\bs(?:\.\s*|\s+)coop\b", re.IGNORECASE)
+_TRAILING_PARENS = re.compile(r"\s*\(([^()]*)\)\s*$")
+# A trailing parenthesis is dropped only when it is a place (`Foo GmbH (Berlin)`);
+# `Deloitte (Consulting)` and `Deloitte (Tax)` are different units. A closed
+# list, so an unlisted place is kept as part of the name: that shows the advert
+# again, which is the safe direction.
+_PLACES = frozenset(
+    """spain espana madrid barcelona valencia sevilla seville bilbao malaga zaragoza
+    germany deutschland berlin munich munchen hamburg frankfurt cologne koln stuttgart
+    dusseldorf united kingdom uk london manchester edinburgh birmingham ireland dublin
+    france paris lyon italy italia milan milano rome roma netherlands amsterdam
+    rotterdam portugal lisbon lisboa porto belgium brussels switzerland zurich geneva
+    austria vienna wien sweden stockholm denmark copenhagen norway oslo finland helsinki
+    poland warsaw krakow usa us united states new york san francisco boston chicago
+    seattle austin los angeles canada toronto vancouver remote emea europe eu dach
+    latam apac""".split()  # noqa: SIM905
+)
+
+
+def _is_place(text: str) -> bool:
+    parts = [p for p in re.split(r"[,/;|\-]+", _ascii_fold(text).replace(".", "")) if p.strip()]
+    if not parts:
+        return False
+    for part in parts:
+        words = part.split()
+        if not (part.strip() in _PLACES or (words and all(w in _PLACES for w in words))):
+            return False
+    return True
+
+
+def _strip_trailing_places(name: str) -> str:
+    while match := _TRAILING_PARENS.search(name):
+        if not _is_place(match.group(1)):
+            break
+        name = name[: match.start()]
+    return name
 
 
 def employer_key(company: str | None) -> tuple[str, ...] | None:
@@ -136,7 +179,7 @@ def employer_key(company: str | None) -> tuple[str, ...] | None:
         return None
     raw = normalise_name(company)
     spa_is_form = bool(_SPA_FORM.search(str(company)))
-    raw = _TRAILING_PARENS.sub("", raw)
+    raw = _strip_trailing_places(raw)
     text = _ascii_fold(_SCOOP.sub("scoopform", raw)).replace(".", "")
     words = _join_initials([w for w in re.split(r"[\W_]+", text) if w])
     # Legal forms count only as a trailing run (`Foo GmbH & Co. KG`): `Spa

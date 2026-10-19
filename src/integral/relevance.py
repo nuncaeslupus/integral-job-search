@@ -57,6 +57,7 @@ import tempfile
 import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -103,16 +104,26 @@ _PHRASES = (
     (r"\ba\.\s?i\.?(?!\w)", "ai"),
     (r"\binteligencia artificial\b", "ai"),
     (r"\bkunstliche intelligenz\b", "ai"),
+    (r"\bintelligence artificielle\b", "ai"),
+    (r"\bintelligenza artificiale\b", "ai"),
+    # `gen` / `rag` are words of other trades ("Next-Gen Sales", "Rag Trade Buyer"):
+    # they mean the AI sense only beside `ai` or a role word.
+    (r"\bgen[\s-]ai\b", "generative ai"),
+    (
+        r"\brag\b(?=[\s,/&-]+(?:engineers?|developers?|architects?|specialists?|scientists?|ai|llm|ml|nlp|pipelines?|systems?|experts?)\b)",
+        "llm",
+    ),
+    (r"\b(?<=ai )rag\b|\b(?<=llm )rag\b|\b(?<=nlp )rag\b", "llm"),
     (r"\blarge language models?\b", "llm"),
 )
 _TOKENS = {
     "genai": "generative ai",
-    "gen": "generative",
     "generativa": "generative",
     "generativo": "generative",
     "ia": "ai",
     "ki": "ai",
-    "rag": "llm",
+    "datenanalyst": "data analyst",
+    "agents": "agent",
     "produktmanager": "product manager",
     "ingeniero": "engineer",
     "ingeniera": "engineer",
@@ -140,23 +151,58 @@ def _words(text: str) -> set[str]:
     return words(text)
 
 
-def _significant(text: str) -> frozenset[str]:
+def _fold(text: str) -> str:
+    """The text as the table reads it. A standalone upper-case `RAG` is the AI term
+    wherever it stands (`Head of RAG`, `Tech Lead (RAG)`); `Rag Trade Buyer` and an
+    multi-word all-caps title are not read that way."""
+    if not (text.isupper() and len(text.split()) > 1):
+        text = re.sub(r"(?<![A-Za-z])RAG(?![A-Za-z])", " llm ", text)
     folded = unicodedata.normalize("NFKD", text.casefold())
     folded = "".join(c for c in folded if not unicodedata.combining(c))
     for pattern, replacement in _PHRASES:
         folded = re.sub(pattern, f" {replacement} ", folded)
+    return folded
+
+
+def _significant(text: str) -> frozenset[str]:
+    folded = _fold(text)
     out: set[str] = set()
     for word in _words(folded):
         out.update(_TOKENS.get(word, word).split())
     return frozenset(out - _FUNCTION_WORDS)
 
 
+#: Gender / number endings (`enfermero`, `enfermera`, `abogados`): two words that differ
+#: only by one of these on a stem of `_MIN_STEM` letters or more are the same word.
+_ENDINGS = ("os", "as", "es", "o", "a", "e")
+_MIN_STEM = 4
+#: Role nouns that name one family of jobs: `java developer` and `java engineer` are
+#: one aim, so neither noun says which job it is.
+_ROLE_FAMILY = frozenset(["engineer", "developer", "programmer"])
+
+
+def _stems(word: str) -> set[str]:
+    return {word, *(word[: -len(e)] for e in _ENDINGS if word.endswith(e))}
+
+
 def same_word(a: str, b: str) -> bool:
-    """The same whole word, or one with a closed suffix (`eval`/`evals`, `llm`/`llmops`)."""
+    """The same whole word, or one with a closed suffix (`eval`/`evals`, `llm`/`llmops`),
+    or one that differs only by a gender/number ending (`abogada`/`abogado`)."""
     short, long_ = sorted((a, b), key=len)
-    return short == long_ or (
+    if short == long_ or (
         len(short) >= 3 and long_.startswith(short) and long_[len(short) :] in _SUFFIXES
-    )
+    ):
+        return True
+    return any(len(stem) >= _MIN_STEM for stem in _stems(a) & _stems(b))
+
+
+def _title_words(text: str) -> frozenset[str]:
+    """`_significant`, plus each pair of adjacent words joined (`back end` is `backend`)."""
+    base = _significant(text)
+    folded = _fold(text)
+    ordered = re.findall(r"\w+", folded)
+    joined = {a + b for a, b in pairwise(ordered)}
+    return base | frozenset(joined)
 
 
 def _has(words: Iterable[str], word: str) -> bool:
@@ -186,20 +232,23 @@ class RelevanceRule:
         if len(phrases) < 2:
             return frozenset()
         vocabulary = {w for p in phrases for w in p}
-        return frozenset(
-            w for w in vocabulary if 2 * sum(_has(p, w) for p in phrases) > len(phrases)
-        )
+        generic = {w for w in vocabulary if 2 * sum(_has(p, w) for p in phrases) > len(phrases)}
+        if 2 * sum(bool(p & _ROLE_FAMILY) for p in phrases) > len(phrases):
+            generic |= vocabulary & _ROLE_FAMILY  # `developer` / `engineer`: one family
+        return frozenset(generic)
 
     def score(self, title: str) -> tuple[float, str | None]:
         """Best share of a phrase's distinctive words found in `title`, and that phrase."""
         generic = self._generic()
-        have = _significant(title)
+        have = _title_words(title)
         best, nearest = 0.0, None
         for phrase in (*self.aim, *self.related):
             words = _significant(phrase)
             if not words:
                 continue
-            need = frozenset(w for w in words if w not in generic) or words
+            need = frozenset(w for w in words if w not in generic)
+            if not need:  # all generic: use all, bar a role noun beside a subject
+                need = frozenset(w for w in words if w not in _ROLE_FAMILY) or words
             share = sum(_has(have, w) for w in need) / len(need)
             if share > best or nearest is None:
                 best, nearest = share, phrase

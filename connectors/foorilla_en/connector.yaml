@@ -87,6 +87,10 @@ list:
     location_raw:
       css: ".text-end"
       take: "first_text_node"
+    # `.text-success` matches anywhere in the card. The selector grammar has no
+    # combinators to narrow it to `.text-end`, so this assumes the marker only
+    # appears inside `.text-end`; a `.text-success` elsewhere in a card would be read
+    # as the workplace marker.
     location_remote:
       css: ".text-success"
     # No `text` here on purpose, and no salary either. The body lives on the

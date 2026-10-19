@@ -143,7 +143,9 @@ def fold_cased(text: str) -> str:
     text = "".join(
         c
         for c in unicodedata.normalize("NFD", text)
-        if not unicodedata.combining(c) and unicodedata.category(c) != "Cf"
+        # `Mn` as well as a nonzero combining class: U+034F (combining grapheme joiner)
+        # is a nonspacing mark of class 0, invisible, and splits a cue like any other.
+        if not unicodedata.combining(c) and unicodedata.category(c) not in ("Cf", "Mn")
     )
     return text
 

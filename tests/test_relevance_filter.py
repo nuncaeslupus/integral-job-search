@@ -230,3 +230,102 @@ def test_related_wording_still_adds_what_the_table_cannot_know() -> None:
     title = "Retrieval Specialist"
     assert not _rule().judge(title).relevant
     assert _rule(related=("retrieval specialist",)).judge(title).relevant
+
+
+# --- #865 follow-ups (R1, R3, R4, R5) ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "aim"),
+    [
+        ("Enfermero/a", "enfermera"),
+        ("Abogada", "abogado"),
+        ("Camarera", "camarero"),
+        ("Programadora", "programador"),
+        ("Auditora", "auditor"),
+        ("Back-end Engineer", "backend engineer"),
+        ("Back End Engineer", "backend engineer"),
+        ("Front-end Developer", "frontend developer"),
+        ("Full-Stack Developer", "fullstack developer"),
+        ("Gerente de Producto", "product manager"),
+    ],
+)
+def test_gender_endings_and_split_compounds_match(title: str, aim: str) -> None:
+    # floor 1.0: every word of the aim has to be found, not just the shared `engineer`
+    assert rel.RelevanceRule(1.0, (aim,)).judge(title).relevant
+
+
+def test_the_ending_rule_needs_a_stem_and_stays_a_whole_word() -> None:
+    assert not rel.same_word("javascript", "java")
+    assert not rel.same_word("production", "product")
+    assert not rel.same_word("data", "date")  # stem of three letters
+    assert rel.same_word("producto", "product")
+    rule = rel.RelevanceRule(0.9, ("java developer",))
+    assert not rule.judge("JavaScript Developer").relevant
+
+
+def test_a_family_noun_beside_a_shared_subject_is_not_the_job() -> None:
+    rule = rel.RelevanceRule(0.5, ("java developer", "java engineer"))
+    assert not rule.judge("Python Developer").relevant
+    assert rule.judge("Java Architect").relevant
+    assert rule.judge("Java Engineer").relevant
+
+
+@pytest.mark.parametrize(
+    "title", ["Next-Gen Sales Engineer", "Gen Z Marketing Lead", "Rag Trade Buyer"]
+)
+def test_gen_and_rag_in_other_trades_are_dropped(title: str) -> None:
+    assert not _rule().judge(title).relevant
+
+
+@pytest.mark.parametrize("title", ["GenAI Engineer", "Gen-AI Engineer", "RAG Engineer"])
+def test_gen_ai_and_rag_engineer_are_kept(title: str) -> None:
+    assert _rule().judge(title).relevant
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Agents Engineer",
+        "Ingénieur Intelligence Artificielle",
+        "Ingegnere Intelligenza Artificiale",
+    ],
+)
+def test_minor_misses_are_kept(title: str) -> None:
+    assert _rule().judge(title).relevant
+
+
+def test_a_german_compound_is_its_parts() -> None:
+    assert rel.RelevanceRule(0.5, ("data analyst",)).judge("Datenanalyst").relevant
+
+
+def test_gen_ai_and_rag_need_the_ai_sense_when_every_word_of_the_aim_is_required() -> None:
+    generative = rel.RelevanceRule(1.0, ("generative ai",))
+    assert generative.judge("Gen-AI Engineer").relevant
+    assert generative.judge("GenAI Engineer").relevant
+    assert not generative.judge("Gen Z Marketing Lead").relevant
+    llm = rel.RelevanceRule(1.0, ("llm engineer",))
+    assert llm.judge("RAG Engineer").relevant
+    assert not llm.judge("Rag Trade Buyer").relevant
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "RAG Lead",
+        "Head of RAG",
+        "RAG & Retrieval Engineer",
+        "Engineer - RAG",
+        "Tech Lead (RAG)",
+        "RAG Engineer",
+    ],
+)
+def test_a_standalone_upper_case_rag_is_the_ai_term_wherever_it_stands(title: str) -> None:
+    assert rel.RelevanceRule(1.0, ("RAG",)).judge(title).relevant
+    assert rel.RelevanceRule(0.5, ("rag engineer", "llm engineer")).judge(title).relevant
+
+
+def test_a_capitalised_or_all_caps_rag_in_another_trade_is_not_the_ai_term() -> None:
+    rule = rel.RelevanceRule(1.0, ("RAG",))
+    assert not rule.judge("Rag Trade Buyer").relevant
+    assert not rule.judge("RAG TRADE BUYER").relevant
