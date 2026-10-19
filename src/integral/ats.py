@@ -105,7 +105,14 @@ from integral.cv_store import (
     SourcedText,
     write_master,
 )
-from integral.generate import _FIXTURE_ASKS, DEFAULT_FIXTURE_MASTER, _holds, _mentions, generate
+from integral.generate import (
+    _FIXTURE_ASKS,
+    DEFAULT_FIXTURE_MASTER,
+    _holds,
+    _mentions,
+    generate,
+    withdrawn_turn_ids,
+)
 from integral.identity import ProfileStore, create_profile
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -330,7 +337,12 @@ def _synonyms_of(keyword: str) -> tuple[str, ...]:
     return ()
 
 
-def classify_keyword(document_text: str, master: CVMaster, keyword: str) -> str:
+def classify_keyword(
+    document_text: str,
+    master: CVMaster,
+    keyword: str,
+    withdrawn: frozenset[str] = frozenset(),
+) -> str:
     """One posting keyword's status against one candidate's application.
 
     Checked in this order — literal, then synonym, then the store — because
@@ -354,7 +366,9 @@ def classify_keyword(document_text: str, master: CVMaster, keyword: str) -> str:
         return COVERED
     if any(_mentions(document_text, synonym) for synonym in synonyms):
         return SYNONYM_ONLY
-    if _holds(master, keyword) or any(_holds(master, synonym) for synonym in synonyms):
+    if _holds(master, keyword, withdrawn) or any(
+        _holds(master, synonym, withdrawn) for synonym in synonyms
+    ):
         return MISSING_HAVE_IT
     return MISSING_GAP
 
@@ -375,11 +389,14 @@ def _application_text(store: ProfileStore, offer_id: str, version: int) -> str:
 
 
 def keyword_coverage(
-    document_text: str, master: CVMaster, keywords: tuple[str, ...]
+    document_text: str,
+    master: CVMaster,
+    keywords: tuple[str, ...],
+    withdrawn: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """The gate: every posting keyword classified into exactly one of the four statuses."""
     rows = [
-        {"keyword": keyword, "status": classify_keyword(document_text, master, keyword)}
+        {"keyword": keyword, "status": classify_keyword(document_text, master, keyword, withdrawn)}
         for keyword in keywords
     ]
     evaluated = len(rows)
@@ -439,7 +456,9 @@ def measure_keyword_coverage(
                 store, master, offer_id=ad.id, advert=ad.text, asks=_FIXTURE_KEYWORDS
             )
             document_text = _application_text(store, ad.id, manifest.version)
-            measured = keyword_coverage(document_text, master, _FIXTURE_KEYWORDS)
+            measured = keyword_coverage(
+                document_text, master, _FIXTURE_KEYWORDS, withdrawn_turn_ids(store)
+            )
             evaluated += measured["posting_keywords_left_unclassified_evaluated"]
             by_status.update(measured["by_status"])
             unclassified.extend(

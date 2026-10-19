@@ -458,12 +458,16 @@ from integral.form_answers import (
 )
 from integral.generate import (
     DEFAULT_FIXTURE_MASTER,
+    Claim,
     Manifest,
     _claim_lines,
+    _entries,
+    cites_withdrawn_turn,
     claim_is_backed,
     generate,
     is_employer_alias,
     read_manifest,
+    render_entry,
     withdrawn_turn_ids,
 )
 from integral.generated_index import refresh_index
@@ -1195,6 +1199,21 @@ def retracted_episode_texts(store: ProfileStore, master: CVMaster) -> frozenset[
     return frozenset(texts)
 
 
+def _cites_retracted_turn(master: CVMaster, claim: Claim, withdrawn_ids: frozenset[str]) -> bool:
+    """Is this CV claim unbacked *because* its entry cites a withdrawn turn?
+
+    True only when the entry still re-renders to the claimed line, so a line
+    that is unbacked for another reason keeps the generic refusal.
+    """
+    entries = _entries(master, claim.section)
+    if claim.entry_index >= len(entries):
+        return False
+    entry = entries[claim.entry_index]
+    return render_entry(claim.section, entry) == claim.text and cites_withdrawn_turn(
+        entry, withdrawn_ids
+    )
+
+
 def measure_prepared(
     store: ProfileStore, master: CVMaster, offer_id: str, version: int
 ) -> dict[str, Any]:
@@ -1228,6 +1247,7 @@ def measure_prepared(
     # bank turned into a gate failure. A Counter, not a set, because one backing
     # backs one line (T45's duplicated-line finding).
     backed: Counter[tuple[str, str]] = Counter()
+    retracted_lines: set[str] = set()
     for claim in claims:
         if claim.section == "episodes":
             if claim.text in approved:
@@ -1235,6 +1255,8 @@ def measure_prepared(
             continue
         if claim_is_backed(master, claim, withdrawn_ids):
             backed[(claim.document, claim.text)] += 1
+        elif _cites_retracted_turn(master, claim, withdrawn_ids):
+            retracted_lines.add(claim.text)
     # T339: a form answer's line is backed by the live evidence rows it cites, judged now.
     for line, count in backed_lines(store, offer_id, version, approved).items():
         backed[(FORM_ANSWERS_DOC, line)] += count
@@ -1301,7 +1323,7 @@ def measure_prepared(
                     f"{offer_id}/v{version} {name}: {line} — "
                     + (
                         "the candidate retracted the evidence this approval was given over"
-                        if line in withdrawn
+                        if line in withdrawn or line in retracted_lines
                         else "no per-use approval backs this line"
                     )
                 )
