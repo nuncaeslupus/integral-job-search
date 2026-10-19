@@ -414,3 +414,17 @@ def test_the_gender_ending_rule_needs_an_o_a_pair(a: str, b: str) -> None:
 
 def test_the_gender_ending_rule_still_joins_o_and_a() -> None:
     assert rel.same_word("abogada", "abogado") and rel.same_word("abogados", "abogada")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "RAG \u2013 Status Analyst",
+        "RAG (Status) Analyst",
+        "RAG; Status Analyst",
+        "RAG. Status Analyst",
+        "RAG_Status Analyst",
+    ],
+)
+def test_n1_rag_status_with_any_joiner_is_not_the_ai_term(title: str) -> None:
+    assert not rel.RelevanceRule(0.5, ("LLM",)).judge(title).relevant

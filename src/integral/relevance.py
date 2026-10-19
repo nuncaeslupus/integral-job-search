@@ -161,7 +161,7 @@ def _words(text: str) -> set[str]:
 #: `RAG-Status`, `RAG / Status`, `PMO Lead (RAG reporting)`, `RAG Trade Buyer`).
 _UPPER_RAG = re.compile(
     r"(?<![A-Za-z])RAG(?![A-Za-z])"
-    r"(?![\s,/:&-]*(?i:status|reporting|report|rating|rated|trade|tracker|dashboard)\b)"
+    r"(?![\W_]*(?i:status|reporting|report|rating|rated|trade|tracker|dashboard)\b)"
 )
 
 
