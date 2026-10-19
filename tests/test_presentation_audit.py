@@ -18,7 +18,13 @@ import pytest
 
 from integral.decline import DeclineLedger
 from integral.identity import ProfileStore, create_profile
-from integral.lifecycle import purge_offer, save_lifecycle_offer, track_new_offer
+from integral.lifecycle import (
+    load_lifecycle_offer,
+    purge_offer,
+    save_lifecycle_offer,
+    track_new_offer,
+    transition,
+)
 from integral.offers import connect_manual
 from integral.presentation_audit import unpresented_ranking, unrecorded_discards
 from integral.presentation_log import present, rule_out
@@ -241,6 +247,18 @@ def test_an_undecided_offer_purged_later_does_not_hide_a_flagged_discard(tmp_pat
     store = _store(tmp_path)
     oid = _offer(store)
     _say_about(store, oid, "nada de banca")
+    purge_offer(store, oid, at="2027-01-01T00:00:00Z", now=datetime(2027, 1, 1, tzinfo=UTC))
+    gaps = unrecorded_discards(store)
+    assert [(g["offer"], g["reason"]) for g in gaps] == [(oid, "nada de banca")]
+
+
+def test_an_expired_offer_purged_later_does_not_hide_a_flagged_discard(tmp_path: Path) -> None:
+    """G: a dead advert (`expired`) is not a decision either; only a ruling-out is."""
+    store = _store(tmp_path)
+    oid = _offer(store)
+    _say_about(store, oid, "nada de banca")
+    offer, record = load_lifecycle_offer(store, oid)
+    save_lifecycle_offer(store, *transition(offer, record, "expired", at="2026-11-01T00:00:00Z"))
     purge_offer(store, oid, at="2027-01-01T00:00:00Z", now=datetime(2027, 1, 1, tzinfo=UTC))
     gaps = unrecorded_discards(store)
     assert [(g["offer"], g["reason"]) for g in gaps] == [(oid, "nada de banca")]
