@@ -1,5 +1,18 @@
 # Session handover
 
+## 00026. Speed: `make evidence` 179 s → 50 s; T346 trimmed the longest test
+
+Merged: #885 (follow-ups in #886), #887 (T312, parallel `evidence_runner`), #888 (T346).
+
+- **T346 measured (4 cores):** full `pytest -n auto --dist loadfile` 376 s → 367 s. The suite is
+  CPU-bound at 4 cores, so the critical path matters only on more cores. The longest file is
+  `test_connector_new_skill.py` (one test, 272 s → 244 s; its two evidence regenerations now run
+  concurrently). Next: `test_sourcing.py` (208 s, 2750 lines) is unsplit.
+- **Env:** use `UV_PYTHON=3.12` (3.13 fails a competence fixture). `test_reader_sections`'
+  real-generator test needs the real HOME (`uv run --with markdown`), so `open_task_pr.sh` needs
+  `ARSENAL_GATE_INHERIT_ENV=1` for it.
+- **Auto mode** blocked agent dispatches and worktree adds until the owner turned it off.
+
 ## 00025. Pruning night: tier (a) done, verified_gate deleted, CI pytest 1137 s → 453 s
 
 Merged: #822, #825, #829, #830 (floor_* trio), #831 (cue_audit), #832 (review_reader),
