@@ -2,6 +2,7 @@
 id: t-6f4ce93c
 title: "T286: Retraction still leaks into advice and drafts: held-skill gaps, ATS keywords, draft rendering, and the episodes probe"
 priority: 5
+status: merged
 ---
 
 Imported from issue #660

@@ -133,8 +133,9 @@ def test_a_claim_tracing_to_a_retracted_row_is_refused(tmp_path: Path) -> None:
     line, live = _step11(store, master)
     assert live["claims_untraced"] == []  # control: backed while live
 
+    # the candidate takes it back after the draft was written
     _add(log, "no", retracts=wrong.id)
-    line, measured = _step11(store, master)
+    measured = traceability(store, master, "o-1", 1)
     assert any(line in untraced for untraced in measured["claims_untraced"])
     assert measured["cv_generation_traceability"] < 1.0
 
@@ -143,9 +144,10 @@ def test_a_claim_whose_retraction_was_retracted_traces_again(tmp_path: Path) -> 
     store, log = _log(tmp_path)
     row = _add(log, "Diploma en Nutrició")
     master = _education_master(store, row.id)
+    _step11(store, master, "o-1")  # drafted while the row was live
     for depth in range(1, 6):
         _add(log, "flip", retracts=_chain_tip(log, row.id))
-        _, measured = _step11(store, master, f"o-{depth}")
+        measured = traceability(store, master, "o-1", 1)
         assert (measured["claims_untraced"] == []) is (depth % 2 == 0), depth
 
 
@@ -215,12 +217,14 @@ def test_prepare_refuses_an_experience_claim_on_a_retracted_turn(tmp_path: Path)
     store, log = _log(tmp_path)
     live = _add(log, "Dietista at Clinic")
     wrong = _add(log, "Dietista at Other")
-    _add(log, "no", retracts=wrong.id)
     # the withdrawn turn is the SECOND provenance item: a first-item-only guard is blind to it
     master = _experience_master(store, (live.id, wrong.id))
-    with pytest.raises(ApprovalError, match="no payload was written"):
-        _prepare(store, master)
-    assert not store.path("applications", "offer-1", "v1", "payload.json").exists()
+    payload = _prepare(store, master)
+    _add(log, "no", retracts=wrong.id)
+    # drafted live, retracted before sending: the send path refuses
+    with pytest.raises(ApprovalError, match="retracted"):
+        record_sent(store, master, "offer-1", 1, confirms=payload_digest(payload))
+    assert not store.path("applications", "offer-1", "v1.json").exists()
 
 
 def test_a_restored_twin_is_prepared_and_sent(tmp_path: Path) -> None:
@@ -265,7 +269,22 @@ def test_a_guard_limited_to_one_section_moves_the_metric(
 
     monkeypatch.setattr(generate_module, "claim_is_backed", only_here)
     measured = retracted_claims_still_traced()
-    assert measured["claims_tracing_to_a_retracted_row"] == len(generate_module._CLAIMABLE) - 1
+    # every other section's guard is blind to its withdrawn turn, and so is the
+    # episodes branch (its section is not `section`)
+    assert measured["claims_tracing_to_a_retracted_row"] == len(generate_module._CLAIMABLE)
+
+
+def test_a_guard_blind_to_the_episodes_branch_moves_the_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real = generate_module.claim_is_backed
+
+    def not_episodes(master: CVMaster, claim: Any, withdrawn: frozenset[str]) -> bool:
+        return real(master, claim, frozenset() if claim.section == "episodes" else withdrawn)
+
+    assert retracted_claims_still_traced()["claims_tracing_to_a_retracted_row"] == 0
+    monkeypatch.setattr(generate_module, "claim_is_backed", not_episodes)
+    assert retracted_claims_still_traced()["claims_tracing_to_a_retracted_row"] == 1
 
 
 def test_a_guard_reading_only_the_first_provenance_item_moves_the_metric(

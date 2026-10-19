@@ -233,12 +233,26 @@ def _mentions(haystack: str, needle: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(needle)}(?!\w)", haystack, re.IGNORECASE) is not None
 
 
-def _holds(master: CVMaster, ask: str) -> bool:
-    """Does any entry in the store hold what `ask` names?"""
+def cites_withdrawn_turn(entry: SourcedEntry, withdrawn: frozenset[str]) -> bool:
+    """Does `entry` cite a conversation turn a retraction currently suppresses?"""
+    return any(
+        isinstance(item, ConversationTurn) and item.evidence_id in withdrawn
+        for item in entry.provenance
+    )
+
+
+def _holds(master: CVMaster, ask: str, withdrawn: frozenset[str] = frozenset()) -> bool:
+    """Does any entry in the store hold what `ask` names?
+
+    An entry that cites a withdrawn turn holds nothing (spec section 4.1,
+    "suppressed everywhere derived"): a skill whose only provenance was
+    retracted is a gap to name, not ground to mirror.
+    """
     return any(
         _mentions(render_entry(section, entry), ask)
         for section in _CLAIMABLE
         for entry in _entries(master, section)
+        if not cites_withdrawn_turn(entry, withdrawn)
     )
 
 
@@ -318,18 +332,48 @@ def _trace_filter(
     return kept, omissions
 
 
+_RETRACTED_REASON = "the candidate retracted the evidence this entry cites"
+
+
 def _select(
-    master: CVMaster, advert: str, asks: tuple[str, ...]
+    master: CVMaster,
+    advert: str,
+    asks: tuple[str, ...],
+    withdrawn: frozenset[str] = frozenset(),
 ) -> tuple[list[tuple[str, int]], list[Omission]]:
-    """Which entries this advert earns, and what that leaves out."""
+    """Which entries this advert earns, and what that leaves out.
+
+    An entry citing a withdrawn turn is never selected, whichever section it is
+    in: `claim_is_backed` would refuse its line, so writing it only guaranteed
+    that `prepare` refused the draft.
+    """
     chosen: list[tuple[str, int]] = []
     omitted: list[Omission] = []
 
+    def retracted(section: str, index: int, entry: SourcedEntry) -> bool:
+        if not cites_withdrawn_turn(entry, withdrawn):
+            return False
+        omitted.append(
+            Omission(
+                section=section,
+                entry_index=index,
+                text=render_entry(section, entry),
+                reason=_RETRACTED_REASON,
+            )
+        )
+        return True
+
     for section in _ALWAYS:
-        chosen.extend((section, index) for index, _ in enumerate(_entries(master, section)))
+        chosen.extend(
+            (section, index)
+            for index, entry in enumerate(_entries(master, section))
+            if not retracted(section, index, entry)
+        )
 
     for section in _SELECTED:
         for index, entry in enumerate(_entries(master, section)):
+            if retracted(section, index, entry):
+                continue
             rendered = render_entry(section, entry)
             # `_mentions` here too, not a substring test: selection and gap
             # naming have to agree about what "the store holds this" means, or
@@ -490,7 +534,8 @@ def generate(
                 f"the fixed line {line!r} breaks a stored voice preference — "
                 "nothing was written; retract the preference or change the line"
             )
-    chosen, omissions = _select(master, advert, asks)
+    withdrawn = withdrawn_turn_ids(store)
+    chosen, omissions = _select(master, advert, asks, withdrawn)
     chosen, voice_omissions = _voice_filter(master, chosen, preferences)
     episode_picks, episode_omissions = _voice_filter(master, episode_picks, preferences)
     chosen, trace_omissions = _trace_filter(store, master, chosen)
@@ -535,7 +580,7 @@ def generate(
         version=version,
         claims=tuple(cv_claims + letter_claims),
         omissions=tuple(omissions),
-        gaps=tuple(sorted({ask for ask in asks if not _holds(master, ask)})),
+        gaps=tuple(sorted({ask for ask in asks if not _holds(master, ask, withdrawn)})),
         voice_applied=applied(preferences),
         voice_unreadable=unreadable,
         voice_notice=notice(applied(preferences), unreadable),
@@ -594,10 +639,7 @@ def claim_is_backed(master: CVMaster, claim: Claim, withdrawn: frozenset[str]) -
     entry = entries[claim.entry_index]
     if render_entry(claim.section, entry) != claim.text:
         return False
-    return not any(
-        isinstance(item, ConversationTurn) and item.evidence_id in withdrawn
-        for item in entry.provenance
-    )
+    return not cites_withdrawn_turn(entry, withdrawn)
 
 
 def traceability(
@@ -686,6 +728,8 @@ def _probe_master(tag: str, turns: tuple[str, ...]) -> CVMaster:
     for section in _CLAIMABLE:
         entry = _probe_entry(section, tag, turns)
         fields[section] = entry if section in SCALAR_FIELDS else (entry,)
+    prov = tuple(ConversationTurn(evidence_id=turn) for turn in turns)
+    fields["episodes"] = (Episode(kind="context", text=f"Story {tag}", provenance=prov),)
     return CVMaster(**fields)
 
 
@@ -696,8 +740,10 @@ def retracted_claims_still_traced() -> dict[str, int]:
     from, scalars included), so a section added later is probed, or the probe
     refuses to run. Each section gets one entry citing a live turn and then a
     **withdrawn** one (second, so a guard that reads only the first provenance
-    item is caught), and a twin whose retraction was itself retracted. Run
-    through the real `generate`/`traceability`. The count is the sections whose
+    item is caught), and a twin whose retraction was itself retracted, plus an
+    approved story-bank episode on the same turns (the episodes branch). The
+    retraction lands after drafting. Run through the real
+    `generate`/`traceability`. The count is the sections whose
     withdrawn claim traceability still calls backed; the twin is the control
     that the check has not simply started refusing everything.
     """
@@ -718,8 +764,6 @@ def retracted_claims_still_traced() -> dict[str, int]:
             ).id
 
         rows = {name: say(f"said {name}") for name in ("live", "wrong", "restored")}
-        say("no", retracts=rows["wrong"])
-        say("oops", retracts=say("no", retracts=rows["restored"]))
 
         traced_withdrawn = 0
         traced_live = 0
@@ -730,14 +774,35 @@ def retracted_claims_still_traced() -> dict[str, int]:
                 section: render_entry(section, _entries(master, section)[0])
                 for section in _CLAIMABLE
             }
+            # The episode rides in as an approved one: the episodes branch of the
+            # guard is a different path from the CV sections' (T286, S1). It is
+            # counted into the withdrawn metric only, so the live-claim control
+            # and the section count stay what they were.
             manifest = generate(
-                store, master, offer_id=offer, advert=" ".join(lines.values()), asks=()
+                store,
+                master,
+                offer_id=offer,
+                advert=" ".join(lines.values()),
+                asks=(),
+                _approved_episodes=(0,),
             )
+            # Retract only after drafting: generation itself now leaves a withdrawn
+            # entry out, so a probe that retracted first would stop reaching the
+            # backing rule. This is the real order too -- a draft is written, then
+            # the candidate takes a value back before it is sent.
+            if name == "wrong":
+                say("no", retracts=rows["wrong"])
+            else:
+                say("oops", retracts=say("no", retracts=rows["restored"]))
             measured = traceability(store, master, offer, manifest.version)
             untraced = {line.split(": ", 1)[1] for line in measured["claims_untraced"]}
             traced = sum(1 for line in lines.values() if line not in untraced)
+            story = render_entry("episodes", master.episodes[0])
+            story_traced = any(
+                claim.section == "episodes" and claim.text == story for claim in manifest.claims
+            ) and (story not in untraced)
             if name == "wrong":
-                traced_withdrawn = traced
+                traced_withdrawn = traced + int(story_traced)
             else:
                 traced_live = traced
     return {
