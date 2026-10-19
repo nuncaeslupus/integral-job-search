@@ -122,15 +122,25 @@ def runs_of(fragments: Iterable[Fragment]) -> list[Run]:
     return runs
 
 
+def _is_marker(frag: Fragment) -> bool:
+    return not any(c.isalnum() for c in frag.text)
+
+
 def _join(group: Sequence[Fragment]) -> Run:
-    first = group[0]
+    # A list marker sits left of its item's text, so the item's first line would start
+    # at another left edge than its next lines; the text's edge is the column's.
+    lead = 0
+    while lead < len(group) - 1 and _is_marker(group[lead]):
+        lead += 1
+    text = group[lead:]
+    first = text[0]
     return Run(
         first.page,
         first.x0,
-        max(f.x1 for f in group),
-        min(f.top for f in group),
-        max(f.line_height for f in group),
-        "".join(f.text for f in group).strip(),
+        max(f.x1 for f in text),
+        min(f.top for f in text),
+        max(f.line_height for f in text),
+        "".join(f.text for f in text).strip(),
     )
 
 

@@ -166,6 +166,48 @@ def test_a_rendered_paragraph_with_a_short_last_line_is_a_widow() -> None:
     assert found[0].ratio < w.MAX_RATIO
 
 
+def test_a_list_marker_does_not_move_its_items_first_line_to_another_column() -> None:
+    fragments = [
+        frag("\u2022", 80.0, 86.0, 0),
+        frag("a full line of bullet text that runs", 90.0, 90.0 + FULL, 0),
+        frag("daily", 90.0, 120.0, 1),
+    ]
+    found = w.find_widows(fragments)
+    assert [(x.text, x.words) for x in found] == [("daily", 1)]
+
+
+def _cv_with_bullet(tail: str) -> dict[str, Any]:
+    bullet = "Moved the nightly load to streaming and cut the time to fresh data " + tail
+    return {
+        "title": "CV",
+        "blocks": [
+            {"type": "section", "title": "Experience"},
+            {
+                "type": "job",
+                "role": "Engineer",
+                "org": "Acme",
+                "dates": "2020 - 2024",
+                "place": "Remote",
+                "bullets": [bullet],
+            },
+        ],
+    }
+
+
+@needs_engine
+def test_the_render_fails_on_a_widow_in_a_two_line_bullet() -> None:
+    for extra in range(1, 40):
+        document = _cv_with_bullet(" ".join(["daily"] * extra))
+        fragments = dr.layout_fragments(dr.render(document))
+        lines = [r for r in w.runs_of(fragments) if "Moved" in r.text or "daily" in r.text]
+        if len(lines) == 2 and lines[1].words == 1:
+            break
+    else:
+        raise AssertionError("no length of tail left one word on a bullet's second line")
+    with pytest.raises(dr.RenderError, match="widow"):
+        dr.render_pdf(dr.render(document))
+
+
 @needs_engine
 def test_the_fixture_documents_have_no_widow_and_wrap() -> None:
     for document in (w.fixture_cv(), w.fixture_letter()):
