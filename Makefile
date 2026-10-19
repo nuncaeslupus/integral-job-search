@@ -58,18 +58,13 @@ gate:  ## record lint_typecheck_exit_code into status/evidence/T1.json
 # list is derived, never listed here: any src/integral module with a `__main__`
 # that mentions evidence is run, so a new one is covered without an edit.
 #
+# The modules run concurrently (`EVIDENCE_JOBS`, default = CPU count); see
+# src/integral/evidence_runner.py for the shared-output check.
+#
 # Exit 3 is "unmeasured", and it is a verdict, not a failure: the record is
 # still written. Any other non-zero is a hard stop.
 evidence:  ## regenerate every module's gate evidence and fail on any drift
-	@for m in $$(grep -l '__main__' src/integral/*.py | xargs grep -lE 'status/evidence|"evidence"|EVIDENCE' | sed 's|.*/||; s|\.py$$||'); do \
-		printf '  %-18s ' "$$m"; \
-		uv run python -m integral.$$m >/dev/null; status=$$?; \
-		case $$status in \
-			0) echo ok ;; \
-			3) echo "unmeasured (recorded)" ;; \
-			*) echo "GATE FAILED"; exit 1 ;; \
-		esac; \
-	done
+	@uv run python -m integral.evidence_runner
 	@git diff --exit-code --stat status/evidence/ \
 		|| { echo "evidence: committed evidence does not match what the code measures now" >&2; exit 1; }
 	@echo "evidence: no drift"
