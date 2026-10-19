@@ -2159,7 +2159,18 @@ def test_a_refused_board_is_not_listed_as_reached(store: ProfileStore) -> None:
     assert "searched for your terms" not in listed.summary(), listed.summary()
     assert "returned their whole list" not in listed.summary(), listed.summary()
 
-    advert = _run(store, _answer_with_detail(detail_status=429))
+    # T310 splits a board's share per term (here 1 each); a share of three
+    # ceilings lets each term reach the refused advert page as it did before
+    advert = source(
+        store,
+        _spain(),
+        Aim(state="stated", terms=_TERMS),
+        fetch=_answer_with_detail(detail_status=429),
+        at=AT,
+        directory=_CONNECTORS,
+        robots=_robots(),
+        board_cap=OFFER_CEILING * len(_TERMS),
+    )
     assert advert.refused, advert.summary()
     # getmanfred_es needs the advert page for every row it kept, and every one
     # of those was refused: nothing reached disk, so it stays unreached.

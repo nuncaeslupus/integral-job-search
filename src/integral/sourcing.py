@@ -151,7 +151,9 @@ OFFER_CEILING = 50
 #:   returning 195 rows, most of them abroad, filled the run's ceiling with
 #:   adverts nobody could take.
 #: * No board may spend more than `board_share(boards)` of it, over the whole
-#:   run (every phrase, every window). The share is `OFFER_CEILING // boards`,
+#:   run (every phrase, every window), and (T310) each term gets a fixed
+#:   `term_share` of it, so the first term cannot spend the later terms' part.
+#:   The share is `OFFER_CEILING // boards`,
 #:   never less than 1 and rounded **down**, so `boards x share` never exceeds
 #:   the ceiling: a rounded-up share let the first ten of eleven boards fill the
 #:   run and the last be reported "NOT asked". Room a board does not use is not
@@ -185,6 +187,18 @@ def board_share(boards: int) -> int:
     board asked still has room when the first ones have each spent their share.
     """
     return max(1, OFFER_CEILING // max(1, boards))
+
+
+def term_share(share: int, terms: int) -> int:
+    """One term's fixed part of a board's `share` (T310, owner decision 2026-10-06).
+
+    Rounded down and at least 1, so `terms * term_share <= share` whenever
+    `terms <= share`. Fixed, not round-robin: a term that finds little leaves its
+    room unspent rather than lending it, which is what keeps the first term from
+    starving the later ones. Past `share` terms the floor of 1 applies and the
+    board's own total (`board_share`) is what holds.
+    """
+    return max(1, share // max(1, terms))
 
 
 @dataclass(frozen=True)
@@ -462,6 +476,9 @@ class Run:
     #: T253. The per-board share this run applied (`board_share`); 0 until a
     #: pass has set it. Said beside every capped board.
     board_cap: int = 0
+    #: T310. What each term of the aim may write on one board (`term_share`);
+    #: 0 until a pass has set it.
+    term_cap: int = 0
 
     @property
     def searched(self) -> list[str]:
@@ -730,7 +747,8 @@ class Run:
             unsent = f"; never searched for: {', '.join(terms)}" if terms else ""
             lines.append(
                 f"  CAPPED  {board}: held to its {self.board_cap}-offer share of the "
-                f"{OFFER_CEILING}-offer ceiling — {rows} matching row(s) not collected, "
+                f"{OFFER_CEILING}-offer ceiling ({self.term_cap} per term) — "
+                f"{rows} matching row(s) not collected, "
                 f"{pages} further request(s) not made{unsent}"
             )
         if self.parsed_nothing:
@@ -1032,6 +1050,7 @@ def source(
     refused_origins: dict[str, str] | None = None,
     board_added: dict[str, int] | None = None,
     board_cap: int | None = None,
+    term_added: dict[tuple[str, str], int] | None = None,
 ) -> Run:
     """Fetch this candidate's country's boards and collect what they return.
 
@@ -1064,6 +1083,13 @@ def source(
     `board_added` (T253) is the same idea per board: how many offers each board
     already wrote this run, so `board_share` bounds a board over every window.
     A row outside the candidate's stated reach is neither collected nor counted.
+
+    `term_added` (T310) is the same per (board, term): a board's share is split
+    into a fixed `term_share(share, len(aim.terms))` for each term of the whole
+    aim, so one term cannot spend the others' and a term's unspent room is not
+    handed to another. Terms are distinct across windows, so a continuation
+    (`offset > 0`) called on its own starts each of *its* terms on exactly its
+    own share, never on a share an earlier window spent.
     `board_cap` replaces the computed share (`board_share`); passing `OFFER_CEILING`
     lets a gate exercise the run-wide ceiling alone, since shares that sum to less
     than it make it unreachable by construction.
@@ -1122,8 +1148,10 @@ def source(
     # answer for the rest of the run rather than for one request.
     refused_origins = {} if refused_origins is None else refused_origins
     board_added = {} if board_added is None else board_added
+    term_added = {} if term_added is None else term_added
     boards = packages_for(constraints, directory)
     run.board_cap = board_share(len(boards)) if board_cap is None else board_cap
+    run.term_cap = term_share(run.board_cap, len(aim.terms))
     for package in boards:
         # A board that does not search returns the same list whatever was
         # asked, so asking it once per phrase is N identical requests for one
@@ -1145,6 +1173,9 @@ def source(
                 )
                 continue
             board_room = run.board_cap - board_added.get(package.name, 0)
+            if query is not None:
+                spent = term_added.get((package.name, query), 0)
+                board_room = min(board_room, run.term_cap - spent)
             if board_room <= 0:
                 run.outcomes.append(
                     BoardOutcome(package.name, None, steerable, query, skipped=_BOARD_CAP_SKIP)
@@ -1171,6 +1202,9 @@ def source(
                 )
             )
             board_added[package.name] = board_added.get(package.name, 0) + run.outcomes[-1].added
+            if query is not None:
+                key = (package.name, query)
+                term_added[key] = term_added.get(key, 0) + run.outcomes[-1].added
     # Phrases the ceiling stopped before they were sent to a board that takes a
     # query. They sit inside this window, so the window — not the next one — is
     # where a resumed run must start, and they are named rather than left only
@@ -1209,6 +1243,7 @@ def source_every_phrase(
     offset = 0
     refused: dict[str, str] = {}
     board_added: dict[str, int] = {}
+    term_added: dict[tuple[str, str], int] = {}
     while True:
         run = source(
             store,
@@ -1218,9 +1253,11 @@ def source_every_phrase(
             already_added=merged.added,
             refused_origins=refused,
             board_added=board_added,
+            term_added=term_added,
             **kwargs,
         )
         merged.board_cap = run.board_cap
+        merged.term_cap = run.term_cap
         if offset == 0:
             merged.unreached = run.unreached
             merged.unreached_because = run.unreached_because
