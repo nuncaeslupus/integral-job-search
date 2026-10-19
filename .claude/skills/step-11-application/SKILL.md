@@ -111,6 +111,17 @@ Why: the first letter this repository generated for a real application was fluen
 
 This is not a template with the candidate's phrases pasted in. Whether the letter can be read aloud without flinching is for the candidate to say, and no gate checks it; the gate checks only the mechanical half, that the package says who wrote each paragraph.
 
+## Public projects
+
+A public project in `cv/master.json` is an `episode` with the link in `text`; this step surfaces such a link only through the story-bank route, pinned verbatim by its test. (Episodes step 3 writes to `profile/evidence.jsonl` do not reach `cv/master.json` yet, so `approval.prepare` cannot see them; that path is a follow-up.)
+
+```text
+A public project is offered, never added: when the advert is in software or data and the story bank holds an episode whose text carries a link, propose it for this posting and company.
+It goes in the letter only as an approved episode, with the link exactly as the candidate gave it; a declined or unanswered proposal sends nothing.
+```
+
+The approval is per use (see "Never" above): the earlier approval for another offer does not travel, and no step writes a link into the CV by itself.
+
 ## An open application
 
 A candidate who wants to send a CV to an employer's open form has no advert. Record it with `integral.presentation_log.record_open_application(store, company, url, form_questions, at=...)`, never with a hand-written `Offer`; it is stored shortlisted, so this step accepts it. What differs, pinned verbatim by its test:
