@@ -141,8 +141,9 @@ _STEM = re.compile(
     r"(?:about us|sobre nosotros|who we are|quienes somos|our company|our story|"
     r"our mission|the company|company overview|la empresa|nuestra empresa)"
 )
-#: A separator set off by whitespace ("About us - perks", "About us · perks").
-_SPACED_SEPARATOR = re.compile(r"\s+[^\w\s]+\s+\S")
+#: A separator set off by whitespace ("About us - perks", "About us · perks"), or a
+#: dash / middle dot that cannot sit inside a word ("About us—perks").
+_SPACED_SEPARATOR = re.compile(r"\s+[^\w\s]+\s+\S|\s*[\u2014\u2013\u00b7]\s*\S")
 #: A colon straight after the stem, and a tail short enough to be a heading
 #: ("About us: perks"), not a sentence ("Our mission: free lunch for all").
 _COLON_TAIL = re.compile(r"\s*[:\uff1a]\s*(\S+(?:\s+\S+){0,2})\s*$")

@@ -479,3 +479,15 @@ def test_an_amount_written_without_a_space_or_as_a_range_is_dropped(amount: str)
     assert same_vacancy("Acme", f"Engineer {amount}", "Acme", "Engineer")
     assert same_vacancy("Acme", f"Engineer 2 {amount}", "Acme", "Engineer 2")
     assert not same_vacancy("Acme", f"Engineer 2 {amount}", "Acme", "Engineer 3")
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Engineer 3 - 50k", "Engineer 2 - 50k"),
+        ("Band 5 - 28k Nurse", "Band 6 - 33k Nurse"),
+    ],
+)
+def test_a_grade_before_a_dash_and_an_amount_is_not_a_range(a: str, b: str) -> None:
+    assert not same_vacancy("Acme", a, "Acme", b)
+    assert same_vacancy("Acme", a, "Acme", a.replace("- ", "- 1"))

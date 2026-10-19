@@ -151,11 +151,21 @@ def _words(text: str) -> set[str]:
     return words(text)
 
 
-def _significant(text: str) -> frozenset[str]:
+def _fold(text: str) -> str:
+    """The text as the table reads it. A standalone upper-case `RAG` is the AI term
+    wherever it stands (`Head of RAG`, `Tech Lead (RAG)`); `Rag Trade Buyer` and an
+    multi-word all-caps title are not read that way."""
+    if not (text.isupper() and len(text.split()) > 1):
+        text = re.sub(r"(?<![A-Za-z])RAG(?![A-Za-z])", " llm ", text)
     folded = unicodedata.normalize("NFKD", text.casefold())
     folded = "".join(c for c in folded if not unicodedata.combining(c))
     for pattern, replacement in _PHRASES:
         folded = re.sub(pattern, f" {replacement} ", folded)
+    return folded
+
+
+def _significant(text: str) -> frozenset[str]:
+    folded = _fold(text)
     out: set[str] = set()
     for word in _words(folded):
         out.update(_TOKENS.get(word, word).split())
@@ -189,10 +199,7 @@ def same_word(a: str, b: str) -> bool:
 def _title_words(text: str) -> frozenset[str]:
     """`_significant`, plus each pair of adjacent words joined (`back end` is `backend`)."""
     base = _significant(text)
-    folded = unicodedata.normalize("NFKD", text.casefold())
-    folded = "".join(c for c in folded if not unicodedata.combining(c))
-    for pattern, replacement in _PHRASES:
-        folded = re.sub(pattern, f" {replacement} ", folded)
+    folded = _fold(text)
     ordered = re.findall(r"\w+", folded)
     joined = {a + b for a, b in pairwise(ordered)}
     return base | frozenset(joined)

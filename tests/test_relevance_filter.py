@@ -307,3 +307,25 @@ def test_gen_ai_and_rag_need_the_ai_sense_when_every_word_of_the_aim_is_required
     llm = rel.RelevanceRule(1.0, ("llm engineer",))
     assert llm.judge("RAG Engineer").relevant
     assert not llm.judge("Rag Trade Buyer").relevant
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "RAG Lead",
+        "Head of RAG",
+        "RAG & Retrieval Engineer",
+        "Engineer - RAG",
+        "Tech Lead (RAG)",
+        "RAG Engineer",
+    ],
+)
+def test_a_standalone_upper_case_rag_is_the_ai_term_wherever_it_stands(title: str) -> None:
+    assert rel.RelevanceRule(1.0, ("RAG",)).judge(title).relevant
+    assert rel.RelevanceRule(0.5, ("rag engineer", "llm engineer")).judge(title).relevant
+
+
+def test_a_capitalised_or_all_caps_rag_in_another_trade_is_not_the_ai_term() -> None:
+    rule = rel.RelevanceRule(1.0, ("RAG",))
+    assert not rule.judge("Rag Trade Buyer").relevant
+    assert not rule.judge("RAG TRADE BUYER").relevant

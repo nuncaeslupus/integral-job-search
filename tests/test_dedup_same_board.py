@@ -384,8 +384,10 @@ def test_places_are_removed_part_by_part_not_only_whole() -> None:
 def test_a_title_differing_only_in_punctuation_is_left_to_the_batch_pass(
     store: ProfileStore,
 ) -> None:
-    """The `posting_key` prefilter is the only thing between these two: same vacancy,
-    same body, but the title text differs, so a stored copy is not read for it."""
+    """Pins the current fail-closed behaviour: the `posting_key` prefilter is the only
+    thing between these two (same vacancy, same body, different title text), so a
+    stored copy is not read for it and both are stored. Merging them would be a
+    change to this test, not a regression."""
     a = _offer(
         f"{TEAM_A} {BOILER}",
         url="https://g.test/k1",
