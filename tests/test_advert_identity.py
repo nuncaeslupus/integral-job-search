@@ -35,6 +35,8 @@ from integral.lifecycle import (
 from integral.offers import Offer, compute_offer_id
 from integral.presentation_log import partition, rule_out
 
+pytestmark = pytest.mark.usefixtures("memoised_connector_parsing")
+
 ROOT = Path(__file__).resolve().parents[1]
 CONNECTORS = sorted(load_connectors(ROOT / "connectors"), key=lambda c: c.site)
 SITES = [c.site for c in CONNECTORS]

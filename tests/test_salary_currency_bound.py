@@ -26,6 +26,8 @@ from integral.connectors import (
 )
 from integral.salary_recovery import _band_defect, bounds_for
 
+pytestmark = pytest.mark.usefixtures("memoised_connector_parsing")
+
 _ROOT = Path(__file__).resolve().parents[1]
 _CONNECTORS = _ROOT / "connectors"
 _BODY = "A body long enough to be an advert. " * 3
