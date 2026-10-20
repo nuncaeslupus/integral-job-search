@@ -44,17 +44,21 @@ def _fragments(document: str) -> list[dr.Fragment]:
 # -- the gate ---------------------------------------------------------------
 
 
-def test_the_gate_measures_zero_over_a_real_denominator() -> None:
-    measured = dr.measure()
+@pytest.fixture(scope="module")
+def measured() -> dict[str, Any]:
+    """The committed inputs' measurement, taken once: no test here writes them."""
+    return dr.measure()
+
+
+def test_the_gate_measures_zero_over_a_real_denominator(measured: dict[str, Any]) -> None:
     assert measured["gate_status"] == "measured"
     assert measured["defects"] == []
     assert measured["reader_fragment_defects"] == 0
     assert measured["readers_generated"] == len(dr.SUBJECTS) * 3
 
 
-def test_the_committed_evidence_is_what_the_gate_measures() -> None:
+def test_the_committed_evidence_is_what_the_gate_measures(measured: dict[str, Any]) -> None:
     committed = json.loads((_REPO_ROOT / "status" / "evidence" / "T141.json").read_text())
-    measured = dr.measure()
     assert committed == json.loads(json.dumps(measured))
 
 

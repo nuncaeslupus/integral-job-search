@@ -14,6 +14,7 @@ name makes the two disagree, and `discarded_concepts` goes non-zero.
 
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 from typing import Any
@@ -342,7 +343,9 @@ _AUDITED: tuple[tuple[str, str | None, str], ...] = (
 )
 
 
+@functools.cache
 def _committed_map() -> dict[str, str]:
+    """Read once per run: the map and its inputs are committed files no test writes."""
     from integral.dimensions import load_dimensions
     from integral.ontology_health import (
         DEFAULT_CONCEPT_MAP_PATH,
