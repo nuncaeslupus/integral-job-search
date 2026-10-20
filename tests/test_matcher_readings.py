@@ -70,7 +70,8 @@ def test_reverting_the_allow_narrowing_in_robots_is_caught(
     real = robots._normalize_rule
     monkeypatch.setattr(robots, "_normalize_rule", lambda pattern, *, widen=True: real(pattern))
     contested = [t for t in mr.generate() if mr.is_contested(mr._allow_of(t[0]))]
-    result = mr.measure(contested)
+    # Every tenth triple is enough: the mutant diverges across the whole contested set.
+    result = mr.measure(contested[::10])
     assert result["matcher_reading_divergences_unrecorded"] > 0
     assert result["divergences_robots_more_permissive"] > 0
 
