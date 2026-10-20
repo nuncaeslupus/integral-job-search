@@ -155,7 +155,11 @@ def test_the_committed_evidence_matches_what_the_module_measures_now(
     assert "triples_compared" not in on_disk, "the count of the day must not be committed"
 
 
-def test_the_main_entry_point_exits_zero_on_a_clean_measurement(tmp_path: Any) -> None:
+def test_the_main_entry_point_exits_zero_on_a_clean_measurement(
+    tmp_path: Any, measured: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI's wiring, over the module's one measurement rather than a second."""
+    monkeypatch.setattr(mr, "measure", lambda population=None: measured)
     out = tmp_path / "D-30.json"
     assert mr._main(["--write-evidence", str(out)]) == 0
     assert json.loads(out.read_text(encoding="utf-8"))["gate_status"] == "measured"
