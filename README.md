@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/nuncaeslupus/integral-job-search/main/docs/hero.png" width="100%" alt="integral-job-search: five dimensions such as remote arrangement and commute burden drawn as lines through five stages, from what you need, through the advert's quoted evidence, the ranking, the CV and the interview, each stage written in the same terms">
+  <img src="https://raw.githubusercontent.com/nuncaeslupus/integral-job-search/main/docs/hero.png" width="100%" alt="integral-job-search: dimensions such as remote arrangement and commute burden drawn as lines through the stages, from what you need, through the advert's quoted evidence, the ranking, the CV and the interview, each stage written in the same terms">
 </p>
 
 **A candidate-centred job search that runs as a conversation in Claude Code, judging every offer in terms of what you actually need.**
@@ -22,7 +22,7 @@ when it feels finished.
 
 ## Quick start
 
-Requires [Claude Code](https://claude.com/claude-code), Python 3.12+ and
+Requires [Claude Code](https://claude.com/claude-code), the Python version in `pyproject.toml` and
 [uv](https://docs.astral.sh/uv/).
 
 ```bash
@@ -78,15 +78,14 @@ elicitation:
 ```
 
 The `tell` lines are what extraction looks for in an advert, and the question is
-what the conversation asks you. The model has 41 dimensions, labelled in English, Spanish
+what the conversation asks you. The model has 40+ dimensions, labelled in English, Spanish
 and Catalan ([dimensions/README.md](dimensions/README.md)).
 
 ## Use with AI agents
 
 The product is a Claude Code project; the agent is the interface.
 
-- **Step skills.** `.claude/skills/step-00-identify` through
-  `step-12-interview-log` are the thirteen steps: identify, intake, constraints,
+- **Step skills.** `.claude/skills/step-*` are the steps, in order: identify, intake, constraints,
   history, traits, reactions, preferences, sourcing, understanding, ranking,
   feedback, application, interview log. Each names the `uv run python -m
   integral.<module>` commands that record its result and close its gate.
@@ -117,7 +116,7 @@ The product is a Claude Code project; the agent is the interface.
   salary-equivalent weights through forced pairwise choices.
 - **Gated steps.** Each step has a checkpoint script and a measured threshold.
 - **Polite sourcing.** robots.txt is checked per fetch and cannot fail open;
-  connector health has three verdicts (`healthy`, `broken`, `inconclusive`).
+  connector health tells `healthy` from `broken` and `inconclusive`.
 - **Nothing sent without you.** Step 11 prepares the documents or the text to
   paste; you press send.
 
@@ -166,7 +165,7 @@ make help     # every target
 The failure-handling layer is adapted from
 [`MadsLorentzen/ai-job-search`](https://github.com/MadsLorentzen/ai-job-search)
 (MIT, © 2026 Mads Lorentzen): robots handling that cannot fail open, a
-three-verdict connector health check, liveness that reads page identity, the
+connector health check that tells broken from inconclusive, liveness that reads page identity, the
 eligibility gate and its quoted reasons, and the ATS text-layer contract. What
 was taken, and what was assessed and not adopted, is recorded in
 [`docs/METHODS.md` §2.9](docs/METHODS.md).
