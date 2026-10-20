@@ -32,8 +32,6 @@ from pathlib import Path
 
 import pytest
 
-from integral.evidence_runner import discover
-
 REPO = Path(__file__).resolve().parent.parent
 SKILL = REPO / ".claude" / "skills" / "connector-new" / "SKILL.md"
 
@@ -222,13 +220,26 @@ def _copy_tracked_tree(destination: Path) -> None:
     _git(destination, "commit", "-q", "-m", "base")
 
 
-def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
-    """Run every evidence-writing module against `root`; return what they wrote.
+#: The modules that write the records a new package moves (D-16, T9, T53, T72, T117,
+#: T127, T136) and those `VALID_PACKAGE_LEAVES_ALONE` reads (T53, T110, T144). Running
+#: all of `make evidence` cost four times as long for the same keys. A key that moves in
+#: a module left out could only raise the count, so the subset is a lower bound.
+MEASURED_MODULES = (
+    "bodyless_post",
+    "connector_contract",
+    "connector_coverage",
+    "connector_health",
+    "connector_procedure",
+    "employer_boards",
+    "reaction_elicit",
+)
 
-    The module list is `evidence_runner.discover`, the selection `make evidence`
-    itself runs, so a module added tomorrow is measured too and the driver, which
-    re-runs every module, is not run on top of them. Each runs in
-    a fresh subprocess pointed at the copy's own `src/`.
+
+def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
+    """Run the modules in `MEASURED_MODULES` against `root`; return every record.
+
+    Records no module rewrites keep their committed values, so they never count as
+    moved. Each module runs in a fresh subprocess pointed at the copy's own `src/`.
     """
     env = {**os.environ, "PYTHONPATH": str(root / "src"), "PYTHONDONTWRITEBYTECODE": "1"}
 
@@ -245,7 +256,7 @@ def _regenerate_evidence(root: Path) -> dict[str, dict[str, object]]:
 
     # Each module writes its own record, so they are independent of one another.
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(run, discover()))
+        results = list(pool.map(run, MEASURED_MODULES))
     for module, code, stderr in results:
         # A module's own verdict (0 pass, 3 unmeasured, 1 red) is not this test's
         # subject: a module can go red on the host's task state, not on a package. What
