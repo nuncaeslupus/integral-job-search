@@ -1,9 +1,9 @@
 # How the tool is used — shape, steps, and what moves them along
 
 **Status: decided.** Every question this document opened carries a decision or a
-named blocker — see "What needed deciding" at the end. Its **step table is
-superseded by specification v2** (`status/spec-v2-process.md`); what remains
-authoritative here is the shape argument — a conversation, steps as skills,
+named blocker — see "What needed deciding" at the end. Its step list follows
+specification v2 (`status/spec-v2-process.md`), which is authoritative for what
+ends each step; what is authoritative here is the shape argument — a conversation, steps as skills,
 checkpoints as scripts, state as files — and the packaging section, whose
 decision record is `docs/distribution.md`.
 
@@ -26,9 +26,8 @@ Not "either a flow or commands" — both, with a clear division of labour:
 | **Files** | the state | Resumable across sessions and containers, diffable, inspectable by the candidate. `evidence.jsonl` already works this way. |
 
 So: the candidate talks; Claude follows the step's skill; a script says whether
-the step is done; the conversation moves on. A command per step exists too —
-`/profile`, `/collect`, `/rank` — but as a way to *resume or jump*, not the
-primary path. Someone returning after a week should be able to say "let's
+the step is done; the conversation moves on. A way to *resume or jump* to a step
+exists too, but it is not the primary path. Someone returning after a week should be able to say "let's
 carry on" and have it work.
 
 ### Why not the alternatives
@@ -44,35 +43,32 @@ carry on" and have it work.
   against. Without measurable checkpoints, "the profile is complete" becomes a
   vibe, and the steps blur into a conversation that never converges.
 
-## The steps, and what ends each one
+## The steps
 
-Each checkpoint is a script with a number. A step does not end because it feels
-finished.
+Each step is a skill, and each ends on a checkpoint a script can measure: a step
+does not end because it feels finished. The ids below are the ones the process
+runtime uses (`src/integral/step_runtime.py`), in order.
 
-**These are the candidate's journey**, numbered independently of the delivery
-phases in `status/specification.md` §"Phases" — that table is about build order
-(0 Foundations … 6 Automation) and this one is about what a person does. Two
-numbering schemes for two different things confuse anyone who reads both, so
-this column is `step`, not `phase`.
+0. **identify** — resolves who the candidate is, before any file under `profiles/` is touched.
+1. **intake** — captures the CV or working history into the store, with provenance.
+2. **constraints** — settles what would rule a job out: residence, pay floor, mobility, permits.
+3. **history** — builds the story bank of episodes from past roles.
+4. **traits** — scores traits from accumulated evidence, never from a personality quiz.
+5. **reactions** — captures reactions to real adverts, to learn what the candidate actually values.
+6. **preferences** — turns reactions into salary-equivalent weights through forced pairwise choices.
+7. **sourcing** — fetches and dedupes live offers against the constraints.
+8. **understanding** — extracts dimension values and verbatim evidence spans from new offers.
+9. **ranking** — presents the live offers in order, each position's reason cited from the ad.
+10. **feedback** — captures what the candidate thinks of the ranked offers, and re-ranks.
+11. **application** — builds a CV and edits the candidate's own letter for one shortlisted offer.
+12. **interview_log** — prepares for, then records, one interview.
 
-| step | what it is | skill | ends when | measured by |
-|------|------------|-------|-----------|-------------|
-| 0 | Onboarding interview | `/profile` | required facts captured, ≥1 episode per elicited dimension | `interview_profile_coverage >= 0.90` (T27) |
-| 1 | Preferences | `/preferences` | enough forced choices to fit part-worths | `weight_confidence` (T10) |
-| 2 | Supply | `/collect` | offers normalised and deduped | `offer_schema_violations == 0` (T11) |
-| 3 | Understanding | (automatic) | extraction run over the new offers | `extraction_macro_f1` (T15), `ontology_hit_rate` (T17) |
-| 4 | Ranking | `/rank` | frontier and facet lists produced with explanations | `explained_fraction == 1.0` (T19) |
-| 5 | Feedback | continuous | rejections and reactions recorded as evidence | `feedback_traceability == 1.0` (T21) |
-| 6 | Application (CV, letters) | `/apply` | deferred — spec Phase 7, out of v1 scope | `not_implemented` |
-
-Steps 0 and 1 are the first run. Steps 2-5 are the loop the candidate lives in
-afterwards, and **step 5 feeds back into 0**: every reaction is more profile
-(T28). The interview is not a thing that happens once.
-
-Step 6 is deferred, and its checkpoint says so rather than being blank. T29's
-gate requires every step to report either a number or `not_implemented`, because
-a step with an empty metric is indistinguishable from a step whose checkpoint
-was forgotten.
+These are the candidate's journey, numbered independently of the delivery phases
+in `status/specification.md` §"Phases", which are about build order. The first
+steps build the profile; the later ones are the loop the candidate lives in
+afterwards, and **feedback feeds back into the profile**: every reaction is more
+evidence, so the interview is not a thing that happens once. The checkpoint for
+each step is defined in `status/spec-v2-process.md`, not here.
 
 ## Signals that move a step along
 
@@ -125,7 +121,7 @@ fourth — distribution — was the remaining scope of T29.
 
 1. **One long first interview, or several sittings?**
    **Decided: several, resumable.** Specification v2 §5.1 and §5.3 settle it —
-   thirteen steps, `position` written continuously during a step rather than at
+   `position` written continuously during a step rather than at
    its end, and a five-rule resumption order that announces which step is being
    resumed and why. The protocol is still one continuous script, so a candidate
    who wants to finish in one sitting can.
