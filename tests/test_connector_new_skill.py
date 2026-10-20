@@ -307,21 +307,33 @@ VALID_PACKAGE_LEAVES_ALONE = (
 )
 
 
+#: Records whose values depend on the copy's own git history or host rather than on its
+#: files: regenerating an unchanged copy moves these and nothing else.
+DEPENDS_ON_THE_CHECKOUT = frozenset({"S4.json", "T116.json"})
+
+
+def _committed_evidence() -> dict[str, dict[str, object]]:
+    return {
+        path.name: json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted((REPO / "status" / "evidence").glob("*.json"))
+    }
+
+
 def test_a_new_package_moves_more_keys_than_the_skill_ever_claimed() -> None:
     with tempfile.TemporaryDirectory(prefix="t197-") as scratch:
-        # Two independent copies of the tracked tree, measured at the same time: the
-        # "before" copy is left as committed, the "after" copy gains the package. Neither
-        # measurement reads the other, so running them one after the other only doubled
-        # this file's wall time (the longest single test in the suite).
-        unchanged, with_package = Path(scratch) / "before", Path(scratch) / "after"
-        for root in (unchanged, with_package):
-            root.mkdir()
-            _copy_tracked_tree(root)
+        # "Before" is the committed evidence: `make evidence` fails CI when it differs
+        # from a regeneration of the tree, so regenerating an unchanged copy here only
+        # re-measured it, at half this test's cost. The records that depend on the
+        # checkout rather than its files are left out of both sides.
+        with_package = Path(scratch) / "after"
+        with_package.mkdir()
+        _copy_tracked_tree(with_package)
         _add_a_package(with_package)
-        with ThreadPoolExecutor(max_workers=2) as both:
-            measuring_before = both.submit(_regenerate_evidence, unchanged)
-            measuring_after = both.submit(_regenerate_evidence, with_package)
-            before, after = measuring_before.result(), measuring_after.result()
+        after = _regenerate_evidence(with_package)
+    before = _committed_evidence()
+    for name in DEPENDS_ON_THE_CHECKOUT:
+        before.pop(name, None)
+        after.pop(name, None)
     moved = _moved_keys(before, after)
     assert before, "no committed evidence was read, so nothing was measured"
     # The probe is a *valid* package. If it were broken, these would move and the count
