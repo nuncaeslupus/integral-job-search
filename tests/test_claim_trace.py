@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -430,14 +431,24 @@ def test_the_probes_judge_every_hole_and_every_counter_case() -> None:
     assert any(v["expected"] == 0 and "denial" in v["case"] for v in verdicts)
 
 
-def test_the_measurement_over_the_corpus_is_clean() -> None:
-    measured = claim_trace.measure()
+@pytest.fixture(scope="module")
+def corpus_measured() -> dict[str, Any]:
+    """One corpus measurement for every test that only reads it (~6 s each)."""
+    measured: dict[str, Any] = claim_trace.measure()
+    return measured
+
+
+def test_the_measurement_over_the_corpus_is_clean(corpus_measured: dict[str, Any]) -> None:
+    measured = corpus_measured
     assert measured["untraced_claim_defects"] == 0
     assert measured["claims_checked"] > 0 and measured["adverts_generated"] > 0
     assert measured["probe_cases_misjudged"] == 0
 
 
-def test_main_exits_zero_and_writes_the_record(tmp_path: Path) -> None:
+def test_main_exits_zero_and_writes_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, corpus_measured: dict[str, Any]
+) -> None:
+    monkeypatch.setattr(claim_trace, "measure", lambda: dict(corpus_measured))
     out = tmp_path / "T146.json"
     assert claim_trace._main(["claim_trace", str(out)]) == 0
     assert json.loads(out.read_text())["untraced_claim_defects"] == 0
@@ -499,16 +510,18 @@ def test_f6_more_number_words() -> None:
     assert quantities("dues empreses, veinticinco, dieciséis, doscientos") == [2, 25, 16, 200]
 
 
-def test_the_corpus_carries_a_candidate_denial_and_a_sourced_count() -> None:
-    measured = claim_trace.measure()
+def test_the_corpus_carries_a_candidate_denial_and_a_sourced_count(
+    corpus_measured: dict[str, Any],
+) -> None:
+    measured = corpus_measured
     assert measured["denials_checked"] > 0 and measured["counts_checked"] > 0
     assert measured["untraced_claim_defects"] == 0
 
 
 def test_main_exits_three_when_the_corpus_has_no_denial_or_no_count(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, corpus_measured: dict[str, Any]
 ) -> None:
-    real = claim_trace.measure()
+    real = corpus_measured
     for key in ("denials_checked", "counts_checked"):
         monkeypatch.setattr(claim_trace, "measure", lambda key=key: {**real, key: 0})
         assert claim_trace._main(["claim_trace", str(tmp_path / "T.json")]) == 3
