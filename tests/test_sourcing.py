@@ -85,7 +85,7 @@ def _memoised_installed_packages() -> Iterator[None]:
     real = coverage_module.installed_packages
     cache: dict[Path, list[Package]] = {}
 
-    def memoised(directory: Path = coverage_module.DEFAULT_CONNECTORS_DIR) -> list[Package]:
+    def memoised(directory: Path = _REAL_CONNECTORS) -> list[Package]:
         key = Path(directory).resolve()
         if key != _REAL_CONNECTORS.resolve():
             return real(directory)
