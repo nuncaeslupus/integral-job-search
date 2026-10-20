@@ -12,13 +12,14 @@ from __future__ import annotations
 import itertools
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, get_args
 
 import pytest
 
+from integral import connector_coverage as coverage_module
 from integral import sourcing
 from integral.candidate import (
     Aim,
@@ -28,7 +29,7 @@ from integral.candidate import (
     Reach,
     ReachMode,
 )
-from integral.connector_coverage import installed_packages
+from integral.connector_coverage import Package, installed_packages
 from integral.connectors import (
     ListRequest,
     accepts_query,
@@ -69,6 +70,35 @@ pytestmark = pytest.mark.usefixtures("memoised_connector_parsing")
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONNECTORS = _REPO_ROOT / "connectors"
 _REAL_CONNECTORS = _CONNECTORS
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _memoised_installed_packages() -> Iterator[None]:
+    """Read the real connectors directory once per module, not once per call.
+
+    `installed_packages` re-reads every package on each call, and this file
+    calls it (directly and through `source`) dozens of times over the same
+    checked-in tree; profiling put most of the file's time there. Only the real
+    directory is cached, keyed on its resolved path, and each call gets a fresh
+    list of the frozen `Package`s; a `tmp_path` tree is always read afresh.
+    """
+    real = coverage_module.installed_packages
+    cache: dict[Path, list[Package]] = {}
+
+    def memoised(directory: Path = coverage_module.DEFAULT_CONNECTORS_DIR) -> list[Package]:
+        key = Path(directory).resolve()
+        if key != _REAL_CONNECTORS.resolve():
+            return real(directory)
+        if key not in cache:
+            cache[key] = real(directory)
+        return list(cache[key])
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(coverage_module, "installed_packages", memoised)
+        patch.setattr(sourcing, "installed_packages", memoised)
+        patch.setitem(globals(), "installed_packages", memoised)
+        yield
+
 
 ALLOW_ALL = "User-agent: *\nAllow: /\n"
 AT = "2026-01-01T00:00:00+00:00"
