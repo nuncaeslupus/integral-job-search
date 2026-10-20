@@ -22,8 +22,10 @@ from pathlib import Path
 
 import pytest
 
+import integral.approval as approval
 from integral.approval import (
     DEFAULT_D24_EVIDENCE_PATH,
+    DEFAULT_EVIDENCE_PATH,
     MINIMUM_PROBES,
     MINIMUM_RETRACTED_APPROVALS_EVALUATED,
     MINIMUM_RETRACTION_PROBES,
@@ -1043,13 +1045,20 @@ def test_the_retraction_gate_report_names_the_two_failure_kinds_apart(
     assert "still sendable: a clean send was refused" not in reported
 
 
-def test_a_scratch_retraction_evidence_run_writes_nothing_into_the_repo(tmp_path: Path) -> None:
+def test_a_scratch_retraction_evidence_run_writes_nothing_into_the_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """D-24's evidence must follow the path it was given, as T46's always has.
 
     `_main` read `argv[1]` for T46 and then called `write_retraction_evidence()`
     with no argument, so a run pointed at a scratch directory still rewrote the
     committed `status/evidence/D-24.json` (#305 review).
+
+    T46's corpus reading (`measure`, ~6 s) is not this test's subject, so it
+    returns the committed T46 record; every writer under test still runs.
     """
+    committed_t46 = json.loads(DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8"))
+    monkeypatch.setattr(approval, "measure", lambda *_args, **_kwargs: committed_t46)
     committed = DEFAULT_D24_EVIDENCE_PATH
     before = (committed.read_bytes(), committed.stat().st_mtime_ns) if committed.exists() else None
 
