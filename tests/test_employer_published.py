@@ -330,23 +330,36 @@ def test_a_blank_employer_trips_no_exclusion(employer: str | None) -> None:
 
 
 def _names_over_every_code_point() -> list[str]:
-    """Every code point alone; padded and followed by a letter only in the
-    planes where `names_an_employer`'s inputs vary — spaces, `Cf` and NFKC
+    """Every assigned code point alone; padded and followed by a letter only in
+    the planes where `names_an_employer`'s inputs vary — spaces, `Cf` and NFKC
     decompositions all live in planes 0, 1 and 14 and the CJK compatibility
     supplement. Planes 2-13, 15 and 16 are otherwise uniform ideographs,
     private use or unassigned, so their padded shapes repeated the alone
-    verdict at three times the cost."""
+    verdict at three times the cost.
+
+    Unassigned (`Cn`) and private-use (`Co`) code points have no decomposition,
+    no combining class and are neither spaces nor `Cf`, so every one gets the
+    same verdict: the first of each contiguous run stands for the run, alone.
+    They were three quarters of the names. The category is read at run time,
+    so a code point a newer Unicode assigns is compared in full."""
     import sys
+    import unicodedata
 
     def varied(cp: int) -> bool:
         return cp < 0x20000 or 0x2F800 <= cp <= 0x2FA1F or 0xE0000 <= cp < 0xF0000
 
     names: list[str] = []
+    previous = ""
     for cp in range(sys.maxunicode + 1):
         if 0xD800 <= cp <= 0xDFFF:
             continue
+        category = unicodedata.category(chr(cp))
+        uniform = category in ("Cn", "Co")
+        if uniform and category == previous:
+            continue
+        previous = category
         names.append(chr(cp))
-        if varied(cp):
+        if varied(cp) and not uniform:
             names += (f" {chr(cp)} ", f"{chr(cp)}x")
     return names
 
@@ -354,7 +367,8 @@ def _names_over_every_code_point() -> list[str]:
 def test_an_empty_company_links_nothing_and_names_nobody() -> None:
     """`posting_key` joins copies by employer and title; a company that
     `names_an_employer` refuses must give no key, so it can never join two
-    adverts, and one it accepts must give one. Every code point alone, and padded
+    adverts, and one it accepts must give one. Every assigned code point alone
+    (one per run of unassigned or private use), and padded
     or followed by a letter wherever that can change the verdict — not a
     sample of spellings, so a character class nobody thought of is still
     compared."""
