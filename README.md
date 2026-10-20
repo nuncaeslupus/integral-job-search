@@ -160,7 +160,6 @@ make help     # every target
 - [drawspec](https://github.com/nuncaeslupus/drawspec) — declarative diagram spec → clean SVG/PNG/text, writable by LLMs; MCP server included.
 - [doc-control](https://github.com/nuncaeslupus/doc-control) — lets AI agents edit Word documents as tracked changes.
 - [literary-critic](https://github.com/nuncaeslupus/literary-critic) — LLM manuscript analysis the way a professional editor would.
-- [integral-connectors](https://github.com/nuncaeslupus/integral-connectors) — the job-board connectors this tool installs.
 
 ## Acknowledgements
 
