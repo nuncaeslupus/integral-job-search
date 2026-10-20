@@ -1909,11 +1909,12 @@ def _unreached_trailing_keys() -> dict[str, list[str]]:
             except UnicodeDecodeError:
                 continue
             for match in _FLAT_JSON_OBJECT.finditer(raw):
+                # The cheap filter first: the leading-run search costs seconds in total.
+                if not any(_is_address_bearing(k) for k, _ in _PAIR.findall(match.group(0))):
+                    continue
                 lead = _LEADING_RUN.search(raw, max(0, match.start() - _RUN_WINDOW), match.start())
                 if (lead.group(3) if lead else "") in REQUESTER_OBJECT_KEYS:
                     continue  # the trailing run does fire for these
-                if not any(_is_address_bearing(k) for k, _ in _PAIR.findall(match.group(0))):
-                    continue
                 trail = _TRAILING_RUN.match(raw, match.end(), match.end() + _RUN_WINDOW)
                 if trail and trail.group(0).strip():
                     key = f"{package.name}/{path.relative_to(package)}"
