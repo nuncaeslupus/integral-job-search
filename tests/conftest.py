@@ -11,9 +11,13 @@ controller does the check, so a write by any worker is seen.
 
 from __future__ import annotations
 
+import functools
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from integral import connectors
 
 _EVIDENCE = Path(__file__).resolve().parents[1] / "status" / "evidence"
 _SNAPSHOT_KEY = pytest.StashKey[dict[str, tuple[int, bytes]]]()
@@ -60,3 +64,26 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         else:
             print(line)
     session.exitstatus = int(pytest.ExitCode.TESTS_FAILED)
+
+
+@pytest.fixture(scope="module")
+def memoised_connector_parsing() -> Iterator[None]:
+    """Parse each distinct connector YAML and each distinct captured page once.
+
+    Opt-in per test module (`pytestmark = pytest.mark.usefixtures(...)`), never
+    suite-wide: a file that tests `parse_connector` or `parse_html` themselves
+    (error paths, call counts, patching them, or editing a returned `Node`)
+    must not use it. Files that drive `source()` or the connector library over
+    the whole installed set re-parsed ~30 connector YAMLs and re-tokenised the
+    same recorded list pages on every call; profiling showed that, not any
+    wait, was most of their time. Both steps are pure functions of their text,
+    memoised on it. `parse_connector` returns a frozen `Connector`.
+    `parse_html` returns a `Node` tree that is mutable in type but only read
+    after the builder returns it, and no file that opts in touches a `Node`.
+    An input that raises is never cached. The memo is module-scoped and removed
+    at module teardown, so it cannot reach another file.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(connectors, "parse_connector", functools.cache(connectors.parse_connector))
+        patch.setattr(connectors, "parse_html", functools.cache(connectors.parse_html))
+        yield

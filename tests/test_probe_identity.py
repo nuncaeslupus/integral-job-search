@@ -18,6 +18,8 @@ from integral.connector_health import (
 )
 from integral.connectors import DEFAULT_CONNECTORS_DIR, connector_packages
 
+pytestmark = pytest.mark.usefixtures("memoised_connector_parsing")
+
 
 def test_no_shipped_package_probes_its_own_fixture() -> None:
     measured = measure_probe_identity()

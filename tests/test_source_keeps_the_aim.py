@@ -30,6 +30,8 @@ from integral.sourcing import (
     source_every_phrase,
 )
 
+pytestmark = pytest.mark.usefixtures("memoised_connector_parsing")
+
 _CONNECTORS = Path(__file__).resolve().parents[1] / "connectors"
 AT = "2026-01-01T00:00:00+00:00"
 

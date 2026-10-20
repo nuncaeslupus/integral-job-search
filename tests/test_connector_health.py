@@ -39,6 +39,8 @@ from integral.connectors import (
     parse_list_page,
 )
 
+pytestmark = pytest.mark.usefixtures("memoised_connector_parsing")
+
 _PACKAGE = DEFAULT_CONNECTORS_DIR / "trabajos_es"
 _CONNECTOR = load_connector(_PACKAGE)
 _SITE = "trabajos.com"

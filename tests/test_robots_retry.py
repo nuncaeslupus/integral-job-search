@@ -22,6 +22,8 @@ from integral.identity import ProfileStore, create_profile
 from integral.robots import Robots, RobotsError, RobotsUnreachable
 from integral.sourcing import Response, _may_fetch, source
 
+pytestmark = pytest.mark.usefixtures("memoised_connector_parsing")
+
 ALLOW_ALL = "User-agent: *\nAllow: /\n"
 AT = "2026-01-01T00:00:00+00:00"
 _CONNECTORS = Path(__file__).resolve().parents[1] / "connectors"
