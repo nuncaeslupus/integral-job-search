@@ -389,7 +389,12 @@ def test_the_reader_catalogue_is_complete_current_and_in_the_corpus_languages() 
     assert set(catalogue["languages"]) == set(corpus.LANGUAGES)
 
 
-def test_a_stale_translation_is_reported_by_the_gate(tmp_path: Path) -> None:
+def test_a_stale_translation_is_reported_by_the_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The catalogue checks run before any reader is built; no subjects keeps it cheap.
+    monkeypatch.setattr(dr, "SUBJECTS", ())
+    monkeypatch.setattr(dr, "MINIMUM_CONTRACTS_EVALUATED", 0)
     catalogue = json.loads(dr.DEFAULT_CATALOGUE.read_text(encoding="utf-8"))
     catalogue["entries"]["reader_export"]["en"] = "Send notes"
     path = tmp_path / "reader.json"
