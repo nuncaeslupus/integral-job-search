@@ -33,6 +33,19 @@ _CONNECTORS = _ROOT / "connectors"
 _BODY = "A body long enough to be an advert. " * 3
 
 
+def _one_package(tmp_path: Path, name: str) -> Path:
+    """A connectors tree holding only `name`: the audit sums per package, and
+    every committed package measures 0, so the others add nothing but time."""
+    shutil.copytree(_CONNECTORS / name, tmp_path / "connectors" / name)
+    return tmp_path / "connectors" / name
+
+
+@pytest.fixture(scope="module")
+def audit() -> dict[str, Any]:
+    """One measurement over the committed tree, shared read-only."""
+    return measure()
+
+
 def _salary(currency: str | None, low: float, high: float, period: str | None = None) -> Any:
     connector = load_connector(_CONNECTORS / "foorilla_en" / "connector.yaml")
     fields = {
@@ -158,8 +171,10 @@ def test_nofluffjobs_hourly_bands_read_as_hour_and_the_monthly_one_stays_refused
 # --- the audit ---
 
 
-def test_the_audit_counts_no_refusal_for_the_bound_or_a_period_today() -> None:
-    measured = measure()
+def test_the_audit_counts_no_refusal_for_the_bound_or_a_period_today(
+    audit: dict[str, Any],
+) -> None:
+    measured = audit
     assert measured["salary_rows_refused_for_bound_or_period"] == 0, measured
     assert measured["salary_expectation_mismatches"] == 0, measured["mismatches"]
 
@@ -203,8 +218,7 @@ def test_the_no_period_waiver_stands_only_while_the_card_states_none() -> None:
 def test_a_card_that_starts_printing_a_period_turns_the_waiver_into_a_counted_refusal(
     tmp_path: Path,
 ) -> None:
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    fixture = tmp_path / "connectors" / "trabajos_es" / "fixture"
+    fixture = _one_package(tmp_path, "trabajos_es") / "fixture"
     html = (fixture / "list.html").read_text(encoding="utf-8")
     assert html.count("9 € - 13 €") == 1
     (fixture / "list.html").write_text(
@@ -279,8 +293,7 @@ def test_every_currency_separates_a_monthly_band_from_an_annual_one(currency: st
 def test_the_no_period_waiver_does_not_stand_over_a_spanish_period_word(
     tmp_path: Path, phrase: str
 ) -> None:
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    fixture = tmp_path / "connectors" / "trabajos_es" / "fixture"
+    fixture = _one_package(tmp_path, "trabajos_es") / "fixture"
     html = (fixture / "list.html").read_text(encoding="utf-8")
     card = "9 € - 13 €"
     (fixture / "list.html").write_text(html.replace(card, f"{card} {phrase}"), encoding="utf-8")
@@ -289,9 +302,10 @@ def test_the_no_period_waiver_does_not_stand_over_a_spanish_period_word(
 
 
 def test_a_non_zero_key_fails_the_audit_exit_code(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, audit: dict[str, Any]
 ) -> None:
-    real = measure()
+    real = audit
+    monkeypatch.setattr(connector_salary_audit, "measure", lambda *a, **k: real)  # no re-run
     # `_main` records T200.json; keep that off the committed file (#671).
     write_real = connector_salary_audit.write_evidence
     monkeypatch.setattr(
@@ -311,8 +325,7 @@ def test_reverting_the_period_take_and_rewording_the_refusal_is_still_counted(
 ) -> None:
     """The key measures the property (the row reads once the bound is off), not
     the wording of the declared reason (#659 F4)."""
-    shutil.copytree(_CONNECTORS, tmp_path / "connectors")
-    package = tmp_path / "connectors" / "nofluffjobs_en"
+    package = _one_package(tmp_path, "nofluffjobs_en")
     yaml = (package / "connector.yaml").read_text(encoding="utf-8")
     block = '    salary_period:\n      css: "nfj-posting-item-salary"\n      take: period\n'
     assert block in yaml
