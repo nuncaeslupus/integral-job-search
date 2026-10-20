@@ -9,17 +9,18 @@ a failed run into a run that looks empty.
 
 from __future__ import annotations
 
+import functools
 import itertools
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, get_args
 
 import pytest
 
-from integral import sourcing
+from integral import connectors, sourcing
 from integral.candidate import (
     Aim,
     CandidateConstraints,
@@ -94,6 +95,27 @@ def _spain() -> CandidateConstraints:
             commutable_regions=("Barcelona",),
         )
     )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _memoised_pure_loaders() -> Iterator[None]:
+    """Parse each distinct connector YAML and each distinct captured page once.
+
+    Nearly every test here drives `source()` over the whole installed library,
+    which re-parsed ~30 connector YAMLs and re-tokenised the same ~30 recorded
+    list pages on every call: profiling showed that, not any wait, was most of
+    the 8-14 s of the slow tests. Both steps are pure functions of their text,
+    memoised on it. `parse_connector` returns a frozen `Connector`. `parse_html`
+    returns a `Node` tree that is mutable in type but only read after the
+    builder returns it (the only writers are `_TreeBuilder`'s own handlers,
+    which run inside the call), and nothing in this file touches a `Node`.
+    An input that raises is never cached. The memo is module-scoped and
+    removed at module teardown, so it cannot reach another file.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(connectors, "parse_connector", functools.cache(connectors.parse_connector))
+        patch.setattr(connectors, "parse_html", functools.cache(connectors.parse_html))
+        yield
 
 
 @pytest.fixture
