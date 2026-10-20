@@ -4,102 +4,174 @@
 [![Built with claude-arsenal](https://img.shields.io/badge/built%20with-claude--arsenal-d97756)](https://github.com/nuncaeslupus/claude-arsenal)
 <!-- /claude-arsenal:attribution -->
 
+[![CI](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/nuncaeslupus/integral-job-search/main/docs/hero.png" width="100%" alt="integral-job-search: five dimensions such as remote arrangement and commute burden drawn as lines through five stages, from what you need, through the advert's quoted evidence, the ranking, the CV and the interview, each stage written in the same terms">
 </p>
 
-[![CI](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nuncaeslupus/integral-job-search/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-Candidate-centred integral job search: one dimension model, carried end to end.
-
-For job seekers who want every offer judged — and every CV, letter and interview
-written — in terms of what they actually need, as a conversation in Claude Code.
-Quick start: `git clone https://github.com/nuncaeslupus/integral-job-search.git && cd integral-job-search && claude`
-([details](#using-it)).
+**A candidate-centred job search that runs as a conversation in Claude Code, judging every offer in terms of what you actually need.**
 
 Job tools match skills against requirements and stop. This one carries a single
-vocabulary — how social the office is, whether "remote" means remote, whether the
-schedule survives a school run — across every stage: the questions asked, the
-evidence read out of an advert, the ranking, the CV, the interview.
+dimension model (how social the office is, whether "remote" means remote,
+whether the schedule survives a school run) through every stage: the questions
+it asks you, the evidence it quotes from each advert, the ranking, the CV and
+letter, and the interview. Each step ends when a checkpoint script says so, not
+when it feels finished.
 
-**Where it is.** Usable, and used — it has been run end to end by its author, to
-a sent application. The thirteen steps all exist and all have gates. What is
-thinnest is **sourcing**: connectors exist for a handful of boards, so how many
-real offers reach you depends on whether your field is one of them, and
-[CONTRIBUTING.md](CONTRIBUTING.md) is about adding one. Expect to be the second
-person using this, not the thousandth.
+## Quick start
 
-## Using it
+Requires [Claude Code](https://claude.com/claude-code), Python 3.12+ and
+[uv](https://docs.astral.sh/uv/).
 
-```
+```bash
 git clone https://github.com/nuncaeslupus/integral-job-search.git
 cd integral-job-search
 claude
 ```
 
-Then talk. There is no command to learn and nothing to install by hand — the
-first session says what it is installing and does it once.
+Then talk. There is no command to learn: a SessionStart hook installs the
+dependencies on first run and says so. You can stop and resume across sessions.
 
-It runs as a conversation in thirteen steps, from working out who you are through
-to logging an interview. A step ends when a checkpoint script says it does, not
-when it feels finished. You can stop and resume across sessions.
+No Claude Code? [docs/simulation-prompt.md](docs/simulation-prompt.md) simulates
+the conversation in a plain Claude chat. It saves nothing and measures nothing.
 
-Requires [Claude Code](https://claude.com/claude-code), Python 3.12+, and
-[uv](https://docs.astral.sh/uv/).
+## Example
 
-No Claude Code? [docs/simulation-prompt.md](docs/simulation-prompt.md) is a
-prompt that simulates the conversation in a plain Claude chat. It saves nothing
-and measures nothing, and it is not a replacement.
+Step 0 resolves who you are with one script call before any profile is touched.
+On a fresh data directory:
+
+```console
+$ uv run python -m integral.step0_open open
+{"outcome": "create", "handle": null, "say": "I don't have a profile for you yet — what would you like to be called?", "last_activity": null, "offered": []}
+```
+
+Claude relays `say` to you verbatim. Every later step works the same way: the
+skill drives the conversation, and a script records the result and decides
+whether the step is done.
+
+Every stage reads the same dimension files. An excerpt of
+`dimensions/commute_burden.yaml`:
+
+```yaml
+id: commute_burden
+kind: hard
+group: requirements
+definition: >
+  What the advert requires of you in order to reach the work at all: living locally,
+  holding a driving licence, or providing your own vehicle. ...
+levels:
+  - value: 0.0
+    tell: "nothing is said about where you live or how you get there"
+  - value: 0.5
+    tell: "living in the area is required or preferred"
+  - value: 0.9
+    tell: "a driving licence or your own vehicle is stated as required"
+elicitation:
+  questions:
+    - id: cb_q1
+      text:
+        en: >
+          Describe the commute of the job you liked most and the one you liked least —
+          what did getting there actually cost you each day?
+```
+
+The `tell` lines are what extraction looks for in an advert, and the question is
+what the conversation asks you. The model has 41 dimensions, labelled in English, Spanish
+and Catalan ([dimensions/README.md](dimensions/README.md)).
+
+## Use with AI agents
+
+The product is a Claude Code project; the agent is the interface.
+
+- **Step skills.** `.claude/skills/step-00-identify` through
+  `step-12-interview-log` are the thirteen steps: identify, intake, constraints,
+  history, traits, reactions, preferences, sourcing, understanding, ranking,
+  feedback, application, interview log. Each names the `uv run python -m
+  integral.<module>` commands that record its result and close its gate.
+- **Connector skills.** `connector-new` connects a job board (robots.txt
+  adjudication, finding the request behind a page that renders after load,
+  field mapping, fixture and probe). `har` turns a browser HAR capture into a
+  scraper.
+- **Connector exchange.** Connectors install from
+  [integral-connectors](https://github.com/nuncaeslupus/integral-connectors)
+  over plain HTTPS and must pass their fixture check before first use. Contributing
+  one back is consent-gated: the tool discloses the files, asks once, and writes
+  the bundle and a `gh pr create` command to the outbox; it never sends anything.
+- **Hooks.** `.claude/settings.json` runs `tools/bootstrap_hook.sh` at session
+  start (dependency install) and `tools/profile_guard.sh` before file and shell
+  tools (keeps candidate data out of the repository).
+- **Test mode.** The `test-mode` skill runs a session as a test: `[[…]]` notes
+  about the tool travel alongside an otherwise real candidate conversation.
+- **Logins.** Sources that need a login are read through the candidate's own
+  browser session; no credential is ever stored in a connector.
+
+## How it works
+
+- **One vocabulary, end to end.** Elicitation, extraction, ranking, CV and
+  interview are projections of the files in `dimensions/`.
+- **Evidence, not guesses.** Extracted values carry verbatim spans from the
+  advert; each ranked position cites its reason from the ad.
+- **Preferences as prices.** Step 6 turns your reactions to real adverts into
+  salary-equivalent weights through forced pairwise choices.
+- **Gated steps.** Each step has a checkpoint script and a measured threshold.
+- **Polite sourcing.** robots.txt is checked per fetch and cannot fail open;
+  connector health has three verdicts (`healthy`, `broken`, `inconclusive`).
+- **Nothing sent without you.** Step 11 prepares the documents or the text to
+  paste; you press send.
 
 ## Your data stays yours
 
 Nothing you say is written inside this repository. Your profile lives in
-`~/.integral-job-search/` (or `$INTEGRAL_HOME`), and the resolver *refuses* any
-path inside a git work tree rather than warning about it — see
-[docs/distribution.md](docs/distribution.md) §2.
+`$INTEGRAL_HOME`, else `$XDG_DATA_HOME/integral-job-search`, else
+`~/.integral-job-search/` on Linux (the platform user-data directory on macOS
+and Windows). The resolver refuses any path inside a git work tree rather than
+warning about it ([docs/distribution.md](docs/distribution.md) §2).
 
-## Working on the tool
+## Limitations
 
-```
-make sync     # install, with dev dependencies
-make ci       # everything CI runs, in CI's order
+- **Sourcing is the thinnest part.** How many real offers reach you depends on
+  whether your boards have connectors; [CONTRIBUTING.md](CONTRIBUTING.md) covers
+  adding one.
+- It has been run end to end by its author, to a sent application. Expect to be
+  an early user.
+
+## Documentation
+
+- [status/specification.md](status/specification.md) — the specification
+- [docs/METHODS.md](docs/METHODS.md) — every technique and formula
+- [docs/product-shape.md](docs/product-shape.md) — why a conversation, not a CLI
+- [docs/distribution.md](docs/distribution.md) — installation and where state lives
+- [docs/dimension-catalogue.md](docs/dimension-catalogue.md) — the dimension model
+- [CONTRIBUTING.md](CONTRIBUTING.md) — adding a connector or a language pack
+
+## Development
+
+```bash
+make sync     # install with dev dependencies
+make ci       # lint, tests, evidence and gate checks, in CI's order
 make help     # every target
 ```
 
-- [status/specification.md](status/specification.md) — the argument
-- [docs/METHODS.md](docs/METHODS.md) — every technique and formula
-- [docs/product-shape.md](docs/product-shape.md) — why a conversation, not a CLI
-- [docs/distribution.md](docs/distribution.md) — how it is installed and where state lives
-
-MIT licensed.
-
 ## Related projects
 
-Built with [claude-arsenal](https://github.com/nuncaeslupus/claude-arsenal), the
-spec-driven Claude Code workflow and gated task queue this repo is developed on.
-Same author:
-
-- [claude-arsenal](https://github.com/nuncaeslupus/claude-arsenal) — a Claude Code skill and plugin marketplace: specs before code, failing tests first, gates with numbers.
-- [drawspec](https://github.com/nuncaeslupus/drawspec) — declarative diagram spec → clean, themeable SVG; JSON with no coordinates, so an LLM can write it.
-- [literary-critic](https://github.com/nuncaeslupus/literary-critic) — lets an LLM index, analyse and advise on a full novel manuscript the way a professional editor would.
-- [doc-control](https://github.com/nuncaeslupus/doc-control) — a deterministic tool for AI agents to edit Word documents as tracked changes (in development).
+- [claude-arsenal](https://github.com/nuncaeslupus/claude-arsenal) — spec-driven Claude Code workflow and gated task queue.
+- [drawspec](https://github.com/nuncaeslupus/drawspec) — declarative diagram spec → clean SVG/PNG/text, writable by LLMs; MCP server included.
+- [doc-control](https://github.com/nuncaeslupus/doc-control) — lets AI agents edit Word documents as tracked changes.
+- [literary-critic](https://github.com/nuncaeslupus/literary-critic) — LLM manuscript analysis the way a professional editor would.
+- [integral-connectors](https://github.com/nuncaeslupus/integral-connectors) — the job-board connectors this tool installs.
 
 ## Acknowledgements
 
-The failure-handling layer of this tool is adapted from
+The failure-handling layer is adapted from
 [`MadsLorentzen/ai-job-search`](https://github.com/MadsLorentzen/ai-job-search)
-(MIT, © 2026 Mads Lorentzen) — how a job board actually fails, written down by
-someone who spent five weeks finding out. Robots handling that cannot fail
-open, a connector health check with three verdicts rather than two, liveness
-that reads page identity, the eligibility gate and its quoted reasons, the ATS
-text-layer contract: each began as a report from that project.
+(MIT, © 2026 Mads Lorentzen): robots handling that cannot fail open, a
+three-verdict connector health check, liveness that reads page identity, the
+eligibility gate and its quoted reasons, and the ATS text-layer contract. What
+was taken, and what was assessed and not adopted, is recorded in
+[`docs/METHODS.md` §2.9](docs/METHODS.md).
 
-What was taken, where each piece lives, and what the borrowing does **not**
-extend to are recorded one row at a time in
-[`docs/METHODS.md` §2.9](docs/METHODS.md). Its matching layer was assessed and
-**not** adopted, and that judgement is recorded there too.
+## License
 
-MIT requires notice retention for copied code, not attribution for ideas. Most
-of the above is the second kind; this section is a commitment rather than a
-licence obligation.
+[MIT](LICENSE).
