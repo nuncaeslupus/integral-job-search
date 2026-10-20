@@ -330,22 +330,34 @@ def test_a_blank_employer_trips_no_exclusion(employer: str | None) -> None:
 
 
 def _names_over_every_code_point() -> list[str]:
+    """Every code point alone; padded and followed by a letter only in the
+    planes where `names_an_employer`'s inputs vary — spaces, `Cf` and NFKC
+    decompositions all live in planes 0, 1 and 14 and the CJK compatibility
+    supplement. Planes 2-13, 15 and 16 are otherwise uniform ideographs,
+    private use or unassigned, so their padded shapes repeated the alone
+    verdict at three times the cost."""
     import sys
 
-    return [
-        shaped
-        for cp in range(sys.maxunicode + 1)
-        if not 0xD800 <= cp <= 0xDFFF
-        for shaped in (chr(cp), f" {chr(cp)} ", f"{chr(cp)}x")
-    ]
+    def varied(cp: int) -> bool:
+        return cp < 0x20000 or 0x2F800 <= cp <= 0x2FA1F or 0xE0000 <= cp < 0xF0000
+
+    names: list[str] = []
+    for cp in range(sys.maxunicode + 1):
+        if 0xD800 <= cp <= 0xDFFF:
+            continue
+        names.append(chr(cp))
+        if varied(cp):
+            names += (f" {chr(cp)} ", f"{chr(cp)}x")
+    return names
 
 
 def test_an_empty_company_links_nothing_and_names_nobody() -> None:
     """`posting_key` joins copies by employer and title; a company that
     `names_an_employer` refuses must give no key, so it can never join two
-    adverts, and one it accepts must give one. Every code point, alone, padded
-    with spaces and followed by a letter — not a sample of spellings, so a
-    character class nobody thought of is still compared."""
+    adverts, and one it accepts must give one. Every code point alone, and padded
+    or followed by a letter wherever that can change the verdict — not a
+    sample of spellings, so a character class nobody thought of is still
+    compared."""
     from integral.lifecycle import posting_key
 
     disagreements = [
