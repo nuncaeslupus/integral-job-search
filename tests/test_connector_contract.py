@@ -21,8 +21,8 @@ import shutil
 import sys
 import time
 import types
-from collections.abc import Callable
-from functools import lru_cache
+from collections.abc import Callable, Iterator
+from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -104,6 +104,27 @@ def package(tmp_path: Path) -> Path:
     target = tmp_path / "connectors" / _REFERENCE.name
     shutil.copytree(_REFERENCE, target)
     return target
+
+
+@pytest.fixture(scope="module", autouse=True)
+def memoised_requester_blocks() -> Iterator[None]:
+    """Find each capture's requester-location blocks once for the module.
+
+    Three readings in `connector_contract` each recompute
+    `requester_location_blocks` over the same capture, and several tests below
+    walk the whole library; that regex scan was ~80% of this file's time. It is
+    a pure function of the text (the window is a module constant) and its
+    callers only read the spans. Only the module attribute is patched: the
+    time-budget test calls the name imported here, so it still times the real,
+    uncached scan.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(
+            connector_contract,
+            "requester_location_blocks",
+            cache(connector_contract.requester_location_blocks),
+        )
+        yield
 
 
 @pytest.fixture(scope="module")
@@ -1323,7 +1344,7 @@ def test_the_run_window_is_bounded_on_both_sides() -> None:
         end - start
         for path in sorted((_LIBRARY / "talent_es").rglob("*"))
         if path.is_file()
-        for start, end in requester_location_blocks(
+        for start, end in connector_contract.requester_location_blocks(
             path.read_text(encoding="utf-8", errors="replace")
         )
     )
