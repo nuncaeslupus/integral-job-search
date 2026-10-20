@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -140,8 +141,16 @@ def test_a_stated_exclusion_removes_the_matching_offers_and_reports_them(
 # --- the gate -------------------------------------------------------------
 
 
-def test_the_live_round_gate_measures_zero_over_real_adverts() -> None:
-    measured = live.measure_live_round()
+@pytest.fixture(scope="module")
+def live_round() -> dict[str, Any]:
+    """One full-corpus measurement, shared: it is read-only and costs seconds."""
+    return live.measure_live_round()
+
+
+def test_the_live_round_gate_measures_zero_over_real_adverts(
+    live_round: dict[str, Any],
+) -> None:
+    measured = live_round
     assert measured["gate_status"] == "measured", measured["failures"]
     assert measured["stated_exclusions_not_applied_to_a_live_round"] == 0
     assert measured["unexcluded_offers_removed"] == 0
@@ -149,7 +158,9 @@ def test_the_live_round_gate_measures_zero_over_real_adverts() -> None:
     assert measured["exclusions_never_tripped"] == 0, measured["never_tripped"]
 
 
-def test_the_live_round_removes_and_keeps_named_real_adverts() -> None:
+def test_the_live_round_removes_and_keeps_named_real_adverts(
+    live_round: dict[str, Any],
+) -> None:
     """Literal ids, chosen by reading the corpus, not by asking `matches`.
 
     manfred-8383 says e-commerce and the tecnoempleo one says "bancario" — a
@@ -163,7 +174,7 @@ def test_the_live_round_removes_and_keeps_named_real_adverts() -> None:
     on fintech): what the
     candidate asked of is the employer's business, not a line of the requirements.
     """
-    observed = live.measure_live_round()["_observed"]
+    observed = live_round["_observed"]
     stored = {url.rsplit("/", 1)[1] for url in observed["stored_urls"]}
     assert {"manfred-8383", "tecnoempleo-17da1920025ad37df94f"}.isdisjoint(stored)
     ads = {
@@ -203,6 +214,7 @@ def test_a_matcher_broken_for_one_row_turns_the_gate_red(
     measured = live.measure_live_round()
     assert measured["exclusions_never_tripped"] >= 1
     assert "sector:e-commerce" in measured["never_tripped"]
+    monkeypatch.setattr(live, "measure_live_round", lambda *a, **k: measured)  # no re-run
     assert live._main(["x", str(tmp_path / "T203.json")]) == 1  # red, not merely unmeasured
 
 
