@@ -441,3 +441,37 @@ def test_r4_further_closure_notices_read_dead(notice: str) -> None:
     check = liveness.read_response("r", 200, page)
     assert check.liveness == "dead", check.reason
     assert liveness.dead_phrase_in(notice) is not None
+
+
+#: getmanfred.com's shape (2026-10-21): the Next.js i18n bundle carrying the
+#: closure strings sits in a `<script>` on every advert, live or not.
+_MANFRED_I18N = (
+    '<script id="__NEXT_DATA__" type="application/json">{"closedOffer":"Oferta cerrada",'
+    '"offerClosed":"Oferta cerrada el {{date}}"}</script>'
+)
+
+
+def test_a_live_manfred_advert_is_not_read_dead_by_its_i18n_bundle() -> None:
+    """FAIL-CLOSED: every live getmanfred.com advert read `dead`."""
+    page = (
+        "<html><head><title>Senior AI Platform Engineer</title></head><body>"
+        "<h1>Senior AI Platform Engineer</h1><p>Signicat</p>"
+        f'{_MANFRED_I18N}<script>{{"status":"ACTIVE","closed":false}}</script></body></html>'
+    )
+    check = liveness.read_response("m", 200, page, title="Senior AI Platform Engineer")
+    assert check.liveness == "live", check.reason
+
+
+def test_a_closed_manfred_advert_still_reads_dead() -> None:
+    """FAIL-OPEN guard: the same bundle, with the closure shown in the visible page."""
+    page = (
+        "<html><head><title>Senior AI Platform Engineer</title></head><body>"
+        "<h1>Senior AI Platform Engineer</h1><p>Oferta cerrada el 3 de octubre</p>"
+        f'{_MANFRED_I18N}<script>{{"status":"CLOSED","closed":true}}</script></body></html>'
+    )
+    check = liveness.read_response("m", 200, page, title="Senior AI Platform Engineer")
+    assert check.liveness == "dead", check.reason
+
+
+def test_an_unclosed_script_does_not_hide_a_visible_closure() -> None:
+    assert liveness.dead_phrase_in("<p>Oferta cerrada</p><script>var a = 1;") == "oferta cerrada"
