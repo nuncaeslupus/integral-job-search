@@ -7,8 +7,8 @@
 set -euo pipefail
 OUT="${1:?usage: record.sh <out-dir>}"
 mkdir -p "$OUT"
-pw-record "$OUT/mic.wav" & MIC=$!
-pw-record -P '{ stream.capture.sink=true }' "$OUT/system.wav" & SYS=$!
+pw-record --rate 16000 --channels 1 "$OUT/mic.wav" & MIC=$!
+pw-record --rate 16000 --channels 1 -P '{ stream.capture.sink=true }' "$OUT/system.wav" & SYS=$!
 # Background children of a non-interactive shell ignore SIGINT, so Ctrl-C alone
 # would never stop them: forward it as TERM, which pw-record finalises cleanly.
 trap 'kill -TERM "$MIC" "$SYS" 2>/dev/null || true' INT TERM
