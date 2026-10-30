@@ -120,6 +120,13 @@ def _stated(haystack: str, phrase: str) -> bool:
     return False
 
 
+#: Code is not prose. A Next.js page ships its whole i18n bundle in a
+#: `<script>` (getmanfred.com: `"offerClosed":"Oferta cerrada el {{date}}"` on
+#: every live advert, 2026-10-21), so a phrase found only there states nothing.
+#: An unclosed `<script` is left alone, so a truncated body still matches.
+_SCRIPT_OR_STYLE = re.compile(r"<(script|style)\b[^<>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+
+
 def dead_phrase_in(text: str) -> str | None:
     """The closure notice the body states, if it states one.
 
@@ -146,6 +153,7 @@ def dead_phrase_in(text: str) -> str | None:
     its phrase by a tag, an entity (`&iquest;`) or a fullwidth question mark (U+FF1F) reads as a
     statement (fail-closed).
     """
+    text = _SCRIPT_OR_STYLE.sub(" ", text)
     views = (normalise(text), visible_text(text))
     return next((p for p in DEAD_PHRASES if any(_stated(v, p) for v in views)), None)
 
