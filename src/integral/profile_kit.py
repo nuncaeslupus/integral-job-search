@@ -20,6 +20,14 @@ entity site / Wayback sourcing is non-deterministic and un-gatable — the runti
 (the model or the candidate) drops the raw file, and this does the mechanical
 squaring, the texts and the folder. An entity with no source is reported in
 ``report.json``, never invented.
+
+Also out of scope here, each needing data or a judgement this does not have:
+``projects/`` for the candidate's own projects (``CVMaster`` has no projects
+section); the credential URL (``Certification`` carries no such field);
+"specializations, not the courses inside them" and "MOOCs only in Certificates"
+(curation of what goes in which section, done upstream in intake); and writing the
+texts "in the site's language" (they are copied from the store verbatim, in the
+language they were stored).
 """
 
 from __future__ import annotations
@@ -59,17 +67,29 @@ def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")[:48] or "entity"
 
 
+class BlankLogo(ValueError):
+    """The source has no visible content once near-white background is trimmed."""
+
+
+# A pixel within this of white (per channel) is background, not content. Zero
+# tolerance trimmed only #FFFFFF, leaving off-white and JPEG-ringed logos untrimmed.
+_WHITE_TOL = 16
+
+
 def square_logo(im: PILImage, *, canvas: int = CANVAS, fit: int = FIT) -> PILImage:
-    """Trim the uniform margin, fit the longest side to ``fit`` keeping aspect, and
-    centre on a ``canvas`` x ``canvas`` white square. Transparency composites onto white."""
+    """Trim the near-white margin, fit the longest side to ``fit`` keeping aspect, and
+    centre on a ``canvas`` x ``canvas`` white square. Transparency composites onto white.
+    Raises ``BlankLogo`` when nothing but background remains."""
     from PIL import Image, ImageChops
 
     flat = Image.new("RGBA", im.size, (*_WHITE, 255))
     flat.alpha_composite(im.convert("RGBA"))
     rgb = flat.convert("RGB")
-    bbox = ImageChops.difference(rgb, Image.new("RGB", rgb.size, _WHITE)).getbbox()
-    if bbox:
-        rgb = rgb.crop(bbox)
+    diff = ImageChops.difference(rgb, Image.new("RGB", rgb.size, _WHITE)).convert("L")
+    bbox = diff.point(lambda v: 255 if v > _WHITE_TOL else 0).getbbox()
+    if not bbox:
+        raise BlankLogo
+    rgb = rgb.crop(bbox)
     w, h = rgb.size
     if w >= h:
         nw, nh = fit, max(1, round(h * fit / w))
@@ -106,20 +126,31 @@ def _dates(start: str | None, end: str | None) -> str:
     return start or end or ""
 
 
+def _unique_slug(base: str, used: dict[str, int]) -> str:
+    """A folder-safe slug unique within this run. slugify is lossy — non-Latin names
+    and long names collapse to one slug — so distinct entities would otherwise share a
+    folder; suffix the repeats (``entity``, ``entity-2``) rather than overwrite."""
+    n = used.get(base, 0) + 1
+    used[base] = n
+    return base if n == 1 else f"{base}-{n}"
+
+
 def entities(master: CVMaster) -> list[Entity]:
-    """Every employer, school and certificate issuer, in CV order, deduped by slug."""
+    """Every employer, school and certificate issuer, in CV order. Deduped by the
+    normalised **name**, not the slug: two distinct names that slugify alike stay two
+    entities, while two roles at one employer share it."""
     order: list[str] = []
-    by_slug: dict[str, tuple[str, list[tuple[tuple[str, str], ...]]]] = {}
+    by_key: dict[str, tuple[str, list[tuple[tuple[str, str], ...]]]] = {}
 
     def add(name: str, fields: list[tuple[str, str]]) -> None:
         name = name.strip()
         if not name:
             return
-        slug = slugify(name)
-        if slug not in by_slug:
-            by_slug[slug] = (name, [])
-            order.append(slug)
-        by_slug[slug][1].append(tuple((k, v) for k, v in fields if v))
+        key = name.casefold()
+        if key not in by_key:
+            by_key[key] = (name, [])
+            order.append(key)
+        by_key[key][1].append(tuple((k, v) for k, v in fields if v))
 
     for e in master.experience:
         add(
@@ -129,10 +160,14 @@ def entities(master: CVMaster) -> list[Entity]:
     for s in master.education:
         add(s.institution, [("qualification", s.qualification), ("dates", s.completed or "")])
     for c in master.certifications:
-        if c.issuer:
+        if c.issuer and c.issuer.strip():
             add(c.issuer, [("certificate", c.name), ("obtained", c.obtained or "")])
 
-    return [Entity(by_slug[s][0], s, tuple(by_slug[s][1])) for s in order]
+    used: dict[str, int] = {}
+    return [
+        Entity(by_key[k][0], _unique_slug(slugify(by_key[k][0]), used), tuple(by_key[k][1]))
+        for k in order
+    ]
 
 
 def _texts_md(entity: Entity) -> str:
@@ -150,7 +185,9 @@ class Report:
     squared: list[str] = field(default_factory=list)
     vector_only: list[str] = field(default_factory=list)
     needs_logos_extra: list[str] = field(default_factory=list)
+    blank: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
+    no_issuer: list[str] = field(default_factory=list)
     entities: list[dict[str, str]] = field(default_factory=list)
 
     def as_json(self) -> dict[str, object]:
@@ -160,7 +197,9 @@ class Report:
             "squared": self.squared,
             "vector_only": self.vector_only,
             "needs_logos_extra": self.needs_logos_extra,
+            "blank": self.blank,
             "missing": self.missing,
+            "no_issuer": self.no_issuer,
         }
 
 
@@ -177,6 +216,9 @@ def _place_logo(store: ProfileStore, slug: str, report: Report) -> str:
         except ModuleNotFoundError:  # Pillow absent: install the `logos` extra
             report.needs_logos_extra.append(slug)
             return "needs_logos_extra"
+        except BlankLogo:  # all background: a blank square is not a logo, report it
+            report.blank.append(slug)
+            return "blank"
         if svg.is_file():
             dest_dir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(svg, dest_dir / "logo.svg")
@@ -193,8 +235,13 @@ def _place_logo(store: ProfileStore, slug: str, report: Report) -> str:
 
 def build_kit(store: ProfileStore) -> Report:
     """Write texts.md per entity, square any dropped logos, and write report.json."""
+    master = load_master(store)
     report = Report()
-    for e in entities(load_master(store)):
+    # A certificate with no issuer gets no logo entity; report it rather than drop it.
+    report.no_issuer = [
+        c.name for c in master.certifications if not (c.issuer and c.issuer.strip())
+    ]
+    for e in entities(master):
         store.write_text(_texts_md(e), *LOGOS, _ISSUERS, e.slug, "texts.md")
         status = _place_logo(store, e.slug, report)
         report.entities.append({"name": e.name, "slug": e.slug, "group": _ISSUERS, "logo": status})
@@ -212,9 +259,15 @@ def render(report: Report) -> str:
     if report.needs_logos_extra:
         ext = ", ".join(report.needs_logos_extra)
         lines.append(f"  not squared: {ext} (install the `logos` extra, then re-run)")
+    if report.blank:
+        lines.append(f"  blank src:   {', '.join(report.blank)} (source had no visible content)")
     if report.missing:
         lines.append(f"  no logo:     {', '.join(report.missing)}")
         lines.append(f"  find one: {_SEARCH_ORDER} Drop it in profile/logos/_sources/<slug>.<ext>.")
+    if report.no_issuer:
+        lines.append(
+            f"  no issuer:   {len(report.no_issuer)} certificate(s) with no issuer, no logo"
+        )
     return "\n".join(lines)
 
 
