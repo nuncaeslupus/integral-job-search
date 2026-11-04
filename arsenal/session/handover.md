@@ -1,5 +1,27 @@
 # Session handover
 
+## 00027. Profile kit merged (#914, T07b591f4); review follow-ups filed as T-d98c885c (#915)
+
+Merged: #914 (T07b591f4 / #909, `profile_kit`: squared logos + field texts for Manfred-style
+profile sites), #915 (docs-only task file for the batched review follow-ups).
+
+- **#914** took one second-reader BLOCK (six fail-open findings: slug-collision overwrite,
+  white-trim threshold too tight, blank source saved as a logo, RGBA not composited, issuer-less
+  cert dropped, portrait branch never fit to 420). All six fixed with committed fixtures and the
+  two correctness ones pin-checked. Round 2 CLEAR on head `bdea0a57`; all CI green (pytest, ruff+mypy,
+  evidence, verify-gates, task-closes). Squash-merged under owner policy H.
+- **Follow-ups batched into `t-d98c885c`** (policy C/G), merged as #915: (1) multi-line description
+  bleeds out of the markdown bullet; (2) case-sensitive source suffix (`.PNG`) reported missing;
+  (3) `_unique_slug` can collide with a natural slug (fail-open overwrite); (4) white-trim measured
+  on luma not per channel (fail-open crop). Each needs a fixture; none is security. **No GitHub issue
+  handle yet** — the next orchestrator session's `handle_sync.py` step creates it.
+- **Fixture privacy:** the test uses a neutral identity ("Ada Lovelace"/"ada"), never the real
+  candidate's name — the repo is public.
+- **Mechanics:** `git commit --amend` / `--force` are denied by the auto-mode classifier here; add a
+  new normal commit and fast-forward push instead (the squash collapses them). `gh pr merge --delete-branch`
+  fails while a worktree still holds the branch — remove the worktree first. `resurface` (untracked,
+  main checkout) is of unknown provenance and was left untouched.
+
 ## 00026. Speed: `make evidence` 179 s → 50 s; T346 trimmed the longest test
 
 Merged: #885 (follow-ups in #886), #887 (T312, parallel `evidence_runner`), #888 (T346).
