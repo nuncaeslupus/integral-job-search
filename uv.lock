@@ -512,10 +512,14 @@ cv = [
 ]
 dev = [
     { name = "mypy" },
+    { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "types-pyyaml" },
+]
+logos = [
+    { name = "pillow" },
 ]
 pdf = [
     { name = "weasyprint" },
@@ -526,6 +530,8 @@ requires-dist = [
     { name = "beautifulsoup4", marker = "extra == 'collect'", specifier = ">=4.12" },
     { name = "lxml", marker = "extra == 'collect'", specifier = ">=5.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
+    { name = "pillow", marker = "extra == 'dev'", specifier = ">=10" },
+    { name = "pillow", marker = "extra == 'logos'", specifier = ">=10" },
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "py3langid", marker = "extra == 'collect'", specifier = ">=0.3" },
     { name = "pydantic", specifier = ">=2.9" },
@@ -538,7 +544,7 @@ requires-dist = [
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "weasyprint", marker = "extra == 'pdf'", specifier = ">=62" },
 ]
-provides-extras = ["collect", "cv", "pdf", "dev"]
+provides-extras = ["collect", "cv", "pdf", "logos", "dev"]
 
 [[package]]
 name = "librt"

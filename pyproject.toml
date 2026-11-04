@@ -35,8 +35,15 @@ cv = [
 pdf = [
     "weasyprint>=62",
 ]
+# Only `integral.profile_kit` needs this — squaring a logo onto a 512x512 canvas.
+# The texts and folder it produces are stdlib, so the kit still runs without it;
+# a raster source is then reported as needing this extra, never squared.
+logos = [
+    "pillow>=10",
+]
 dev = [
     "mypy>=1.11",
+    "pillow>=10",
     "pytest>=8.3",
     # ~3,800 tests. The exact count sat here for a round and was already a
     # commit out of date when a reader checked it — it moves on any PR that
