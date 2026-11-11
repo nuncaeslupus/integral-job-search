@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# adversarial_review.sh <emit|verdict|check> [options]
+# adversarial_review.sh <emit|verdict|check|marker> [options]
 # The pre-PR adversarial review gate: build a self-contained case file for a
 # reviewer that has never seen this work, then hold the answer it gives.
 #
@@ -69,6 +69,20 @@
 #            review of this one, and the digest is what makes "I reviewed it,
 #            then kept coding" impossible to pass off as a cleared change.
 #
+#   marker   publish the receipt where a merge can see it. Prints a PR comment
+#            body carrying one machine line —
+#              <!-- arsenal-review: verdict=CLEAR head=<sha> session=<id> -->
+#            — for the committed HEAD, and with `--post <pr>` posts it. It
+#            refuses unless the receipt is fresh for this tree AND the tree is
+#            exactly HEAD (nothing uncommitted), because the marker names a
+#            commit and a receipt is about a working tree: the two only agree
+#            when there is nothing between them. `session=` is filled from
+#            CLAUDE_CODE_REMOTE_SESSION_ID, else CLAUDE_CODE_SESSION_ID, and is
+#            what `[review] reviewer-identity = "distinct-session"` compares
+#            against the PR's Claude-Session trailers (pr_audit.py). Run it in
+#            the REVIEWER's session: a subagent reports its parent's id, so a
+#            marker minted by the implementing session names the implementer.
+#
 # A MISSING VERDICT IS NOT A PASS. `verdict` exits 2 when it cannot find the
 # line, and `check` exits 2 with no receipt at all — distinct from the 0 that
 # means cleared, so no caller can read silence as approval. This is the same
@@ -95,10 +109,13 @@
 #      ARSENAL_QUEUE_REMOTE (default origin) — for resolving the default branch
 #      ARSENAL_REVIEW_DIR (packet dir, default tmp/arsenal-review)
 #      ARSENAL_REVIEW_MAX_DIFF_LINES (default 4000) — inline diff cap
+#      ARSENAL_REVIEW_UNTRACKED_BYTES (default 1048576) — untracked bytes expanded
+#        as diffs; files past it are fingerprinted, not inlined
 # Config: review-max-rounds (default 2) — the round cap; review-budget-min (10)
 #         and verification (balanced) are quoted in the packet's Budget line
 # Options: emit [--task <id>] [--intent <file>] [--checks <file>] [--base <ref>]
-#          [--reset] [--out <dir>]; verdict/check [--task <id>] [--out <dir>]
+#          [--reset] [--out <dir>]; verdict/check [--task <id>] [--out <dir>];
+#          marker [--task <id>] [--out <dir>] [--post <pr>]
 # Exit: emit    0 packet written (absolute path on stdout); 3 nothing to
 #               review; 2 error — including the round cap being exhausted and
 #               a follow-up whose tree is unchanged since the last round, both
@@ -106,6 +123,10 @@
 #       verdict 0 CLEAR, 1 BLOCK, 2 no usable verdict, 3 stale (tree moved)
 #       check   0 fresh CLEAR, 1 BLOCK on record, 2 no review on record,
 #               3 receipt is stale — the tree changed after it was written
+#       marker  0 marker printed (and posted, with --post) — whichever verdict
+#               it carries; 2 no receipt, uncommitted changes, or the post
+#               failed; 3 receipt is stale; 5 no scriptable GitHub channel —
+#               the body and the call to make are printed
 #
 # 1 means A REVIEWER SAID BLOCK, and never anything else. Every other way the
 # step can fail to produce a verdict — no reply file, no packet, an unreadable
@@ -127,6 +148,12 @@ if ! [[ "${MAX_DIFF_LINES}" =~ ^[0-9]+$ ]] || (( MAX_DIFF_LINES < 1 )); then
     echo "adversarial_review: ARSENAL_REVIEW_MAX_DIFF_LINES must be a positive integer, got '${MAX_DIFF_LINES}'" >&2
     exit 2
 fi
+# ponytail: starting value — past ~1 MiB nothing more fits the 4000-line inline cap
+UNTRACKED_BYTES="${ARSENAL_REVIEW_UNTRACKED_BYTES:-1048576}"
+[[ "${UNTRACKED_BYTES}" =~ ^[0-9]+$ ]] || {
+    echo "adversarial_review: ARSENAL_REVIEW_UNTRACKED_BYTES must be a non-negative integer, got '${UNTRACKED_BYTES}'" >&2
+    exit 2
+}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 # Git Bash: a native python.exe cannot open a `/c/...` path, and MSYS rewrites
 # one it is handed into a wrong `C:\c\...`. Resolve to `C:/...` once, here, so
@@ -146,9 +173,9 @@ CONFIG_PY="${SCRIPT_DIR}/../scripts/arsenal_config.py"
 die() { echo "adversarial_review: $1" >&2; exit "${2:-2}"; }
 
 SUB="${1:-}"; shift || true
-[[ -z "${SUB}" ]] && die "usage: adversarial_review.sh <emit|verdict|check> [--task id] [--intent file] [--checks file] [--base ref] [--reset] [--out dir]"
+[[ -z "${SUB}" ]] && die "usage: adversarial_review.sh <emit|verdict|check|marker> [--task id] [--intent file] [--checks file] [--base ref] [--reset] [--out dir]"
 
-RESET=0; BASE_OVERRIDE=""; TASK_ID=""; INTENT_FILE=""; REPLY_FILE=""; CHECKS_FILE=""
+RESET=0; BASE_OVERRIDE=""; TASK_ID=""; INTENT_FILE=""; REPLY_FILE=""; CHECKS_FILE=""; POST_PR=""
 OUT_DIR="${ARSENAL_REVIEW_DIR:-}"; OUT_DIR_GIVEN=0
 [[ -n "${OUT_DIR}" ]] && OUT_DIR_GIVEN=1
 # `${2:?message}` was the obvious way to write these and exits 1 — the status
@@ -168,6 +195,7 @@ while [[ $# -gt 0 ]]; do
         --intent) INTENT_FILE="$(_need --intent "${2:-}")" || exit $?; shift 2 ;;
         --checks) CHECKS_FILE="$(_need --checks "${2:-}")" || exit $?; shift 2 ;;
         --out)    OUT_DIR="$(_need --out "${2:-}")" || exit $?; OUT_DIR_GIVEN=1; shift 2 ;;
+        --post)   POST_PR="$(_need --post "${2:-}")" || exit $?; shift 2 ;;
         -*)       die "unknown option: $1" ;;
         *)        [[ -z "${REPLY_FILE}" ]] && REPLY_FILE="$1" || die "unexpected argument: $1"; shift ;;
     esac
@@ -329,7 +357,7 @@ _tracked_diff() {  # $1 = base
 # rendered as diffs against /dev/null without touching the index — `git add -N`
 # would mutate a tree this script has no business writing to.
 _untracked_diff() {
-    local p status
+    local p status size expanded=0 over=0
     while IFS= read -r -d '' p; do
         # `git ls-files --others` reports a nested git checkout as ONE directory
         # entry, and `git diff --no-index -- /dev/null <dir>` fails with status
@@ -360,6 +388,22 @@ _untracked_diff() {
             find "${p}" -type f -not -path '*/.git/*' 2>/dev/null | LC_ALL=C sort | while IFS= read -r _f; do
                 printf '+%s %s\n' "${_f}" "$(git hash-object "${_f}" 2>/dev/null || echo unreadable)"
             done
+            continue
+        fi
+        # A user's untracked bulk (a 48 MB `html/` nobody ignored) used to be
+        # rendered whole: emit then held it in one shell string and took over five
+        # minutes. Past the cap a file is fingerprinted — still in the digest, so a
+        # change to it still makes a receipt stale — and emit warns.
+        # Once over, every later file is capped too: no per-file `wc` past the cap.
+        # ponytail: one hash-object per capped file; batch via --stdin-paths if counts hurt
+        if (( ! over )); then
+            size=$(wc -c < "${p}" 2>/dev/null) || size=0
+            if (( expanded + size > UNTRACKED_BYTES )); then over=1; else expanded=$(( expanded + size )); fi
+        fi
+        if (( over )); then
+            printf 'diff --arsenal-untracked-capped %s\n--- /dev/null\n+++ b/%s\n' "${p}" "${p}"
+            printf '@@ not expanded: past the %s-byte untracked cap; open the file itself @@\n' "${UNTRACKED_BYTES}"
+            printf '+%s\n' "$(git hash-object "${p}" 2>/dev/null || echo unreadable)"
             continue
         fi
         # Status 1 means "the files differ", which is the whole point of asking,
@@ -486,6 +530,18 @@ _max_rounds() {
     printf '%s\n' "${v}"
 }
 
+# How the round cap gets raised, said to whoever will read it. On a cloud
+# surface the agent cannot do it: an agent loosening its own guardrail is what
+# the auto-mode classifier refuses, and arguably should. Offering "raise" there
+# sent an agent into that refusal and left two finished tasks parked (#484).
+_raise_hint() {
+    if [[ "${CLAUDE_CODE_REMOTE:-}" == "true" ]]; then
+        printf 'only the repo owner can set review-max-rounds higher in arsenal/config.toml; an agent may not loosen its own guardrail. Do not try: park the task with bin/park_task.sh, give this message as the reason, and move on.\n'
+    else
+        printf 'set review-max-rounds higher in arsenal/config.toml, if this change genuinely needs more.\n'
+    fi
+}
+
 # A config value quoted in the packet header. Informational, so an unreadable
 # config falls back to the shipped default rather than blocking the review —
 # the round cap, which does gate, is read strictly by _max_rounds.
@@ -535,7 +591,11 @@ cmd_emit() {
     base="$(_resolve_base)" || die "could not resolve a base commit to diff against. Pass --base <ref>."
 
     diff="$(_full_diff "${base}")" || die "could not read the diff against ${base} — refusing to build a packet from a partial tree"
-    [[ -z "${diff//[[:space:]]/}" ]] && {
+    capped="$(grep -c '^diff --arsenal-untracked-capped ' <<<"${diff}")"
+    (( capped )) && echo "adversarial_review: ${capped} untracked file(s) past ${UNTRACKED_BYTES} bytes were fingerprinted, not inlined (first: $(grep -m1 '^diff --arsenal-untracked-capped ' <<<"${diff}" | cut -d' ' -f3-)). If they are not part of this change, list them in .git/info/exclude." >&2
+    # A regex, not `${diff//[[:space:]]/}`: that substitution is quadratic in bash
+    # and took over two minutes on a 1 MB diff.
+    [[ "${diff}" =~ [^[:space:]] ]] || {
         echo "adversarial_review: no change against ${base:0:12} — nothing to review" >&2
         exit 3
     }
@@ -562,8 +622,12 @@ cmd_emit() {
         echo "adversarial_review: round ${round} would exceed review-max-rounds=${max_rounds} on this branch." >&2
         echo "adversarial_review: ${max_rounds} rounds without convergence is a finding about the change, not about the reviewer. Three ways out:" >&2
         echo "adversarial_review:   split    — drop the disputed part, open the rest, file the remainder as its own task" >&2
-        echo "adversarial_review:   override — say in the PR body which finding you judge a false positive, what you checked, and why" >&2
-        echo "adversarial_review:   raise    — set review-max-rounds higher in arsenal/config.toml, if this change genuinely needs more" >&2
+        if [[ "$(_cfg_or pre-pr-review warn)" == "required" ]]; then
+            echo "adversarial_review:   override — not here: pre-pr-review = required refuses a PR whose tree has no CLEAR receipt" >&2
+        else
+            echo "adversarial_review:   override — say in the PR body which finding you judge a false positive, what you checked, and why" >&2
+        fi
+        echo "adversarial_review:   raise    — $(_raise_hint)" >&2
         echo "adversarial_review: the count follows the branch, not the base. 'emit --reset' starts it over; so does a different branch." >&2
         exit 2
     fi
@@ -583,7 +647,7 @@ cmd_emit() {
             # opinion, it is shopping for one — what § Handling BLOCK forbids,
             # arriving by accident rather than by intent. Refuse it here, where
             # it costs nothing, instead of paying for a whole round to find out.
-            if [[ -z "${delta//[[:space:]]/}" ]]; then
+            if ! [[ "${delta}" =~ [^[:space:]] ]]; then
                 echo "adversarial_review: nothing has changed since round ${prev_round} read this tree." >&2
                 echo "adversarial_review: re-running the review on an unchanged tree is shopping for a verdict, not getting a second opinion — address the findings first." >&2
                 exit 2
@@ -915,7 +979,14 @@ cmd_verdict() {
     fi
     if [[ "${max_rounds}" =~ ^[0-9]+$ ]] && (( round >= max_rounds )); then
         echo "adversarial_review: round ${round} of ${max_rounds} — the last one. Another emit on this branch is refused." >&2
-        echo "adversarial_review: fix the BLOCKER findings and open the PR declaring what you changed, split the disputed part out, or raise review-max-rounds in arsenal/config.toml." >&2
+        if [[ "$(_cfg_or pre-pr-review warn)" == "required" ]]; then
+            # A fix made now has no receipt, and `required` refuses exactly that
+            # tree — so "fix and open the PR" was a path that could not be taken
+            # (#484). Say the two that can.
+            echo "adversarial_review: pre-pr-review = required, so a fix made after this round cannot open a PR — its tree will have no CLEAR receipt. Split the disputed part out, or park the task with bin/park_task.sh. To get another round: $(_raise_hint)" >&2
+        else
+            echo "adversarial_review: fix the BLOCKER findings and open the PR declaring what you changed, or split the disputed part out. To get another round: $(_raise_hint)" >&2
+        fi
     else
         echo "adversarial_review: round ${round} of ${max_rounds}. Fix the BLOCKER findings and re-emit — round $((round + 1)) reads those findings plus what you changed, not the whole diff again." >&2
     fi
@@ -952,9 +1023,58 @@ cmd_check() {
     exit 0
 }
 
+cmd_marker() {
+    [[ -z "${POST_PR}" || "${POST_PR}" =~ ^[0-9]+$ ]] || die "--post needs a PR number, got '${POST_PR}'"
+    [[ -f "${RECEIPT}" ]] || die "no review on record in ${OUT_DIR} — nothing to publish"
+    local verdict digest base reason now head session body
+    verdict="$(sed -n 's/^verdict=//p' "${RECEIPT}")"
+    digest="$(sed -n 's/^digest=//p' "${RECEIPT}")"
+    base="$(sed -n 's/^base=//p' "${RECEIPT}")"
+    reason="$(sed -n 's/^reason=//p' "${RECEIPT}" | head -1)"
+    [[ "${verdict}" == "CLEAR" || "${verdict}" == "BLOCK" ]] || die "the receipt in ${OUT_DIR} carries no verdict"
+    # Freshness for BOTH verdicts: a BLOCK about an earlier tree is not an
+    # objection to this one, and a marker names the commit it is posted for.
+    git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1 \
+        || die "the reviewed base ${base:0:12} is gone — the receipt cannot be verified" 3
+    now="$(_diff_digest "${base}")" || die "could not re-read the diff against ${base:0:12}" 3
+    [[ "${now}" == "${digest}" ]] \
+        || die "the tree changed since the review (${digest:0:12} → ${now:0:12}) — re-review before publishing" 3
+    # The receipt is about the working tree; the marker is about a commit. They
+    # are the same thing only when nothing is uncommitted.
+    if [[ -n "$(git status --porcelain --untracked-files=normal 2>/dev/null)" ]]; then
+        die "uncommitted changes: the marker names HEAD, and HEAD is not the tree that was reviewed — commit (and push) first"
+    fi
+    head="$(git rev-parse HEAD)" || die "cannot resolve HEAD"
+    # Bare token only: it lands inside an HTML comment that is parsed as
+    # key=value pairs, so anything else is dropped rather than quoted.
+    session="${CLAUDE_CODE_REMOTE_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
+    [[ "${session}" =~ ^[A-Za-z0-9._:/-]+$ ]] || session=""
+    body="<!-- arsenal-review: verdict=${verdict} head=${head}${session:+ session=${session}} -->"
+    body+=$'\n'"Adversarial review **${verdict}** on \`${head:0:7}\`${reason:+ — ${reason}}"
+    [[ -n "${session}" ]] || echo "adversarial_review: no session id in the environment — the marker cannot clear a PR under reviewer-identity = distinct-session" >&2
+    if [[ -z "${POST_PR}" ]]; then
+        printf '%s\n' "${body}"
+        return 0
+    fi
+    local channel="${SCRIPT_DIR}/github_channel.sh" slug payload status
+    slug="$(bash "${channel}" --slug 2>/dev/null)" || die "cannot determine owner/repo from the git remote"
+    payload="$(BODY="${body}" python3 -c 'import json,os;print(json.dumps({"body":os.environ["BODY"]}))')" \
+        || die "cannot encode the comment body"
+    bash "${channel}" --api POST "/repos/${slug}/issues/${POST_PR}/comments" "${payload}" >/dev/null 2>&1
+    status=$?
+    case ${status} in
+        0) printf '%s\n' "${body}"; echo "adversarial_review: ${verdict} marker posted on #${POST_PR} for ${head:0:12}" >&2 ;;
+        5) printf '%s\n' "${body}"
+           echo "adversarial_review: no scriptable GitHub channel — post the body above with your GitHub tools: POST /repos/${slug}/issues/${POST_PR}/comments" >&2
+           exit 5 ;;
+        *) die "posting the marker on #${POST_PR} failed (channel exit ${status})" ;;
+    esac
+}
+
 case "${SUB}" in
     emit)    cmd_emit ;;
     verdict) cmd_verdict ;;
     check)   cmd_check ;;
-    *)       die "unknown subcommand '${SUB}' (expected emit, verdict or check)" ;;
+    marker)  cmd_marker ;;
+    *)       die "unknown subcommand '${SUB}' (expected emit, verdict, check or marker)" ;;
 esac
