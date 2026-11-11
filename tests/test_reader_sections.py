@@ -150,8 +150,10 @@ def test_the_real_generator_cuts_one_section_per_paragraph(tmp_path: Path) -> No
         capture_output=True, text=True, check=False,
     )  # fmt: skip
     assert base.returncode == 0, base.stderr
-    raw_html = (raw_dir / "carta-reader.html").read_text(encoding="utf-8")
-    assert raw_html.count('<article class="sec"') == 1
+    # The generator names its output <project>-<stem>-v<n>-<stamp>-reader.html since
+    # bundle 5.x, and adds a level class to each section, so find and count by prefix.
+    raw_html = next(raw_dir.glob("*-reader.html")).read_text(encoding="utf-8")
+    assert raw_html.count('<article class="sec') == 1
 
     wrapped = subprocess.run(
         [
@@ -161,9 +163,9 @@ def test_the_real_generator_cuts_one_section_per_paragraph(tmp_path: Path) -> No
         capture_output=True, text=True, check=False,
     )  # fmt: skip
     assert wrapped.returncode == 0, wrapped.stderr
-    html = (new_dir / "carta-reader.html").read_text(encoding="utf-8")
+    html = next(new_dir.glob("*-reader.html")).read_text(encoding="utf-8")
     # The generator's own markers: one article and one note box per section.
-    assert html.count('<article class="sec"') == len(LETTER_PARAGRAPHS)
+    assert html.count('<article class="sec') == len(LETTER_PARAGRAPHS)
     assert html.count('<textarea class="note-ta"') == len(LETTER_PARAGRAPHS)
     bodies = re.findall(r'<div class="sec-body">(.*?)</div>', html, flags=re.DOTALL)
     assert len(bodies) == len(LETTER_PARAGRAPHS)

@@ -31,7 +31,8 @@
 #   manual <METHOD> <PATH> <BODY>
 #                        — no scriptable GitHub channel here; make this exact
 #                          call with your built-in GitHub tools and treat
-#                          201 as `won`, 422 as `lost`
+#                          201 as `won`, 422 as `lost`; a 403 from the shell
+#                          token means use the tools, not stop (stderr hint)
 # Exit: 0 won, 1 lost, 5 manual, 2 error.
 
 set -uo pipefail
@@ -64,6 +65,28 @@ fi
 PREFIX="${PREFIX:-arsenal/claims}"
 
 _fail() { echo "error: $1" >&2; exit 2; }
+
+# Serialized in-place mode: the worker runs in THIS checkout and open_task_pr.sh
+# commits it with `git add -A`, so anything already changed here — a user's own
+# settings edit, a large untracked dir — would ride into the task's PR (#546).
+# A linked worktree has no such residue by construction, which is why the check
+# keys on the in-place sentinel. ARSENAL_ALLOW_SHARED_ADD=1 is the same operator
+# escape hatch open_task_pr.sh honours.
+session_dir="${ARSENAL_SESSION_DIR:-${ARSENAL_HOME:-arsenal}/session}"
+if [[ "${ARSENAL_ALLOW_SHARED_ADD:-}" != "1" ]] \
+    && { [[ "${ARSENAL_WORKTREE_ISOLATION:-}" == "unavailable" ]] \
+        || [[ "$(tr -d '[:space:]' 2>/dev/null < "${session_dir}/worktree_isolation")" == "unavailable" ]]; }; then
+    dirty="$(git status --porcelain 2>/dev/null)"
+    if [[ -n "${dirty}" ]]; then
+        echo "error: in-place mode commits this whole checkout, and it already has changes" >&2
+        echo "       no task made:" >&2
+        sed 's/^/         /' <<<"${dirty}" | head -20 >&2
+        echo "       They are not yours to move: ask the user to commit or stash them" >&2
+        echo "       (git stash push -u), or to list a directory of theirs in" >&2
+        echo "       .git/info/exclude, then claim again." >&2
+        exit 2
+    fi
+fi
 
 slug="$(bash "${CHANNEL}" --slug)" || _fail "cannot determine owner/repo from remote '${REMOTE}'"
 
@@ -118,7 +141,22 @@ status=$?
 case ${status} in
     0) echo "won ${ref}"; exit 0 ;;
     3) echo "lost"; exit 1 ;;
-    5) echo "manual POST ${path} ${body}"; exit 5 ;;
+    5)
+        echo "manual POST ${path} ${body}"
+        # The channel already tried this with the shell's token and was refused
+        # the write (or has no channel at all). `--detect` saying `rest` only
+        # means reads work, so repeating the same POST with that token answers
+        # 403, which an agent reads as an `error` and stops on (#502). A ref
+        # creation is a branch creation, so the harness's own branch tool makes
+        # the identical compare-and-swap.
+        {
+            echo "claim_task: make this call with your built-in GitHub tools, not this shell's token —"
+            echo "  it creates branch '${ref#refs/heads/}' at ${sha} (e.g. a create_branch tool)."
+            echo "  Created (201) = won; already exists (422) = lost. A 403 means the shell token"
+            echo "  cannot create refs: use the tool instead. It is not an error to stop on."
+        } >&2
+        exit 5
+        ;;
     *)
         echo "error: claim call failed for ${TASK_ID}" >&2
         [[ -n "${out}" ]] && echo "${out}" >&2

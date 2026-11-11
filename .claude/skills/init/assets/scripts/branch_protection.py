@@ -115,6 +115,10 @@ def _repo_slug(repo_root: Path, override: str | None) -> str | None:
         return override
     if os.environ.get("GH_REPO"):
         return os.environ["GH_REPO"]
+    return _origin_slug(repo_root)
+
+
+def _origin_slug(repo_root: Path) -> str | None:
     try:
         proc = subprocess.run(
             ["git", "-C", str(repo_root), "remote", "get-url", "origin"],
@@ -219,7 +223,17 @@ def _carry_over(existing: dict[str, Any], contexts: list[str]) -> dict[str, Any]
         "required_approving_review_count": reviews.get("required_approving_review_count", 0),
         "dismiss_stale_reviews": bool(reviews.get("dismiss_stale_reviews")),
         "require_code_owner_reviews": bool(reviews.get("require_code_owner_reviews")),
+        "require_last_push_approval": bool(reviews.get("require_last_push_approval")),
     }
+    # The PUT replaces the whole protection: a toggle left out is switched off.
+    for key in (
+        "required_linear_history",
+        "required_conversation_resolution",
+        "lock_branch",
+        "block_creations",
+    ):
+        if (existing.get(key) or {}).get("enabled"):
+            payload[key] = True
     if restr:
         payload["restrictions"] = {
             "users": [u.get("login") for u in restr.get("users", [])],
@@ -335,7 +349,12 @@ def run(repo_root: Path, repo: str | None, dry_run: bool, force: bool) -> str:
             )
             _say(f"  {name}: {counts[name]}/{sampled} — {verdict}")
     else:
-        required = _workflow_jobs(repo_root)
+        # `--repo` naming a different repository than this checkout: its workflow
+        # files are not here, and requiring this checkout's job names would block
+        # every PR there on checks that never run.
+        origin = _origin_slug(repo_root)
+        foreign = origin is not None and origin.lower() != slug.lower()
+        required = [] if foreign else _workflow_jobs(repo_root)
         if required:
             _say(
                 "no PR has reported a check yet; falling back to pull_request workflow job "
