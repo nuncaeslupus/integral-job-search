@@ -6,6 +6,7 @@ import json
 import shutil
 from pathlib import Path
 from typing import Any, get_args
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -80,7 +81,8 @@ def test_the_slot_and_the_employers_imply_each_other(url: str, employers: str) -
 @pytest.mark.parametrize(
     ("url", "why"),
     [
-        ("https://{employer}.ats.test/jobs", "in the path"),  # every employer its own origin
+        ("https://{employer}-x.ats.test/jobs", "in the path"),  # not a whole label
+        ("https://{employer}.test/jobs", "in the path"),  # no fixed domain under it
         ("https://api.ats.test/jobs?company={employer}", "in the path"),
         ("https://api.ats.test/jobs#{employer}", "in the path"),
         ("https://{employer}@api.ats.test/jobs", "in the path"),  # userinfo is the netloc
@@ -133,7 +135,7 @@ def test_a_copied_connector_cannot_move_the_slot_where_the_validator_refused_it(
     asked again where URLs are built — the module's own posture (T110)."""
     connector = parse_connector(_yaml(GOOD))
     for update in (
-        {"url_pattern": "https://{employer}.evil.example/jobs"},
+        {"url_pattern": "{employer}://evil.example/jobs"},
         {"method": "POST", "body_json": {"q": "x"}},
         {"employers": {"..": "Dots"}},
         # round 2: `.match` would pass this one where `.fullmatch` refuses (M14)
@@ -999,4 +1001,78 @@ def test_the_committed_employer_boards_declare_it() -> None:
         if (package / "connector.yaml").is_file()
         and load_connector(package).source_kind == "employer"
     }
-    assert declared == {"ashby_en", "greenhouse_en", "lever_en", "rippling_en", "workable_en"}
+    assert declared == {
+        "ashby_en",
+        "greenhouse_en",
+        "lever_en",
+        "rippling_en",
+        "teamtailor_en",
+        "workable_en",
+    }
+
+
+# ---------------------------------------------------------------------------
+# the slot as the host's first label (Teamtailor): each employer its own origin
+
+
+HOST_SLOT = "https://{employer}.ats.test/jobs.json"
+
+
+def test_the_slot_may_be_the_hosts_first_label() -> None:
+    connector = parse_connector(_yaml(HOST_SLOT))
+    assert build_list_urls(connector, query="python") == ["https://acme.ats.test/jobs.json"]
+
+
+def test_a_host_slot_refuses_a_slug_that_is_not_one_dns_label() -> None:
+    with pytest.raises(ConnectorError, match="one DNS label"):
+        parse_connector(_yaml(HOST_SLOT, "  employers:\n    a.b: Dotted\n"))
+
+
+def test_a_host_slot_asks_each_employers_own_robots_txt(tmp_path: Path) -> None:
+    """A refused or unreadable robots.txt skips that employer; the rest are read."""
+    import urllib.error
+
+    directory = _package(tmp_path)
+    (directory / "atshost_en" / "connector.yaml").write_text(
+        _yaml(
+            HOST_SLOT,
+            "  employers:\n    acme: Acme Corp\n    gone: Gone Co\n"
+            "    shut: Shut Ltd\n    beta: Beta Inc\n",
+        ),
+        encoding="utf-8",
+    )
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)
+
+    def robots_fetch(url: str) -> str:
+        if url.startswith("https://gone."):
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)  # type: ignore[arg-type]
+        if url.startswith("https://shut."):
+            return "User-agent: *\nDisallow: /\n"
+        return "User-agent: *\nAllow: /\n"
+
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(urlsplit(request.url).hostname.split(".")[0])  # type: ignore[union-attr]
+        return _jobs(asked[-1])
+
+    run = source(
+        ProfileStore(tmp_path / "p", "test"),
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+        Aim(state="stated", terms=("python",)),
+        fetch=fetch,
+        at=AT,
+        directory=directory,
+        robots=Robots(fetch=robots_fetch, browser_fetch=robots_fetch),
+    )
+    assert asked == ["acme", "beta"]
+    (outcome,) = run.outcomes
+    assert outcome.added == 2
+    assert outcome.error is None and not outcome.skipped
+    failed = dict(f.split(" (", 1) for f in outcome.employers_failed)
+    assert set(failed) == {"Gone Co", "Shut Ltd"}
+    assert "unreadable" in failed["Gone Co"]
+    assert "disallows" in failed["Shut Ltd"]

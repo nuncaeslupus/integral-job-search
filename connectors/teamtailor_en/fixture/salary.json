@@ -1,0 +1,16 @@
+{
+  "rows": {
+    "1": {
+      "verdict": "read",
+      "min": 5100.0,
+      "max": 6500.0,
+      "currency": "AUD",
+      "period": "month",
+      "card_uncomparable": "The row's card is a JSON Feed item: the band is two string fields (`_jobposting.baseSalary.value.minValue`, `maxValue`), the currency a third (`baseSalary.currency`) and the period a fourth (`unitText`), with no figure written beside a currency token, so neither `card_band` nor `card_figure` can cut a band out of it.",
+      "card_figures": [
+        5100,
+        6500
+      ]
+    }
+  }
+}

@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 26,
-  "silent_connector_failures_evaluated": 26,
-  "connector_runs_probed": 26,
+  "connector_runs_evaluated": 27,
+  "silent_connector_failures_evaluated": 27,
+  "connector_runs_probed": 27,
   "disabled": [],
   "gate_status": "measured",
   "readings": [
@@ -202,6 +202,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-09-21",
+      "rate_limited": null
+    },
+    {
+      "connector": "teamtailor",
+      "site": "teamtailor.com",
+      "health": "healthy",
+      "baseline_items": 2,
+      "probe_items": 2,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-11-12",
       "rate_limited": null
     },
     {
