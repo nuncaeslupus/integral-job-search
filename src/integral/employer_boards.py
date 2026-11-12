@@ -53,6 +53,7 @@ from integral.connectors import (
     ConnectorError,
     ListRequest,
     build_list_urls,
+    employer_in_host,
     load_connector,
     source_kind_of,
 )
@@ -102,7 +103,12 @@ def measure(
         if row is None:
             why.append("no row in connectors/robots-adjudications.yaml")
         else:
-            why += row.problems() + _replay(row, build_list_urls(connector, query="python"))
+            urls = build_list_urls(connector, query="python")
+            if employer_in_host(pattern):
+                # Each employer is its own origin, asked its own robots.txt at
+                # fetch time (sourcing); the row adjudicates its own host only.
+                urls = [url for url in urls if urlsplit(url).hostname == row.site]
+            why += row.problems() + _replay(row, urls)
         if why:
             not_conforming[package.name] = why
             continue

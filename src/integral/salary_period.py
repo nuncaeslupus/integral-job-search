@@ -202,6 +202,13 @@ CONTRACT_CASES: tuple[PeriodContract, ...] = (
         connector="justjoin_en",
     ),
     PeriodContract(
+        "schema.org unitText",
+        "MONTH",
+        "month",
+        'connectors/teamtailor_en/fixture/list.html: _jobposting.baseSalary "unitText": "MONTH"',
+        connector="teamtailor_en",
+    ),
+    PeriodContract(
         "nofluffjobs",
         "h",
         "hour",

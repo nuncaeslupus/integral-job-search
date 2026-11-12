@@ -630,3 +630,13 @@ def test_a_refusal_raised_by_a_different_rule_does_not_count_as_this_one() -> No
 
     with pytest.raises(AssertionError, match="expected a refusal"):
         reaction_elicit.refused_by("no_url", "carries no url", lambda: None)
+
+
+def test_a_host_slot_package_lists_every_declared_employer_host() -> None:
+    """`https://{employer}.teamtailor.com/…` serves each employer from its own host."""
+    declared = yaml.safe_load(
+        Path("connectors/teamtailor_en/connector.yaml").read_text(encoding="utf-8")
+    )
+    expected = {f"{slug}.teamtailor.com" for slug in declared["list"]["employers"]}
+    assert expected <= SOURCE_HOSTS["teamtailor"]
+    assert "{employer}.teamtailor.com" not in SOURCE_HOSTS["teamtailor"]
