@@ -174,9 +174,13 @@ that serves its listings only to a browser is read through the candidate's own, 
 
 3. **Open each URL in the candidate's Chrome** and wait until the listing is on screen. The first
    page stays blank for about ten seconds while the check runs. Then run this in the tab. It saves
-   the rendered page with the URL on its first line, so the page can answer only that search:
+   the rendered page with the URL on its first line, so the page can answer only that search.
+   It scrolls to the bottom first: InfoJobs renders its cards only as they scroll into view, and
+   an unscrolled capture holds about 5 of the 20 on the page:
 
    ```js
+   for (let y = 0; y < document.body.scrollHeight; y += 500) { window.scrollTo(0, y); await new Promise(r => setTimeout(r, 300)); }
+   await new Promise(r => setTimeout(r, 1500));
    const html = `<!-- integral-capture: ${location.href} -->\n` + document.documentElement.outerHTML;
    const a = document.createElement('a');
    a.href = URL.createObjectURL(new Blob([html], {type: 'text/html'}));
