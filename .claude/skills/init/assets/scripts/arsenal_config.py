@@ -19,6 +19,7 @@ Usage:
     arsenal_config.py --get merge-policy   # print one value, bare
     arsenal_config.py --get models.workers # dotted key: a value inside a table
     arsenal_config.py --explain            # show each value and where it came from
+    arsenal_config.py --new-settings       # keys added since config-acknowledged, unset here
 
 Exit: 0 on success, 2 on an invalid value (a typo in a policy name is a
 configuration bug worth failing loudly for, not silently defaulting past).
@@ -33,11 +34,38 @@ import re
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
+
+
+class Setting(NamedTuple):
+    """One registered key: its default, the release that added it, and what it does.
+
+    This table is the ONE registry of config keys (#496). The loader validates
+    against it, `--explain` reports from it, and `--new-settings` derives the
+    session-start notice from it — so a key cannot exist in one of those places
+    and be missing from another. `config_keys_test.sh` fails the build on a key
+    with no `since` or no description, because a key nobody is told about sits at
+    its default in every downstream repo until someone happens to read the
+    changelog.
+    """
+
+    default: Any
+    since: str
+    description: str
+
+
+# The version recorded for every key that predates the registry. The releases
+# before it did not record when each key arrived, and reconstructing that from
+# the changelog would be prose-parsing by another name. It is also the floor a
+# host is assumed to have acknowledged when its file says nothing: those keys
+# reached it through the template, the docs and the changelog of their own
+# release, so announcing all of them again on the first session after an
+# upgrade would bury the one line that is actually new.
+BASELINE = "5.6.0"
 
 # Defaults live here rather than being scattered through the scripts that read
 # them, so `--explain` can always say what the fallback is.
-DEFAULTS: dict[str, Any] = {
+SETTINGS: dict[str, Setting] = {
     # How far a task PR must get before it may be merged. Read at the merge
     # step itself — `AGENTS.md` § Completion, expanded in
     # `references/github-automation.md`, which maps each value to a check.
@@ -45,13 +73,17 @@ DEFAULTS: dict[str, Any] = {
     # or anywhere else in the bundle, ever read the key (#192): a policy
     # nothing consults decides nothing, and the cost is quiet — every merge
     # stops to ask a question the host already answered.
-    "merge-policy": "after-ci",
+    "merge-policy": Setting(
+        "after-ci", BASELINE, "How far a task PR must get before an agent may merge it."
+    ),
     # Shell command run by open_task_pr.sh before a task PR is opened, refusing
     # on non-zero. Empty by default: a repo with no gate is unaffected. This is
     # what gives worker.md's "run the host lint gate" a data path — the prose
     # named `make lint` as its example, so a repo whose real gate is five
     # commands had four of them enforced by nobody.
-    "host-gate": "",
+    "host-gate": Setting(
+        "", BASELINE, "Shell command run before a task PR opens; non-zero means no PR."
+    ),
     # The cheap counterpart, run by `open_task_pr.sh <task> --preflight` over
     # the archived tree and nowhere else. Empty by default: the honest default
     # is that this bundle cannot see inside `make test`, so preflight without
@@ -71,14 +103,22 @@ DEFAULTS: dict[str, Any] = {
     # host-gate is paid once before the PR opens and once before merge rather
     # than once per push. Change-scoped lint/typecheck plus the tests the change
     # selects is the usual shape.
-    "preflight-gate": "",
+    "preflight-gate": Setting(
+        "",
+        BASELINE,
+        "Cheap change-scoped slice of host-gate, run by --preflight and later review rounds.",
+    ),
     # Shell command run by bin/host_setup.sh in a fresh worktree, before the
     # first gate. Empty by default. A worktree carries tracked files and nothing
     # an install produces, so the first gate in one fails on a missing tool
     # rather than on the change under test — and every worker rediscovers that
     # separately. Naming the command here is what turns it from a diagnosis
     # into a step.
-    "host-setup": "",
+    "host-setup": Setting(
+        "",
+        BASELINE,
+        "Shell command that installs dependencies in a fresh worktree before the first gate.",
+    ),
     # How hard the pre-PR adversarial review binds ON THE TASK-PR PATH. Read by
     # open_task_pr.sh and nowhere else, via bin/adversarial_review.sh, whose
     # `check` asks whether a reviewer that never saw this work cleared THIS
@@ -92,7 +132,9 @@ DEFAULTS: dict[str, Any] = {
     #             turned off, and one that says nothing gets forgotten.
     #   required  refuse to open the PR without a CLEAR receipt for this tree.
     #   off       skip the check and write no line.
-    "pre-pr-review": "warn",
+    "pre-pr-review": Setting(
+        "warn", BASELINE, "How hard the pre-PR adversarial review binds when a task PR is opened."
+    ),
     # How many adversarial-review rounds one change gets before the loop is
     # declared non-convergent. Read by bin/adversarial_review.sh, which refuses
     # to emit a packet past it. Round two is a follow-up on the previous
@@ -102,13 +144,17 @@ DEFAULTS: dict[str, Any] = {
     # to the base, every rebase or base merge restarted it, and one PR ran eight
     # rounds of ~40 minutes under a cap of three. `adversarial_review.sh --reset`
     # starts over deliberately.
-    "review-max-rounds": 2,
+    "review-max-rounds": Setting(
+        2,
+        BASELINE,
+        "Adversarial-review rounds one change gets before the loop is declared non-convergent.",
+    ),
     # How often a session stops to ask the user. Read by AGENTS.md, which every
     # session loads; /init sets it from the setup interview.
     #   ask-often         confirm each step before taking it
     #   ask-when-blocked  ask only when blocked or before a risky action
     #   autonomous        never wait on the user for reversible work
-    "autonomy": "ask-when-blocked",
+    "autonomy": Setting("ask-when-blocked", BASELINE, "How often a session stops to ask the user."),
     # How deep local verification goes, given what CI and the review bots
     # already did on the PR. Read by scripts/review_sources.py (the decision
     # line every caller follows), bin/fast_gate.sh and bin/adversarial_review.sh.
@@ -117,67 +163,109 @@ DEFAULTS: dict[str, Any] = {
     #             one diff review, targeted tests only, when the bots are out
     #   strict    always one local review; reviewer may run the full suite and
     #             mutations; no CI-green shortcut at merge
-    "verification": "balanced",
+    "verification": Setting(
+        "balanced",
+        BASELINE,
+        "How deep local verification goes, given what CI and the review bots already did.",
+    ),
     # Minutes one review round is told it has, as an elapsed/budget line in the
     # packet. Advisory to the reviewer; the dispatcher stops waiting at twice it.
-    "review-budget-min": 10,
+    "review-budget-min": Setting(
+        10, BASELINE, "Minutes one adversarial-review round is told it has."
+    ),
     # Minutes a configured review bot may stay silent on a PR head before
     # review_sources.py sends its trigger (see bot-triggers) and, after a
     # second wait, records it as absent so the loop moves on.
-    "bot-wait-min": 20,
+    "bot-wait-min": Setting(
+        20,
+        BASELINE,
+        "Minutes a review bot may stay silent on a PR head before it counts as absent.",
+    ),
     # Manual review commands, one "login=comment" per bot. A bot that skipped
     # the PR (some skip small or unstarred repos) or stayed silent gets this
     # comment once per head. Empty means never post one. A starting value: /init
     # suggests entries for the bots in review-bots.
-    "bot-triggers": [],
+    "bot-triggers": Setting(
+        [],
+        BASELINE,
+        "Manual review commands, one login=comment per bot, posted once per head.",
+    ),
     # Globs whose change always gets a local review round, whatever CI and the
     # bots said (auth, migrations, release scripts — your call).
-    "risk-paths": [],
+    "risk-paths": Setting([], BASELINE, "Globs whose change always gets a local review round."),
     # A diff larger than this many changed lines always gets a local round.
-    "risk-lines": 400,
+    "risk-lines": Setting(
+        400, BASELINE, "Changed-line count above which a diff always gets a local review round."
+    ),
+    # Extra phrases, as case-insensitive regexes, that mean a review bot will
+    # not review this head. review_sources.py ships a starting table (rate
+    # limits, free-tier and plan caps, "fewer than N stars" skips, pauses);
+    # these are appended to it, for a reviewer that words its notice another
+    # way. A match reads as `unavailable` (skipped): one trigger, then the
+    # decision falls through to the local review rather than waiting (#507).
+    "bot-unavailable-notices": Setting(
+        [], "5.7.0", "Extra regexes that mark a review bot unavailable (beyond the shipped table)."
+    ),
     # Which review bots the PR review loop waits on, by GitHub username. Read
     # by the github skill's query_pr_state.py, which watches for their :eyes:,
     # their line comments and their approval before a PR is callable.
     #
-    # The three shipped here are a starting value, not a claim about your repo:
-    # they are the ones this bundle was exercised against. A repo running a
-    # different reviewer had no way to say so short of passing --watch-bots at
-    # every call, and a repo running none at all had the loop wait for a signal
-    # that was never coming.
-    #
-    # An empty list is the documented way to say "no review bot here": the loop
-    # then runs CI-only, and `ready_to_merge` rests on green CI alone. That is
-    # the weaker gate, which is why it is opt-in rather than the default — a
-    # host that has a bot should not lose it by upgrading.
-    "review-bots": ["gemini-code-assist[bot]", "coderabbitai[bot]", "claude[bot]"],
+    # Empty by default since 5.19.0: a shipped list of vendor bots made every
+    # repo running none of them wait on a signal that was never coming. Empty
+    # means CI-only — `ready_to_merge` rests on green CI alone — so a host with
+    # a bot lists it here (the setup interview asks); `since` is 5.19.0 so an
+    # existing host is told once that the default changed.
+    "review-bots": Setting(
+        [],
+        "5.19.0",
+        "Review bots the PR loop waits on; empty (default since 5.19.0) means CI-only.",
+    ),
     # The skills-listing character budget the auditor enforces. It is a real
     # constraint, but its value differs by surface and has changed over time,
     # so a consumer whose budget differs can set it here instead of being
     # unable to pass the audit at all (#143).
-    "listing-budget": 8000,
+    "listing-budget": Setting(
+        8000, BASELINE, "Skills-listing character budget the auditor enforces."
+    ),
     # Whether `/init` keeps .github/workflows/arsenal-queue.yml installed. Set
     # to `true` on first install and to `false` when the file is found deleted,
     # so removing it is a real opt-out rather than something the next session's
     # `init --silent` quietly undoes.
-    "queue-automation": True,
+    "queue-automation": Setting(
+        True, BASELINE, "Whether /init keeps the queue workflow installed."
+    ),
     # What `/init` did about GitHub branch protection on the default branch,
     # recorded so the API is asked once rather than on every run: applied,
     # existing (a rule was already there and was left alone), unavailable
     # (GitHub refused — a plan or permission limit), or off (--no-branch-protection).
     # Empty = not yet attempted. Clear it to have the next `/init` try again.
-    "branch-protection": "",
+    "branch-protection": Setting(
+        "",
+        BASELINE,
+        "What /init did about branch protection on the default branch (recorded, not chosen).",
+    ),
     # The label an issue must carry before `issue_import.py` turns it into a
     # task. Opt-in on purpose: every open issue becoming claimable work means a
     # worker opens a PR against a question someone asked.
-    "import-label": "arsenal:queue",
+    "import-label": Setting(
+        "arsenal:queue",
+        BASELINE,
+        "Label an issue must carry before issue_import.py turns it into a task.",
+    ),
     # Where host-owned project content lives, relative to the repo root.
-    "home": "arsenal",
+    "home": Setting(
+        "arsenal",
+        BASELINE,
+        "Where host-owned project content lives (set via ARSENAL_HOME, not this file).",
+    ),
     # The label that marks an issue as a machine-managed task handle. Anything
     # without it is never treated as claimable work, which is what keeps
     # ordinary issues people file out of the queue.
-    "task-label": "arsenal:task",
+    "task-label": Setting(
+        "arsenal:task", BASELINE, "Label that marks an issue as a machine-managed task handle."
+    ),
     # Ref namespace for atomic claim refs.
-    "claim-prefix": "arsenal/claims",
+    "claim-prefix": Setting("arsenal/claims", BASELINE, "Ref namespace for atomic claim refs."),
     # Which skill sections /init vendors into .claude/skills/, on top of the
     # always-installed core. Registered here so `--explain` can report them and
     # so the loader keeps them; the values are written by init.py from the
@@ -185,8 +273,8 @@ DEFAULTS: dict[str, Any] = {
     # one writer, so the shipped defaults and the recorded answer cannot drift.
     # The defaults here are what a FRESH install gets; an upgrade preserves
     # whatever the repo already had (init.py:_resolve_sections).
-    "skills.workflow": True,
-    "skills.python": False,
+    "skills.workflow": Setting(True, BASELINE, "Whether /init vendors the workflow skill section."),
+    "skills.python": Setting(False, BASELINE, "Whether /init vendors the python skill section."),
     # The auto-compact threshold, in tokens, written into the host's
     # `.claude/settings.json` as `autoCompactWindow` by `/init`. 0 means "no
     # opinion" — leave whatever the harness defaults to, and never touch a value
@@ -204,13 +292,19 @@ DEFAULTS: dict[str, Any] = {
     # work, not one upstream can make: too low and sessions compact mid-task and
     # re-read what they dropped, which costs turns instead of context. Set it,
     # measure with scripts/usage_report.py, move it.
-    "context-window": 0,
+    "context-window": Setting(
+        0,
+        BASELINE,
+        "Auto-compact threshold in tokens written into .claude/settings.json; 0 = no opinion.",
+    ),
     # Which model runs the session that dispatches work. Advisory, and the one
     # key here nothing can enforce from inside a session: a session cannot
     # change the model it is already running as, so this is read and reported
     # at session start for the person launching it (`claude --model <value>`).
     # Empty means "whatever the session was launched with" — no opinion.
-    "models.orchestrator": "",
+    "models.orchestrator": Setting(
+        "", BASELINE, "Model the dispatching session should run as (advisory)."
+    ),
     # Which model runs worker subagents. This one has a data path: the
     # orchestrator resolves it and passes it as the dispatch's own model
     # argument, so it governs every worker in the session. It used to be a
@@ -222,7 +316,7 @@ DEFAULTS: dict[str, Any] = {
     # a fresh shell: the export died with the call that made it, and the fleet
     # ran on the orchestrator's model — the expensive default — while this key
     # resolved to something cheaper and governed nothing (#379).
-    "models.workers": "sonnet",
+    "models.workers": Setting("sonnet", BASELINE, "Model worker subagents are dispatched with."),
     # Which model runs adversarial reviewer subagents (`agents/reviewer.md`,
     # dispatched from a case file by bin/adversarial_review.sh). Empty means
     # "no separate opinion — use models.workers", which is why it is not
@@ -237,8 +331,130 @@ DEFAULTS: dict[str, Any] = {
     # parsed fine, sat in the file looking configured, and reached nothing,
     # because unknown keys are tolerated on read (below). A key that records a
     # decision and changes nothing is worse than no key (#380).
-    "models.reviewers": "",
+    "models.reviewers": Setting(
+        "",
+        BASELINE,
+        "Model adversarial reviewer subagents are dispatched with; empty = models.workers.",
+    ),
+    # Whose reviewer marker may clear a PR head for the review half of
+    # merge-policy. Read by scripts/pr_audit.py (via bin/merge_ready.sh), which
+    # documents the marker and the rule; `[review]` table in the file.
+    #   distinct-session  (default) the author's own login also counts, when
+    #                     the marker names a reviewer session that is none of
+    #                     the sessions in the PR's `Claude-Session:` commit
+    #                     trailers. For an agent fleet where every session
+    #                     posts with one credential, which makes distinct-login
+    #                     unsatisfiable. A subagent shares its parent's session
+    #                     id, so the reviewer must run as its own session (#495).
+    #   distinct-login    the marker must be written by a login other than the
+    #                     PR author's. Right for a repo whose second reader is a
+    #                     human or a bot account on another login.
+    "review.reviewer-identity": Setting(
+        "distinct-session",
+        "5.7.0",
+        "Whose review marker clears a PR: distinct-session, or distinct-login for other logins",
+    ),
+    # Who approves a PR, by risk tier — read by scripts/review_policy.py, which
+    # classifies the PR (low / medium / high) and turns the tier into what
+    # pr_audit.py waits for. Empty keeps merge-policy alone in charge, exactly as
+    # before the key existed. The presets, one line each:
+    #   solo-trust  agent merges every tier; high-tier merges flagged to ratify
+    #   solo-gated  a human approves medium and high
+    #   team        agent review on low, 1 human on medium, 2 on high
+    #   manual      no agent merges (merge-policy never)
+    "review.preset": Setting(
+        "",
+        "5.11.0",
+        "Who approves by risk tier (solo-trust, solo-gated, team, manual); empty = merge-policy.",
+    ),
+    # Globs that always need a human, whatever the preset says: any match makes
+    # the PR high-risk and requires at least one human approval.
+    "review.always-human-paths": Setting(
+        [],
+        "5.11.0",
+        "Globs whose change always needs a human approval, whatever review.preset says.",
+    ),
+    # Globs a PR must ONLY touch to be low-risk. Empty = the built-in docs/config
+    # set review_sources.py already uses. High is risk-paths / risk-lines.
+    "review.low-paths": Setting(
+        [],
+        "5.11.0",
+        "Globs a PR may only touch to be low-risk; empty = the built-in docs/config set.",
+    ),
+    # Per-tier override of the preset row: auto | agent | human:<N> | human-after.
+    "review.approval-low": Setting(
+        "",
+        "5.11.0",
+        "Approval for low-risk PRs (auto, agent, human:N, human-after); empty = preset row.",
+    ),
+    "review.approval-medium": Setting(
+        "",
+        "5.11.0",
+        "Approval for medium-risk PRs (auto, agent, human:N, human-after); empty = preset row.",
+    ),
+    "review.approval-high": Setting(
+        "",
+        "5.11.0",
+        "Approval for high-risk PRs (auto, agent, human:N, human-after); empty = preset row.",
+    ),
+    # When a digest approval counts as a human one (scripts/pr_audit.py): a
+    # `<!-- arsenal-decision: approve head=<sha> via=digest -->` marker written by
+    # apply_decisions.py from the human's exported decisions file. Off by default:
+    # the agent writes the marker, so the trust is in that file, not in GitHub.
+    # On lets solo-gated work when the agent opens PRs with the owner's account.
+    "review.digest-decisions": Setting(
+        False, "5.12.0", "Count a digest approval marker on the head as one human approval."
+    ),
+    # Where `digest.py render` puts the digest at its triggers (session end, the
+    # quota stop, every digest-every merges): file (HTML path printed), chat
+    # (Markdown printed), or both.
+    "digest-delivery": Setting(
+        "file", "5.12.0", "Where the review digest goes: file, chat or both."
+    ),
+    # Also render after this many merges in one session; 0 = only at session end.
+    "digest-every": Setting(
+        5, "5.12.0", "Render the review digest after this many merges; 0 = at session end only."
+    ),
+    # The "built with claude-arsenal" badge `/init` puts under the README's
+    # title, read by init.py and nowhere else. Like a license notice it says
+    # where the tooling came from and links to it, and like any notice the host
+    # may drop it: set false, or delete the block — once init has recorded
+    # `true` it never puts a deleted badge back.
+    "attribution": Setting(
+        True,
+        "5.10.0",
+        "Keep a 'built with claude-arsenal' badge in README.md; false (or deleting it) drops it.",
+    ),
+    # The newest bundle version whose new settings this host has looked at.
+    # `--new-settings` (run by `init.py` at every session start) prints one
+    # NEW SETTING line per key added after it that the file does not set, and
+    # nothing at all once each is set or this is raised past it. Empty means
+    # BASELINE. `/init` seeds it with the installing version, so a fresh host
+    # is not told about keys its own template just showed it.
+    "config-acknowledged": Setting(
+        "", "5.7.0", "Newest bundle version whose new settings this host has acknowledged."
+    ),
+    # Whether the /init setup interview has been answered: the date it was
+    # recorded, or "declined" when the user chose to skip it. Absent, init.py
+    # prints `SETUP INTERVIEW PENDING` on every run, --silent included. It used
+    # to be asked on a first install only, so a host installed before the
+    # interview existed (or one whose first install skipped it) was never asked
+    # at all, and its user repeated the same answers by hand every session.
+    "setup-interview": Setting(
+        "", "5.18.0", 'When the setup interview was answered (YYYY-MM-DD), or "declined".'
+    ),
 }
+
+DEFAULTS: dict[str, Any] = {key: s.default for key, s in SETTINGS.items()}
+
+# Keys the session-start notice never announces: acknowledging is the remedy the
+# notice itself names, so a line telling the host about it would be noise.
+# `setup-interview` has its own, louder line (SETUP INTERVIEW PENDING), so a
+# NEW SETTING line for it would say the same thing twice.
+NOTICE_EXEMPT = {"config-acknowledged", "home", "setup-interview"}
+
+VERSION_REGEX = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+SETUP_INTERVIEW_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 ENUMS: dict[str, set[str]] = {
     # `after-review` is not a weaker `after-ci-and-review` — it is the other
@@ -257,7 +473,12 @@ ENUMS: dict[str, set[str]] = {
     "verification": {"fast", "balanced", "strict"},
     "autonomy": {"ask-often", "ask-when-blocked", "autonomous"},
     "branch-protection": {"", "applied", "existing", "unavailable", "off"},
+    "review.reviewer-identity": {"distinct-login", "distinct-session"},
+    "review.preset": {"", "solo-trust", "solo-gated", "team", "manual"},
+    "digest-delivery": {"file", "chat", "both"},
 }
+
+APPROVAL_REGEX = re.compile(r"^(|auto|agent|human-after|human:[1-9])$")
 
 CONFIG_RELPATH = "config.toml"
 
@@ -283,9 +504,11 @@ READERS = {
     "risk-paths": "plugins/core/skills/init/assets/scripts/review_sources.py",
     "risk-lines": "plugins/core/skills/init/assets/scripts/review_sources.py",
     "review-bots": "plugins/core/skills/github/scripts/query_pr_state.py",
+    "bot-unavailable-notices": "plugins/core/skills/init/assets/scripts/review_sources.py",
     "listing-budget": "plugins/skill-workshop/skills/skill-workshop/scripts/audit_library.py",
     "queue-automation": "plugins/core/skills/init/scripts/init.py",
     "branch-protection": "plugins/core/skills/init/scripts/init.py",
+    "attribution": "plugins/core/skills/init/scripts/init.py",
     "import-label": "plugins/core/skills/init/assets/scripts/issue_import.py",
     "task-label": "plugins/core/skills/init/assets/scripts/queue_hooks.py",
     "claim-prefix": "plugins/core/skills/init/assets/scripts/queue_hooks.py",
@@ -297,6 +520,19 @@ READERS = {
     "models.orchestrator": "plugins/core/skills/init/assets/AGENTS.md",
     "models.workers": "plugins/core/skills/init/assets/agents/worker.md",
     "models.reviewers": "plugins/core/skills/init/assets/agents/reviewer.md",
+    "review.reviewer-identity": "plugins/core/skills/init/assets/scripts/pr_audit.py",
+    "review.preset": "plugins/core/skills/init/assets/scripts/review_policy.py",
+    "review.always-human-paths": "plugins/core/skills/init/assets/scripts/review_policy.py",
+    "review.low-paths": "plugins/core/skills/init/assets/scripts/review_policy.py",
+    "review.approval-low": "plugins/core/skills/init/assets/scripts/review_policy.py",
+    "review.digest-decisions": "plugins/core/skills/init/assets/scripts/pr_audit.py",
+    "digest-delivery": "plugins/core/skills/init/assets/scripts/digest.py",
+    "digest-every": "plugins/core/skills/init/assets/references/orchestrator-tick.md",
+    "review.approval-medium": "plugins/core/skills/init/assets/scripts/review_policy.py",
+    "review.approval-high": "plugins/core/skills/init/assets/scripts/review_policy.py",
+    # Read here, by new_settings() below; init.py prints what it returns.
+    "config-acknowledged": "plugins/core/skills/init/assets/scripts/arsenal_config.py",
+    "setup-interview": "plugins/core/skills/init/scripts/init.py",
     # `home` is the exception, and the only one: it names the directory holding
     # config.toml, so it cannot be read from config.toml. ARSENAL_HOME is the
     # channel, and FILE_ONLY_REJECTS below refuses the key in the file rather
@@ -438,11 +674,41 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
             raise ConfigError(
                 f"{key} must be an integer >= 1, got {values[key]!r} (from {sources[key]})"
             )
-    for key in ("risk-paths", "bot-triggers"):
+    if not isinstance(values["review.digest-decisions"], bool):
+        raise ConfigError(
+            f"review.digest-decisions must be true or false, got "
+            f"{values['review.digest-decisions']!r} (from {sources['review.digest-decisions']})"
+        )
+    if type(values["digest-every"]) is not int or values["digest-every"] < 0:
+        raise ConfigError(
+            f"digest-every must be an integer >= 0, got {values['digest-every']!r} "
+            f"(from {sources['digest-every']})"
+        )
+    for key in ("review.approval-low", "review.approval-medium", "review.approval-high"):
+        if not isinstance(values[key], str) or not APPROVAL_REGEX.match(values[key]):
+            raise ConfigError(
+                f"{key}: {values[key]!r} is not auto, agent, human:<1-9> or human-after "
+                f"(from {sources[key]})"
+            )
+    for key in (
+        "risk-paths",
+        "bot-triggers",
+        "bot-unavailable-notices",
+        "review.always-human-paths",
+        "review.low-paths",
+    ):
         if not isinstance(values[key], list) or not all(isinstance(v, str) for v in values[key]):
             raise ConfigError(
                 f"{key} must be a list of strings, got {values[key]!r} (from {sources[key]})"
             )
+    for pattern in values["bot-unavailable-notices"]:
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ConfigError(
+                f"bot-unavailable-notices: {pattern!r} is not a valid regex ({exc}) "
+                f"(from {sources['bot-unavailable-notices']})"
+            ) from exc
     for entry in values["bot-triggers"]:
         login, sep, comment = entry.partition("=")
         if not sep or not login.strip() or not comment.strip():
@@ -471,6 +737,22 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
             f"context-window must be 0 (no opinion) or an integer between {low} "
             f"and {high}, got {window!r} (from {sources['context-window']})"
         )
+    ack = values["config-acknowledged"]
+    if not isinstance(ack, str) or (ack and not VERSION_REGEX.match(ack)):
+        raise ConfigError(
+            f'config-acknowledged must be a version like "5.7.0", got {ack!r} '
+            f"(from {sources['config-acknowledged']})"
+        )
+    # Quoted in the file: a bare TOML date (setup-interview = 2026-01-31) parses
+    # as a datetime.date, which every reader would then have to special-case.
+    done = values["setup-interview"]
+    if not isinstance(done, str) or (
+        done and done != "declined" and not SETUP_INTERVIEW_REGEX.match(done)
+    ):
+        raise ConfigError(
+            f'setup-interview must be a quoted date like "2026-01-31" or "declined", '
+            f"got {done!r} (from {sources['setup-interview']})"
+        )
     for key in MODEL_KEYS:
         value = values[key]
         if not isinstance(value, str):
@@ -496,6 +778,92 @@ def load(repo_root: Path | None = None) -> tuple[dict[str, Any], dict[str, str]]
     return values, sources
 
 
+# A capability name lands in surface_profile.json and in `requires:` lists, so
+# it is held to the shape those already use: `surface:cli`, `net:example.com`.
+CAPABILITY_NAME_REGEX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+
+
+def capability_probes(repo_root: Path | None = None) -> dict[str, str]:
+    """The host's `[capabilities]` table: capability name → probe command.
+
+    `detect_surface.sh` runs each probe and grants the capability only on exit
+    0. What differs between a laptop and a cloud container in a real repo —
+    network egress to one host, a gitignored data directory — is not on the
+    script's hard-coded list, and a hand-passed `--capability` is a claim
+    nothing checks (#481). Kept out of DEFAULTS because the keys are the host's
+    own, not settings this bundle knows.
+    """
+    root = repo_root or Path.cwd()
+    home = os.environ.get("ARSENAL_HOME") or DEFAULTS["home"]
+    path = _config_path(root, home)
+    if not path.is_file():
+        return {}
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path}: not valid TOML — {exc}") from exc
+    table = raw.get("capabilities", {})
+    if not isinstance(table, dict):
+        raise ConfigError(f'{path}: [capabilities] must be a table of name = "command"')
+    probes: dict[str, str] = {}
+    for name, command in table.items():
+        if not CAPABILITY_NAME_REGEX.match(name):
+            raise ConfigError(f"{path}: capability name {name!r} — use letters, digits and ._:/-")
+        if not isinstance(command, str) or not command.strip():
+            raise ConfigError(f"{path}: capability {name!r} needs a non-empty probe command")
+        probes[name] = command
+    return probes
+
+
+def _version(text: str) -> tuple[int, ...]:
+    match = VERSION_REGEX.match(text)
+    if not match:
+        raise ValueError(f"not a version: {text!r}")
+    return tuple(int(part) for part in match.groups())
+
+
+def _toml_value(value: Any) -> str:
+    """A default as it would be written in config.toml, so it can be pasted."""
+    return json.dumps(value) if not isinstance(value, bool) else str(value).lower()
+
+
+def new_settings(repo_root: Path | None = None) -> list[str]:
+    """One NEW SETTING line per key this host has not set and not acknowledged.
+
+    A key is announced when its `since` is newer than the host's
+    `config-acknowledged` (BASELINE when unset) and the file does not set it.
+    Setting the key, or raising `config-acknowledged` to at least its `since`,
+    silences it for good. Derived from SETTINGS, never from the changelog: the
+    registry the loader validates against is the only list there is.
+
+    An unreadable or invalid config returns nothing — every other reader of the
+    file already says so loudly, and a notice is not the place to repeat it.
+    """
+    try:
+        values, sources = load(repo_root)
+    except (ConfigError, OSError):
+        return []
+    floor = max(_version(values["config-acknowledged"] or BASELINE), _version(BASELINE))
+    pending = [
+        (key, entry)
+        for key, entry in SETTINGS.items()
+        if key not in NOTICE_EXEMPT and sources[key] == "default" and _version(entry.since) > floor
+    ]
+    if not pending:
+        return []
+    lines = [
+        f"NEW SETTING {key} (since v{entry.since}, default {_toml_value(entry.default)}): "
+        f"{entry.description}"
+        for key, entry in pending
+    ]
+    newest = max((entry.since for _, entry in pending), key=_version)
+    lines.append(
+        f"  set each in {values['home']}/{CONFIG_RELPATH}, or acknowledge all with "
+        f'config-acknowledged = "{newest}"'
+    )
+    return lines
+
+
 def setting(key: str, repo_root: Path | None = None) -> Any:
     """One configured value, for a module that needs a single key.
 
@@ -518,7 +886,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--get", metavar="KEY", help="print a single value, bare")
     parser.add_argument("--explain", action="store_true", help="show each value and its source")
+    parser.add_argument(
+        "--probes",
+        action="store_true",
+        help="print the [capabilities] probes, one 'name<TAB>command' per line",
+    )
+    parser.add_argument(
+        "--new-settings",
+        action="store_true",
+        help="print a NEW SETTING line per unacknowledged key added since config-acknowledged",
+    )
     args = parser.parse_args(argv)
+
+    if args.new_settings:
+        for line in new_settings(args.repo_root):
+            print(line)
+        return 0
+
+    if args.probes:
+        try:
+            probes = capability_probes(args.repo_root)
+        except ConfigError as exc:
+            print(f"arsenal_config: {exc}", file=sys.stderr)
+            return 2
+        for name, command in probes.items():
+            print(f"{name}\t{' '.join(command.splitlines())}")
+        return 0
 
     try:
         values, sources = load(args.repo_root)

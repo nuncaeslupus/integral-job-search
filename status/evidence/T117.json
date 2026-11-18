@@ -1,7 +1,7 @@
 {
   "probes_identical_to_their_fixture": 0,
   "identical_packages": [],
-  "packages_byte_compared": 26,
+  "packages_byte_compared": 27,
   "packages_byte_compared_floor": 12,
   "packages_not_compared": [
     "examplejobs_es"

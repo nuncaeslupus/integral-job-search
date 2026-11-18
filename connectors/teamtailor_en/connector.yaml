@@ -1,0 +1,63 @@
+# Teamtailor — an ATS whose employers each get a career site at
+# `https://<slug>.teamtailor.com`. Read through the JSON Feed every such site
+# serves at `/jobs.json` (`application/feed+json`, JSON Feed 1.1).
+#
+# Why the feed and not the `/jobs` page: the HTML listing is themed per
+# employer — checked on 2026-11-12, `career` and `qida` wrap rows in
+# `li.w-full`, `flanks` uses `li.group` — and this selector grammar has no
+# combinators to anchor on `ul#jobs_list_container`. The feed is the same
+# document on every tenant. Each item carries the whole advert body
+# (`content_html`) and a schema.org `JobPosting` (`_jobposting`), so no
+# advert page is fetched. `/jobs.rss` carries the same data, but its URL is in
+# `<link>`, a void element to this parser, and its `<guid>` is a UUID.
+#
+# robots.txt is the same file on every tenant checked (career, flanks): a
+# `User-Agent: *` group disallowing `/app/`, `/messages/`, `/messenger/`,
+# `/facebook/tab/` and `/jobs/internal/`, plus `Content-Signal: search=yes,
+# ai-train=no, ai-input=yes`. `/jobs.json` is under none of those prefixes.
+#
+# The slot is the host's first label, so each employer is its own origin:
+# sourcing asks each one's robots.txt before its feed, and a refusal or an
+# unreadable file skips that employer only.
+site: teamtailor
+locale: en
+version: "1.0.0"
+last_verified: "2026-11-12"
+source_kind: employer
+auth: none
+
+list:
+  url_pattern: "https://{employer}.teamtailor.com/jobs.json"
+  pagination:
+    # The feed is the whole list: `career` served 19 items in one response
+    # and `/jobs?page=2` serves no rows. No page parameter exists.
+    mode: none
+    max_pages: 1
+  from_json:
+    items: items
+    fields:
+      detail_url: url
+      # Teamtailor's numeric job id — the same number that opens the advert
+      # URL (`/jobs/<id>-<slug>`).
+      source_ref: _jobposting.identifier.value
+      title: title
+      company: _jobposting.hiringOrganization.name
+      text:
+        path: content_html
+        take: html_text
+      location_raw: _jobposting.jobLocation.0.address.addressLocality
+      location_country: _jobposting.jobLocation.0.address.addressCountry
+      # Published by few employers (1 item of 61 across four tenants on
+      # 2026-11-12); mapped because when it is there it is schema.org's shape.
+      salary_min: _jobposting.baseSalary.value.minValue
+      salary_max: _jobposting.baseSalary.value.maxValue
+      salary_currency: _jobposting.baseSalary.currency
+      salary_period: _jobposting.baseSalary.value.unitText
+  employers:
+    career: Teamtailor
+    flanks: Flanks
+    leytonglobal-spain: Leyton Spain
+    qida: Qida
+    qtech: Qtech
+    signicat: Signicat
+    tendios: Tendios

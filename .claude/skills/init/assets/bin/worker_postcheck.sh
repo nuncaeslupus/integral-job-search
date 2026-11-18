@@ -7,7 +7,7 @@
 # Why: a worker is supposed to run in its own `isolation: worktree`. When that
 # isolation is silently unavailable (observed on some web sessions), the worker
 # runs in the orchestrator's shared tree instead: open_task_pr.sh checks out a
-# feature branch (moving the orchestrator's HEAD off the coordination branch),
+# feature branch (moving the orchestrator's HEAD off its host branch),
 # and a gate-failed worker can leave uncommitted edits sitting on the
 # orchestrator's own tree. Subsequent steps then run from the wrong branch (it guards on the recorded host
 # branch), and a stray `git commit -a` could sweep task code onto the queue
@@ -181,9 +181,28 @@ if [[ "${ARSENAL_WORKER_OUTCOME:-}" == "done" ]]; then
     fi
 fi
 
+# A registered worktree nested inside this tree is a live checkout, not residue.
+# Without an ignore rule for it, `git status` reports `?? .claude/worktrees/`
+# and the restore below took the worker's own tree for something to clean;
+# only git's refusal to delete a nested repository kept `clean -fd` off it
+# (#485). Every status and clean below excludes those paths.
+_live_trees=()
+_own_real="$(pwd -P)"
+while IFS= read -r _wt; do
+    [[ -n "${_wt}" && -d "${_wt}" ]] || continue
+    _wt_real="$(cd "${_wt}" && pwd -P)"
+    case "${_wt_real}" in
+        "${_own_real}"/*) _live_trees+=(":(exclude)${_wt_real#"${_own_real}"/}") ;;
+    esac
+done < <(
+    git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p'
+    [[ -n "${ARSENAL_WORKER_TOPLEVEL:-}" ]] && printf '%s\n' "${ARSENAL_WORKER_TOPLEVEL}"
+)
+_status() { git status --porcelain -- . "${_live_trees[@]+"${_live_trees[@]}"}" 2>/dev/null; }
+
 session_dir="${ARSENAL_SESSION_DIR:-${ARSENAL_HOME:-arsenal}/session}"
 current="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-dirty="$(git status --porcelain 2>/dev/null)"
+dirty="$(_status)"
 
 recorded_branch=""
 if [[ -f "${session_dir}/host_branch" ]]; then
@@ -249,13 +268,13 @@ if [[ -n "${dirty}" ]]; then
     fi
 fi
 git reset -q --hard >/dev/null 2>&1 || true
-git clean -fdq >/dev/null 2>&1 || true
+git clean -fdq -- . "${_live_trees[@]+"${_live_trees[@]}"}" >/dev/null 2>&1 || true
 if [[ "${current}" != "${host_branch}" ]]; then
     git checkout -f "${host_branch}" >/dev/null 2>&1 || true
 fi
 
 current="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-dirty="$(git status --porcelain 2>/dev/null)"
+dirty="$(_status)"
 if [[ "${current}" != "${host_branch}" || -n "${dirty}" ]]; then
     echo "worker_postcheck: could not restore HEAD to '${host_branch}' / clean tree (HEAD=${current:-unknown})" >&2
     exit 2

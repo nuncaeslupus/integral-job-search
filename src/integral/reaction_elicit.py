@@ -246,11 +246,20 @@ def connector_hosts(directory: Path = CONNECTORS_DIR) -> dict[str, frozenset[str
     for package in sorted(directory.glob(f"*/{CONNECTOR_FILENAME}")):
         declared = yaml.safe_load(package.read_text(encoding="utf-8"))
         site = declared.get("site")
-        listed = _hostname((declared.get("list") or {}).get("url_pattern") or "")
+        listing = declared.get("list") or {}
+        pattern = listing.get("url_pattern") or ""
+        # A host slot (`https://{employer}.teamtailor.com/…`) serves each declared
+        # employer from its own host, so each of those hosts is the list host.
+        patterns = (
+            [pattern.replace("{employer}", slug) for slug in listing.get("employers") or {}]
+            if pattern.startswith("https://{employer}.")
+            else [pattern]
+        )
+        listed = {host for host in map(_hostname, patterns) if host}
         if not site or not listed:
             continue
         served = {_hostname(f"https://{host}") for host in declared.get("serves_from") or []}
-        package_hosts = {listed} | {host for host in served if host}
+        package_hosts = listed | {host for host in served if host}
         # Applied to EVERY host and not only the list one. A worked-example package
         # carries the reserved TLD in both keys, so checking one of them made the
         # claim below true by luck rather than by derivation.

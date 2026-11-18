@@ -68,6 +68,7 @@ from integral.connectors import (
     build_offer,
     client_headers,
     collect_listing,
+    employer_in_host,
     load_connector,
     parse_detail_page,
     source_kind_of,
@@ -1601,6 +1602,7 @@ def _one_board(
 
     limit = min(room, board_room)
     requests_not_made = 0
+    per_origin = employer_in_host(connector.list.url_pattern)
     for index, request in enumerate(requests):
         if added >= limit:
             if board_room < room:
@@ -1634,16 +1636,22 @@ def _one_board(
                     request.url,
                     skipped=f"refused: robots.txt disallows {request.url}",
                 )
-        except (RobotsUnreachable, OSError) as exc:
-            # T238: no answer at all, after the retries — a network fault, not the
-            # board's decision, so say so: the candidate can try again later. It
-            # is still not permission, and still ends the board's round.
-            return ended(
-                request.url,
-                skipped=f"unreachable: robots.txt could not be fetched, so the board "
-                f"was not read this round and the path is not permitted: {exc}",
-            )
-        except RobotsError as exc:
+        except (RobotsUnreachable, RobotsError, OSError) as exc:
+            if request.employer and per_origin:
+                # The slot is in the host, so this robots.txt is one
+                # employer's origin: unreadable there is that employer's
+                # refusal, and the next employer's origin is still asked.
+                failed.append(f"{request.employer} (refused: robots.txt unreadable: {exc})")
+                continue
+            if isinstance(exc, (RobotsUnreachable, OSError)):
+                # T238: no answer at all, after the retries — a network fault, not
+                # the board's decision, so say so: the candidate can try again
+                # later. It is still not permission, and still ends the round.
+                return ended(
+                    request.url,
+                    skipped=f"unreachable: robots.txt could not be fetched, so the board "
+                    f"was not read this round and the path is not permitted: {exc}",
+                )
             return ended(
                 request.url,
                 skipped=f"robots.txt could not be read, so the path is not permitted: {exc}",

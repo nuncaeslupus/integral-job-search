@@ -1,6 +1,6 @@
 ---
 name: pypi-release
-description: Runs the PyPI release runbook (build, twine check, version bump, tag, upload), catching version drift and stale dist/. Use when the user wants a Python package published. Not for scaffolding (python-bootstrap) or dependency upgrades (dep-upgrade).
+description: Runs the PyPI release runbook — build, twine check, version bump, tag, upload. Use when the user wants a Python package published. Not for project scaffolding.
 argument-hint: "--tag vX.Y.Z"
 user-invocable: true
 metadata:
@@ -19,6 +19,11 @@ CANARY: pypi-release-loaded-2026-06-04-ea39c2b5-820c8d070baea5a5
 Load when a package is being published to PyPI or TestPyPI. Pre-merge
 production sign-off (compatibility, observability, rollback) belongs to the
 `ship` skill; the two compose.
+
+Load [automated release](references/automated-release.md) when the project
+should publish from CI on a version bump instead of by hand (setting up or
+fixing a `release.yml`, trusted publishing, an approval gate) — it holds the
+workflow, the owner's one-time setup, and when to prefer it over this runbook.
 
 ## Step 1 — Pre-flight
 

@@ -198,6 +198,11 @@ def main(argv: list[str] | None = None) -> int:
         help="a branch, not the default: an archived task whose issue is still open is the "
         "documented in-flight state, not drift",
     )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="stamp `status: merged` on archived task files whose issue closed as completed",
+    )
     args = parser.parse_args(argv)
 
     # "I did not ask GitHub" and "GitHub has no handle for this" are different
@@ -355,10 +360,23 @@ def main(argv: list[str] | None = None) -> int:
                     "the PR merged without closing it; close it as completed"
                 )
         elif task.get("status") not in TERMINAL and actual == "done":
-            problems.append(
-                f"{task['id']}: {where} is closed as completed but the task file is still live "
-                f"in {args.tasks_dir} — move it to _history/ with `status: merged`"
-            )
+            # An archive written before `status:` was required is already where
+            # it belongs; telling it to move to _history/ names a no-op (#554).
+            path = Path(task["path"])
+            if "_history" in path.parts and args.fix:
+                text = path.read_text(encoding="utf-8")
+                path.write_text(text.replace("---\n", "---\nstatus: merged\n", 1), encoding="utf-8")
+                notes.append(f"{task['id']}: stamped `status: merged` on {path}")
+            elif "_history" in path.parts:
+                problems.append(
+                    f"{task['id']}: {where} is closed as completed but its archived file has "
+                    "no `status:` — add `status: merged` (or rerun with --fix)"
+                )
+            else:
+                problems.append(
+                    f"{task['id']}: {where} is closed as completed but the task file is still "
+                    f"live in {args.tasks_dir} — move it to _history/ with `status: merged`"
+                )
 
     # The derived answer, for anything outside this repo that needs it.
     #
@@ -412,6 +430,18 @@ def main(argv: list[str] | None = None) -> int:
                 marks.append("no-handle")
             suffix = f"  [{'; '.join(marks)}]" if marks else ""
             print(f"  {task['id']}  p{task['priority']:<3} {current:<9} {task['display']}{suffix}")
+
+    # explore-idea's backlog, as one line — and nothing at all when the repo has
+    # none, since this runs at every session start. Ideas are not tasks; the line
+    # only says unspecified work is waiting there.
+    try:
+        from ideas_log import summary_line
+
+        ideas = summary_line(Path.cwd() / "status" / "ideas.md")
+        if ideas:
+            print(ideas)
+    except Exception:
+        pass
 
     if _report(notes, warnings, problems, fail_on_problems=args.fail_on_problems):
         return 1

@@ -18,6 +18,542 @@ being a changelog nobody reads.
 
 Format: `## [X.Y.Z] - YYYY-MM-DD`, newest first, plain bullets below.
 
+## [5.26.0] - 2026-11-11
+
+Slow CI, addressed where it starts. A measured review of seven repositories
+built with this workflow found none was slow from having too many tests: the
+time was in workflow shape, fixtures rebuilt per test, tests re-running a
+measurement a gate already runs, and tests that grep prose. What that review
+found is now the default a session works to, so the same mistakes are not made
+again in the next repo.
+
+### The defaults (each can be overridden with a written reason)
+- **CI** (`references/ci-minutes.md` § CI defaults): pull requests run **one
+  language version** — the oldest supported — on **Linux only**; the full
+  version/OS matrix, release and installer builds and the slow test tier run on
+  the default branch, nightly or tags; superseded runs are cancelled; every job
+  has a timeout; no step runs twice; the test runner runs in parallel.
+- **Tests** (`execution` § `references/test-cost.md`): every module with
+  branching, parsing, boundary or data-loss logic has tests, and a core module
+  with none is a finding; no tests that grep prose, pin constants or glue, or
+  re-run a gate's measurement; duplicates become one table or property test;
+  an expensive fixture is built once per module or session; subprocess spawns
+  are batched; slow tests are marked and kept off every push. Fast tier: about
+  60 seconds, a starting value.
+- **`python-bootstrap`** applies both when it writes a test target or CI.
+
+### Added
+- **`scripts/ci_shape.py` checks your workflows.** Run
+  `python3 claude-arsenal/scripts/ci_shape.py` to see, per push/PR workflow, a
+  missing `cancel-in-progress`, jobs with no `timeout-minutes`, a macOS or
+  Windows runner on the pull-request path, a `matrix` spelling out more than
+  one language version or OS where pull requests reach it, and as notes: the
+  same command run by two jobs, and a missing path filter (a filtered workflow
+  carrying a required check blocks the PRs it skips). Read-only, stdlib only; `--fail-on-problems` makes it a gate.
+  `references/ci-minutes.md` § Measuring it points at it.
+- **`execution` has a test-cost rule.** A test is owed per failure mode of logic
+  that branches, parses or can lose data, not per function; no tests that grep
+  prose, re-run a gate's measurement, or pin constants; expensive fixtures are
+  built once per module; a test slower than about a second needs a reason or a
+  slow tier. The detail is in the skill's `references/test-cost.md`, loaded only
+  when a task adds many tests or a slow one.
+- **`review` flags tests that do not earn their cost**, citing the same
+  reference.
+- **`repo-audit` has a test-diet pass** (`references/test-diet.md`): measure
+  first, classify what should be cut, merged or moved off the every-push path,
+  state the protection each cut loses. "Proportionate, keep" is a valid result.
+  It runs in **every** audit, and the report always has a `Test diet` section:
+  verdict, measurements, what to trim, and core modules with no tests.
+
+Nothing changes in an existing repo until you run the script or a skill loads
+the new reference; no test of yours is touched.
+
+## [5.25.0] - 2026-11-10
+
+### Changed
+- **The annotatable reader is lighter to use.** Import now sits in the top bar
+  next to Save / Export; the floating bottom-right buttons (Top, Import, Clear,
+  Export) are gone, and Clear with them. The page is light only, and inline
+  diagram SVGs lose their dark-mode ink so they stay readable on it. The
+  Contents index starts collapsed.
+- **Zoom uses a wide screen.** The first tap or click on a picture or diagram
+  widens it to the window, less a 16px gutter, rather than zooming inside the
+  text column; on a phone it still zooms to 250% with pan.
+
+### Added
+- **`--bake` warns on personal data** in a note: an email address or a
+  `/home/<user>`, `/Users/<user>` or `C:\Users\<user>` path. The reader
+  reference now asks for both the export and the reviewed copy to be read for
+  names, emails, phones, handles and home paths before they are committed.
+## [5.24.0] - 2026-11-10
+
+### Added
+- `create_reader.py --notes <export> --bake` writes `…-reviewed.html`: the
+  reviewer's returned notes pasted in place, read-only and full length, beside
+  the text they were written on. Run it before bumping the revision and commit it
+  with the export, so the review lives in the repo next to the document. A rebuild
+  does not remove it.
+- Screens review: a `screens.md` (one `## Sxx · name` per screen, a summary, the
+  picture) runs through the same reader, for UI projects that review screenshots
+  or mockups. `specify` offers it for user-facing problems; the recipe is in
+  `references/annotatable-reader.md`.
+- Pictures and SVG diagrams in any reader zoom in place: tap or click enlarges one
+  inside the column and pushes the note field below it, pinch or Ctrl+wheel zooms
+  the picture only (not the page), tap again to fit. No overlay to close.
+- Local images are embedded as data: URIs, so a reader opened from Downloads or a
+  phone shows them.
+
+### Changed
+- An export now names the document it came from. `--notes` refuses another
+  document's export (exit 2); the page's Import asks before loading one.
+
+## [5.23.0] - 2026-11-09
+
+### Fixed
+- Skills no longer reach into sibling skills through `${CLAUDE_SKILL_DIR}/..`
+  (`design`, `review`, `ship`, `github`, `explore-idea`). Those paths do not
+  resolve once a skill is installed outside the marketplace layout; each now
+  cites the vendored `claude-arsenal/` path or names the sibling skill.
+- `session-end`'s handoff reference no longer mentions a `--merge` flag that
+  `write_handoff.py` never had, nor a private project name in an example.
+
+### Added
+- `skill-workshop`'s validator fails any `${CLAUDE_SKILL_DIR}/..` path,
+  fenced or inline (`skill-dir-escape`), and resolves `claude-arsenal/…`
+  script cites against init's assets so vendored paths validate upstream.
+
+## [5.22.0] - 2026-11-09
+
+- `query_status.py --fix`: stamps `status: merged` on archived task files in
+  `_history/` whose issue closed as completed but that predate the required
+  `status:` field. Without the flag, the problem line now points at it.
+
+## [5.21.2] - 2026-11-09
+
+- `references/repo-housekeeping.md`: the release-workflow example now pins
+  `astral-sh/setup-uv`, `actions/upload-artifact`, `actions/download-artifact`
+  and `pypa/gh-action-pypi-publish` to commit SHAs (version in a trailing
+  comment), like `actions/checkout` in 5.21.1. Copying the example no longer
+  gives you a workflow that follows moving tags.
+
+## [5.21.1] - 2026-11-09
+
+- `query_status`: a task whose issue closed as completed and whose file is
+  already in `_history/` but has no `status:` line (archives written before the
+  field was required) now reads "its archived file has no `status:` — add
+  `status: merged`", instead of telling you to move it to `_history/`, where it
+  already is.
+- `repo-housekeeping` reference: the release-workflow example pins
+  `actions/checkout` to the v4.4.0 commit SHA, as the shipped queue workflow does.
+
+## [5.21.0] - 2026-11-09
+
+- `claim_task.sh`: in serialized in-place mode a claim is now refused (exit 2)
+  while the checkout already has changes no task made, and the stray paths are
+  listed. In that mode the task's PR commits the whole tree with `git add -A`,
+  so a local settings edit or a large untracked directory of yours used to ride
+  into it. Commit or stash them, or list the directory in `.git/info/exclude`.
+  Worktree-isolated runs are unaffected; `ARSENAL_ALLOW_SHARED_ADD=1` skips it.
+
+## [5.20.7] - 2026-11-05
+
+- `bugreport`: kernel log times in `timeline` and the summary no longer run
+  early by the device's total time asleep since boot. dmesg seconds stop
+  during suspend, so the old boot-based conversion drifted by hours on a
+  phone that had slept; the kernel's own `PM: suspend entry/exit … UTC`
+  lines now pin each stretch to the wall clock when the report has them.
+
+## [5.20.6] - 2026-11-05
+
+### Fixed
+
+- The annotatable reader from `create_reader.py` no longer loses a note typed
+  just before the page closes: pending saves are flushed on `pagehide` /
+  `beforeunload`, and with storage blocked the unload warning fires for an
+  edit still inside the save debounce.
+- Importing notes into a newer reader keeps a section note whose heading was
+  renamed or removed: it lands under "Unplaced notes" and is in the next
+  export, instead of being silently dropped.
+- The reader's notes dialog is now a real modal dialog for keyboard and
+  screen-reader users: `role="dialog"`, `aria-modal`, focus moves in on open
+  and returns on close (also on Escape), and the page behind is `inert`.
+  Regenerate existing readers to pick these up.
+
+## [5.20.5] - 2026-11-05
+
+### Fixed
+
+- `arsenal-queue.yml` pins `actions/checkout` to the v4.4.0 commit SHA instead
+  of the movable `@v4` tag, so a retagged or compromised upstream release cannot
+  change what runs with the workflow's write token. Re-run `/init` to pick it up.
+
+## [5.20.4] - 2026-11-05
+
+### Fixed
+
+- `adversarial_review.sh emit` no longer takes minutes on a tree with large
+  untracked files that git does not ignore. Only the first 1 MiB of untracked
+  content is inlined as diffs. Files past that are fingerprinted: they stay in
+  the digest, so changing one still makes a receipt stale, and `emit` warns and
+  suggests `.git/info/exclude`. The cap is set by `ARSENAL_REVIEW_UNTRACKED_BYTES`.
+  The emptiness check was a quadratic bash substitution and is now a regex
+  match. On 51 MB of untracked HTML, `emit` went from 183 s to 17 s (#546).
+
+## [5.20.3] - 2026-11-05
+
+### Fixed
+
+- `validate.py`'s `content.ref-unconditional` check accepts Spanish load
+  conditions (`cuando`, `si`, `antes de`, `en caso de` …), so a skill written in
+  Spanish no longer fails the skill-workshop gate on every reference it cites
+  with a condition (#550).
+
+## [5.20.2] - 2026-11-05
+
+### Fixed
+
+- `merge_ready.sh` and `pr_audit.py` no longer pass a PR whose `mergeable_state`
+  is `behind`, `dirty` or `unknown`. A `behind` PR ran CI on an old base, so a
+  squash merge would land code never tested together; the next action now says
+  to update the branch. `unknown` is fetched once more before it blocks (#540).
+
+## [5.20.1] - 2026-11-05
+
+### Fixed
+
+- `/init` no longer adds a `.gitignore` line your repo already has in another
+  spelling: `.claude/worktrees/` and `/.claude/worktrees/` ignore the same path,
+  so the second is now recognised and skipped (#539). Patterns whose meaning
+  changes with the leading slash, such as `tmp/` and `/tmp/`, are still kept
+  apart.
+
+## [5.20.0] - 2026-11-04
+
+- **`bugreport` (android section, off by default) is feature-complete.** New in this release:
+  - **Security checkup (F10):** `analyze_bugreport.py` now flags sideloaded apps holding
+    accessibility, device-admin, notification, overlay, usage or install access; USB
+    debugging; an always-on VPN; an unlocked bootloader; a security patch over 90 days
+    older than the report; and user-installed CA certificates (zip reports only). Play
+    Protect is not reported: a bugreport's text does not expose it.
+  - **`--advice`** adds each finding's one-line remedy; `references/advice.md` holds the
+    full steps per finding.
+  - **`create_bugreport.py --redact`** writes a copy safe to send: identifiers become
+    tokens, and a `.zip` output drops binary members (listed in `dropped`) because they
+    cannot be scrubbed.
+  - **`compare_bugreport.py`** diffs two `analyze_bugreport.py --output` files: new, gone
+    and changed findings, plus moves in the memory and battery rankings.
+
+## [5.19.0] - 2026-11-04
+
+- **`review-bots` now defaults to none (CI-only).** It used to list three vendor bots, so a
+  repo running none of them had the PR loop wait for a signal that never came. **If your
+  repo uses a review bot, list it:** `review-bots = ["yourbot[bot]"]` in
+  `arsenal/config.toml`, or `init.py --review-bots yourbot[bot]`. Existing installs see one
+  `NEW SETTING review-bots` line until they set it, and the setup interview now asks which
+  bots review the repo.
+- **Uncommitted edits to vendored files are kept.** `init.py` (run at every session start)
+  used to overwrite a changed bundle file and replace a vendored skill folder outright,
+  destroying edits nobody had committed. It now leaves such a file or folder alone and
+  prints `MODIFIED LOCALLY — left as is: <path>`; commit or discard it, then re-run.
+  Committed edits are still replaced: the bundle is upstream's.
+- **Hooks no longer run twice** when the plugin is installed and `/init` also registered
+  them in `.claude/settings.json`: each duplicated plugin hook (skill-edit gate, compaction
+  resume) stands down when the project's settings run the same script.
+
+## [5.18.0] - 2026-11-04
+
+- The setup interview is no longer first-install only. While `arsenal/config.toml` has
+  no `setup-interview` key, every `init.py` run — `--silent` session starts and
+  upgrades included — prints `SETUP INTERVIEW PENDING`, and the session asks the
+  interview before picking up work. Hosts installed before the interview existed, or
+  whose first install skipped it, are now asked once.
+- Answering records `setup-interview = "<date>"`; the new `--interview-declined` flag
+  records `"declined"` for a user who skips it. Either stops the line for good.
+- New interview question and flag `--merge-policy` (`always`, `after-ci`,
+  `after-review`, `after-ci-and-review`, `never`). Whatever is chosen, the agent merges
+  by itself once `merge_ready.sh` passes, without asking.
+- The interview and `pr-review-loop.md` now say how CodeRabbit behaves on small repos:
+  no auto-review under 10 stars, but on a public repo `@coderabbitai review` still gets
+  a review (about one per hour); on a private Free-plan repo only a summary.
+  `--suggest-bot-triggers` prints that note on stderr when CodeRabbit is configured.
+
+## [5.17.0] - 2026-11-04
+
+- `analyze_bugreport.py` gains seven detector families, each with its `--family` table:
+  `battery` (F1, screen-off drain blamed on the top partial wakelock, checkin v15 and v36),
+  `reboots` (F3, battery shutdown as last boot reason, system_server watchdog kills with
+  the blocked thread), `crashes` (F5, repeated `am_crash` per package and native crashes
+  decoded from `.pb` tombstones in a zip), `network` (F7, Wi-Fi scan storms, SSIDs never
+  shown), `peripherals` (F8, GPS held by a background app), `storage` (F9, low `/data`
+  free space with the largest caches) and `battery-health` (F11, learned capacity under
+  80% of design).
+- Thresholds are starting values; a section whose layout a detector does not recognise
+  is still a `not_parsed` row, never a silent miss.
+
+## [5.16.0] - 2026-11-04
+
+- New `bugreport` skill (android section) for Android bugreports: `query_bugreport.py`
+  (show / sample / locate a section), `validate_bugreport.py` (layout and which
+  detector inputs parsed) and `summary` for the device header. Output is JSON,
+  capped in size, with PII redacted by default.
+- `analyze_bugreport.py` runs a ranked checkup: swap thrashing, ANRs blamed on system
+  pressure or on the app's own main thread, kill → restart loops, and thermal
+  throttling. Each finding lists its subjects, evidence offsets and an `advice_id`.
+  `--family memory|anr|thermal|churn` adds that family's tables. A section it cannot
+  read becomes a `not_parsed` row with the `query` command that reaches it, so the
+  run does not fail. More families (crashes, battery, reboots, …) come in later
+  releases.
+
+## [5.15.0] - 2026-10-29
+
+- New `scripts/render_diagrams.py`: renders each ```drawspec fence in a spec or plan
+  to `diagrams/<doc>-<n>.svg` and puts the image above it, with the JSON source
+  collapsed under "Diagram source". Diagrams now show as pictures on GitHub instead
+  of JSON, in light and dark mode. `--check` exits 1 when an SVG is stale, for CI.
+  Needs drawspec 0.4 or later; `uvx` fetches it when it is not installed.
+- `create_reader.py` ignores that image and wrapper, so the HTML reader still draws
+  each diagram once.
+
+## [5.14.1] - 2026-10-29
+
+### Fixed
+- **`merge_ready.sh` no longer fails on PRs with long review-bot comments.** It passed each API response to Python through an environment variable, and Linux caps one at 128 KiB, so a PR carrying a few long bot comments exited 2 with "Argument list too long". The responses now go through temporary files.
+
+## [5.14.0] - 2026-10-27
+
+### Added
+- **Overnight repo audit** (`repo-audit`, `references/overnight.md`):
+  - `audit_estimate.py` prices a scope before anything runs: files, lines, ≈ tokens (12 per line, a starting value to tune) and workers.
+  - The audit asks for scope and a token ceiling first, then runs one subsystem at a time, riskiest first, checking the budget before each.
+  - A run that stops early reports what it did not cover, and never edits code.
+- **`review_metrics.py`:** one line per risk tier for the last N days, so you can see whether relaxing a tier raises reverts.
+  - From git: merges, reverts and fix-ups within 7 days.
+  - From digest records: mean review rounds and who found the problems.
+- **Digest:** the header now carries the 30-day metrics line, and `render --audit <ledger>` adds the night's audit findings as a card above the PRs.
+
+## [5.13.0] - 2026-10-27
+
+### Added
+- **Lean-code rules** (`references/lean-code.md`, loaded only when implementing or reviewing).
+  - Before writing code, a four-step check: is it needed at all → does the stdlib or platform already do it → does the repo already have it → only then the minimum that passes the gate.
+  - One-line rules: smallest diff, delete before adding, no speculative options, no impossible-state guards, no unrequested refactors, no comments restating code, no dependency for a few lines.
+  - A never-cut list: validation, error handling, security, accessibility, tests.
+- **Reviewer `SCOPE` tag:** code a task did not need is reported as `RISK | … — SCOPE: …` with the lines that could go. It never blocks on its own; the author removes it or answers why it stays.
+- **Digest size flag:** add `expected_lines` (your estimate, written before implementing) to the record notes. A PR over twice that shows `⚠ 2.4x expected size` on its card, and a green mark turns amber.
+
+## [5.12.0] - 2026-10-27
+
+### Added
+- **Review digest: decide on a night's work without opening GitHub.**
+  - `digest.py record` stores each PR's facts in a hidden block in its body: risk tier, a red/amber/green mark, state, a summary of at most 60 words, each problem found (who found it, how it was fixed, which commit), what is still open, and how to undo it.
+  - `digest.py render` turns open and recently merged PRs into one page: folded cards, red first, each with **Approve / Deny / Question**. It also makes a Markdown version for chat.
+  - Agents render it at session end, at the token-budget stop and every `digest-every` merges (default 5).
+- **`apply_decisions.py` acts on what you decided**, from the page's exported file or typed lines like `approve 42; deny 43: split it`.
+  - An approval only counts for the commit you saw; if the PR changed since, it is reported as stale.
+  - Approved PRs merge in dependency order. A denied PR is closed; a denied merged PR gets a revert PR.
+  - Questions are posted on the PR for the next session to answer.
+- **`[review] digest-decisions = true`** makes a digest approval count as your human approval. This lets `solo-gated` work when agents open PRs with your own GitHub account. It is off by default; `/init` offers it with the solo presets.
+- Config: `digest-delivery` (`file` | `chat` | `both`) and `digest-every`.
+
+## [5.11.0] - 2026-10-27
+
+### Added
+- **Risk-tiered approval (`[review] preset`).** `/init` now asks who approves what: `solo-trust` (the agent merges every PR; high-risk merges are flagged `Ratify: pending` for you to confirm later), `solo-gated` (you approve medium- and high-risk PRs), `team` (0/1/2 human approvals by tier) or `manual`. A PR's tier comes from its changed files (`risk-paths`, `risk-lines`, new `always-human-paths` and `low-paths`); `approval-low|medium|high` override a row. Human approvals only count on the head commit and never from a bot or the PR author. Merge commits now carry `Risk-tier` / `Reviewed-by` / `Approved-by` trailers. `review_policy.py explain` prints your effective flow. **Nothing changes until you set a preset** — re-run `/init --interview` or add `preset = "…"` under `[review]` in `arsenal/config.toml`.
+- **Note on any paragraph in an annotatable reader.** Every paragraph, list item and table in a spec or plan reader has a ✎ at its right; tapping it opens a note box right below that spot, so you write while the text that prompted the note stays in view. The export quotes the paragraph each note is about (`> ¶ “…”`), `--notes` re-seeds them, and a note whose paragraph a later revision rewrote is kept at the end of its section instead of dropped. Regenerate a reader to get it.
+
+## [5.10.9] - 2026-10-25
+
+### Changed
+- **The PR review `/loop` prompt is one line now.** `query_pr_state.py` prints a `next` field with the action for the current state (the agree/disagree/ambiguous rubric on `bot_commented`, rebase on `conflicts`, …), so the loop no longer carries the whole rubric into every 2-minute tick. Update a loop you started from the old one-liner by restarting it from the `github` skill.
+- AGENTS.md's references table lists only when to open each file, not what is inside it (~125 tokens less on every turn of every session).
+
+## [5.10.8] - 2026-10-25
+
+### Changed
+- **Smaller skills listing:** every skill description was tightened (5550 → 3998 chars across all 23), keeping each one's "Use when" trigger and "Not for" exclusion. Every session pays this listing on every turn.
+- The `ARSENAL_*` tuning-knob table moved from `references/worker-loop.md` (read on every task pickup) to `references/performance-tuning.md` § Tuning knobs.
+- Examples and pointers no longer name a specific review bot or skills this bundle does not ship (`engineering-core`, `code-review`).
+- Removed leftover references to the coordination branch retired in v0.25.0.
+- `queue-next` points at AGENTS.md for the fetch, claim and PR rules instead of restating them (~300 tokens less per invocation).
+- `ship` walks the checklists in `references/template.md` instead of keeping a second, drifted copy in Steps 3–6; the template gains the items only the skill had (client notification, flaky tests, deployment order, on-call).
+- `explore-idea` Step 6 uses the decision-log table from `references/ideas-backlog.md`, which has the optional `Sub-project` column the skill's copy lacked.
+- The full task-file example moved from AGENTS.md to `references/state-layout.md` § Task format; AGENTS.md keeps the field list.
+
+## [5.10.7] - 2026-10-25
+
+### Fixed
+- **Skill-edit gate:** a relative path is now resolved against the session's working directory, so `cd …/skills/<name>` followed by `sed -i … SKILL.md` is gated like the absolute form. A host with no `python3` no longer has every Edit/Write/Bash call refused — only calls that name a skill path.
+- Plugin hooks quote `${CLAUDE_PLUGIN_ROOT}` and run through `bash`, so a plugin root with a space in it (e.g. `C:/Users/First Last`) no longer silently disables them.
+- `detect_surface.sh` detects redis on macOS, which has no `timeout`.
+- The skill-edit gate and the prompt hook start fewer `python3` processes per call.
+
+## [5.10.6] - 2026-10-25
+
+### Fixed
+- **Session start no longer reprints the whole pending changelog.** `check_update.sh --check-only` (run at every session start while an update is pending) and the `/init` upgrade banner now show the newest 5 entries and one line counting the rest. A consumer a month behind was paying 15–40k tokens of release notes per session.
+- `sweep-claims` no longer releases a claim whose task has a hand-opened PR naming it by the `arsenal-task:` body marker (it only recognised `arsenal/<id>-…` branches), which handed the task to a second session.
+- `handle_sync.py` defaults `--label` to your `task-label` setting instead of a hardcoded `arsenal:task`, so a renamed label no longer yields duplicate handles. `create_task.py` prints the `arsenal-id:<id>` label too.
+- `branch_protection.py --force` now keeps linear history, conversation resolution, last-push approval, branch lock and block-creations; the PUT used to switch them off.
+- The post-merge archive step no longer reports "archived" when its `git add`/`commit` failed.
+- `handle_sync.py` no longer claims tasks were "held back" when the only warning was the by-title notice.
+
+## [5.10.5] - 2026-10-20
+
+- `references/performance-tuning.md` gains **Time from PR to merge**: measured
+  medians (54 → 9 → 5 min) and what cut them — CI as the only gate, scoped local
+  checks, merge on green, capped review rounds, a cheaper suite. **Making the
+  tests themselves cheaper** adds: regenerate only the inputs a test reads, rank
+  files serially, leave product-measurement tests alone, match CI's interpreter.
+
+## [5.10.4] - 2026-10-20
+
+- **`prune-claims` no longer fails on more than 100 claim refs.** GitHub's
+  `matching-refs` endpoint ignores `page` and `per_page`, so paging it read the
+  same refs ten times, reported the listing as truncated, and DELETEd every ref
+  once and then 422'd on the nine copies. `matching_refs()` now makes one
+  request, and `plan_prune_claims` plans one delete per ref.
+
+## [5.10.3] - 2026-10-20
+
+- **`references/performance-tuning.md` covers the tests themselves.** Two new
+  sections: making slow tests cheaper (reuse the product's own selection,
+  memoise pure helpers per module, one end-to-end pipeline test, exhaustive
+  sweeps state their cost) and not adding tests the suite has to carry (one
+  test per behaviour rather than per finding, no tests about the process
+  itself, scoped runs while editing).
+
+## [5.10.2] - 2026-10-20
+
+- **The scheduled queue job prunes finished claim refs again.** `prune-claims`
+  sent its `DELETE` to `git/heads/<claim>` instead of `git/refs/heads/<claim>`,
+  which GitHub answers with 404, so the "release abandoned claims, prune
+  finished ones" job failed on every run and claim refs piled up. After
+  updating, the next runs delete the backlog (a run capped by the truncation
+  guard leaves the rest to the next one).
+
+## [5.10.1] - 2026-10-14
+
+- **Spec and plan readers no longer share a name across documents (#517).**
+  Readers and their exports are stamped to the minute,
+  `<repo>-<doc>-v<N>-<YYYY-MM-DD-HHMM>-reader.html` / `-notes.md`, so two
+  workspace specs reviewed the same day stay apart in Downloads. Earlier
+  date-only readers are still cleaned up and still recognised by the
+  validators. `SOURCE_DATE_EPOCH` pins the stamp.
+- **A bare placeholder no longer hides the rest of the reader.** Raw
+  `<title>`, `<script>`, `<style>`, `<textarea>` and similar tags outside code
+  are shown as text instead of swallowing everything after them.
+- **Opening a reader no longer fills it with old notes.** Notes saved in the
+  browser are keyed on the document's revision and, for workspace specs, the
+  workspace. Notes already applied to revision N no longer reappear in revision
+  N+1's reader, and one workspace's notes no longer show up in another's. To
+  carry unapplied notes forward, use `--notes <export>` as before. Notes typed
+  into a reader built before this update are not shown by a rebuilt one, so
+  export them first.
+- **The reader is easier to read and to annotate.** The document is set in a
+  book face. Empty note fields are a quiet single line that opens into a
+  writing card on focus, and a written note stands out as a solid card. A
+  single document gets flat contents with no repeated title band. Tables are
+  tidier, and `**Revision**` / `**Status**` header lines stay one per line.
+
+## [5.10.0] - 2026-10-13
+
+- **`/init` credits claude-arsenal in your README.** It adds a "built with
+  claude-arsenal" badge, linking the project, under `README.md`'s title, once,
+  between `claude-arsenal:attribution` markers that later refreshes update in
+  place. It works like a license notice you are free to drop: delete the block
+  and it is not put back, or set `attribution = false` in `arsenal/config.toml`
+  before it is added. Commit the README change with the refresh.
+- **`design` plans past drawspec's budget can be drawn again.** `sync_plan_graph.py`
+  now draws the Depends column's transitive reduction (an edge a longer path
+  already implies is left out), and a plan still past 15 nodes / 16 edges is
+  split into a phase overview plus one graph per phase, each within the budget.
+  `validate_plan.py` accepts a path for each dependency instead of a literal
+  edge, reads a split graph as one, and only **warns** on a fence too big to draw
+  — it no longer demands a graph `create_reader.py` refuses. Rerun
+  `sync_plan_graph.py --apply` on a plan whose reader stopped building.
+- **`create_reader.py` runs drawspec from PyPI.** The fallback after
+  `$ARSENAL_DRAWSPEC` and `drawspec` on PATH is now
+  `uvx --from 'drawspec>=0.2,<0.3' drawspec`, pinned so your reader does not
+  change under you; faster to fetch, and works where git over HTTPS is blocked.
+  `pip install drawspec` puts it on PATH.
+- **Review loop: a bot acknowledging your trigger is no longer read as a skip.**
+  `review_sources.py` classifies acknowledgements ("Review triggered", "review
+  requested/queued/started") as in progress, and anything a bot posts after the
+  loop's own trigger on the same head waits one `bot-wait-min` instead of ending
+  the loop `bot_skipped`; only a rate limit there is final. `pr-review-loop.md`
+  notes per-hour on-demand quotas: with several PRs open, trigger the one a bot
+  review is worth most on first.
+- **`pypi-release` documents an automated release** (`references/automated-release.md`):
+  a `release.yml` that publishes on a merged version bump (or a pushed `v*` tag,
+  checked against the version) with `twine check --strict`, PyPI trusted
+  publishing behind a `pypi` environment with a required reviewer, then
+  `gh release create` — plus the owner's one-time setup, SHA-pinned actions and
+  how to gate the release on green CI.
+
+## [5.9.1] - 2026-10-13
+
+- `references/repo-housekeeping.md` now walks a package's **first publish** in
+  order — the pending trusted publisher the owner has to register, the release
+  workflow that must match it by filename and environment, the warning that
+  merging it publishes — with a workflow that releases on a version bump, and a
+  check that the built archive does not ship vendored tooling.
+
+## [5.9.0] - 2026-10-12
+
+- **`repo_health.py` checks packaging metadata.** For a package whose name is on PyPI it reports a `GAP` when `pyproject.toml`'s `[project]` lacks a description, readme, license, `requires-python`, or a `[project.urls]` entry pointing at the repository (without it the index page cannot link back). For an unpublished package the same list is appended to the `NOTE`, as what to add before a first publish.
+- **Choosing a license is a guided question.** A missing-license gap now points at the new `references/repo-housekeeping.md`: the three questions that decide between a permissive, patent-granting, copyleft or no-license choice, and a checklist for publishing a package (name check, metadata, back-links, version = tag = release, publishing from CI without a stored token).
+- **`branch_protection.py --repo OWNER/REPO` no longer reads the wrong workflows.** Run from a checkout of a *different* repository, it used that checkout's `pull_request` job names as the required checks when the target had no PR history, which would have blocked every PR there on checks that never run. It now requires a PR only in that case.
+
+## [5.8.0] - 2026-10-12
+
+- **`/init` lists the repository housekeeping that is missing.** The first deliberate run (the one that protects the default branch) now also runs the new read-only `claude-arsenal/scripts/repo_health.py` and prints one `repo_health: GAP …` line per missing item, each with the command that fixes it: no description, topics or license; a default branch not called `main`; an unprotected default branch; secret scanning or push protection off; a Pages site or PyPI package with no homepage link; a newest version tag with no release; a PyPI version with no tag. A `NOTE` line flags a `pyproject.toml` package that is not on PyPI, or a same-named PyPI project that does not link back to your repo. It changes nothing by itself and is skipped with `--no-branch-protection`. Run it by hand at any time; `--fail-on-gaps` exits 1 for use in CI.
+
+## [5.7.0] - 2026-10-12
+
+- **New settings are announced.** Session start (`init.py`, including `--silent`) prints `NEW SETTING <key> (since vX.Y.Z, default …): …` for each config key a release adds that your `arsenal/config.toml` neither sets nor acknowledges. Silence them by setting the key or `config-acknowledged = "X.Y.Z"`. Nothing is printed when nothing is pending (#496).
+- **`[review] reviewer-identity = "distinct-login" | "distinct-session"`** (default `distinct-session`). A reviewer posting with the PR author's login clears the head when its marker (`adversarial_review.sh marker --post <pr>`) names a session that is not one of the PR's `Claude-Session` trailers; the reviewer must run as its own session, not as a subagent (#495). A repo whose second reader is a human or a bot on another login can set `distinct-login`, under which a CLEAR from the author's own login never counts.
+- **The adversarial review counts as the review when no bot can.** `after-ci-and-review` (and `after-review`) accept a clearing adversarial-review marker for the head SHA when no bot or human review is available; `review_sources.py` reports rate-limited, capped or skipped bots as `unavailable` instead of `pending` (its JSON changes accordingly). New `bot-unavailable-notices` key adds your bot's own wording (#507).
+- **explore-idea keeps a durable ideas backlog.** `/explore-idea capture <text>` (or pasting a list of ideas) sorts them into `status/ideas.md` with stable `I-N` ids and proposed sub-projects. The `D-N` decision log is saved there and never re-asked in later sessions; `specify` cites the `I-N` ids it covers, and the board prints one `ideas:` line when the file exists (#504).
+- **`design` plans draw their dependency graph as a drawspec diagram** generated from the task table's Depends column (`sync_plan_graph.py --apply`). `validate_plan.py` fails on every edge a drawspec graph and the table disagree on, and **warns** (exit 0) on the old ASCII graph with the fix — run `sync_plan_graph.py --apply` once on an existing plan that still has one (#506).
+- **Annotatable readers** put one note field after each section with text and none on bare headings, read better (≈70-char lines, clearer headings, distinct note fields, dark mode, phone layout), and are named `<repo>-<doc>-v<N>-<date>-reader.html`, with exports `…-notes.md` to match (`--output FILE` overrides). A rebuild removes older readers of the same document (an annotated file with typed notes is kept), and a requested download no longer counts as a saved backup (#505).
+- **`open_task_pr.sh --branch <name>`** (or `ARSENAL_PR_BRANCH`) commits and pushes on a designated branch instead of creating `arsenal/<id>-<slug>`, with every check still run. With no PR tool available it prints the full PR body, including `Closes #N`, so you can open the PR yourself (#503).
+- **`claim_task.sh` manual hint** now names the branch to create and says to use your harness's GitHub tool (e.g. `create_branch`); a 403 from the shell token means "use the tool", not an error to stop on (#502).
+- **`create_task.py --body`** with its own `## Acceptance gate` fenced block no longer gets a second, placeholder gate appended; a body whose gate section has no fenced block is refused (#501).
+- **The skill-edit gate no longer blocks commands that only run a skill script**, including from a heredoc or `-c` program via `subprocess`, `sys.executable` or `os.system`. Writes into a skill folder are still blocked (#500).
+
+## [5.6.0] - 2026-10-10
+
+- **`ship` now checks the README's hero image.** Step 1 asks whether a hero (banner) image still matches what ships, and points to a new on-demand reference, `ship/references/readme-hero.md`: when a change means redrawing it (a renamed or removed headline feature, a new lead feature), and how to make one render everywhere (1280 × 640, the GitHub social-preview size; a PNG, since GitHub's `<img>` view of an SVG loads no fonts; an absolute URL so PyPI and mirrors show it; no versions or counts on it, so releases do not stale it). It says nothing about how a hero should look. One line added to the `ship` body; the reference loads only when needed. No resident-context cost.
+
+## [5.5.1] - 2026-10-10
+
+- **The orchestrator tick starts the full gate only after the second reader clears the head.** `references/orchestrator-tick.md` now orders each PR head as: second reader → CLEAR on that exact head → `fast_gate.sh --full` → merge. Running the full clean-checkout gate beside the review wasted it on every BLOCKed round and slowed every other session sharing the cores. The cheap per-round `preflight-gate` is unchanged. `merge_ready.sh` and `references/github-automation.md` state the same order. No resident-context cost.
+
+## [5.5.0] - 2026-10-07
+
+- **A ready-made test selector for `preflight-gate`.** `claude-arsenal/bin/select_tests.py` prints the tests a change could affect — the ones named after a changed file or naming it — and falls back to every test whenever it meets a file it cannot place, so review rounds stop paying for the whole suite without silently skipping anything it cannot see. Example: `preflight-gate = 'pytest $(python3 claude-arsenal/bin/select_tests.py --tests "**/test_*.py")'`. `--always`, `--ignore` and `--include` tune it; see `references/ci-minutes.md`. It does not follow imports, so keep it out of `host-gate`. No resident-context cost.
+
+## [5.4.0] - 2026-10-06
+
+- **`github` no longer polls a PR in cloud sessions that get PR events.** When the session offers `subscribe_pr_activity` (claude.ai cloud sessions), the skill subscribes to the PR and acts on each CI, review and conflict event as it arrives, instead of running a `/loop` every 2 minutes. Local CLI sessions keep the `/loop` review loop unchanged. A silent review bot, a reaction or a quiet window sends no event, so the skill schedules one check-in whenever the PR is waiting on something other than running CI.
+- **`query_pr_state.py` now works where GitHub GraphQL is blocked.** Cloud sessions get a 403 on GraphQL, which made the script exit 2 on every call, so the review loop never ran there. It now falls back to REST for the repo name, PR state, CI rollup, reviews and review threads. One gap: REST cannot see whether a thread was resolved, so with `--unresolved-only` only threads whose latest reply is from a human drop out. Bot `bot-triggers` commands are now posted through REST too.
+
+## [5.3.0] - 2026-10-05
+
+- **Every longer session keeps resume notes, not only `execution`.** `AGENTS.md` now tells any session on work longer than a few steps to keep `tmp/<id-or-slug>-notes.md` with a `## Resume` section (Decided / Ruled out / Next step). The compaction hooks have always re-injected that section; until now only the `execution` skill said to write it, so other sessions had nothing to restore. Costs about 60 tokens of resident context. `/init` now adds `tmp/*-notes.md` and `tmp/.arsenal-sessions/` to `.gitignore` so the notes stay out of `git status`. Re-run `/init` to pick up both.
+
+## [5.2.0] - 2026-10-05
+
+- **Compaction keeps your decisions even without a notes file.** A new `PreCompact` hook asks the summary to keep the task in progress, decisions taken, approaches ruled out, the next step, and your corrections. Before this, the resume hooks only helped a session that had written `tmp/<task-id>-notes.md`, which in practice meant only sessions running `execution`; any other session was left with whatever the default summary kept. Re-run `/init` to register the hook in `.claude/settings.json`; plugin installs get it on update.
+
+## [5.1.0] - 2026-10-03
+
+- **Parked tasks keep their work.** New `bin/park_task.sh <task_id> "<reason>"` pushes a stopped task's uncommitted tree to `arsenal/wip/<task_id>` and prints a `resume:` command that restores it, still uncommitted, on any machine (#482). Workers now run it before returning `open` (gate failure, round cap, refused review), and the worker loop copies the `wip:`/`resume:` lines into the task notes, the issue and `handover.md`. Before this, a task stopped at the review cap on a cloud container was lost with the container.
+- **Round-cap messages only offer what you can do.** On a cloud surface, `adversarial_review.sh` now says only the repo owner can raise `review-max-rounds` and tells the agent to park the task. Under `pre-pr-review = "required"` it no longer suggests "fix and open the PR", which that gate refuses (#484).
+- **`requires:` now matches what the surface measured.** `task_select.py` reads `arsenal/session/surface_profile.json` by default; `--capability` adds to it, `--no-profile` ignores it. Declare your own probes under `[capabilities]` in `arsenal/config.toml` (e.g. `"net:example.com" = "curl -sf …"`, `"data" = "test -d data/raw"`); `detect_surface.sh` grants each one only where its command exits 0 (#481).
+- **Agent worktrees are no longer residue.** `worker_postcheck.sh` ignores registered git worktrees nested in your tree, so a worker run with `isolation: worktree` no longer trips a restore that stops the loop. `init.py` also adds `/.claude/worktrees/` to `.gitignore` (#485).
+- **The session-start refresh no longer dirties your tree.** `init.py --silent`, run from the copy vendored into your repo, rewrote the `# source:` line of `claude-arsenal/.arsenal-manifest` to your own repository's URL (#480, #483). It now keeps the recorded upstream. If an earlier refresh already rewrote it, restore the line with `git checkout -- claude-arsenal/.arsenal-manifest` (or set it back to the marketplace URL) before your next update.
+
 ## [5.0.1] - 2026-10-01
 
 - **Spec/plan readers keep your notes.** Three bugs in the annotatable reader that `create_reader.py` generates are fixed (#477). Regenerate a reader to pick up the fixes:

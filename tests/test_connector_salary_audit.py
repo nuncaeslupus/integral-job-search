@@ -388,7 +388,7 @@ def test_no_row_that_reads_a_salary_leaves_its_card_money_uncompared(live: dict[
     that carry a declared reason is exact so it cannot grow unseen."""
     measured = live
     assert measured["rows_read_whose_card_money_was_not_compared"] == 0, measured["uncompared"]
-    assert measured["rows_read_with_a_declared_uncomparable_card"] == 5
+    assert measured["rows_read_with_a_declared_uncomparable_card"] == 6
     assert "rows_read_whose_card_money_was_not_compared" in record(measured)
 
 

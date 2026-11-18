@@ -97,7 +97,7 @@ Signal = Literal[
 
 #: The roster-level marker `record_session_kind` writes and `read_recorded_kind`
 #: reads — the "one place" T137 asks for, named and shaped after
-#: `identity.ACTIVE_FILE` on purpose: one JSON object, bound to the session
+#: `identity.ACTIVE_DIR` on purpose: one JSON object, bound to the session
 #: that wrote it, sitting beside `.active.json` at the roster level rather than
 #: under any one handle's tree (an engineering session has no handle to hold it
 #: under, and that is precisely the case this file has to be able to name).

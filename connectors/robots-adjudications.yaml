@@ -129,6 +129,38 @@ adjudications:
       rule. The second reader returned False there, so it demonstrably can
       refuse on this file, and the True verdicts beside it are an agreement.
 
+  - site: career.teamtailor.com
+    package: connectors/teamtailor_en
+    checked: 2026-11-12
+    agent: "integral-job-search/0.1"
+    standing: two_parsers_agreed
+    second_reader: "urllib.robotparser"
+    source: connectors/teamtailor_en/meta.yaml
+    allowed:
+      - /jobs
+      - /jobs.json
+    second_reader_refused:
+      - /app/
+      - /jobs/internal/x
+    robots_txt: |
+      User-Agent: aihitdata
+      Disallow: /
+
+      User-Agent: *
+      Disallow: /app/
+      Disallow: /messages/
+      Disallow: /messenger/
+      Disallow: /facebook/tab/
+      Disallow: /jobs/internal/
+    reason: >
+      Every employer is its own origin (`<slug>.teamtailor.com`), and the file
+      above was the same on each tenant read (career, flanks). The `*` group has
+      only Disallow lines, so first-match and longest-match cannot diverge, and
+      the second reader refused `/app/` and `/jobs/internal/x` on it. Because
+      the slot is in the host, this row is the reading of one origin, not a
+      verdict for the package: sourcing asks each employer's own robots.txt
+      before its feed, and a refusal or an unreadable file skips that employer.
+
   # ---------------------------------------------------------------------
   # The file admits no negative control at all.
   # ---------------------------------------------------------------------

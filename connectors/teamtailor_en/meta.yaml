@@ -1,0 +1,25 @@
+# Who maintains this connector, where it points, and when it was last known to
+# work. An ATS host: `site` is the provider's domain; every employer in
+# `employers` has its career site on a subdomain of it.
+site: teamtailor.com
+country: GLOBAL
+language: en
+maintainer: "@nuncaeslupus"
+last_verified: "2026-11-12"
+
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose on the date below, from employers and roles chosen
+# to be unrelated to any search a candidate was running — never an advert a
+# candidate was reading. Excerpted: two items per feed, each `content_html`
+# cut to its first 600 characters with the cut marked in the text.
+# `probe/list.html` is a second read, of another employer's feed, naming
+# items the fixture does not.
+fixture:
+  provenance: sampled
+  recorded: "2026-11-12"
+  bodies: excerpted
+  client_ip: redacted

@@ -1,6 +1,6 @@
 ---
 name: design
-description: Defines the technical solution after discovery — contracts, task split, risks, sequencing (validate_plan). Use when the user is planning how to build scoped work. Not for investigation (specify), implementation (execution) or PR review (review).
+description: Turns an approved spec into contracts, risks and a gated task plan. Use when the user plans how to build scoped work. Not for investigation (specify).
 metadata:
   section: workflow
   type: workflow
@@ -12,12 +12,9 @@ CANARY: design-loaded-2026-05-19-e08675ccb0a5c932
 
 Owns sections 5–6 of `status/specification.md` (contracts, risks) and creates `status/plan.md` (task split). Reads sections 1–4 of `status/specification.md` to understand what the spec already covers.
 
-**Before Step 1 — the spec must be approved.** The `specify` skill's validator answers it:
-
-```bash
-python3 "${CLAUDE_SKILL_DIR}/../specify/scripts/validate_spec.py" \
-    --input status/specification.md --require-approved
-```
+**Before Step 1 — the spec must be approved.** The `specify` skill's validator
+answers it: `validate_spec.py --input status/specification.md --require-approved`
+(in that skill's `scripts/`).
 
 Anything but exit 0 means stop and hand the spec back for approval, because a plan
 written before approval is built on a draft.
@@ -78,13 +75,14 @@ Pay special attention to:
 
 Load `references/template-specification-tail.md` when appending contracts and risks (sections 5–6) to `status/specification.md`. Load `references/template-plan.md` when creating `status/plan.md`.
 
-After writing the files, confirm the plan's structure:
+After writing the files, draw the dependency graph from the task table and confirm the plan's structure:
 
 ```bash
+python3 "${CLAUDE_SKILL_DIR}/scripts/sync_plan_graph.py" --input status/plan.md --apply
 python3 "${CLAUDE_SKILL_DIR}/scripts/validate_plan.py" --input status/plan.md
 ```
 
-It checks shape only: the required sections and task-table columns, Gate included. `gate-check`'s `run_gate.py --strict` audits the gate values.
+The graph is generated, never hand-drawn; rerun `sync_plan_graph.py --apply` after any change to **Depends**. The validator checks shape — the required sections and task-table columns, Gate included — and that every Depends edge is in the graph (a path counts: the graph leaves out edges a longer path implies, and past drawspec's one-flow budget it is split into a phase overview plus one graph per phase). A graph that is not a drawspec fence (an older plan's ASCII art) only warns, with the `--apply` fix. `gate-check`'s `run_gate.py --strict` audits the gate values.
 
 Draw any picture as a fenced `drawspec` block: `claude-arsenal:core:init § references/diagrams.md`.
 
@@ -99,7 +97,7 @@ explicitly, since auto-discovery finds only specs, and send `--output-dir` with 
 create_reader.py --input status/plan.md --output-dir status   # in claude-arsenal/scripts/; uv run --with markdown
 ```
 
-It writes `plan-reader.html` and `plan-annotated.md` and prints both paths. The plan
+It writes `<repo>-plan-v<N>-<date>-reader.html` and `…-annotated.md` and prints both paths. The plan
 keeps the spec's review record (`**Revision**`, `**Status**`, `**Revision log**`);
 seeding tasks or starting `execution` waits for
 `validate_plan.py --input <plan> --require-approved`. Load

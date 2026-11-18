@@ -1,0 +1,14 @@
+{
+  "skill": "transcribe-interview",
+  "canary": "transcribe-interview-loaded-2026-10-26-66869dcb-6093d1171606d814",
+  "negative_control": "transcribe-interview transcribes by uploading the audio to a cloud API",
+  "load_prompts": [
+    "Transcribe this interview recording and tell me who said what",
+    "I have an .m4a of my interview, separate the two speakers into a dialog",
+    "My interview is tomorrow on Zoom, how can I record it so we can review it afterwards?"
+  ],
+  "no_load_prompts": [
+    "Summarise this text document for me",
+    "Transcribe this single-person voice memo"
+  ]
+}

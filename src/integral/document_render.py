@@ -14,12 +14,15 @@ block of any other type, a field a block does not declare, or a missing
 required field is a :class:`RenderError` (never a silent omission), and a
 document mixes CV blocks with letter blocks only by being refused.
 
-**One rule about text, learned by breaking it.** Every text field carries inline
-HTML and passes through exactly as written; only ``href`` values are escaped
-(and must be ``http(s)``/``mailto``/``tel``). Escaping some fields and not
-others once shipped ``EDUCATION &AMP; CERTIFICATIONS``: the page's capitals
-come from CSS ``text-transform``, which acts on the rendered glyphs, so no
-Python ``.upper()`` ever touches markup.
+**One rule about text, learned by breaking it.** Every text field is escaped
+exactly once (:func:`_esc`), so ``R&D`` and ``Ana <ana@example.org>`` render as
+written and a ``<script>`` copied from an advert is inert text. The only markup
+a field may carry is the bare, attribute-less ``b``, ``strong``, ``em`` and
+``i`` tags (:data:`_INLINE_TAGS`); links come from ``href``/``live``, which must
+be ``http(s)``/``mailto``/``tel``. Escaping some fields and not others once
+shipped ``EDUCATION &AMP; CERTIFICATIONS``: the page's capitals come from CSS
+``text-transform``, which acts on the rendered glyphs, so no Python
+``.upper()`` ever touches markup, and nothing is escaped twice.
 
 **A project carries two links, and they are not the same claim.** ``href`` is
 the repository; ``live`` is a running deployment and renders a ``LIVE`` badge.
@@ -237,6 +240,20 @@ def _texts(value: Any, where: str) -> list[str]:
     return list(value)
 
 
+_INLINE_TAGS = re.compile(r"&lt;(/?)(b|strong|em|i)&gt;")
+
+
+def _esc(value: Any) -> Any:
+    """Escape text (and lists/rows of it); re-allow only bare b/strong/em/i tags."""
+    if isinstance(value, str):
+        return _INLINE_TAGS.sub(r"<\1\2>", html.escape(value, quote=False))
+    if isinstance(value, list):
+        return [_esc(v) for v in value]
+    if isinstance(value, Mapping):
+        return {k: _esc(v) for k, v in value.items()}
+    return value
+
+
 def _href(value: Any, where: str) -> str:
     text = _text(value, where).strip()
     if not _SAFE_HREF.fullmatch(text):
@@ -264,6 +281,8 @@ def _items(values: list[str]) -> str:
 
 def _render_block(block: Mapping[str, Any], accent: str) -> str:
     kind = block["type"]
+    raw = block
+    block = {k: v if k in ("href", "live") else _esc(v) for k, v in raw.items()}
     g = block.get
     if kind == "header":
         contact = " · ".join(_texts(g("contact", []), "header.contact"))
@@ -646,7 +665,7 @@ def sample_cv() -> dict[str, Any]:
                 "title": "Data engineer",
                 "contact": ["ana@example.org", "Girona", '<a href="https://example.org">site</a>'],
             },
-            {"type": "summary", "text": "Builds data platforms &amp; the teams that run them."},
+            {"type": "summary", "text": "Builds data platforms & the teams that run them."},
             {"type": "section", "title": "Experience"},
             {
                 "type": "job",
@@ -671,7 +690,7 @@ def sample_cv() -> dict[str, Any]:
                 "text": "Source only.",
                 "href": "https://x.test/n",
             },
-            {"type": "section", "title": "Education &amp; certifications"},
+            {"type": "section", "title": "Education & certifications"},
             {"type": "bullets", "items": ["BSc, UdG", "Cloud practitioner"]},
             {"type": "grid", "cells": [{"title": "Python", "text": "daily"}, {"text": "SQL"}]},
             {"type": "board", "rows": [{"label": "Languages", "text": "Catalan, Spanish"}]},

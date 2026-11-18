@@ -28,9 +28,9 @@ An offer with status `applied` and an interview arranged, for the preparation ha
 
 ## Protocol — the manner, not the mechanism
 
-- *Before:* work out what this employer is likely to press on — from the advert's emphases, the application's claims, previous interviews — and rehearse the episodes that answer it, using the bank rather than inventing.
+- *Before:* work out what this employer is likely to press on — from the advert's emphases, the application's claims, previous interviews — and rehearse the episodes that answer it, using the bank rather than inventing. Offer, once, to record the real interview so the candidate and the tool can go through it together afterwards; the `transcribe-interview` skill has the how-to and the tools.
 - **The mock interview is a role-play, and it is strict.** Say so before it starts: from that point the tool is the interviewer and nothing else — no coaching mid-answer, no breaking character. It ends when it ends, then the ordinary voice comes back with the feedback. Offer dictation.
-- *After:* record what was actually asked, what went well, what they wish they had said, and the outcome when it comes — and **give the feedback then**, while it is fresh.
+- *After:* record what was actually asked, what went well, what they wish they had said, and the outcome when it comes — and **give the feedback then**, while it is fresh. If they recorded it, turn the recording into a dialog with `transcribe-interview` first and work from that rather than from memory.
 
 **Say what is happening before a silence.** Work the candidate waits through — creating their profile, running a check, saving what they have just said — is named **before** it starts, in one short line, and closed when it finishes. Acknowledge the person first, then do the work, then come back to them; never open a run of tool calls on someone who has just answered. An unexplained pause is indistinguishable from a tool that has hung, and the candidate has no way to ask.
 

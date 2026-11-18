@@ -474,9 +474,10 @@ def test_a_cv_that_outgrows_its_budget_fails_loudly() -> None:
 
 
 def _pdf_with_text(text: str) -> bytes:
-    doc = dr.sample_cv()
-    doc["blocks"] = [{"type": "summary", "text": text}, *doc["blocks"]]
-    return dr.render_pdf(dr.render(doc))[0]
+    # Text fields are escaped now (#926), so the engine's own defence is exercised
+    # by putting the markup into the finished page, as a template bug would.
+    page = dr.render(dr.sample_cv()).replace("<body>", f"<body><p>{text}</p>", 1)
+    return dr.render_pdf(page)[0]
 
 
 def _streams(pdf: bytes) -> bytes:
@@ -686,3 +687,28 @@ def test_render_pdf_hands_the_engine_a_fetcher_that_refuses_everything(
     for url in _FETCH_URLS:
         with pytest.raises(ValueError, match="fetches nothing"):
             fetcher(url)
+
+
+# -- text is escaped by default (#926) ----------------------------------------
+
+
+def test_text_is_escaped_and_only_bare_inline_tags_survive() -> None:
+    doc = {
+        "title": "CV",
+        "blocks": [
+            {"type": "header", "name": "Ana", "contact": ["Ana <ana@example.org>", "R&D lead"]},
+            {
+                "type": "summary",
+                "text": (
+                    "a<script>alert(1)</script><img src=x onerror=1> <b>ok</b> "
+                    '<em onclick="x">no</em>'
+                ),
+            },
+        ],
+    }
+    page = dr.render(doc)
+    assert "Ana &lt;ana@example.org&gt; · R&amp;D lead" in page
+    assert "<script>alert" not in page and "<img" not in page
+    assert "<b>ok</b>" in page
+    assert "<em onclick" not in page and "&lt;em onclick" in page
+    assert not re.search(r"&amp;amp;|&AMP;", page)

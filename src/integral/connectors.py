@@ -276,13 +276,42 @@ def _employer_slot_problem(pattern: str, method: str) -> str | None:
         return "list.url_pattern is not a URL"
     path = parsed.path
     hostname = filled.hostname
-    if filled.scheme not in ("http", "https") or not hostname or EMPLOYER_PLACEHOLDER not in path:
-        return (
-            f"{EMPLOYER_PLACEHOLDER} must sit in the path of an http(s) URL with a fixed "
-            "host — in the host each employer is its own origin, and one robots verdict "
-            "no longer covers them"
-        )
-    return None
+    # In the path, one origin serves every employer; as the host's first label
+    # (Teamtailor), each employer is its own origin and sourcing asks each one's
+    # robots.txt, so a refusal skips that employer alone.
+    if (
+        filled.scheme in ("http", "https")
+        and hostname
+        and (EMPLOYER_PLACEHOLDER in path or employer_in_host(pattern))
+    ):
+        return None
+    return (
+        f"{EMPLOYER_PLACEHOLDER} must sit in the path of an http(s) URL with a fixed "
+        f"host, or be the whole first label of that host ({EMPLOYER_PLACEHOLDER}.example.com)"
+    )
+
+
+def employer_in_host(pattern: str) -> bool:
+    """Whether `pattern` is `scheme://{employer}.<fixed domain>/…`.
+
+    The slot must be the whole leftmost label, with at least two fixed labels
+    after it, no port and no userinfo — so a filled slug can only ever name a
+    subdomain of the one declared domain.
+    """
+    parsed = safe_urlsplit(pattern)
+    if parsed is None or parsed.scheme not in ("http", "https"):
+        return False
+    prefix = EMPLOYER_PLACEHOLDER + "."
+    netloc = parsed.netloc
+    if not netloc.startswith(prefix):
+        return False
+    suffix = netloc[len(prefix) :]
+    labels = suffix.split(".")
+    return len(labels) >= 2 and all(_DNS_LABEL.fullmatch(label) for label in labels)
+
+
+#: One DNS label (RFC 1123): what a slug must be when it fills a host.
+_DNS_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 
 
 #: The `Content-Type` a JSON request body implies. Derived from the body's
@@ -2460,6 +2489,12 @@ class ListPage(Strict):
         problem = _employer_slot_problem(self.url_pattern, self.method) if slots else None
         if problem:
             raise ValueError(problem)
+        if slots and employer_in_host(self.url_pattern):
+            bad = [s for s in self.employers if not _DNS_LABEL.fullmatch(s)]
+            if bad:
+                raise ValueError(
+                    f"list.employers {bad!r} cannot fill a host: each must be one DNS label"
+                )
         return self
 
     @field_validator("item")
@@ -3776,7 +3811,8 @@ def _list_targets(
         # Repeated from `ListPage` for the reason the clamp above is: a
         # `model_copy(update=...)` object never met the validator.
         problem = _employer_slot_problem(connector.list.url_pattern, connector.list.method)
-        bad = [s for s in connector.list.employers if not EMPLOYER_SLUG.fullmatch(s)]
+        slug_shape = _DNS_LABEL if employer_in_host(connector.list.url_pattern) else EMPLOYER_SLUG
+        bad = [s for s in connector.list.employers if not slug_shape.fullmatch(s)]
         if problem or bad:
             raise ConnectorError(f"{connector.site}: {problem or f'bad employer slug(s) {bad!r}'}")
     per_employer: list[tuple[str, str | None]] = (

@@ -277,3 +277,7 @@ arsenal/session/worktree_isolation.why
 # reason; a consumer that re-vendors leaves eight stale ones sitting
 # untracked otherwise.
 .claude/skills/*/findings.md
+
+tmp/*-notes.md
+
+tmp/.arsenal-sessions/

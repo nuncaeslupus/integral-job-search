@@ -1,6 +1,6 @@
 ---
 name: session-end
-description: Wraps up a session — opt-in status/handoff.md, repeated errors worth a skill update, and a CI/review/conflict audit of its PRs. Use when the user signals the end of the job or its opt-in auto-fire hook runs. Not for mid-job checkpoints or cross-session memory.
+description: Wraps up a session — optional handoff, skill-update proposals from repeated errors, a PR audit. Use when the user signals the job is done. Not for mid-job checkpoints.
 metadata:
   type: workflow
 ---
@@ -26,8 +26,10 @@ Mid-job is too early: the retrospective needs a complete arc to scan.
 First, if this session adopted or locked an architecture decision, make sure the
 spec and plan say so (`arsenal/project/<WORKSPACE>/spec.md` + `plan.md`, or
 `status/specification.md` + `status/plan.md`), or seed a queue task for it. A
-blocking spec divergence found this session becomes a queue task too. The handoff
-is a snapshot the next session overwrites; the spec, plan and queue are the ledger.
+blocking spec divergence found this session becomes a queue task too. An idea or
+decision raised this session but missing from `status/ideas.md` is a handover item.
+The handoff is a snapshot the next session overwrites; the spec, plan and queue are
+the ledger.
 
 Then read the host repo's `CLAUDE.md` for the marker:
 
@@ -66,6 +68,10 @@ append each accepted proposal to:
 | Anywhere else | `~/.claude/proposed-skill-improvements/<YYYY-MM-DD>.md` |
 
 ## Step 3 — PR audit (when a queue exists)
+
+Before the audit, render the review digest and hand it over in this reply
+(`claude-arsenal:core:init § references/digest.md` § 2), so what waits on the user
+reaches them even after a long unattended run.
 
 This step reports and repairs nothing: merged task PRs already closed their tasks,
 and the queue workflow releases abandoned claims, so a session that ends abruptly
