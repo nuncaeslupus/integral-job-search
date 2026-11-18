@@ -1739,6 +1739,9 @@ def _one_board(
             response = fetch(request)
         else:
             response = _list_of_the_day(store, request, at, fetch, robots)
+        if response.error is None and response.status is not None and response.status >= 400:
+            # An error page is a failed read, not a board that was reached and is empty.
+            response = Response(response.status, response.body, error=f"HTTP {response.status}")
         last = response
         blocked = rate_limited(None, response.status) if response.error is not None else None
         if blocked is not None:

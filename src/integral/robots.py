@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import http.client
+import ipaddress
 import json
 import re
 import string
@@ -129,10 +130,34 @@ class RobotsUnreachable(RobotsError):
 RETRY_DELAYS: tuple[float, ...] = (1.0, 3.0)
 
 
+def is_public_web_url(url: str) -> bool:
+    """http(s) to a named host or a public IP; never localhost or a private address.
+
+    Links come from scraped adverts, so one pointing at `http://127.0.0.1:8080/` or an
+    intranet address must not be requested from the candidate's machine.
+    """
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower().rstrip(".")
+    if parts.scheme.lower() not in ("http", "https") or not host:
+        return False
+    if host == "localhost" or host.endswith(".localhost"):
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return address.is_global
+
+
+#: RFC 9309 asks a crawler to parse at least 500 KiB of robots.txt and allows it to ignore the
+#: rest, so an endless or huge answer is cut here rather than read whole into memory.
+MAX_ROBOTS_BYTES = 512 * 1024
+
+
 def _read(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=20) as response:
-        return str(response.read().decode("utf-8", errors="replace"))
+        return str(response.read(MAX_ROBOTS_BYTES).decode("utf-8", errors="replace"))
 
 
 # T71: some sites put a WAF in front of everything, so the honest agent above
@@ -149,7 +174,7 @@ _BROWSER_USER_AGENT = (
 def _browser_read(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": _BROWSER_USER_AGENT})
     with urllib.request.urlopen(request, timeout=20) as response:
-        return str(response.read().decode("utf-8", errors="replace"))
+        return str(response.read(MAX_ROBOTS_BYTES).decode("utf-8", errors="replace"))
 
 
 @dataclass(frozen=True)
@@ -918,6 +943,8 @@ class Robots:
         return self._fetch(robots_url)
 
     def allows(self, url: str) -> bool:
+        if not is_public_web_url(url):
+            return False  # a scraped link to this machine or its network is not ours to open
         rules, _ = _select_rules(self._groups_for(url), self.user_agent)
         return _allowed(rules, _request_path(url))
 

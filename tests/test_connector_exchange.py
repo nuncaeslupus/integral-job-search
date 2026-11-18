@@ -653,3 +653,28 @@ def test_the_prepared_submission_carries_the_generated_body(home: Path, installe
     assert "## Provenance" in body
     assert "## Fixture and probe" in body
     assert body.startswith("Adds a connector for")
+
+
+def test_an_oversized_exchange_answer_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#934: an endless answer must not be read whole into memory."""
+    import urllib.request
+
+    from integral import connector_exchange as ex
+
+    class _Reply:
+        def read(self, limit: int = -1) -> bytes:
+            return b"x" * (limit if limit >= 0 else 10**7)
+
+        def __enter__(self) -> _Reply:
+            return self
+
+        def __exit__(self, *_a: object) -> None:
+            return None
+
+    class _Opener:
+        def open(self, *_a: object, **_k: object) -> _Reply:
+            return _Reply()
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *_a: _Opener())
+    with pytest.raises(ex.ExchangeError, match="larger than"):
+        ex.https_fetcher()("https://example.org/manifest.yaml")

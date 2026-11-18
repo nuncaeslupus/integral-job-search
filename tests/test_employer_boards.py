@@ -872,6 +872,16 @@ def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> 
     assert "not asked again" not in outcome.refused, outcome.refused
 
 
+def test_an_error_page_with_no_transport_error_is_a_failed_read(tmp_path: Path) -> None:
+    """#934 #22: a 404/500 page used to parse to zero rows and read as an empty board."""
+    page = Response(404, "<html>Not found</html>")
+    run, _ = _three_employer_run(
+        tmp_path, dict.fromkeys(("acme", "gone", "beta"), page), "User-agent: *\nAllow: /\n"
+    )
+    (outcome,) = run.outcomes
+    assert outcome.error and "404" in outcome.error and not outcome.reached_the_board
+
+
 def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:
     failure = Response(None, "", error="timed out")
     run, _ = _three_employer_run(

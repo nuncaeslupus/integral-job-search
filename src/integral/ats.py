@@ -144,6 +144,10 @@ class ATSError(Exception):
     """The text layer of a document could not be read."""
 
 
+#: A starting value: a one-page CV reads in well under a second.
+_PDFTOTEXT_SECONDS = 60
+
+
 def text_layer(path: Path) -> str:
     """The text an ATS would see for `path` — renderer-independent.
 
@@ -159,9 +163,12 @@ def text_layer(path: Path) -> str:
             capture_output=True,
             text=True,
             check=False,
+            timeout=_PDFTOTEXT_SECONDS,
         )
     except FileNotFoundError as exc:
         raise ATSError(f"pdftotext is not available to read {path}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ATSError(f"pdftotext did not finish reading {path} in {_PDFTOTEXT_SECONDS}s") from exc
     if completed.returncode != 0:
         raise ATSError(f"pdftotext failed on {path}: {completed.stderr.strip()}")
     return completed.stdout
