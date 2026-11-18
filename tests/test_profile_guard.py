@@ -293,3 +293,58 @@ def test_a_session_id_cannot_name_another_path(tmp_path: Path) -> None:
     write_active_handle(root, "ada-lovelace", session_id="../../etc/x", now=FIXED)
     assert read_active_handle(root, session_id="../../etc/x") == "ada-lovelace"
     assert not (tmp_path / "etc").exists()
+
+
+# -- review follow-up on #942: relative paths are judged against the session's cwd --
+
+
+@pytest.mark.parametrize(
+    ("tool", "tool_input", "cwd_part"),
+    [
+        ("Grep", {"pattern": "salary", "path": "."}, "profiles"),
+        ("Grep", {"pattern": "salary"}, "profiles"),
+        ("Grep", {"pattern": "salary", "path": "profiles"}, ""),
+        ("Glob", {"pattern": "**/*.json"}, "profiles"),
+        ("Glob", {"pattern": "profiles/*/cv.json"}, ""),
+        ("Bash", {"command": "grep -r salary ."}, "profiles"),
+        ("Bash", {"command": "grep -r salary ."}, ""),
+    ],
+)
+def test_relative_searches_are_judged_against_the_session_cwd(
+    tmp_path: Path, tool: str, tool_input: dict[str, str], cwd_part: str
+) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    cwd = str(tmp_path / cwd_part) if cwd_part == "profiles" else str(tmp_path)
+    decision = guard_tool_call(tool, tool_input, root=root, active="ada-lovelace", cwd=cwd)
+    assert decision.allowed is False
+
+
+def test_a_search_from_an_unrelated_cwd_still_passes(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    work = tmp_path / "repo"
+    work.mkdir()
+    for tool, tool_input in (
+        ("Grep", {"pattern": "x", "path": "src"}),
+        ("Bash", {"command": "grep -r x ."}),
+    ):
+        assert guard_tool_call(
+            tool, tool_input, root=root, active="ada-lovelace", cwd=str(work)
+        ).allowed
+
+
+def test_the_hook_passes_the_payload_cwd_to_the_guard(tmp_path: Path) -> None:
+    from integral.identity import hook_main, write_active_handle
+
+    root = tmp_path / "profiles"
+    ada = create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    write_active_handle(root, ada.handle, session_id="s1")
+    payload = {
+        "tool_name": "Grep",
+        "tool_input": {"pattern": "salary", "path": "."},
+        "session_id": "s1",
+        "cwd": str(root),
+    }
+    code, _message = hook_main(json.dumps(payload), root=root)
+    assert code == 2

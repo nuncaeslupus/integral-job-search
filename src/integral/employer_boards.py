@@ -282,7 +282,7 @@ def attribution_round() -> tuple[list[tuple[str, SourceKind | None]], str]:
     from integral.identity import ProfileStore, create_profile
     from integral.lifecycle import collect_offer, load_lifecycle_offer
     from integral.offers import Offer, compute_offer_id
-    from integral.sourcing import OFFER_CEILING, Response, source
+    from integral.sourcing import OFFER_CEILING, Response, no_waiting, source
 
     at = "2026-01-01T00:00:00+00:00"
     meta = (DEFAULT_CONNECTORS_DIR / "greenhouse_en" / "meta.yaml").read_text(encoding="utf-8")
@@ -334,26 +334,27 @@ def attribution_round() -> tuple[list[tuple[str, SourceKind | None]], str]:
             body = ATTRIBUTION_KNOWN_TEXT if answer == "known" else f"an advert at {site} {index}"
             return Response(200, json.dumps({"jobs": [{"title": f"{site}{index}", "body": body}]}))
 
-        run = source(
-            store,
-            CandidateConstraints(
-                location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
-            ),
-            # T167 filters an unsteered board's rows by phrase; every
-            # constructed row that has a body (the "offer" and "known"
-            # answers) carries the word "advert", and none of the others
-            # (badrow, norows, refused, timeout) has any text to match
-            # regardless of the phrase chosen, so this is the one term that
-            # neither starves the matrix nor privileges any one board.
-            Aim(state="stated", terms=("advert",)),
-            fetch=fetch,
-            at=at,
-            directory=directory,
-            robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
-            # T253: attribution is what is measured; a per-board share over this
-            # many constructed boards would leave most of the matrix unread.
-            board_cap=OFFER_CEILING,
-        )
+        with no_waiting():
+            run = source(
+                store,
+                CandidateConstraints(
+                    location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+                ),
+                # T167 filters an unsteered board's rows by phrase; every
+                # constructed row that has a body (the "offer" and "known"
+                # answers) carries the word "advert", and none of the others
+                # (badrow, norows, refused, timeout) has any text to match
+                # regardless of the phrase chosen, so this is the one term that
+                # neither starves the matrix nor privileges any one board.
+                Aim(state="stated", terms=("advert",)),
+                fetch=fetch,
+                at=at,
+                directory=directory,
+                robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+                # T253: attribution is what is measured; a per-board share over this
+                # many constructed boards would leave most of the matrix unread.
+                board_cap=OFFER_CEILING,
+            )
         stored = [
             (offer.source, offer.source_kind)
             for path in store.path("offers").glob("sha256*.json")

@@ -860,15 +860,57 @@ def _bash_breadth_refusal(command: str, root: Path) -> str | None:
     return None
 
 
+_DOT_TARGET = re.compile(r"(?<!\S)(?:\.|\./|\*)(?!\S)")
+
+
+def _cwd_refusal(
+    tool_name: str,
+    tool_input: dict[str, Any],
+    root: Path,
+    cwd: Path,
+    active: Handle | None,
+    intent: Intent,
+) -> str | None:
+    """A Bash command run from inside or above the roster, judged by where it runs."""
+    if tool_name != "Bash":
+        return None
+    command = tool_input.get("command")
+    if not isinstance(command, str):
+        return None
+    if cwd == root or root in cwd.parents:
+        decision = guard_decision(cwd, root=root, active=active, intent=intent)
+        if not decision.allowed:
+            return f"this command runs from {cwd}: {decision.reason}"
+    reaches = cwd == root or (cwd in root.parents and cwd != cwd.parent)
+    if reaches and _RECURSIVE.search(command) and _DOT_TARGET.search(command):
+        return (
+            "this command searches recursively from a directory that holds every candidate's tree"
+        )
+    return None
+
+
 def guard_tool_call(
     tool_name: str,
     tool_input: dict[str, Any],
     *,
     root: Path,
     active: Handle | None,
+    cwd: str | None = None,
 ) -> Decision:
-    """The guard over a whole `PreToolUse` payload: refused if any path is."""
+    """The guard over a whole `PreToolUse` payload: refused if any path is.
+
+    `cwd` is the session's working directory from the hook payload; relative
+    Grep/Glob paths, a Grep with no path, and a recursive Bash search of `.`
+    are judged against it. Without it they are not judged, as before.
+    """
     intent = intent_of(tool_name)
+    resolved_cwd = Path(cwd).resolve(strict=False) if isinstance(cwd, str) and cwd else None
+    if resolved_cwd is not None:
+        reason = _cwd_refusal(
+            tool_name, tool_input, Path(root).resolve(strict=False), resolved_cwd, active, intent
+        )
+        if reason:
+            return Decision(False, reason)
     command = tool_input.get("command") if tool_name == "Bash" else None
     if isinstance(command, str):
         for text in (command, _expanded(command)):
@@ -882,9 +924,9 @@ def guard_tool_call(
         # relative resolves against the session's cwd, which this guard does not
         # know, so only absolute values (after `~`) are judged here.
         resolved_root = Path(root).resolve(strict=False)
-        values = [tool_input.get("path")]
+        values = [tool_input.get("path") or (str(resolved_cwd) if resolved_cwd else None)]
         if tool_name == "Glob":
-            pattern, under = tool_input.get("pattern"), tool_input.get("path")
+            pattern, under = tool_input.get("pattern"), values[0]
             if isinstance(pattern, str) and isinstance(under, str) and not pattern.startswith("/"):
                 pattern = f"{under.rstrip('/')}/{pattern}"
             values.append(pattern)
@@ -892,6 +934,8 @@ def guard_tool_call(
             if not isinstance(value, str) or not value:
                 continue
             absolute = str(Path(value).expanduser())
+            if not absolute.startswith("/") and resolved_cwd is not None:
+                absolute = str(resolved_cwd / absolute)
             if not absolute.startswith("/"):
                 continue
             literal = Path(_WILDCARD.split(absolute, 1)[0].rstrip("/") or "/")
@@ -947,6 +991,7 @@ def hook_main(stdin_text: str, *, root: Path | None = None) -> tuple[int, str]:
         active=read_active_handle(
             roster, session_id=session_id if isinstance(session_id, str) else None
         ),
+        cwd=payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
     )
     if decision.allowed:
         return 0, ""

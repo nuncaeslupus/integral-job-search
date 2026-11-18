@@ -109,6 +109,9 @@ class _Clock:
         self.now += seconds
 
 
+_ROBOTS = Robots(fetch=lambda url: "User-agent: *\nAllow: /\n")
+
+
 def _spacing(monkeypatch: pytest.MonkeyPatch) -> _Clock:
     clock = _Clock()
     monkeypatch.setattr(sourcing, "_pause", clock.pause)
@@ -191,8 +194,8 @@ def test_a_refusal_or_error_is_never_kept(tmp_path: Path, answer: Response) -> N
         asked.append(request.url)
         return answer
 
-    sourcing._list_of_the_day(store, _request(), AT, fetch)
-    sourcing._list_of_the_day(store, _request(), AT, fetch)
+    sourcing._list_of_the_day(store, _request(), AT, fetch, _ROBOTS)
+    sourcing._list_of_the_day(store, _request(), AT, fetch, _ROBOTS)
     assert len(asked) == 2
 
 
@@ -204,10 +207,12 @@ def test_a_kept_page_is_reused_that_day_for_that_url_only(tmp_path: Path) -> Non
         asked.append(request.url)
         return Response(200, json.dumps({"jobs": [{"title": request.url}]}))
 
-    first = sourcing._list_of_the_day(store, _request(), AT, fetch)
-    again = sourcing._list_of_the_day(store, _request(), "2026-11-11T23:59:00+00:00", fetch)
+    first = sourcing._list_of_the_day(store, _request(), AT, fetch, _ROBOTS)
+    again = sourcing._list_of_the_day(
+        store, _request(), "2026-11-11T23:59:00+00:00", fetch, _ROBOTS
+    )
     other = sourcing._list_of_the_day(
-        store, _request("https://boards.example/beta/jobs"), AT, fetch
+        store, _request("https://boards.example/beta/jobs"), AT, fetch, _ROBOTS
     )
     assert (again.status, again.body) == (first.status, first.body)
     assert other.body != first.body
@@ -227,7 +232,57 @@ def test_clearing_old_days_touches_nothing_outside_the_board_cache(tmp_path: Pat
     (boards / "2026-11-10").mkdir()
     (boards / "link").symlink_to(outside, target_is_directory=True)
 
-    sourcing._list_of_the_day(store, _request(), AT, lambda r: Response(200, '{"jobs": []}'))
+    sourcing._list_of_the_day(
+        store, _request(), AT, lambda r: Response(200, '{"jobs": []}'), _ROBOTS
+    )
     assert (outside / "keep.txt").exists()
     assert (sibling / "keep.txt").exists()
     assert not (boards / "2026-11-10").exists()
+
+
+def test_a_cache_hit_does_not_wait_for_the_host_gap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review follow-up on #943: spacing is for real requests, not for a kept page."""
+    clock = _spacing(monkeypatch)
+    store = _store(tmp_path)
+    fetch = lambda r: Response(200, '{"jobs": []}')  # noqa: E731
+    sourcing._list_of_the_day(store, _request(), AT, fetch, _ROBOTS)
+    sourcing._list_of_the_day(store, _request(), AT, fetch, _ROBOTS)
+    assert clock.waits == []
+
+
+# --- review follow-up on #943: directory readers count one offer once ----------
+
+
+def _both_names(base: Path) -> None:
+    for name in (f"sha256:{HEX}", f"sha256-{HEX}"):
+        (base / name).mkdir(parents=True)
+
+
+def test_the_directory_readers_list_an_offer_stored_under_both_names_once(tmp_path: Path) -> None:
+    from integral import applications_board, brand_measure, interview_log
+
+    store = _store(tmp_path)
+    for offer in (f"sha256:{HEX}", f"sha256-{HEX}"):
+        (Path(store.path("cv", "generated")) / offer / "v1").mkdir(parents=True)
+        held = Path(store.path("interviews")) / offer / "iv-001"
+        held.mkdir(parents=True)
+        (held / "held.json").write_text("{}", encoding="utf-8")
+    _both_names(Path(store.path("applications")))
+
+    assert len(brand_measure.generated_versions(store)) == 1
+    assert len(interview_log.logged_interviews(store)) == 1
+    assert [r.offer_id for r in applications_board.collect(store).rows] == [f"sha256:{HEX}"]
+
+
+def test_a_constructed_round_can_skip_the_spacing_wait_and_restores_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _spacing(monkeypatch)
+    with sourcing.no_waiting():
+        sourcing._space(_ROBOTS, "https://a.example/1")
+        sourcing._space(_ROBOTS, "https://a.example/2")
+    assert clock.waits == []
+    sourcing._space(_ROBOTS, "https://a.example/3")
+    assert clock.waits == [sourcing.REQUEST_FLOOR_SECONDS]

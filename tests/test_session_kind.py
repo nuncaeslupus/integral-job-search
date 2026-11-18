@@ -316,6 +316,17 @@ def test_a_recorded_verdict_is_not_read_back_for_a_different_session(tmp_path: P
     assert read_recorded_kind(root, session_id="sess-b") is None
 
 
+def test_two_sessions_keep_their_own_recorded_verdict(tmp_path: Path) -> None:
+    """One marker per session: recording for B must not erase A's answer (#924's shape)."""
+    root = tmp_path / "profiles"
+    root.mkdir(parents=True)
+    record_session_kind(root, session_kind(root, session_id="sess-a"), session_id="sess-a")
+    record_session_kind(root, session_kind(root, session_id="sess-b"), session_id="sess-b")
+
+    assert read_recorded_kind(root, session_id="sess-a") == "engineering"
+    assert read_recorded_kind(root, session_id="sess-b") == "engineering"
+
+
 def test_resolve_session_kind_records_only_when_asked(tmp_path: Path) -> None:
     """`record=False` (the default) must not write the marker — a caller that
     only wants to know the kind, such as a diagnostic run, must not have a

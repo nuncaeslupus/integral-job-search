@@ -243,9 +243,16 @@ def _texts(value: Any, where: str) -> list[str]:
 _INLINE_TAGS = re.compile(r"&lt;(/?)(b|strong|em|i)&gt;")
 
 
+# What a CV saved before text was escaped holds: it was written as HTML, so `&amp;`
+# means `&`. Decoded exactly once, here, so it is not escaped into a literal `&amp;`.
+_SAVED_ENTITY = re.compile(r"&(amp|lt|gt|quot|#39);")
+_SAVED_ENTITY_CHAR = {"amp": "&", "lt": "<", "gt": ">", "quot": '"', "#39": "'"}
+
+
 def _esc(value: Any) -> Any:
     """Escape text (and lists/rows of it); re-allow only bare b/strong/em/i tags."""
     if isinstance(value, str):
+        value = _SAVED_ENTITY.sub(lambda m: _SAVED_ENTITY_CHAR[m[1]], value)
         return _INLINE_TAGS.sub(r"<\1\2>", html.escape(value, quote=False))
     if isinstance(value, list):
         return [_esc(v) for v in value]
@@ -259,6 +266,24 @@ def _href(value: Any, where: str) -> str:
     if not _SAFE_HREF.fullmatch(text):
         raise RenderError(f"{where} {value!r} is not an http(s), mailto or tel link")
     return html.escape(text, quote=True)
+
+
+_SAVED_ANCHOR = re.compile(r'<a href="([^"]*)">([^<]*)</a>')
+
+
+def _contact_item(raw: str) -> str:
+    """One contact entry: a bare http(s)/mailto/tel URL, or a saved `<a href>` of one, is a link.
+
+    The contact line is the one free-text field whose entries are validated URLs;
+    everywhere else a link is refused as text (see `_esc`).
+    """
+    text = raw.strip()
+    anchor = _SAVED_ANCHOR.fullmatch(text)
+    href, label = (anchor[1], anchor[2]) if anchor else (text, text)
+    href = _SAVED_ENTITY.sub(lambda m: _SAVED_ENTITY_CHAR[m[1]], href)
+    if _SAFE_HREF.fullmatch(href):
+        return f'<a href="{html.escape(href, quote=True)}">{_esc(label)}</a>'
+    return str(_esc(raw))
 
 
 def _svg_dot(accent: str) -> str:
@@ -285,7 +310,9 @@ def _render_block(block: Mapping[str, Any], accent: str) -> str:
     block = {k: v if k in ("href", "live") else _esc(v) for k, v in raw.items()}
     g = block.get
     if kind == "header":
-        contact = " · ".join(_texts(g("contact", []), "header.contact"))
+        contact = " · ".join(
+            _contact_item(c) for c in _texts(raw.get("contact", []), "header.contact")
+        )
         sub = f'<p class="role">{g("title")}</p>' if g("title") else ""
         line = f'<p class="contact">{contact}</p>' if contact else ""
         return f"<header>{_svg_bar(accent)}<h1>{g('name')}</h1>{sub}{line}</header>"
@@ -663,7 +690,7 @@ def sample_cv() -> dict[str, Any]:
                 "type": "header",
                 "name": "Ana Perez",
                 "title": "Data engineer",
-                "contact": ["ana@example.org", "Girona", '<a href="https://example.org">site</a>'],
+                "contact": ["ana@example.org", "Girona", "https://example.org"],
             },
             {"type": "summary", "text": "Builds data platforms & the teams that run them."},
             {"type": "section", "title": "Experience"},
