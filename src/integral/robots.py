@@ -34,6 +34,7 @@ import http.client
 import ipaddress
 import json
 import re
+import socket
 import string
 import sys
 import time
@@ -143,9 +144,14 @@ def is_public_web_url(url: str) -> bool:
     if host == "localhost" or host.endswith(".localhost"):
         return False
     try:
-        address = ipaddress.ip_address(host)
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(host)
     except ValueError:
-        return True
+        # The resolver also reads the legacy IPv4 spellings `ipaddress` refuses —
+        # `2130706433`, `0x7f000001`, `0177.0.0.1`, `127.1` are all 127.0.0.1.
+        try:
+            address = ipaddress.IPv4Address(socket.inet_aton(host))
+        except OSError:
+            return True
     return address.is_global
 
 

@@ -348,3 +348,12 @@ def test_the_hook_passes_the_payload_cwd_to_the_guard(tmp_path: Path) -> None:
     }
     code, _message = hook_main(json.dumps(payload), root=root)
     assert code == 2
+
+
+def test_a_recursive_search_from_the_filesystem_root_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    decision = guard_tool_call(
+        "Bash", {"command": "grep -r salary ."}, root=root, active="ada-lovelace", cwd="/"
+    )
+    assert decision.allowed is False

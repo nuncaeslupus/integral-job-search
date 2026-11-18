@@ -252,6 +252,20 @@ def test_a_cache_hit_does_not_wait_for_the_host_gap(
     assert clock.waits == []
 
 
+def test_a_list_page_actually_fetched_still_waits_for_the_host_gap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second reader on #944: moving the wait into the cache path must not drop it."""
+    clock = _spacing(monkeypatch)
+    store = _store(tmp_path)
+    fetch = lambda r: Response(200, '{"jobs": []}')  # noqa: E731
+    sourcing._list_of_the_day(store, _request(), AT, fetch, _ROBOTS)
+    sourcing._list_of_the_day(
+        store, _request("https://boards.example/beta/jobs"), AT, fetch, _ROBOTS
+    )
+    assert clock.waits == [sourcing.REQUEST_FLOOR_SECONDS]
+
+
 # --- review follow-up on #943: directory readers count one offer once ----------
 
 

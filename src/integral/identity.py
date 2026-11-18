@@ -881,7 +881,7 @@ def _cwd_refusal(
         decision = guard_decision(cwd, root=root, active=active, intent=intent)
         if not decision.allowed:
             return f"this command runs from {cwd}: {decision.reason}"
-    reaches = cwd == root or (cwd in root.parents and cwd != cwd.parent)
+    reaches = cwd == root or cwd in root.parents
     if reaches and _RECURSIVE.search(command) and _DOT_TARGET.search(command):
         return (
             "this command searches recursively from a directory that holds every candidate's tree"
