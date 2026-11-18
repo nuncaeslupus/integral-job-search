@@ -24,7 +24,6 @@ from pathlib import Path
 import pytest
 
 from integral.identity import (
-    ACTIVE_FILE,
     MINIMUM_PROBES,
     ROSTER_FILE,
     Decision,
@@ -32,6 +31,7 @@ from integral.identity import (
     IdentityError,
     ProfileLeak,
     ProfileStore,
+    active_marker,
     create_profile,
     derive_handle,
     guard_decision,
@@ -217,7 +217,7 @@ def test_the_active_handle_round_trips_and_an_unwritable_marker_reads_as_nobody(
     assert read_active_handle(root, session_id="s1") is None
     write_active_handle(root, "ada-lovelace", session_id="s1", now=FIXED)
     assert read_active_handle(root, session_id="s1") == "ada-lovelace"
-    (root / ACTIVE_FILE).write_text("not json", encoding="utf-8")
+    active_marker(root, "s1").write_text("not json", encoding="utf-8")
     assert read_active_handle(root, session_id="s1") is None
 
 
@@ -259,7 +259,7 @@ def test_correct_operation_never_trips_the_hook(
         # §6.1 case 3 lists the display names it has — before identification.
         guard_decision(root / first.handle / "identity.json", root=root, active=None),
         guard_decision(root / second.handle / "identity.json", root=root, active=first.handle),
-        guard_decision(root / ACTIVE_FILE, root=root, active=None),
+        guard_decision(active_marker(root, "s1"), root=root, active=None),
         guard_decision(root, root=root, active=None),
         # ordinary work inside the identified tree
         guard_decision(
@@ -589,3 +589,40 @@ def test_two_creators_of_one_handle_cannot_both_win(tmp_path: Path) -> None:
     (root / "grace-hopper").mkdir()
     with pytest.raises(IdentityError, match="tell the two apart"):
         create_profile(root, "Grace Hopper", language="en", now=FIXED)
+
+
+# -- #931: a profile write is atomic -----------------------------------------
+
+
+def test_an_interrupted_write_leaves_the_old_record_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    store = ProfileStore(root, "ada-lovelace")
+    store.write_text("old\n", "constraints.json")
+
+    def die(_self: Path, _target: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(Path, "replace", die)
+    with pytest.raises(KeyboardInterrupt):
+        store.write_text("new\n", "constraints.json")
+    monkeypatch.undo()
+    assert store.read_text("constraints.json") == "old\n"
+    assert [p.name for p in store.home.iterdir() if p.name.endswith(".tmp")] == []
+
+
+def test_a_write_over_a_symlinked_file_is_still_refused(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    store = ProfileStore(root, "ada-lovelace")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep", encoding="utf-8")
+    try:
+        (store.home / "link.json").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+    with pytest.raises(ProfileLeak):
+        store.write_text("x", "link.json")
+    assert outside.read_text(encoding="utf-8") == "keep"
