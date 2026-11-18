@@ -65,6 +65,7 @@ from integral.identity import (
     IdentityError,
     ProfileLeak,
     ProfileStore,
+    active_marker,
     create_profile,
     read_active_handle,
     write_active_handle,
@@ -95,13 +96,19 @@ Signal = Literal[
     "simulated_ledger", "fiction_profile", "resolved_handle", "state_home_refused", "no_signal"
 ]
 
-#: The roster-level marker `record_session_kind` writes and `read_recorded_kind`
-#: reads — the "one place" T137 asks for, named and shaped after
-#: `identity.ACTIVE_DIR` on purpose: one JSON object, bound to the session
-#: that wrote it, sitting beside `.active.json` at the roster level rather than
-#: under any one handle's tree (an engineering session has no handle to hold it
-#: under, and that is precisely the case this file has to be able to name).
-SESSION_KIND_FILE = ".session-kind.json"
+#: The marker `record_session_kind` writes and `read_recorded_kind` reads — the
+#: "one place" T137 asks for. One JSON object per session, in the same hashed
+#: `<root>/.active/` directory as the active-handle marker (`identity.active_marker`,
+#: the per-session fix of #924), under this suffix: a single shared file would let
+#: two sessions on one machine overwrite each other's verdict. It sits at the roster
+#: level rather than under any handle's tree (an engineering session has no handle).
+SESSION_KIND_SUFFIX = ".kind.json"
+
+
+def kind_marker(root: Path, session_id: str) -> Path:
+    """This session's kind marker, next to its active-handle marker."""
+    active = active_marker(root, session_id)
+    return active.with_name(active.stem + SESSION_KIND_SUFFIX)
 
 
 @dataclass(frozen=True)
@@ -274,8 +281,8 @@ def record_session_kind(
 ) -> Path:
     """Write `session_kind()`'s verdict to the one place other code reads it back.
 
-    Same shape as `identity.write_active_handle` on purpose — a single
-    roster-level JSON marker, overwritten on every call, bound to the session
+    Same shape as `identity.write_active_handle` on purpose — a
+    roster-level JSON marker per session, overwritten on every call, bound to the session
     that produced it. `read_recorded_kind` refuses a marker whose `session_id`
     does not match, for the identical reason `read_active_handle` refuses one:
     a marker with no binding is a standing answer for the next session on a
@@ -284,8 +291,8 @@ def record_session_kind(
     if not session_id:
         raise ValueError("a session-kind verdict must be bound to a session")
     root = Path(root)
-    root.mkdir(parents=True, exist_ok=True)
-    marker = root / SESSION_KIND_FILE
+    marker = kind_marker(root, session_id)
+    marker.parent.mkdir(parents=True, exist_ok=True)
     stamp = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
     payload = {
         "session_id": session_id,
@@ -309,7 +316,7 @@ def read_recorded_kind(root: Path, *, session_id: str) -> SessionKind | None:
     though nothing had been recorded, rather than handed over as though it
     applied here.
     """
-    marker = Path(root) / SESSION_KIND_FILE
+    marker = kind_marker(Path(root), session_id)
     try:
         payload = json.loads(marker.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):

@@ -337,12 +337,15 @@ def logged_interviews(store: ProfileStore) -> list[tuple[str, str]]:
     root = store.path("interviews")
     if not root.is_dir():
         return []
+    # A set: an offer stored under both its old `sha256:` name and its file-safe one is one offer.
     return sorted(
-        (id_from_name(offer.name), child.name)
-        for offer in root.iterdir()
-        if offer.is_dir()
-        for child in offer.iterdir()
-        if child.is_dir() and INTERVIEW_ID.match(child.name) and (child / "held.json").exists()
+        {
+            (id_from_name(offer.name), child.name)
+            for offer in root.iterdir()
+            if offer.is_dir()
+            for child in offer.iterdir()
+            if child.is_dir() and INTERVIEW_ID.match(child.name) and (child / "held.json").exists()
+        }
     )
 
 

@@ -128,12 +128,15 @@ def generated_versions(store: ProfileStore) -> list[tuple[str, ...]]:
     base = store.path("cv", "generated")
     if not base.is_dir():
         return []
+    # A set: an offer stored under both its old `sha256:` name and its file-safe one is one offer.
     return sorted(
-        ("cv", "generated", id_from_name(offer.name), version.name)
-        for offer in base.iterdir()
-        if offer.is_dir()
-        for version in offer.iterdir()
-        if version.is_dir() and version.name.startswith("v")
+        {
+            ("cv", "generated", id_from_name(offer.name), version.name)
+            for offer in base.iterdir()
+            if offer.is_dir()
+            for version in offer.iterdir()
+            if version.is_dir() and version.name.startswith("v")
+        }
     )
 
 

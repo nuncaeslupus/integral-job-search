@@ -206,7 +206,7 @@ def test_a_board_without_the_slot_names_no_employer() -> None:
 
 def _package(tmp: Path) -> Path:
     package = tmp / "connectors" / "atshost_en"
-    (package / "fixture").mkdir(parents=True)
+    (package / "fixture").mkdir(parents=True, exist_ok=True)
     (package / "connector.yaml").write_text(
         _yaml(GOOD, "  employers:\n    acme: Acme Corp\n    beta: Beta Inc\n"), encoding="utf-8"
     )
@@ -532,8 +532,9 @@ def _three_employer_run(
         text.replace("    beta: Beta Inc\n", "    gone: Gone Co\n    beta: Beta Inc\n"),
         encoding="utf-8",
     )
-    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
-    record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
+    if not (tmp_path / "p").exists():  # a second run in one tmp_path reuses the profile and cache
+        create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+        record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # filter not under test
     store = ProfileStore(tmp_path / "p", "test")
     asked: list[str] = []
 
@@ -871,6 +872,16 @@ def test_a_board_refused_on_its_own_advert_keeps_that_reason(tmp_path: Path) -> 
     assert "not asked again" not in outcome.refused, outcome.refused
 
 
+def test_an_error_page_with_no_transport_error_is_a_failed_read(tmp_path: Path) -> None:
+    """#934 #22: a 404/500 page used to parse to zero rows and read as an empty board."""
+    page = Response(404, "<html>Not found</html>")
+    run, _ = _three_employer_run(
+        tmp_path, dict.fromkeys(("acme", "gone", "beta"), page), "User-agent: *\nAllow: /\n"
+    )
+    (outcome,) = run.outcomes
+    assert outcome.error and "404" in outcome.error and not outcome.reached_the_board
+
+
 def test_every_employer_failing_is_an_error(tmp_path: Path) -> None:
     failure = Response(None, "", error="timed out")
     run, _ = _three_employer_run(
@@ -906,6 +917,21 @@ def test_a_host_with_no_crawl_delay_is_still_spaced_by_the_floor(
     answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
     _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
     assert pauses == [sourcing.REQUEST_FLOOR_SECONDS] * 2
+
+
+def test_a_same_day_cache_hit_does_not_wait_for_the_host_gap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review follow-up on #943: the spacing check came before the cache lookup."""
+    import integral.sourcing as sourcing
+
+    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
+    answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
+    _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
+    pauses: list[float] = []
+    monkeypatch.setattr(sourcing, "_pause", pauses.append)
+    _, asked = _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
+    assert asked == [] and pauses == []
 
 
 @pytest.fixture(scope="module")

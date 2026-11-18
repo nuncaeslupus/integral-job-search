@@ -41,6 +41,7 @@ tests rather than a recording of one afternoon's internet.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -48,7 +49,7 @@ import shutil
 import sys
 import time
 import unicodedata
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
@@ -1028,12 +1029,26 @@ _clock = time.monotonic
 #: than this still wins, and a host that asks for less is not given less.
 REQUEST_FLOOR_SECONDS = 1.0
 
+
+@contextlib.contextmanager
+def no_waiting() -> Iterator[None]:
+    """Skip the request-spacing sleep: for constructed rounds that touch no real host."""
+    global _pause
+    kept, _pause = _pause, lambda _seconds: None
+    try:
+        yield
+    finally:
+        _pause = kept
+
+
 #: When this process last requested each origin. Per origin and not per board:
 #: 56 Greenhouse boards are one host, and each used to start its own count.
 _last_request_at: dict[str, float] = {}
 
 
-def _list_of_the_day(store: ProfileStore, request: ListRequest, at: str, fetch: Fetch) -> Response:
+def _list_of_the_day(
+    store: ProfileStore, request: ListRequest, at: str, fetch: Fetch, robots: Robots
+) -> Response:
     """An unsteerable board's list page, fetched at most once per calendar day.
 
     These boards take no query, so every round asks the same URLs and filters
@@ -1048,6 +1063,7 @@ def _list_of_the_day(store: ProfileStore, request: ListRequest, at: str, fetch: 
     if store.exists("cache", "boards", day, name):
         kept = store.read_json("cache", "boards", day, name)
         return Response(kept["status"], kept["body"])
+    _space(robots, request.url)  # only a real request waits; a cache hit never does
     response = fetch(request)
     if (
         response.error is None
@@ -1718,12 +1734,14 @@ def _one_board(
             )
         # The site's own Crawl-delay, or the floor, between requests to one
         # host. An ATS host is dozens of boards (T144).
-        _space(robots, request.url)
-        response = (
-            fetch(request)
-            if steerable or request.method != "GET"
-            else _list_of_the_day(store, request, at, fetch)
-        )
+        if steerable or request.method != "GET":
+            _space(robots, request.url)
+            response = fetch(request)
+        else:
+            response = _list_of_the_day(store, request, at, fetch, robots)
+        if response.error is None and response.status is not None and response.status >= 400:
+            # An error page is a failed read, not a board that was reached and is empty.
+            response = Response(response.status, response.body, error=f"HTTP {response.status}")
         last = response
         blocked = rate_limited(None, response.status) if response.error is not None else None
         if blocked is not None:

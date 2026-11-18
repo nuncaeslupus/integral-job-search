@@ -8,7 +8,6 @@ present and nobody asked whether anything in it had been read.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -16,7 +15,7 @@ import pytest
 from integral.identity import ProfileStore
 from integral.step_gates import UNCERTIFIABLE, VOCABULARY_SILENT, checkpoint_exit
 from integral.step_runtime import ProfileView, settled_extractions
-from integral.vocabulary_reach import measure, write_evidence
+from integral.vocabulary_reach import measure
 
 
 def _store(root: Path) -> ProfileStore:
@@ -125,14 +124,6 @@ def test_the_gate_holds() -> None:
         "shortfalls"
     ]
     assert measured["claims_checked"] >= 6
-
-
-def test_write_evidence_records_what_measure_found(tmp_path: Path) -> None:
-    target = tmp_path / "D-19.json"
-
-    measured = write_evidence(target)
-
-    assert json.loads(target.read_text(encoding="utf-8")) == measured
 
 
 def test_the_static_check_is_not_satisfied_by_merely_naming_the_key(

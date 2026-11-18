@@ -495,3 +495,58 @@ def test_r6_an_aggregator_copy_with_no_lifecycle_record_leaves_the_new_pool(
     kept, record = load_lifecycle_offer(store, agg_id)
     assert kept.status == "archived" and kept.duplicate_of == result.canonical_id
     assert record.current_status == "archived"
+
+
+# -- #934: size cap, charset, one Robots per process -------------------------------
+
+
+class _Reply:
+    status = 200
+    url = "https://example.org/job"
+
+    def __init__(self, raw: bytes, charset: str | None) -> None:
+        self._raw = raw
+        self.headers = email.message.Message()
+        if charset:
+            self.headers["Content-Type"] = f"text/html; charset={charset}"
+        self.asked: int | None = None
+
+    def read(self, limit: int = -1) -> bytes:
+        self.asked = limit
+        return self._raw[:limit] if limit >= 0 else self._raw
+
+    def __enter__(self) -> _Reply:
+        return self
+
+    def __exit__(self, *_a: object) -> None:
+        return None
+
+
+def _fetch_reply(monkeypatch: pytest.MonkeyPatch, reply: _Reply) -> str | None:
+    from integral import canonical_ad
+
+    class _Opener:
+        def open(self, *_a: object, **_k: object) -> _Reply:
+            return reply
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *_a: _Opener())
+    return canonical_ad.guarded_fetch(Robots(fetch=lambda _u: ""))(reply.url).body
+
+
+def test_a_latin1_page_is_decoded_by_its_declared_charset(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = _Reply("Ingeniero de datos, Málaga".encode("latin-1"), "iso-8859-1")
+    assert _fetch_reply(monkeypatch, reply) == "Ingeniero de datos, Málaga"
+
+
+def test_a_page_is_read_up_to_a_cap_not_whole(monkeypatch: pytest.MonkeyPatch) -> None:
+    from integral import canonical_ad
+
+    reply = _Reply(b"x" * (canonical_ad.MAX_PAGE_BYTES + 10), None)
+    body = _fetch_reply(monkeypatch, reply)
+    assert body is not None and len(body) == canonical_ad.MAX_PAGE_BYTES
+
+
+def test_resolving_many_offers_shares_one_robots() -> None:
+    from integral import canonical_ad
+
+    assert canonical_ad._shared_robots() is canonical_ad._shared_robots()

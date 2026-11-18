@@ -134,7 +134,7 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
     from integral.identity import create_profile
     from integral.offers import load_offer
     from integral.robots import Robots
-    from integral.sourcing import _FLOOD_CONNECTOR, GLOBAL, Response, source
+    from integral.sourcing import _FLOOD_CONNECTOR, GLOBAL, Response, no_waiting, source
 
     exclusions = tuple(
         Exclusion(about=about, stated_at_cycle=1, words=words, terms=terms)
@@ -185,23 +185,24 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
         def fetch(request: ListRequest) -> Response:
             return Response(200, page)
 
-        run = source(
-            store,
-            CandidateConstraints(
-                location=Location(
-                    state="stated",
-                    country="ES",
-                    accepts_onsite_in_country=True,
-                    commutable_regions=("Barcelona",),
+        with no_waiting():
+            run = source(
+                store,
+                CandidateConstraints(
+                    location=Location(
+                        state="stated",
+                        country="ES",
+                        accepts_onsite_in_country=True,
+                        commutable_regions=("Barcelona",),
+                    ),
+                    reach=Reach(state="stated", modes=("remote",)),
                 ),
-                reach=Reach(state="stated", modes=("remote",)),
-            ),
-            Aim(state="stated", terms=(_CORPUS_QUERY,)),
-            fetch=fetch,
-            at="2026-01-01T00:00:00+00:00",
-            directory=directory,
-            robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
-        )
+                Aim(state="stated", terms=(_CORPUS_QUERY,)),
+                fetch=fetch,
+                at="2026-01-01T00:00:00+00:00",
+                directory=directory,
+                robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+            )
         stored = {
             offer.url: offer
             for path in Path(store.path("offers")).glob("*.json")

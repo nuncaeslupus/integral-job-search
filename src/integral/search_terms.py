@@ -324,6 +324,7 @@ def _drive(
         DEFAULT_CONNECTORS_DIR,
         Response,
         _connector_of,
+        no_waiting,
         packages_for,
         source,
     )
@@ -350,15 +351,16 @@ def _drive(
         return Response(200, "<html></html>")
 
     store = _temp_store(root)
-    source(
-        store,
-        constraints,
-        Aim(state="stated", terms=phrases),
-        fetch=answer,
-        at="2026-01-01T00:00:00+00:00",
-        directory=DEFAULT_CONNECTORS_DIR,
-        robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
-    )
+    with no_waiting():
+        source(
+            store,
+            constraints,
+            Aim(state="stated", terms=phrases),
+            fetch=answer,
+            at="2026-01-01T00:00:00+00:00",
+            directory=DEFAULT_CONNECTORS_DIR,
+            robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+        )
     hosts = {p.site for p in wanted if p.site}
     return [url for url in sent if any((p or "") in url for p in hosts)]
 

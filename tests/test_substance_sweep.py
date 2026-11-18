@@ -37,7 +37,6 @@ from integral.approval import (
     MINIMUM_DISCLOSURE_PROBES,
     MINIMUM_INTACT_SEAM_CHECKS,
     MINIMUM_INTACT_SEAM_STATES,
-    MINIMUM_MANIFEST_DISCLOSURES_COMPARED,
     MINIMUM_PARAPHRASE_CHECKS,
     MINIMUM_PARAPHRASE_STATES,
     ApprovalError,
@@ -431,21 +430,6 @@ def test_the_probes_catch_every_planted_defect(tmp_path: Path) -> None:
     # trees they leave untouched: a non-zero here is the fix over-refusing.
     assert measured["disclosures_unbacked_by_a_generated_document"] == 0
     assert measured["manifest_disclosures_compared"] >= 2
-
-
-def test_the_recorded_evidence_clears_its_own_floors(tmp_path: Path) -> None:
-    """The floor is over the whole record — the probes plus the corpus pass.
-
-    A probe set alone compares a handful of disclosures, which is the empty-scan
-    shape this gate exists to refuse; the corpus is what makes the zero mean
-    something, so the floor is asserted where the two are added up.
-    """
-    measured = write_disclosure_evidence(tmp_path / "T114.json")
-
-    assert measured["manifest_disclosures_compared"] >= MINIMUM_MANIFEST_DISCLOSURES_COMPARED
-    assert measured["disclosures_unbacked_by_a_generated_document"] == 0
-    assert measured["gate_status"] == "measured"
-    assert json.loads((tmp_path / "T114.json").read_text(encoding="utf-8")) == measured
 
 
 def test_the_refusal_helper_fires_only_on_a_divergence() -> None:

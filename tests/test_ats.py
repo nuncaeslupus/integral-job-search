@@ -266,3 +266,19 @@ def test_a_longer_declared_spelling_is_synonym_only_not_covered() -> None:
     # Unchanged for the pair that has no substring relationship.
     assert classify_keyword("We use PostgreSQL", master, "postgres") == SYNONYM_ONLY
     assert classify_keyword("We use Postgres", master, "postgres") == COVERED
+
+
+def test_a_pdf_that_hangs_pdftotext_is_an_error_not_a_hang(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    from integral import ats
+
+    def hang(*_a: object, **kwargs: object) -> None:
+        assert kwargs.get("timeout")
+        raise subprocess.TimeoutExpired("pdftotext", 1)
+
+    monkeypatch.setattr(subprocess, "run", hang)
+    with pytest.raises(ats.ATSError, match="did not finish"):
+        ats.text_layer(tmp_path / "cv.pdf")

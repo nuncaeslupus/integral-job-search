@@ -111,6 +111,11 @@ class _GuardedRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+#: A starting value: an advert page is some hundreds of KiB, and an endless answer
+#: must not be read whole into memory.
+MAX_PAGE_BYTES = 5 * 1024 * 1024
+
+
 def guarded_fetch(
     robots: Robots, sleep: Callable[[float], None] = time.sleep, floor: float = 1.0
 ) -> Fetch:
@@ -121,7 +126,13 @@ def guarded_fetch(
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         try:
             with opener.open(request, timeout=timeout) as reply:
-                return Response(reply.status, reply.read().decode("utf-8", "replace"), reply.url)
+                raw = reply.read(MAX_PAGE_BYTES)
+                charset = reply.headers.get_content_charset() or "utf-8"
+                try:
+                    body = raw.decode(charset, "replace")
+                except LookupError:  # a charset name Python does not know
+                    body = raw.decode("utf-8", "replace")
+                return Response(reply.status, body, reply.url)
         except urllib.error.HTTPError as exc:
             return Response(exc.code, None, url)
 
@@ -328,6 +339,17 @@ def primary_offer(store: ProfileStore, offer_id: str) -> Offer:
     return load_offer(store, offer_id)
 
 
+_default_robots: Robots | None = None
+
+
+def _shared_robots() -> Robots:
+    """One Robots per process, so resolving many offers of one host reads its robots.txt once."""
+    global _default_robots
+    if _default_robots is None:
+        _default_robots = Robots()
+    return _default_robots
+
+
 def resolve_canonical(
     store: ProfileStore,
     offer_id: str,
@@ -370,7 +392,7 @@ def resolve_canonical(
             )
     if aggregator.status != "new":
         return fallback("already_in_progress", f"the advert is already {aggregator.status}")
-    checker = robots or Robots()
+    checker = robots or _shared_robots()
     try:
         allowed = checker.allows(url)
     except RobotsError as exc:

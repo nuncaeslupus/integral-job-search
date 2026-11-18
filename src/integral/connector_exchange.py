@@ -198,6 +198,10 @@ class _HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+#: A starting value: a manifest or a connector file is a few KiB.
+MAX_EXCHANGE_BYTES = 1024 * 1024
+
+
 def https_fetcher(timeout: float = 20.0) -> Fetch:
     """The real reader: plain HTTPS, no credentials, and https on every hop."""
     opener = urllib.request.build_opener(_HttpsOnlyRedirects())
@@ -206,7 +210,10 @@ def https_fetcher(timeout: float = 20.0) -> Fetch:
         if urllib.parse.urlsplit(url).scheme != "https":
             raise ExchangeError(f"the exchange reads https only, not {url!r}")
         with opener.open(url, timeout=timeout) as response:
-            return str(response.read().decode("utf-8"))
+            raw = response.read(MAX_EXCHANGE_BYTES + 1)
+            if len(raw) > MAX_EXCHANGE_BYTES:
+                raise ExchangeError(f"{url!r} is larger than {MAX_EXCHANGE_BYTES} bytes")
+            return str(raw.decode("utf-8"))
 
     return fetch
 

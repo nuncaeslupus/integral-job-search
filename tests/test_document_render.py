@@ -712,3 +712,39 @@ def test_text_is_escaped_and_only_bare_inline_tags_survive() -> None:
     assert "<b>ok</b>" in page
     assert "<em onclick" not in page and "&lt;em onclick" in page
     assert not re.search(r"&amp;amp;|&AMP;", page)
+
+
+# -- review follow-up on #942: CVs saved before escaping, and the contact line ------
+
+
+def _cv(*blocks: dict[str, Any]) -> str:
+    return dr.render({"title": "t", "blocks": list(blocks)})
+
+
+def test_a_cv_saved_before_escaping_does_not_show_its_entities() -> None:
+    page = _cv(
+        {"type": "section", "title": "Education &amp; certifications"},
+        {"type": "summary", "text": "R&amp;D &lt;lead&gt; and R&D"},
+    )
+    assert "Education &amp; certifications" in page
+    assert "R&amp;D &lt;lead&gt; and R&amp;D" in page
+    assert "&amp;amp;" not in page
+
+
+def test_contact_urls_render_as_links_and_free_text_links_stay_inert() -> None:
+    page = _cv(
+        {
+            "type": "header",
+            "name": "Ana",
+            "contact": [
+                "https://example.org",
+                '<a href="https://old.example.org?a=1&amp;b=2">site</a>',
+                "x",
+            ],
+        },
+        {"type": "summary", "text": '<a href="https://evil.example">click</a>'},
+    )
+    assert '<a href="https://example.org">https://example.org</a>' in page
+    assert '<a href="https://old.example.org?a=1&amp;b=2">site</a>' in page
+    assert '<a href="https://evil.example">' not in page
+    assert "&lt;a href" in page
