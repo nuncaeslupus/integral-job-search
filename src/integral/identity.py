@@ -36,9 +36,11 @@ A run that measures nothing is a failure, not a pass over an empty set.
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import os
 import re
+import secrets
 import sys
 import unicodedata
 from collections.abc import Iterator
@@ -83,10 +85,13 @@ _RESERVED_HANDLES = frozenset({"active", "identity", "all", "new", "none", "shar
 
 Language = Literal["en", "es", "ca"]
 
-# The file at the roster level that records who this session identified. It is
-# not inside any handle's tree, because reading it is what tells the guard which
-# tree is allowed — a chicken-and-egg the tree layout would otherwise create.
-ACTIVE_FILE = ".active.json"
+# The directory at the roster level that records who each session identified,
+# one file per session (`active_marker`). It is not inside any handle's tree,
+# because reading it is what tells the guard which tree is allowed — a
+# chicken-and-egg the tree layout would otherwise create. One file per session
+# because a single shared marker let a second session's identification log the
+# first one out (#924).
+ACTIVE_DIR = ".active"
 
 # Read freely at the roster level so §6.1 case 3 can list display names before a
 # handle exists. Nothing else under a handle is readable pre-identification.
@@ -288,10 +293,17 @@ class ProfileStore:
     # -- writes -----------------------------------------------------------
 
     def write_text(self, content: str, *parts: str) -> Path:
+        """Replace the file atomically: a reader sees the old or the new, never half.
+
+        Written to a sibling temp file (exclusive, never following a link), then
+        `os.replace`d over the target, so an interrupted write leaves the old
+        record intact instead of an empty or truncated one (#931).
+        """
         target = self.path(*parts)
         target.parent.mkdir(parents=True, exist_ok=True)
-        with self._open_leaf(target, "w") as stream:
-            stream.write(content)
+        if target.is_symlink():
+            raise ProfileLeak(f"{target} is a symbolic link, not a file in this tree")
+        atomic_write_text(target, content)
         return target
 
     def write_json(self, payload: Any, *parts: str) -> Path:
@@ -527,6 +539,28 @@ def create_profile(
     return identity
 
 
+def atomic_write_text(target: Path, content: str) -> None:
+    """Write `content` to `target` via temp file + fsync + `os.replace`."""
+    temp = target.with_name(f".{target.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(temp, flags, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temp.replace(target)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
+
+
+def active_marker(root: Path, session_id: str) -> Path:
+    """This session's marker. Hashed, so no session id can name another path."""
+    digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:32]
+    return Path(root) / ACTIVE_DIR / f"{digest}.json"
+
+
 def read_active_handle(root: Path, *, session_id: str | None) -> Handle | None:
     """Who *this session* identified, or `None` — which means nothing may be read.
 
@@ -540,7 +574,7 @@ def read_active_handle(root: Path, *, session_id: str | None) -> Handle | None:
         # No session to compare against: treat it as nobody identified. The
         # safe direction — the store still works, only the guard tightens.
         return None
-    marker = Path(root) / ACTIVE_FILE
+    marker = active_marker(root, session_id)
     try:
         payload = json.loads(marker.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -560,14 +594,13 @@ def write_active_handle(
     _validate_handle(handle)
     if not session_id:
         raise IdentityError("an active handle must be bound to a session")
-    root = Path(root)
-    root.mkdir(parents=True, exist_ok=True)
-    marker = root / ACTIVE_FILE
+    marker = active_marker(root, session_id)
+    marker.parent.mkdir(parents=True, exist_ok=True)
     stamp = (now or datetime.now(UTC)).astimezone(UTC).isoformat(timespec="seconds")
-    marker.write_text(
+    atomic_write_text(
+        marker,
         json.dumps({"handle": handle, "session_id": session_id, "identified_at": stamp}, indent=2)
         + "\n",
-        encoding="utf-8",
     )
     return marker
 
@@ -612,7 +645,7 @@ def guard_decision(
 
     1. outside `profiles/` — not this guard's business;
     2. the roster directory itself — allowed, so the tool can list who exists;
-    3. roster metadata (`profiles/.active.json` and any other dotfile at that
+    3. roster metadata (`profiles/.active/<session>.json` and any other dotfile at that
        level) — allowed, because writing it *is* the act of identifying, and
        the session binding in `read_active_handle` is what makes a tampered
        marker inert rather than an authorisation;
@@ -645,7 +678,7 @@ def guard_decision(
     parts = relative.parts
     if not parts:
         return Decision(True, "the roster directory, which resolution has to list")
-    if len(parts) == 1 and parts[0].startswith("."):
+    if (len(parts) == 1 and parts[0].startswith(".")) or parts[0] == ACTIVE_DIR:
         return Decision(True, "roster metadata, which identification itself writes")
 
     handle = parts[0]
@@ -711,11 +744,52 @@ def paths_in_tool_call(tool_name: str, tool_input: dict[str, Any]) -> list[str]:
                 paths.append(f"profiles/{value}")
         return paths
     found: list[str] = []
-    for key in ("file_path", "path", "notebook_path"):
+    keys = ["file_path", "path", "notebook_path"]
+    if tool_name == "Glob":
+        keys.append("pattern")  # an absolute glob names a tree; a Grep pattern is a regex
+    for key in keys:
         value = tool_input.get(key)
         if isinstance(value, str) and value:
             found.append(value)
     return found
+
+
+# A mention of the roster itself rather than of one handle under it: `profiles`,
+# `profiles/`, `profiles/*/…`, `profiles/pro*`, `profiles/$X`. Whatever the shell
+# makes of it can reach any candidate, so it cannot be judged against one handle.
+_BARE_ROSTER = re.compile(
+    r"(?<=/)profiles(?![\w./-])"  # <root>/profiles, then a space, quote or operator
+    r"|(?<![\w.-])profiles/(?![\w.-])"  # profiles/ then a glob, $VAR or nothing
+    r"|(?<![\w.-])profiles/[\w.-]*[*?\[{]"  # profiles/pro*
+    r"|(?<=\bcd )profiles(?![\w.-])|(?<=\bpushd )profiles(?![\w.-])"
+)
+_PARENT_CLIMB = re.compile(r"(?<![\w.])\.\.(?:/|$|\s)")
+_RECURSIVE = re.compile(
+    r"(?<!\S)(?:find|rg|ag|ack|tree|du)(?!\S)|(?<!\S)-[A-Za-z]*[rR][A-Za-z]*(?!\S)|--recursive"
+)
+
+
+def _bare_mention(command: str, path: Path) -> re.Match[str] | None:
+    """`path` named in `command` without a handle-specific continuation."""
+    text = re.escape(str(path))
+    return re.search(rf"(?<![\w.-]){text}(?:/?(?![\w./-])|/[\w.-]*[*?\[{{])", command)
+
+
+def _bash_breadth_refusal(command: str, root: Path) -> str | None:
+    """Why a command reaches the whole roster (or a way out of one handle), or `None`.
+
+    `cd <root> && cat bob/cv.json`, `cat <root>/prof*/bob/cv.json` and
+    `grep -r salary <root>` name no `profiles/<handle>` path for the per-path
+    check to judge, so the roster mention itself is refused (#923). An accident
+    barrier, not isolation: a shell can always build a path this does not see.
+    """
+    if _BARE_ROSTER.search(command) or _bare_mention(command, root):
+        return "names the whole profiles directory, which holds every candidate's tree"
+    if _bare_mention(command, root.parent) and _RECURSIVE.search(command):
+        return "searches recursively from a directory that contains every candidate's tree"
+    if "profiles/" in command and _PARENT_CLIMB.search(command):
+        return "climbs out of a profile path with .., so the path cannot be judged"
+    return None
 
 
 def guard_tool_call(
@@ -727,6 +801,24 @@ def guard_tool_call(
 ) -> Decision:
     """The guard over a whole `PreToolUse` payload: refused if any path is."""
     intent = intent_of(tool_name)
+    command = tool_input.get("command") if tool_name == "Bash" else None
+    if isinstance(command, str):
+        reason = _bash_breadth_refusal(command, Path(root).resolve(strict=False))
+        if reason:
+            return Decision(False, f"this command {reason}")
+    if tool_name in ("Grep", "Glob"):
+        # A search is recursive by nature: aimed at the roster or above it, it
+        # reads every candidate whichever handle is active.
+        resolved_root = Path(root).resolve(strict=False)
+        for key in ("path", "pattern") if tool_name == "Glob" else ("path",):
+            value = tool_input.get(key)
+            if isinstance(value, str) and value.startswith("/"):
+                base = Path(value.split("*")[0].split("?")[0].split("[")[0].rstrip("/") or "/")
+                resolved = base.resolve(strict=False)
+                if resolved == resolved_root or resolved in resolved_root.parents:
+                    return Decision(
+                        False, f"{value}: a {tool_name} over the whole profiles directory"
+                    )
     for raw in paths_in_tool_call(tool_name, tool_input):
         decision = guard_decision(raw, root=root, active=active, intent=intent)
         if not decision.allowed:

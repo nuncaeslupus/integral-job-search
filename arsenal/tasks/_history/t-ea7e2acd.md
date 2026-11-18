@@ -3,6 +3,7 @@ id: t-ea7e2acd
 title: "review: CV/letter renderer passes every text field through as raw HTML"
 priority: 5
 requires: [human:gate]
+status: merged
 ---
 
 Imported from issue #926

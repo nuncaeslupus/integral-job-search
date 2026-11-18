@@ -15,6 +15,7 @@ from integral import identity
 from integral.identity import (
     _RESERVED_HANDLES,
     create_profile,
+    guard_tool_call,
     hook_main,
     read_active_handle,
     write_active_handle,
@@ -142,3 +143,89 @@ def test_the_shell_wrapper_prints_the_restore_command(tmp_path: Path) -> None:
     result = _guard(_payload("Edit", {"file_path": str(root / ada.handle / "x.json")}), tmp_path)
     assert result.returncode == 2
     assert "write_active_handle" in result.stderr
+
+
+# -- #923: the guard must refuse what reaches around a per-path check ---------
+
+
+def _bash(root: Path, command: str, active: str | None = "ada-lovelace") -> bool:
+    return guard_tool_call("Bash", {"command": command}, root=root, active=active).allowed
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "cd {r} && cat nuria-puig/cv.json",
+        "cd {r}/ && cat nuria-puig/cv.json",
+        "cat {r}/nur*/cv.json",
+        "cat {r}/*/profile/evidence.jsonl",
+        "grep -r salary {r}",
+        "grep -rn salary {p}",
+        "rg salary {p}",
+        "find {p} -name cv.json",
+        "cat {r}/ada-lovelace/../nuria-puig/cv.json",
+        "cat {r}/$WHO/cv.json",
+    ],
+)
+def test_a_command_that_reaches_the_whole_roster_is_refused(tmp_path: Path, template: str) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    command = template.format(r=root, p=root.parent)
+    assert _bash(root, command) is False
+    assert _bash(root, command, active=None) is False
+
+
+def test_ordinary_commands_and_the_active_tree_are_still_allowed(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    assert _bash(root, f"cat {root}/ada-lovelace/cv/master.json")
+    assert _bash(root, f"cat {root.parent}/src/integral/identity.py")
+    assert _bash(root, 'git commit -m "fix the profiles guard"')
+
+
+@pytest.mark.parametrize(
+    ("tool", "key", "suffix"),
+    [
+        ("Grep", "path", "nuria-puig"),
+        ("Glob", "path", "nuria-puig"),
+        ("Glob", "pattern", "nuria-puig/**/*.json"),
+        ("Glob", "pattern", "*/cv.json"),
+        ("MultiEdit", "file_path", "nuria-puig/cv.json"),
+        ("Grep", "path", ""),
+    ],
+)
+def test_search_and_multiedit_tools_are_judged_like_the_rest(
+    tmp_path: Path, tool: str, key: str, suffix: str
+) -> None:
+    root = tmp_path / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    value = f"{root}/{suffix}".rstrip("/")
+    decision = guard_tool_call(tool, {key: value}, root=root, active="ada-lovelace")
+    assert decision.allowed is False
+
+
+def test_the_hook_matcher_covers_every_tool_the_guard_judges() -> None:
+    import json
+
+    settings = json.loads(Path(".claude/settings.json").read_text(encoding="utf-8"))
+    matcher = settings["hooks"]["PreToolUse"][0]["matcher"].split("|")
+    assert {"Grep", "Glob", "MultiEdit"} <= set(matcher)
+    assert "profile_guard" in settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+
+# -- #924: one marker per session ---------------------------------------------
+
+
+def test_a_second_session_does_not_log_the_first_one_out(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    write_active_handle(root, "ada-lovelace", session_id="A", now=FIXED)
+    write_active_handle(root, "nuria-puig", session_id="B", now=FIXED)
+    assert read_active_handle(root, session_id="A") == "ada-lovelace"
+    assert read_active_handle(root, session_id="B") == "nuria-puig"
+
+
+def test_a_session_id_cannot_name_another_path(tmp_path: Path) -> None:
+    root = tmp_path / "profiles"
+    write_active_handle(root, "ada-lovelace", session_id="../../etc/x", now=FIXED)
+    assert read_active_handle(root, session_id="../../etc/x") == "ada-lovelace"
+    assert not (tmp_path / "etc").exists()
