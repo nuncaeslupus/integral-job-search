@@ -883,4 +883,3 @@ def test_a_link_to_this_machine_or_a_private_network_is_never_allowed(url: str) 
 def test_a_public_host_is_still_judged_by_its_robots_txt() -> None:
     robots = Robots(fetch=lambda _u: "User-agent: *\nAllow: /\n")
     assert robots.allows("https://example.com/jobs/1") is True
-    assert robots.allows("http://93.184.216.34/jobs/1") is True

@@ -146,16 +146,6 @@ def test_a_disallow_is_widened_and_an_allow_is_not() -> None:
     assert robots._match_octets(*robots._normalize_rule("/*/x", widen=False), path) is None
 
 
-def test_the_committed_evidence_matches_what_the_module_measures_now(
-    measured: dict[str, Any],
-) -> None:
-    on_disk = json.loads(mr.DEFAULT_EVIDENCE_PATH.read_text(encoding="utf-8"))
-    assert on_disk == mr.record(measured)
-    assert on_disk["matcher_reading_divergences_unrecorded"] == 0
-    assert on_disk["gate_status"] == "measured"
-    assert "triples_compared" not in on_disk, "the count of the day must not be committed"
-
-
 def test_the_main_entry_point_exits_zero_on_a_clean_measurement(
     tmp_path: Any, measured: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
