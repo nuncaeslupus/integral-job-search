@@ -250,7 +250,7 @@ def test_the_employer_name_fills_a_missing_company_and_never_overrides_one(
     assert run.added == 2, run.summary()
     companies = {
         load_lifecycle_offer(store, path.stem)[0].company
-        for path in store.path("offers").glob("sha256:*.json")
+        for path in store.path("offers").glob("sha256*.json")
     }
     assert companies == {"Acme Corp", "Beta (own)"}
 
@@ -705,6 +705,7 @@ def _detail_run(
     record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
     pauses: list[float] = []
     monkeypatch.setattr(sourcing, "_pause", pauses.append)
+    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
     robots_asked: list[str] = []
 
     def robots_fetch(url: str) -> str:
@@ -766,7 +767,8 @@ def test_the_advert_host_crawl_delay_is_kept_and_a_budget_stop_is_named(
     )
     (outcome,) = run.outcomes
     assert (outcome.added, outcome.detail_fetched) == (3, 3)
-    assert pauses.count(5.0) == 3
+    # The first request to the advert host waits for nothing; the next two wait.
+    assert pauses.count(5.0) == 2
     # T167 counts a budget stop apart from `dropped`, so it cannot read as a
     # connector fault at all; the summary names the budget.
     assert (outcome.unopened, outcome.dropped) == (1, 0), outcome
@@ -886,9 +888,24 @@ def test_the_crawl_delay_is_kept_between_one_hosts_requests(
 
     pauses: list[float] = []
     monkeypatch.setattr(sourcing, "_pause", pauses.append)
+    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
     answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
     _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\nCrawl-delay: 2\n")
     assert pauses == [2.0, 2.0]
+
+
+def test_a_host_with_no_crawl_delay_is_still_spaced_by_the_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#925: without a stated Crawl-delay requests used to go back to back."""
+    import integral.sourcing as sourcing
+
+    pauses: list[float] = []
+    monkeypatch.setattr(sourcing, "_pause", pauses.append)
+    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
+    answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
+    _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
+    assert pauses == [sourcing.REQUEST_FLOOR_SECONDS] * 2
 
 
 @pytest.fixture(scope="module")
@@ -1076,3 +1093,38 @@ def test_a_host_slot_asks_each_employers_own_robots_txt(tmp_path: Path) -> None:
     assert set(failed) == {"Gone Co", "Shut Ltd"}
     assert "unreadable" in failed["Gone Co"]
     assert "disallows" in failed["Shut Ltd"]
+
+
+def test_an_unsteerable_board_is_downloaded_once_a_day(tmp_path: Path) -> None:
+    """#932: a second round the same day reads the saved lists, a later day asks again."""
+    directory = _package(tmp_path)
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    store = ProfileStore(tmp_path / "p", "test")
+    record_relevance(store, 0.0)
+    asked: list[str] = []
+
+    def fetch(request: ListRequest) -> Response:
+        asked.append(request.url)
+        return _jobs(request.url.split("/")[-2])
+
+    def run_at(at: str) -> Any:
+        return source(
+            store,
+            CandidateConstraints(
+                location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+            ),
+            Aim(state="stated", terms=("python",)),
+            fetch=fetch,
+            at=at,
+            directory=directory,
+            robots=Robots(fetch=lambda url: "User-agent: *\nAllow: /\n"),
+        )
+
+    run_at("2026-11-11T08:00:00+00:00")
+    first = len(asked)
+    assert first > 0
+    run_at("2026-11-11T18:00:00+00:00")
+    assert len(asked) == first
+    run_at("2026-11-12T08:00:00+00:00")
+    assert len(asked) == 2 * first
+    assert [p.name for p in store.path("cache", "boards").iterdir()] == ["2026-11-12"]

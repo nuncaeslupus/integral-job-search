@@ -112,7 +112,7 @@ from integral.dedup import (
     shingles,
     tombstone_match,
 )
-from integral.identity import IdentityError, ProfileStore, create_profile
+from integral.identity import IdentityError, ProfileStore, create_profile, id_from_name
 from integral.offers import (
     Offer,
     OfferError,
@@ -405,7 +405,7 @@ def select_purge_eligible(store: ProfileStore, *, now: datetime) -> list[str]:
         return []
     eligible: list[str] = []
     for path in sorted(offers_dir.glob("*.json")):
-        offer_id = path.stem
+        offer_id = id_from_name(path.stem)
         try:
             offer, record = load_lifecycle_offer(store, offer_id)
         except (OfferError, LifecycleError):
@@ -727,7 +727,7 @@ def _scan_stored(store: ProfileStore) -> dict[str, tuple[str | None, str | None]
         cached = cache.get(offer_id)
         if cached is None or cached[0] != stamp:
             cache[offer_id] = (stamp, _fields_on_disk(directory / f"{offer_id}.json"))
-    return {offer_id: cached[1] for offer_id, cached in cache.items()}
+    return {id_from_name(name): cached[1] for name, cached in cache.items()}
 
 
 def stored_identities(store: ProfileStore) -> dict[str, str | None]:
@@ -1303,7 +1303,7 @@ def probe_lifecycle() -> dict[str, Any]:
             again = connect_manual(stored.text, url=stored.url)
             outcome = collect_offer(store, again, at=later)
             moved = (path.read_bytes(), companion.read_bytes()) != before
-            if again.id != path.stem or outcome.added_as_new or moved:
+            if id_from_name(path.stem) != again.id or outcome.added_as_new or moved:
                 reset_ids.append(path.stem)
             check(
                 path.stem not in reset_ids,
@@ -1614,7 +1614,7 @@ def probe_application_statuses() -> dict[str, Any]:
 
         rows: list[tuple[str, str]] = []
         for status_path in sorted(store.path("applications").glob("*/status.json")):
-            offer_id = status_path.parent.name
+            offer_id = id_from_name(status_path.parent.name)
             raw = json.loads(status_path.read_text(encoding="utf-8"))
             rows.append((offer_id, raw["status"]))
 

@@ -64,7 +64,7 @@ from integral.cv_store import (
     write_master,
 )
 from integral.generated_index import refresh_index
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, file_safe
 from integral.profile import EvidenceLog
 from integral.voice import (
     VoiceApplied,
@@ -516,17 +516,23 @@ def link_employer(store: ProfileStore, offer_id: str, slug: str) -> Path:
     if not slug or "/" in slug or ":" in slug or slug in (".", "..") or slug == offer_id:
         raise EmployerLinkError(f"not a plain employer name: {slug!r}")
     link = store.path("cv", "generated") / slug
-    target = link.parent / offer_id
-    if len(Path(offer_id).parts) != 1 or not target.is_dir() or target.is_symlink():
+    # The directory is named by the file-safe form of the id (or the old one).
+    if len(Path(offer_id).parts) != 1 or offer_id in (".", ".."):
+        raise EmployerLinkError(f"{offer_id!r} is not an offer directory beside the link")
+    dirname = file_safe(offer_id)
+    if not (link.parent / dirname).exists() and (link.parent / offer_id).exists():
+        dirname = offer_id  # a store written before ids were made file-safe
+    target = link.parent / dirname
+    if not target.is_dir() or target.is_symlink():
         raise EmployerLinkError(f"{offer_id!r} is not an offer directory beside the link")
     if link.is_symlink():
-        if link.readlink() == Path(offer_id):
+        if link.readlink() == Path(dirname):
             refresh_index(store)
             return link
         raise EmployerLinkError(f"{slug!r} already links to {link.readlink()}")
     if link.exists():
         raise EmployerLinkError(f"{slug!r} exists and is not a link")
-    link.symlink_to(offer_id, target_is_directory=True)
+    link.symlink_to(dirname, target_is_directory=True)
     refresh_index(store)
     return link
 

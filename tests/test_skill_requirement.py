@@ -31,7 +31,7 @@ from integral import skill_requirement as sr
 from integral import sourcing_exclusions as se
 from integral.candidate import Aim, CandidateConstraints, Location, Reach
 from integral.connectors import ListRequest
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, id_from_name
 from integral.lifecycle import collect_offer
 from integral.offers import Offer, compute_offer_id, load_offer
 from integral.presentation_log import (
@@ -611,7 +611,11 @@ def _source_round(store: ProfileStore, tmp_path: Path) -> object:
 
 
 def _stored_ids(store: ProfileStore) -> set[str]:
-    return {p.stem for p in Path(store.path("offers")).glob("*.json") if not p.name.startswith("_")}
+    return {
+        id_from_name(p.stem)
+        for p in Path(store.path("offers")).glob("*.json")
+        if not p.name.startswith("_")
+    }
 
 
 def test_source_applies_a_required_reading_and_shows_what_is_unread(

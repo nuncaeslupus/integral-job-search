@@ -177,6 +177,22 @@ def _validate_handle(handle: str) -> Handle:
 # the store
 
 
+def file_safe(part: str) -> str:
+    """A path part with the characters NTFS refuses removed.
+
+    Offer ids are `sha256:<hex>`, and a colon in a Windows file name opens an
+    alternate data stream instead of naming a file. The `sha256:` prefix
+    becomes `sha256-`; `id_from_name` undoes it. Only an id is touched: other
+    parts (a timestamped file name) keep their colons.
+    """
+    return "sha256-" + part[7:] if part.startswith("sha256:") else part
+
+
+def id_from_name(name: str) -> str:
+    """The id a stored file or directory name stands for (see `file_safe`)."""
+    return "sha256:" + name[7:] if name.startswith("sha256-") else name
+
+
 class ProfileStore:
     """Every read and write under one candidate's tree, and nothing else.
 
@@ -213,9 +229,14 @@ class ProfileStore:
         for part in parts:
             if Path(part).is_absolute():
                 raise ProfileLeak(f"absolute path in a store operation: {part!r}")
-        candidate = self.home.joinpath(*parts).resolve(strict=False)
+        candidate = self.home.joinpath(*(file_safe(part) for part in parts)).resolve(strict=False)
         if candidate != self.home and self.home not in candidate.parents:
             raise ProfileLeak(f"{candidate} is outside the tree of {self.handle!r}")
+        if not candidate.exists():
+            # A store written before ids were made file-safe keeps its old names.
+            old = self.home.joinpath(*parts).resolve(strict=False)
+            if old != candidate and self.home in old.parents and old.exists():
+                return old
         return candidate
 
     def _refuse_a_symlinked_home(self) -> None:

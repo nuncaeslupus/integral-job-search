@@ -87,3 +87,26 @@ def memoised_connector_parsing() -> Iterator[None]:
         patch.setattr(connectors, "parse_connector", functools.cache(connectors.parse_connector))
         patch.setattr(connectors, "parse_html", functools.cache(connectors.parse_html))
         yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _no_real_request_spacing() -> Iterator[None]:
+    """Sourcing spaces requests per host; tests must not actually wait.
+
+    Session-scoped so a module-scoped fixture that runs a round (the
+    attribution matrix) is covered too: a function-scoped patch is applied
+    after it, and it used to sleep for real for about 90 s.
+    """
+    from integral import sourcing
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(sourcing, "_pause", lambda _seconds: None)
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_request_spacing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each test starts with no request on record for any origin."""
+    from integral import sourcing
+
+    monkeypatch.setattr(sourcing, "_last_request_at", {})

@@ -355,6 +355,33 @@ class DuplicateMatch:
     similarity: float
 
 
+# Looser than `same_vacancy.TITLE_THRESHOLD` (0.75) on purpose: that rule decides
+# "one vacancy" outright, this one only vetoes a text match, and the calibration
+# crossposts re-title one role (`Backend Engineer` / `Backend Developer
+# (Python/Django)` scores 0.5) while sibling roles (`Backend` / `Frontend
+# Engineer`) score 0.33. A starting value between the two; a level word that
+# differs scores 0.0 and always vetoes.
+_DISTINCT_TITLE_BELOW = 0.4
+
+
+def _distinct_roles(a: Offer, b: Offer) -> bool:
+    """Two adverts of one employer whose stated titles are different roles.
+
+    Sibling roles share a templated body (about-us, benefits, process), so text
+    alone can score them above the threshold. The store-time twin rule already
+    requires `same_vacancy`; this applies it to the batch path too. Only a stated
+    title on both sides can veto: a missing title leaves the text rule in charge.
+    """
+    # Imported here: same_vacancy -> lifecycle -> dedup would be a cycle at load.
+    from integral.same_vacancy import employer_key, title_similarity
+
+    if not (a.title or "").strip() or not (b.title or "").strip():
+        return False
+    if employer_key(a.company) is None or employer_key(a.company) != employer_key(b.company):
+        return False
+    return title_similarity(a.title, b.title) < _DISTINCT_TITLE_BELOW
+
+
 def find_duplicates(
     offers: Sequence[Offer],
     *,
@@ -390,6 +417,8 @@ def find_duplicates(
     for (offer_a, shingles_a), (offer_b, shingles_b) in combinations(prepared, 2):
         if offer_a.id == offer_b.id:
             continue  # already the same record by T11's content-addressed id
+        if _distinct_roles(offer_a, offer_b):
+            continue
         score = jaccard(shingles_a - boilerplate, shingles_b - boilerplate)
         if score > threshold:
             matches.append(DuplicateMatch(offer_a.id, offer_b.id, score))

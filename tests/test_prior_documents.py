@@ -14,7 +14,7 @@ from integral.application_authorship import TRACE_FILE
 from integral.approval import PersonalDetails, prepare
 from integral.cv_store import CVMaster, add_conversation_entry
 from integral.generate import Claim, Manifest, generate, link_employer
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, file_safe
 from integral.offers import Offer, compute_offer_id, save_offer
 from integral.profile import EvidenceLog, rebuild
 
@@ -299,13 +299,13 @@ def test_strays_under_generated_are_reported_not_ignored(store: ProfileStore) ->
     version(store, GRAFANA, 1)
     root = store.path("cv", "generated")
     (root / "notes.txt").write_text("x", encoding="utf-8")
-    (root / GRAFANA / "draft").mkdir()
-    (root / GRAFANA / "v0").mkdir()  # v0 is not a version
+    (root / file_safe(GRAFANA) / "draft").mkdir()
+    (root / file_safe(GRAFANA) / "v0").mkdir()  # v0 is not a version
     found = {s.where for s in pd.digest(store).skipped}
     assert found == {
         "cv/generated/notes.txt",
-        f"cv/generated/{GRAFANA}/draft",
-        f"cv/generated/{GRAFANA}/v0",
+        f"cv/generated/{file_safe(GRAFANA)}/draft",
+        f"cv/generated/{file_safe(GRAFANA)}/v0",
     }
 
 
@@ -549,12 +549,14 @@ def test_a_symlinked_offer_or_version_directory_is_refused_by_name(
     root = store.path("cv", "generated")
     outside = tmp_path / "elsewhere"
     outside.mkdir()
-    (root / COHERE).symlink_to(outside, target_is_directory=True)
-    (root / GRAFANA / "v2").symlink_to(root / GRAFANA / "v1", target_is_directory=True)
+    (root / file_safe(COHERE)).symlink_to(outside, target_is_directory=True)
+    (root / file_safe(GRAFANA) / "v2").symlink_to(
+        root / file_safe(GRAFANA) / "v1", target_is_directory=True
+    )
     result = pd.digest(store)
     assert {s.where: s.reason for s in result.skipped} == {
-        f"cv/generated/{COHERE}": "not an offer directory",
-        f"cv/generated/{GRAFANA}/v2": "not a v<N> version",
+        f"cv/generated/{file_safe(COHERE)}": "not an offer directory",
+        f"cv/generated/{file_safe(GRAFANA)}/v2": "not a v<N> version",
     }
     assert by_id(result)[GRAFANA].versions == (1,)
 

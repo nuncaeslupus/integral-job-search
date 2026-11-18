@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from integral.brand_palette import BrandPalette, extract_palette, trazabilidad_section
-from integral.identity import IdentityError, ProfileStore
+from integral.identity import IdentityError, ProfileStore, id_from_name
 
 MEASUREMENT_FILE = "palette.json"
 # `approval.SEND_DIR`, repeated because approval imports this module.
@@ -129,7 +129,7 @@ def generated_versions(store: ProfileStore) -> list[tuple[str, ...]]:
     if not base.is_dir():
         return []
     return sorted(
-        ("cv", "generated", offer.name, version.name)
+        ("cv", "generated", id_from_name(offer.name), version.name)
         for offer in base.iterdir()
         if offer.is_dir()
         for version in offer.iterdir()

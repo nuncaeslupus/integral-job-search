@@ -51,7 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from integral.dimensions import DEFAULT_DIMENSIONS_DIR, Dimension, ad_side, load_dimensions
 from integral.extraction import _normalise_labelled, cue_findings
 from integral.harness import DEFAULT_STORE_PATH, LabelledAd, load_store
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, id_from_name
 from integral.profile import EvidenceLog, EvidenceRow, EvidenceSubject, SubjectKind
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -338,7 +338,7 @@ def logged_interviews(store: ProfileStore) -> list[tuple[str, str]]:
     if not root.is_dir():
         return []
     return sorted(
-        (offer.name, child.name)
+        (id_from_name(offer.name), child.name)
         for offer in root.iterdir()
         if offer.is_dir()
         for child in offer.iterdir()

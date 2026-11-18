@@ -356,7 +356,7 @@ def attribution_round() -> tuple[list[tuple[str, SourceKind | None]], str]:
         )
         stored = [
             (offer.source, offer.source_kind)
-            for path in store.path("offers").glob("sha256:*.json")
+            for path in store.path("offers").glob("sha256*.json")
             for offer in [load_lifecycle_offer(store, path.stem)[0]]
             if offer.id != planted.id
         ]

@@ -192,3 +192,19 @@ def test_an_underscore_file_in_offers_is_not_an_offer(tmp_path: Path) -> None:
     store.write_json({"anything": 1}, "offers", "_index.json")
     scan = load_offers(store)
     assert scan.offers == () and scan.skipped == ()
+
+
+def test_offer_files_have_windows_safe_names_and_old_names_still_load(tmp_path: Path) -> None:
+    """#930: `sha256:<hex>.json` is an NTFS alternate data stream, not a file."""
+    store = _store(tmp_path)
+    new = connect_manual("a new offer")
+    path = save_offer(store, new)
+    assert ":" not in path.name
+    assert [o.id for o in load_offers(store).offers] == [new.id]
+
+    old = connect_manual("an offer stored before the rename")
+    (store.path("offers").parent / "offers" / f"{old.id}.json").write_text(
+        json.dumps(old.model_dump(mode="json")), encoding="utf-8"
+    )
+    assert load_offer(store, old.id).text == old.text
+    assert {o.id for o in load_offers(store).offers} == {new.id, old.id}

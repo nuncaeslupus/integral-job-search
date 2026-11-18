@@ -17,7 +17,7 @@ from integral.generated_index import (
     refresh_index,
     render_index,
 )
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, file_safe
 
 SRC = Path(generated_index.__file__).parent
 
@@ -117,7 +117,7 @@ def test_a_stored_offer_and_a_real_stage_send_fill_every_column(store: ProfileSt
     _master, offer_id, version = delivery_with_send(store)
     text = _index(store)
     assert "| Acme \\| Co | Data Engineer |" in text
-    assert f"`{offer_id}/v{version}/send`" in text
+    assert f"`{file_safe(offer_id)}/v{version}/send`" in text
     assert index_differs(store) == 0
 
 

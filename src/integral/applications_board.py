@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any
 
 from integral import report_style
-from integral.identity import IdentityError, ProfileStore, default_profiles_root
+from integral.identity import IdentityError, ProfileStore, default_profiles_root, id_from_name
 
 BOARD_PARTS = ("reports", "applications.html")
 TRACKING_PARTS = ("tracking", "links.jsonl")
@@ -297,7 +297,7 @@ def collect(store: ProfileStore) -> Board:
     left_out: dict[str, str] = {}
     directories = sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
     for directory in directories:
-        offer_id = directory.name
+        offer_id = id_from_name(directory.name)
         notes: list[str] = []
         sent, broken, record_exists = _sent_at(directory)
         if broken:
