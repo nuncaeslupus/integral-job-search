@@ -204,6 +204,70 @@ def test_search_and_multiedit_tools_are_judged_like_the_rest(
     assert decision.allowed is False
 
 
+# Second-reader cases on #923: a wildcard or a recursive search above the roster,
+# and the `$INTEGRAL_HOME` / `~` spellings the shell expands before it runs.
+@pytest.mark.parametrize(
+    "template",
+    [
+        "cat {h}/prof*/nuria-puig/cv.json",
+        "cat {h}/profile?/nuria-puig/cv.json",
+        "cat {h}/{{profiles,x}}/nuria-puig/cv.json",
+        "cat $(ls -d {h}/p*)/nuria-puig/cv.json",
+        "cat {g}/*/profiles/nuria-puig/cv.json",
+        "cd {h} && cat p*/nuria-puig/cv.json",
+        "grep -r salary {g}",
+        'grep -r salary "$INTEGRAL_HOME"',
+        "cat $INTEGRAL_HOME/prof*/nuria-puig/cv.json",
+        "grep -r salary ~",
+    ],
+)
+def test_a_wildcard_or_search_above_the_roster_is_refused(
+    tmp_path: Path, template: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    root = home / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    monkeypatch.setenv("INTEGRAL_HOME", str(home))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert _bash(root, template.format(h=home, g=tmp_path)) is False
+
+
+def test_a_wildcard_that_cannot_match_the_roster_is_allowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    root = home / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    monkeypatch.setenv("INTEGRAL_HOME", str(home))
+    assert _bash(root, f"ls {tmp_path}/*.log")
+    assert _bash(root, "ls $INTEGRAL_HOME/*.log")
+    assert _bash(root, f"cat {root}/ada-lovelace/*.json")
+    assert _bash(root, "grep -r foo src")
+
+
+@pytest.mark.parametrize(
+    ("tool", "tool_input"),
+    [
+        ("Glob", {"pattern": "{g}/hom*/profiles/nuria-puig/cv.json"}),
+        ("Glob", {"pattern": "{h}/pro*/nuria-puig/cv.json"}),
+        ("Glob", {"pattern": "pro*/nuria-puig/*", "path": "{h}"}),
+        ("Glob", {"pattern": "../nuria-puig/*", "path": "{h}/profiles/ada-lovelace"}),
+        ("Grep", {"pattern": "x", "path": "~"}),
+    ],
+)
+def test_a_search_tool_cannot_reach_the_roster_through_a_wildcard(
+    tmp_path: Path, tool: str, tool_input: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    root = home / "profiles"
+    create_profile(root, "Ada Lovelace", language="en", now=FIXED)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    filled = {k: v.format(g=tmp_path, h=home) for k, v in tool_input.items()}
+    assert guard_tool_call(tool, filled, root=root, active="ada-lovelace").allowed is False
+    own = {"pattern": "*.json", "path": f"{root}/ada-lovelace"}
+    assert guard_tool_call("Glob", own, root=root, active="ada-lovelace").allowed
+
+
 def test_the_hook_matcher_covers_every_tool_the_guard_judges() -> None:
     import json
 

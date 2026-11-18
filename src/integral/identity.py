@@ -36,6 +36,7 @@ A run that measures nothing is a failure, not a pass over an empty set.
 from __future__ import annotations
 
 import errno
+import fnmatch
 import hashlib
 import json
 import os
@@ -775,6 +776,46 @@ def _bare_mention(command: str, path: Path) -> re.Match[str] | None:
     return re.search(rf"(?<![\w.-]){text}(?:/?(?![\w./-])|/[\w.-]*[*?\[{{])", command)
 
 
+_WILDCARD = re.compile(r"[*?\[{]")
+# An absolute path token in a shell command, cut at the shell's own delimiters.
+_ABSOLUTE_TOKEN = re.compile(r"(?<![\w.$-])/[^\s;&|'\"()<>`]*")
+_RELATIVE_GLOB = re.compile(r"(?<![\w/.$~-])[\w.-]*[*?\[{][^\s;&|'\"()<>`]*")
+_CD_TARGET = re.compile(r"\b(?:cd|pushd)\s+['\"]?(/[^\s;&|'\"()<>`]*)")
+
+
+def _glob_reaches_roster(pattern: str, root: Path) -> bool:
+    """Could this absolute glob match the roster or a path through it?
+
+    The wildcard is judged where it sits: at or below the roster it can match
+    any handle; above it, it reaches the roster when its segment can match the
+    next component on the way down (`<home>/prof*`, `/tmp/hom*/profiles`), and
+    not when it cannot (`/tmp/*.log`). A brace is not expanded, so it counts as
+    matching. `root` is resolved.
+    """
+    found = _WILDCARD.search(pattern)
+    if not pattern.startswith("/") or found is None:
+        return False
+    head = pattern[: found.start()].rpartition("/")[0]
+    base = Path(head or "/").resolve(strict=False)
+    if base == root:
+        return True
+    if base not in root.parents:
+        return False
+    segment = pattern[len(head) + 1 :].split("/", 1)[0]
+    step = root.relative_to(base).parts[0]
+    return "{" in segment or fnmatch.fnmatchcase(step, segment)
+
+
+def _expanded(command: str) -> str:
+    """`command` with `~` and the `$VAR`s this hook's own environment holds expanded.
+
+    The hook runs with the session's environment, so `"$INTEGRAL_HOME"` names
+    here what it names to the shell that will run the command.
+    """
+    text = os.path.expandvars(command)
+    return re.sub(r"(?<![\w./~-])~(?=/|\s|$|[;&|)'\"])", str(Path.home()), text)
+
+
 def _bash_breadth_refusal(command: str, root: Path) -> str | None:
     """Why a command reaches the whole roster (or a way out of one handle), or `None`.
 
@@ -785,8 +826,14 @@ def _bash_breadth_refusal(command: str, root: Path) -> str | None:
     """
     if _BARE_ROSTER.search(command) or _bare_mention(command, root):
         return "names the whole profiles directory, which holds every candidate's tree"
-    if _bare_mention(command, root.parent) and _RECURSIVE.search(command):
+    ancestors = [a for a in root.parents if a != a.parent]  # `/` alone is too common a token
+    if _RECURSIVE.search(command) and any(_bare_mention(command, a) for a in ancestors):
         return "searches recursively from a directory that contains every candidate's tree"
+    globs = [m.group(0) for m in _ABSOLUTE_TOKEN.finditer(command)]
+    for target in _CD_TARGET.findall(command):
+        globs += [f"{target.rstrip('/')}/{g}" for g in _RELATIVE_GLOB.findall(command)]
+    if any(_glob_reaches_roster(g, root) for g in globs):
+        return "uses a wildcard that can match the profiles directory or every tree in it"
     if "profiles/" in command and _PARENT_CLIMB.search(command):
         return "climbs out of a profile path with .., so the path cannot be judged"
     return None
@@ -803,22 +850,40 @@ def guard_tool_call(
     intent = intent_of(tool_name)
     command = tool_input.get("command") if tool_name == "Bash" else None
     if isinstance(command, str):
-        reason = _bash_breadth_refusal(command, Path(root).resolve(strict=False))
-        if reason:
-            return Decision(False, f"this command {reason}")
+        for text in (command, _expanded(command)):
+            reason = _bash_breadth_refusal(text, Path(root).resolve(strict=False))
+            if reason:
+                return Decision(False, f"this command {reason}")
     if tool_name in ("Grep", "Glob"):
         # A search is recursive by nature: aimed at the roster or above it, it
         # reads every candidate whichever handle is active.
+        # A relative Glob pattern is read under its `path`. A value that is still
+        # relative resolves against the session's cwd, which this guard does not
+        # know, so only absolute values (after `~`) are judged here.
         resolved_root = Path(root).resolve(strict=False)
-        for key in ("path", "pattern") if tool_name == "Glob" else ("path",):
-            value = tool_input.get(key)
-            if isinstance(value, str) and value.startswith("/"):
-                base = Path(value.split("*")[0].split("?")[0].split("[")[0].rstrip("/") or "/")
-                resolved = base.resolve(strict=False)
-                if resolved == resolved_root or resolved in resolved_root.parents:
-                    return Decision(
-                        False, f"{value}: a {tool_name} over the whole profiles directory"
-                    )
+        values = [tool_input.get("path")]
+        if tool_name == "Glob":
+            pattern, under = tool_input.get("pattern"), tool_input.get("path")
+            if isinstance(pattern, str) and isinstance(under, str) and not pattern.startswith("/"):
+                pattern = f"{under.rstrip('/')}/{pattern}"
+            values.append(pattern)
+        for value in values:
+            if not isinstance(value, str) or not value:
+                continue
+            absolute = str(Path(value).expanduser())
+            if not absolute.startswith("/"):
+                continue
+            literal = Path(_WILDCARD.split(absolute, 1)[0].rstrip("/") or "/")
+            resolved = literal.resolve(strict=False)
+            if (
+                resolved == resolved_root
+                or resolved in resolved_root.parents
+                or _glob_reaches_roster(absolute, resolved_root)
+            ):
+                return Decision(False, f"{value}: a {tool_name} over the whole profiles directory")
+            decision = guard_decision(absolute, root=root, active=active, intent=intent)
+            if not decision.allowed:
+                return Decision(False, f"{value}: {decision.reason}")
     for raw in paths_in_tool_call(tool_name, tool_input):
         decision = guard_decision(raw, root=root, active=active, intent=intent)
         if not decision.allowed:
