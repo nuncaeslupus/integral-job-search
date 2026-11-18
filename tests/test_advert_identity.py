@@ -18,7 +18,7 @@ import pytest
 
 from integral.advert_identity import identity_query_for, restrict_query
 from integral.connectors import Connector, load_connectors, parse_list_page
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, id_from_name
 from integral.lifecycle import (
     advert_identity,
     build_tombstone,
@@ -96,7 +96,11 @@ def store(tmp_path: Path) -> ProfileStore:
 
 
 def _stored_ids(store: ProfileStore) -> set[str]:
-    return {p.stem for p in Path(store.path("offers")).glob("*.json") if not p.name.startswith("_")}
+    return {
+        id_from_name(p.stem)
+        for p in Path(store.path("offers")).glob("*.json")
+        if not p.name.startswith("_")
+    }
 
 
 # --- the declaration, checked against the committed fixtures -----------------

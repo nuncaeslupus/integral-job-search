@@ -37,7 +37,7 @@ from integral.connectors import (
     build_list_urls,
     load_connector,
 )
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, id_from_name
 from integral.relevance import record as record_relevance
 from integral.robots import Robots
 from integral.sourcing import (
@@ -2775,7 +2775,7 @@ def test_a_refused_duplicate_is_recorded_under_the_copy_that_is_stored(
     log = Path(store.path("offers", FETCH_LOG))
     already = len(log.read_text(encoding="utf-8").splitlines())
     _run(store, _answer_with_captures())
-    stored = {p.stem for p in Path(store.path("offers")).glob("*.json")}
+    stored = {id_from_name(p.stem) for p in Path(store.path("offers")).glob("*.json")}
     rows = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()[already:]]
     recorded = {i for row in rows for i in row["offer_ids"]}
     assert recorded, "the second run recorded nothing"

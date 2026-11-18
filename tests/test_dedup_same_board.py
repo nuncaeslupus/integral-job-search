@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, id_from_name
 from integral.lifecycle import (
     SAME_BOARD_TEXT_THRESHOLD,
     collect_offer,
@@ -72,7 +72,11 @@ def store(tmp_path: Path) -> ProfileStore:
 
 
 def _stored(store: ProfileStore) -> set[str]:
-    return {p.stem for p in Path(store.path("offers")).glob("*.json") if not p.name.startswith("_")}
+    return {
+        id_from_name(p.stem)
+        for p in Path(store.path("offers")).glob("*.json")
+        if not p.name.startswith("_")
+    }
 
 
 def test_one_posting_under_four_offices_is_stored_once(store: ProfileStore) -> None:

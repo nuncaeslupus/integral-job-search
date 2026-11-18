@@ -3,6 +3,7 @@ id: t-fbdae165
 title: "review: Unsteerable employer boards are downloaded in full on every run"
 priority: 5
 requires: [human:gate]
+status: merged
 ---
 
 Imported from issue #932

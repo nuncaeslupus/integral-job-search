@@ -94,6 +94,29 @@ jobs:
       - run: uv python install 3.12
       - run: make test
 
+  pdf-cv:
+    name: pytest (PDF and CV import, nothing skipped)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history, in every job: some checks read git history.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - name: System libraries the PDF engine and the photo extractor need
+        run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 poppler-utils
+      - name: Run the PDF and CV tests with their extras; a skip here is a failure
+        run: |
+          set -o pipefail
+          uv run --extra dev --extra collect --extra pdf --extra cv pytest -n0 -rs -q \
+            tests/test_widows.py tests/test_document_render_version.py \
+            tests/test_document_render.py tests/test_cv_store.py tests/test_send_folder.py \
+            tests/test_intake_cv.py tests/test_photo_extract.py | tee pdf-cv.log
+          if grep -q SKIPPED pdf-cv.log; then echo "a PDF or CV test was skipped" >&2; exit 1; fi
+
   evidence:
     name: evidence is current
     runs-on: ubuntu-latest

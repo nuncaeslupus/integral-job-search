@@ -41,8 +41,10 @@ tests rather than a recording of one afternoon's internet.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import shutil
 import sys
 import time
 import unicodedata
@@ -75,7 +77,7 @@ from integral.connectors import (
 )
 from integral.fixture_shapes import measure as measure_shape_cells
 from integral.gate_exit import worst
-from integral.identity import ProfileStore
+from integral.identity import ProfileStore, id_from_name
 from integral.lifecycle import (
     collect_offer,
     save_lifecycle_offer,
@@ -1018,6 +1020,58 @@ def matches_aim(item: dict[str, str], phrases: Sequence[str]) -> bool:
 
 #: `time.sleep`, named so a test can replace it rather than wait.
 _pause = time.sleep
+_clock = time.monotonic
+
+#: The least gap kept between two requests to one host when its robots.txt
+#: states no `Crawl-delay` (one second, as `canonical_ad.DEFAULT_DELAY_FLOOR`).
+#: A starting value rather than a rule of the web: a stated Crawl-delay longer
+#: than this still wins, and a host that asks for less is not given less.
+REQUEST_FLOOR_SECONDS = 1.0
+
+#: When this process last requested each origin. Per origin and not per board:
+#: 56 Greenhouse boards are one host, and each used to start its own count.
+_last_request_at: dict[str, float] = {}
+
+
+def _list_of_the_day(store: ProfileStore, request: ListRequest, at: str, fetch: Fetch) -> Response:
+    """An unsteerable board's list page, fetched at most once per calendar day.
+
+    These boards take no query, so every round asks the same URLs and filters
+    locally; without this, each round re-downloads every listed employer's
+    board. The freshness window is the day of `at` — a starting value; a
+    posting added the same day shows up the next. Only a clean 200 is kept, so
+    an error or a block page is asked again, and the previous days' pages are
+    removed so the cache never outgrows one day.
+    """
+    day = at[:10]
+    name = hashlib.sha256(request.url.encode("utf-8")).hexdigest() + ".json"
+    if store.exists("cache", "boards", day, name):
+        kept = store.read_json("cache", "boards", day, name)
+        return Response(kept["status"], kept["body"])
+    response = fetch(request)
+    if (
+        response.error is None
+        and response.status == 200
+        and rate_limited(response.body, response.status) is None
+    ):
+        root = Path(store.path("cache", "boards"))
+        for old in root.glob("*") if root.is_dir() else ():
+            if old.name != day:
+                shutil.rmtree(old, ignore_errors=True)
+        store.write_json({"status": 200, "body": response.body}, "cache", "boards", day, name)
+    return response
+
+
+def _space(robots: Robots, url: str) -> None:
+    """Wait out the host's gap since our previous request to the same origin,
+    then record this one. The first request to an origin never waits."""
+    origin = _origin(url)
+    last = _last_request_at.get(origin)
+    if last is not None:
+        wait = robots.delay(url, REQUEST_FLOOR_SECONDS) - (_clock() - last)
+        if wait > 0:
+            _pause(wait)
+    _last_request_at[origin] = _clock()
 
 
 def _check_offset(aim: Aim, offset: int) -> None:
@@ -1662,11 +1716,14 @@ def _one_board(
                 skipped="served only to a real browser — open its search in the candidate's "
                 "own browser (`browser_urls`) and pass the saved pages as `browser=`",
             )
-        if index:
-            # The site's own Crawl-delay between one board's requests. Moot
-            # while a board was one page per run; an ATS host is dozens (T144).
-            _pause(robots.delay(request.url, 0.0))
-        response = fetch(request)
+        # The site's own Crawl-delay, or the floor, between requests to one
+        # host. An ATS host is dozens of boards (T144).
+        _space(robots, request.url)
+        response = (
+            fetch(request)
+            if steerable or request.method != "GET"
+            else _list_of_the_day(store, request, at, fetch)
+        )
         last = response
         blocked = rate_limited(None, response.status) if response.error is not None else None
         if blocked is not None:
@@ -1742,7 +1799,7 @@ def _one_board(
                     unopened += 1
                     continue
                 if origin not in refused_origins and _may_fetch(robots, detail_url):
-                    _pause(robots.delay(detail_url, 0.0))
+                    _space(robots, detail_url)
                     detail_fetched += 1
                     fields, refusal = _detail_record(connector, detail_url, fetch=fetch)
                     if refusal is not None:
@@ -1952,7 +2009,7 @@ def offers_without_a_recorded_fetch(store: ProfileStore) -> list[str]:
     """Offers in the tree that no fetch record accounts for."""
     recorded = recorded_offer_ids(store)
     present = {
-        path.stem
+        id_from_name(path.stem)
         for path in (Path(store.path("offers")).glob("*.json"))
         if not path.name.startswith("_")
     }
@@ -1966,7 +2023,7 @@ def measure(stores: Iterable[ProfileStore]) -> dict[str, Any]:
     evaluated = 0
     for store in stores:
         present = [
-            path.stem
+            id_from_name(path.stem)
             for path in Path(store.path("offers")).glob("*.json")
             if not path.name.startswith("_")
         ]

@@ -3,6 +3,7 @@ id: t-ddbc55ae
 title: "review: PDF and CV-import paths are skipped in CI"
 priority: 5
 requires: [human:gate]
+status: merged
 ---
 
 Imported from issue #933

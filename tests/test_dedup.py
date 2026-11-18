@@ -83,6 +83,33 @@ def test_distinct_roles_at_same_company_are_not_merged() -> None:
     assert frozenset((backend_acme.id, frontend_acme.id)) not in predicted
 
 
+def test_sibling_roles_sharing_a_templated_body_are_not_merged() -> None:
+    """Two roles at one employer that share a templated body score above the
+    threshold on text alone; the stated titles must keep them apart."""
+    import random
+
+    rng = random.Random(7)
+    shared = " ".join(f"w{rng.randrange(10**6)}" for _ in range(300))
+    a = _offer_hex(
+        201,
+        shared + " " + " ".join(f"b{i}x" for i in range(150)),
+        title="Backend Engineer",
+        company="Acme",
+    )
+    b = _offer_hex(
+        202,
+        shared + " " + " ".join(f"f{i}y" for i in range(150)),
+        title="Frontend Engineer",
+        company="Acme",
+    )
+    assert similarity(a, b) > SIMILARITY_THRESHOLD
+    assert find_duplicates([a, b]) == []
+    # the same pair with no stated title is still judged on text alone
+    c = a.model_copy(update={"title": None})
+    d = b.model_copy(update={"title": None})
+    assert len(find_duplicates([c, d])) == 1
+
+
 # ---------------------------------------------------------------------------
 # additional seeded cases
 

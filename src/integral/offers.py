@@ -71,7 +71,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationIn
 
 from integral.advert_link import advert_url
 from integral.dimensions import Language
-from integral.identity import IdentityError, ProfileStore
+from integral.identity import IdentityError, ProfileStore, id_from_name
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T11.json"
@@ -482,7 +482,9 @@ def load_offers(store: ProfileStore, *, record: bool = False) -> OfferScan:
                 # Not only `OfferError`: a non-UTF-8 file (`UnicodeDecodeError`),
                 # a directory named `*.json` (`IsADirectoryError`) and deeply
                 # nested JSON (`RecursionError`) each escape `load_offer`.
-                skipped.append(SkippedOffer(path.stem, f"{type(exc).__name__}: {exc}"))
+                skipped.append(
+                    SkippedOffer(id_from_name(path.stem), f"{type(exc).__name__}: {exc}")
+                )
     if record and directory.is_dir():
         if skipped:
             store.write_text(

@@ -18,7 +18,7 @@ from integral import sourcing_exclusions as se
 from integral.candidate import Aim, CandidateConstraints, Location, Reach
 from integral.connectors import ListRequest
 from integral.corpus_scope import DEFAULT_LABELLED_ADS
-from integral.identity import IdentityError, ProfileStore, create_profile
+from integral.identity import IdentityError, ProfileStore, create_profile, id_from_name
 from integral.offers import load_offer
 from integral.relevance import record as record_relevance
 from integral.robots import Robots
@@ -243,7 +243,7 @@ def test_offers_stored_in_round_one_are_not_presented_after_the_topic_is_ruled_o
 
     written, _ = _run(store, tmp_path)  # round 1: nothing ruled out, so 2 are stored
     assert sum("platform" in t for t in written) == 2
-    ids = [path.stem for path in Path(store.path("offers")).glob("*.json")]
+    ids = [id_from_name(path.stem) for path in Path(store.path("offers")).glob("*.json")]
     assert partition(store, ids)[1] == []
 
     record_exclusion(store, _platform())  # the candidate rules the topic out, round 2

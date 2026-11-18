@@ -87,3 +87,12 @@ def memoised_connector_parsing() -> Iterator[None]:
         patch.setattr(connectors, "parse_connector", functools.cache(connectors.parse_connector))
         patch.setattr(connectors, "parse_html", functools.cache(connectors.parse_html))
         yield
+
+
+@pytest.fixture(autouse=True)
+def _no_real_request_spacing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sourcing spaces requests per host; tests must not actually wait."""
+    from integral import sourcing
+
+    monkeypatch.setattr(sourcing, "_pause", lambda _seconds: None)
+    monkeypatch.setattr(sourcing, "_last_request_at", {})

@@ -112,7 +112,7 @@ from integral.dedup import (
     shingles,
     tombstone_match,
 )
-from integral.identity import IdentityError, ProfileStore, create_profile
+from integral.identity import IdentityError, ProfileStore, create_profile, id_from_name
 from integral.offers import (
     Offer,
     OfferError,
@@ -405,7 +405,7 @@ def select_purge_eligible(store: ProfileStore, *, now: datetime) -> list[str]:
         return []
     eligible: list[str] = []
     for path in sorted(offers_dir.glob("*.json")):
-        offer_id = path.stem
+        offer_id = id_from_name(path.stem)
         try:
             offer, record = load_lifecycle_offer(store, offer_id)
         except (OfferError, LifecycleError):
@@ -1614,7 +1614,7 @@ def probe_application_statuses() -> dict[str, Any]:
 
         rows: list[tuple[str, str]] = []
         for status_path in sorted(store.path("applications").glob("*/status.json")):
-            offer_id = status_path.parent.name
+            offer_id = id_from_name(status_path.parent.name)
             raw = json.loads(status_path.read_text(encoding="utf-8"))
             rows.append((offer_id, raw["status"]))
 

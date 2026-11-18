@@ -18,7 +18,7 @@ import pytest
 from integral import sourcing_exclusions as se
 from integral.candidate import Aim, CandidateConstraints, Location, Reach
 from integral.connectors import ListRequest
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, id_from_name
 from integral.offers import load_offer
 from integral.presentation_log import partition
 from integral.robots import Robots
@@ -321,7 +321,11 @@ def test_partition_holds_back_stored_offers_of_a_newly_ruled_out_employer(
     store: ProfileStore, tmp_path: Path
 ) -> None:
     _run(store, tmp_path)
-    ids = [p.stem for p in Path(store.path("offers")).glob("*.json") if not p.name.startswith("_")]
+    ids = [
+        id_from_name(p.stem)
+        for p in Path(store.path("offers")).glob("*.json")
+        if not p.name.startswith("_")
+    ]
     before = {load_offer(store, i).company for i in partition(store, ids)[0]}
     assert "Employer 2" in before
     assert partition(store, ids)[1] == []
