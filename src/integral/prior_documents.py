@@ -57,7 +57,7 @@ from integral.application_authorship import TRACE_FILE
 from integral.approval import Approvals, _normalised_equal
 from integral.generate import _HEADINGS, Manifest, _claim_lines, is_employer_alias
 from integral.generated_index import INDEX_NAME
-from integral.identity import IdentityError, ProfileLeak, ProfileStore
+from integral.identity import IdentityError, ProfileLeak, ProfileStore, id_from_name
 from integral.offers import OfferError, load_offer
 from integral.state_home import StateHomeRefused, ensure_outside_a_work_tree, profiles_root
 
@@ -228,7 +228,7 @@ def digest(store: ProfileStore) -> Digest:
         if not offer_dir.is_dir() or offer_dir.is_symlink():
             skipped.append(Skipped(rel, "not an offer directory"))
             continue
-        acc = by_offer.setdefault(offer_dir.name, _Acc())
+        acc = by_offer.setdefault(id_from_name(offer_dir.name), _Acc())
         children = sorted(offer_dir.iterdir(), key=lambda p: p.name)
         if not children:
             skipped.append(Skipped(rel, "empty offer directory"))
@@ -237,7 +237,7 @@ def digest(store: ProfileStore) -> Digest:
             if not match or not version_dir.is_dir() or version_dir.is_symlink():
                 skipped.append(Skipped(f"{rel}/{version_dir.name}", "not a v<N> version"))
                 continue
-            _read_version(store, offer_dir.name, int(match.group(1)), acc, skipped)
+            _read_version(store, id_from_name(offer_dir.name), int(match.group(1)), acc, skipped)
 
     offers: list[OfferDigest] = []
     for offer_id, acc in by_offer.items():

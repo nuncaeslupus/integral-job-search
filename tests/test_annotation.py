@@ -43,7 +43,7 @@ from integral.candidate import (
 )
 from integral.dimensions import load_dimensions
 from integral.extraction import OfferExtraction
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, file_safe
 from integral.offers import Offer, compute_offer_id
 from integral.profile import EvidenceLog, ProfileRevision, rebuild
 from integral.revision import stale_artefacts
@@ -153,7 +153,7 @@ def test_annotation_is_recomputed_when_constraints_change(store: ProfileStore) -
         source="conversation",
     )
     stale = [entry.artefact for entry in stale_artefacts(store)]
-    assert f"annotations/{offer.id}.json" in stale
+    assert f"annotations/{file_safe(offer.id)}.json" in stale
 
 
 def test_extraction_schema_stays_candidate_independent() -> None:

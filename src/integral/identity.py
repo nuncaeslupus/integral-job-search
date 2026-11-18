@@ -175,10 +175,11 @@ def file_safe(part: str) -> str:
     """A path part with the characters NTFS refuses removed.
 
     Offer ids are `sha256:<hex>`, and a colon in a Windows file name opens an
-    alternate data stream instead of naming a file. `:` becomes `-`;
-    `id_from_name` undoes it for the one id shape that has a colon.
+    alternate data stream instead of naming a file. The `sha256:` prefix
+    becomes `sha256-`; `id_from_name` undoes it. Only an id is touched: other
+    parts (a timestamped file name) keep their colons.
     """
-    return part.replace(":", "-")
+    return "sha256-" + part[7:] if part.startswith("sha256:") else part
 
 
 def id_from_name(name: str) -> str:

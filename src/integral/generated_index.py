@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from integral.cv_store import _atomic_write_text
-from integral.identity import ProfileStore
+from integral.identity import ProfileStore, file_safe, id_from_name
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T343.json"
@@ -120,7 +120,9 @@ def render_index(store: ProfileStore) -> str:
             if folder.is_dir() and not folder.is_symlink():
                 send = f"`{offer_dir.name}/v{n}/send`"
                 break
-        lines.append(f"| {employer} | {_cell(role)} | `{offer_dir.name}` | {shown} | {send} |")
+        lines.append(
+            f"| {employer} | {_cell(role)} | `{id_from_name(offer_dir.name)}` | {shown} | {send} |"
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -309,7 +311,7 @@ def measure() -> dict[str, Any]:
         wanted = (
             "Acme \\| Co",
             f"| {GATE_ROLE} |",
-            f"`{offer_id}/v{version}/send`",
+            f"`{file_safe(offer_id)}/v{version}/send`",
         )
         cases["real_stage_send_shows_employer_role_and_send_path"] = index_differs(store) + sum(
             1 for cell in wanted if cell not in text

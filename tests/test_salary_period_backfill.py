@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from integral.identity import ProfileStore, create_profile
+from integral.identity import ProfileStore, create_profile, file_safe
 from integral.offers import Offer, connect_manual, load_offer, save_offer
 from integral.revision import REVISIONED, classify
 from integral.salary_period_backfill import (
@@ -116,8 +116,11 @@ def test_scan_and_apply_round_trip_through_load_offer(tmp_path: Path) -> None:
     assert [patched["id"] for _, patched, _ in repairs] == [broken.id]
 
     backup = backup_offers_dir(store)
-    assert (backup / f"{broken.id}.json").is_file()
-    assert json.loads((backup / f"{broken.id}.json").read_text())["salary"]["period"] == "hourly"
+    assert (backup / file_safe(f"{broken.id}.json")).is_file()
+    assert (
+        json.loads((backup / file_safe(f"{broken.id}.json")).read_text())["salary"]["period"]
+        == "hourly"
+    )
 
     apply_repairs(store, repairs)
 
@@ -195,7 +198,10 @@ def test_a_dry_run_reports_pending_work_in_its_exit_code(tmp_path: Path, monkeyp
     backups = sorted(p.name for p in store.path("backups").glob("offers.pre-t170.*"))
     assert len(backups) == 1, backups
     backup = store.path("backups", backups[0])
-    assert json.loads((backup / f"{raw['id']}.json").read_text())["salary"]["period"] == "MONTH"
+    assert (
+        json.loads((backup / f"{file_safe(raw['id'])}.json").read_text())["salary"]["period"]
+        == "MONTH"
+    )
 
     assert _main([]) == 0  # and now it is migrated
 
