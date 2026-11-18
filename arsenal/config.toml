@@ -120,12 +120,9 @@ host-setup = "uv sync --extra dev --locked"
 branch-protection = "applied"
 
 attribution = true
-
 bot-triggers = ["coderabbitai[bot]=@coderabbitai review"]
-
 review-bots = ["coderabbitai[bot]"]
-
-setup-interview = "2026-11-11"
+setup-interview = "2026-11-18"
 
 [skills]
 android = false
