@@ -441,3 +441,73 @@ def test_r4_further_closure_notices_read_dead(notice: str) -> None:
     check = liveness.read_response("r", 200, page)
     assert check.liveness == "dead", check.reason
     assert liveness.dead_phrase_in(notice) is not None
+
+
+#: getmanfred.com's shape (2026-10-21): the Next.js i18n bundle carrying the
+#: closure strings sits in a `<script>` on every advert, live or not.
+_MANFRED_I18N = (
+    '<script id="__NEXT_DATA__" type="application/json">{"closedOffer":"Oferta cerrada",'
+    '"offerClosed":"Oferta cerrada el {{date}}"}</script>'
+)
+
+
+def test_a_live_manfred_advert_is_not_read_dead_by_its_i18n_bundle() -> None:
+    """FAIL-CLOSED: every live getmanfred.com advert read `dead`."""
+    page = (
+        "<html><head><title>Senior AI Platform Engineer</title></head><body>"
+        "<h1>Senior AI Platform Engineer</h1><p>Signicat</p>"
+        f'{_MANFRED_I18N}<script>{{"status":"ACTIVE","closed":false}}</script></body></html>'
+    )
+    check = liveness.read_response("m", 200, page, title="Senior AI Platform Engineer")
+    assert check.liveness == "live", check.reason
+
+
+def test_a_closed_manfred_advert_still_reads_dead() -> None:
+    """FAIL-OPEN guard: the same bundle, with the closure shown in the visible page."""
+    page = (
+        "<html><head><title>Senior AI Platform Engineer</title></head><body>"
+        "<h1>Senior AI Platform Engineer</h1><p>Oferta cerrada el 3 de octubre</p>"
+        f'{_MANFRED_I18N}<script>{{"status":"CLOSED","closed":true}}</script></body></html>'
+    )
+    check = liveness.read_response("m", 200, page, title="Senior AI Platform Engineer")
+    assert check.liveness == "dead", check.reason
+
+
+def test_an_unclosed_script_does_not_hide_a_visible_closure() -> None:
+    assert liveness.dead_phrase_in("<p>Oferta cerrada</p><script>var a = 1;") == "oferta cerrada"
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "<p>Oferta cerrada</p><SCRIPT type='x'>var a;</SCRIPT >",
+        "<style>.a{}</style><p>Oferta cerrada</p>",
+        "<script-x>Oferta cerrada</script>",
+        "<styled>Oferta cerrada</styled>",
+    ],
+)
+def test_visible_closure_beside_code_or_lookalike_tags_still_reads(page: str) -> None:
+    assert liveness.dead_phrase_in(page) == "oferta cerrada"
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "<SCRIPT type='x'>Oferta cerrada</SCRIPT >",
+        "<style a>Oferta cerrada</style>",
+        "<p>ok</p><script>Oferta cerrada</script><p>live</p>",
+    ],
+)
+def test_closure_words_inside_code_are_ignored(page: str) -> None:
+    assert liveness.dead_phrase_in(page) is None
+
+
+@pytest.mark.parametrize("opener", ["<script>", "<style a>", "<script ", "</script "])
+def test_many_unclosed_openers_read_in_linear_time(opener: str) -> None:
+    """500 KB of adversarial openers: the old regex took ~130 s; a linear scan, ms."""
+    import time
+
+    body = opener * (500_000 // len(opener))
+    start = time.perf_counter()
+    liveness.dead_phrase_in(body)
+    assert time.perf_counter() - start < 2.0

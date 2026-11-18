@@ -120,6 +120,36 @@ def _stated(haystack: str, phrase: str) -> bool:
     return False
 
 
+#: Code is not prose. A Next.js page ships its whole i18n bundle in a
+#: `<script>` (getmanfred.com: `"offerClosed":"Oferta cerrada el {{date}}"` on
+#: every live advert, 2026-10-21), so a phrase found only there states nothing.
+#: An unclosed `<script` is left alone, so a truncated body still matches.
+#: The scan is linear: a closer is searched for once per tag name, and a tag
+#: with no closer is never searched for again (a regex `.*?` retried from every
+#: unclosed opener took 130 s on 480 KB of `<script>`).
+_CODE_OPEN = re.compile(r"<(script|style)(?=[\s/>])[^<>]*>", re.IGNORECASE)
+_CODE_CLOSE = {name: re.compile(rf"</{name}\s*>", re.IGNORECASE) for name in ("script", "style")}
+
+
+def _without_code(text: str) -> str:
+    """`text` with each closed `<script>`/`<style>` block replaced by a space."""
+    out: list[str] = []
+    pos = 0
+    unclosed: set[str] = set()
+    while opener := _CODE_OPEN.search(text, pos):
+        name = opener.group(1).lower()
+        closer = None if name in unclosed else _CODE_CLOSE[name].search(text, opener.end())
+        if closer is None:
+            unclosed.add(name)
+            out.append(text[pos : opener.end()])
+            pos = opener.end()
+            continue
+        out.append(text[pos : opener.start()] + " ")
+        pos = closer.end()
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def dead_phrase_in(text: str) -> str | None:
     """The closure notice the body states, if it states one.
 
@@ -146,6 +176,7 @@ def dead_phrase_in(text: str) -> str | None:
     its phrase by a tag, an entity (`&iquest;`) or a fullwidth question mark (U+FF1F) reads as a
     statement (fail-closed).
     """
+    text = _without_code(text)
     views = (normalise(text), visible_text(text))
     return next((p for p in DEAD_PHRASES if any(_stated(v, p) for v in views)), None)
 
