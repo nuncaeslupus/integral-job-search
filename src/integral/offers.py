@@ -71,7 +71,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationIn
 
 from integral.advert_link import advert_url
 from integral.dimensions import Language
-from integral.identity import IdentityError, ProfileStore, id_from_name
+from integral.identity import IdentityError, ProfileStore, file_safe, id_from_name
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T11.json"
@@ -476,6 +476,8 @@ def load_offers(store: ProfileStore, *, record: bool = False) -> OfferScan:
         for path in sorted(directory.glob("*.json")):
             if path.name.startswith("_"):
                 continue
+            if file_safe(path.name) != path.name and (directory / file_safe(path.name)).exists():
+                continue  # the old name of an offer also stored under its file-safe one
             try:
                 offers.append(load_offer(store, path.stem))
             except (OfferError, OSError, ValueError, RecursionError) as exc:

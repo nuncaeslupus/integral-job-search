@@ -2022,11 +2022,11 @@ def measure(stores: Iterable[ProfileStore]) -> dict[str, Any]:
     unrecorded: list[str] = []
     evaluated = 0
     for store in stores:
-        present = [
+        present = {
             id_from_name(path.stem)
             for path in Path(store.path("offers")).glob("*.json")
             if not path.name.startswith("_")
-        ]
+        }
         evaluated += len(present)
         unrecorded += [f"{store.handle}:{oid}" for oid in offers_without_a_recorded_fetch(store)]
     return {
