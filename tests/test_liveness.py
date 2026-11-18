@@ -475,3 +475,39 @@ def test_a_closed_manfred_advert_still_reads_dead() -> None:
 
 def test_an_unclosed_script_does_not_hide_a_visible_closure() -> None:
     assert liveness.dead_phrase_in("<p>Oferta cerrada</p><script>var a = 1;") == "oferta cerrada"
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "<p>Oferta cerrada</p><SCRIPT type='x'>var a;</SCRIPT >",
+        "<style>.a{}</style><p>Oferta cerrada</p>",
+        "<script-x>Oferta cerrada</script>",
+        "<styled>Oferta cerrada</styled>",
+    ],
+)
+def test_visible_closure_beside_code_or_lookalike_tags_still_reads(page: str) -> None:
+    assert liveness.dead_phrase_in(page) == "oferta cerrada"
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "<SCRIPT type='x'>Oferta cerrada</SCRIPT >",
+        "<style a>Oferta cerrada</style>",
+        "<p>ok</p><script>Oferta cerrada</script><p>live</p>",
+    ],
+)
+def test_closure_words_inside_code_are_ignored(page: str) -> None:
+    assert liveness.dead_phrase_in(page) is None
+
+
+@pytest.mark.parametrize("opener", ["<script>", "<style a>", "<script ", "</script "])
+def test_many_unclosed_openers_read_in_linear_time(opener: str) -> None:
+    """500 KB of adversarial openers: the old regex took ~130 s; a linear scan, ms."""
+    import time
+
+    body = opener * (500_000 // len(opener))
+    start = time.perf_counter()
+    liveness.dead_phrase_in(body)
+    assert time.perf_counter() - start < 2.0
