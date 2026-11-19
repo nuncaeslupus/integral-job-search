@@ -98,8 +98,9 @@ _WANT_WORDS = (
 _WANT = re.compile(rf"\b{_WANT_WORDS}\b", re.I)
 # Earning verbs in any tense, ES/EN/CA: a sentence with one states pay the candidate has or had.
 _EARNS = re.compile(
-    r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a|é)|guany(?:o|ava|es|a)|vaig guanyar|earn(?:s|ed|ing)?|make|makes|made|"
-    r"paid|pays?|takes? home|taking home|took home|pagan|paguen|perc[ei]b\w*|recib\w*|rebo)\b",
+    r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a|é)|guany(?:o|ava|es|a)|vaig guanyar|"
+    r"earn(?:s|ed|ing)?|make|makes|made|paid|pays?|takes? home|taking home|took home|"
+    r"pagan|paguen|perc[ei]b\w*|recib\w*|rebo)\b",
     re.I,
 )
 # Rate words and "I am on": a bare number after them is pay too ("Day rate 300", "I am on 38").
