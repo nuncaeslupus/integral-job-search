@@ -90,6 +90,7 @@ CONCEPT_SAMPLES = [
         "Our client is a leading insurer",
         "El nostre client busca un analista",
     ),
+    ("Somos una consultora", "We are a consultancy", "Som una consultora"),
     ("Trabajarás en cliente final", "Working at the end client", "Treballaràs a client final"),
     ("En nombre de nuestro cliente", "On behalf of our client", "En nom del nostre client"),
 ]
@@ -199,3 +200,67 @@ def test_the_facet_is_only_a_publisher_rule_for_its_own_value() -> None:
     ad = se.Candidate(offer_id="x", title=None, text="For our client, a bank.")
     assert se.matches(ad, Exclusion(about="publisher:consultancy", stated_at_cycle=1, words="w"))
     assert not se.matches(ad, Exclusion(about="publisher:agency", stated_at_cycle=1, words="w"))
+
+
+# --- leftovers from #965 (t-92dfe902) --------------------------------------
+
+# "client" as a modifier or half of a hyphenated word is not a placement.
+CLIENT_MODIFIER = [
+    "We are looking for a client-facing Solutions Engineer",
+    "You will join a client-facing team",
+    "Join our Client Success team!",
+    "Work with our client success managers",
+    "We are hiring for our Client Services team.",
+    "Buscamos para nuestro cliente-facing un ingeniero",
+    "Incorporarte a nuestro cliente-facing equipo",
+    "Per al nostre client-facing busquem un enginyer",
+    "Treballaràs a client-success",
+]
+# Customer-first slogans, support wording and past work are not a placement.
+CLIENT_SINGULAR = [
+    "Our client is at the heart of everything",
+    "Nuestro cliente es lo primero",
+    "El nostre client és el centre de tot",
+    "Darás soporte a un cliente",
+    "Dóna suport a un client",
+    "You will support a client every day",
+    "Built X for a client in 2019",
+    "Construimos X para un cliente en 2019",
+    "Vam construir X per a un client en 2019",
+]
+SELF_DESCRIBED = ["Somos una consultora", "We are a consultancy", "Som una consultora"]
+EARLIER_CLAUSE_NEGATOR = [
+    "No es necesario inglés, trabajarás en cliente final",
+    "No English needed, you will be working at the end client",
+    "No cal anglès, treballaràs a client final",
+]
+
+
+@pytest.mark.parametrize("text", CLIENT_MODIFIER)
+def test_client_as_a_modifier_is_not_a_placement(text: str) -> None:
+    assert pk.publisher_kind(text) == "unknown"
+
+
+@pytest.mark.parametrize("text", CLIENT_SINGULAR)
+def test_a_singular_client_slogan_or_support_wording_is_not_a_placement(text: str) -> None:
+    assert pk.publisher_kind(text) == "unknown"
+
+
+@pytest.mark.parametrize("text", SELF_DESCRIBED)
+def test_a_self_described_consultancy_is_a_consultancy(text: str) -> None:
+    assert pk.publisher_kind(text) == "consultancy"
+
+
+@pytest.mark.parametrize("text", EARLIER_CLAUSE_NEGATOR)
+def test_a_negator_in_an_earlier_clause_does_not_cancel_a_cue(text: str) -> None:
+    assert pk.publisher_kind(text) == "consultancy"
+
+
+@pytest.mark.parametrize("about", ["publisher:consultora", "publisher:unknown"])
+def test_the_recorder_refuses_a_publisher_value_that_would_exclude_nothing_or_all(
+    tmp_path: Path, about: str
+) -> None:
+    create_profile(tmp_path, "Test", handle="test", language="es", fiction=True)
+    store = ProfileStore(tmp_path, "test")
+    with pytest.raises(ValueError, match="publisher takes one of"):
+        record_exclusion(store, Exclusion(about=about, stated_at_cycle=1, words="w"))

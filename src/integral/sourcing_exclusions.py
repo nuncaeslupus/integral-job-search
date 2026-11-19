@@ -746,6 +746,10 @@ def record_exclusion(store: ProfileStore, exclusion: Exclusion) -> Path:
     Idempotent on `about`: saying it again replaces the row and never doubles
     it, and the candidate's latest words are the ones quoted back.
     """
+    if exclusion.facet.strip().lower() == publisher_kind.FACET and (
+        exclusion.value.strip().lower() not in publisher_kind.EXCLUDABLE
+    ):
+        raise ValueError(f"publisher takes one of {sorted(publisher_kind.EXCLUDABLE)}")
     kept = [e for e in load_exclusions(store) if e.about != exclusion.about]
     return store.write_json([e.model_dump() for e in (*kept, exclusion)], *EXCLUSIONS_FILE)
 
