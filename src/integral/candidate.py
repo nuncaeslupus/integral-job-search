@@ -471,7 +471,9 @@ def load_constraints(payload: dict[str, Any]) -> CandidateConstraints:
     fields = payload.get("fields", {})
     if not isinstance(fields, dict):
         raise CandidateError("constraints.json 'fields' must be an object")
-    unknown_keys = sorted(set(fields) - set(FIELD_MODELS))
+    # `unattributed` is the builder's own bucket for a constraint row stated
+    # with no dimension tag: not a stray id, and nothing here filters on it.
+    unknown_keys = sorted(set(fields) - set(FIELD_MODELS) - {"unattributed"})
     if unknown_keys:
         raise CandidateError(
             f"constraints.json names field(s) outside the T24 schema: {', '.join(unknown_keys)}"

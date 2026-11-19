@@ -305,3 +305,22 @@ def test_probe_resolution_exercises_both_openings(tmp_path: Path) -> None:
     result = probe_resolution(tmp_path / "profiles")
     assert result["failures"] == []
     assert result["checks_run"] >= 10
+
+
+def test_untagged_constraint_row_still_loads(store: ProfileStore) -> None:
+    """A constraint said with no dimension tag lands under `unattributed`;
+    the loader must accept the file the builder wrote, or sourcing stops."""
+    from integral.profile import rebuild
+
+    EvidenceLog(store).append(
+        recorded_at="2026-11-18T09:00:00Z",
+        step="constraints",
+        kind="constraint",
+        dimensions=[],
+        text="I can lower my expectations a little.",
+        source="conversation",
+    )
+    rebuild(store)
+    fields = _written_fields(store)
+    assert "unattributed" in fields
+    load_constraints({"fields": fields})
