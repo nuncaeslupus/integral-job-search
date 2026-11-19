@@ -48,7 +48,8 @@ _WHEN = (
 )
 _PERIOD = (
     r"(?:al mes|a month|per month|/\s?mes|/\s?month|mensual\w*|monthly|al año|a year|per year|"
-    r"per annum|anual\w*|annual\w*|yearly|a l'any|al any|l'any)"
+    r"per annum|anual\w*|annual\w*|yearly|a l'any|al any|l'any|an hour|per hour|hourly|la hora|"
+    r"por hora|per hora|a l'hora|a day|per day|daily|al d[ií]a|por d[ií]a|al dia|per dia)"
 )
 _CURRENCY = r"(?:[€$£]|\b(?:euros?|eur|usd|dollars?)\b)"
 # One money figure: "38k", a thousands number (dot, comma or space separated), five digits or
@@ -63,7 +64,7 @@ _TALKS_PAY = re.compile(rf"{_CURRENCY}|\b(?:bruts?|brutos?|gross)\b", re.I)
 # The low end of a range is dropped, so "45-50k" or "entre 45 y 50k" is one figure. "de/from 38k a
 # 45k" is not a range to drop: it says where the candidate stands now, so both figures count.
 _RANGE_LOW = re.compile(
-    r"(?<![\d.,])(?<!de )(?<!from )(?<!desde )"
+    r"(?<![\d.,])(?<!de )(?<!from )"
     r"\d[\d.,\u00a0\u202f ]*\s?k?\s*(?:-|\u2013|\bto\b|\ba\b|\bal\b)\s*(?=[€$£]?\d)|"
     r"\b(?:entre|between)\s+\d[\d.,\u00a0\u202f ]*\s?k?\s*(?:y|and|i)\s+(?=[€$£]?\d)",
     re.I,
@@ -79,7 +80,7 @@ _WANT = re.compile(rf"\b{_WANT_WORDS}\b", re.I)
 # Earning verbs in any tense, ES/EN/CA: a sentence with one states pay the candidate has or had.
 _EARNS = re.compile(
     r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a)|guany(?:o|ava|es|a)|earn(?:s|ed|ing)?|make|makes|made|"
-    r"paid|takes? home|taking home|took home)\b",
+    r"paid|pays?|takes? home|taking home|took home)\b",
     re.I,
 )
 # "my salary" with no want word right beside it ("my ideal salary", "salario deseado" are fine).
@@ -119,6 +120,8 @@ def states_own_pay(text: str) -> bool:
             _FIGURE.search(sentence)
             or _TALKS_PAY.search(sentence)
             or (re.search(rf"\b{_PAY}\b", sentence, re.I) and any(c.isdigit() for c in sentence))
+            # An earning verb beside any number states pay: "Gano 38", "I earn 25 an hour".
+            or (_EARNS.search(sentence) and any(c.isdigit() for c in sentence))
         )
         if talks_pay and not _sendable(sentence):
             return True

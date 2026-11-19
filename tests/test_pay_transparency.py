@@ -170,6 +170,15 @@ MIXED_OR_MISSED_ROWS = [
     "I earn 3.200 per month, looking for more.",
     "I earn thirty eight grand.",
     "Expectativa 45k (ahora 38k).",
+    "I earn 25 an hour.",
+    "Cobro 20 la hora.",
+    "Guanyo 20 per hora.",
+    "I make 300 a day.",
+    "Cobro 150 al día.",
+    "Gano 38.",
+    "Looking for 45k. Earn 38 now.",
+    "Minimum: what my employer pays me, 38k.",
+    "Busco pasar desde 38k a 45k.",
     # Leftovers from #971 round 2: a range start, a possessive, past tense, figures with words
     # between the number and its period.
     "Busco pasar de 38k a 45k.",
