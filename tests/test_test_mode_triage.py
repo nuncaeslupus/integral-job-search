@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from integral.test_mode import NoteLedger, NoteRow, SessionRow, ledger_path
+from integral.test_mode import NoteLedger, NoteRow, SessionRow, TallyRow, ledger_path
 
 SCRIPT = Path(__file__).resolve().parents[1] / ".claude/skills/test-mode/scripts/query_notes.py"
 
@@ -68,3 +68,25 @@ def test_decision_needs_its_task_or_reason(tmp_path: Path) -> None:
     _session(tmp_path, notes=1)
     assert _run(tmp_path, "--decide", "1", "seeded").returncode == 2
     assert _run(tmp_path, "--decide", "1", "discarded").returncode == 2
+
+
+def test_lost_marker_does_not_block_a_fully_decided_session(tmp_path: Path) -> None:
+    _session(tmp_path, notes=1)
+    NoteLedger(ledger_path(tmp_path, "s1")).append_tally(TallyRow(unparsed_markers=1, at="t"))
+    assert _run(tmp_path, "--check").returncode == 1
+    # --decide prints the review, which still exits 1 for the lost marker; only --check ends.
+    _run(tmp_path, "--decide", "1", "discarded", "--reason", "already known")
+    assert _run(tmp_path, "--check").returncode == 0
+
+
+def test_malformed_decision_row_exits_2(tmp_path: Path) -> None:
+    _session(tmp_path, notes=1)
+    with ledger_path(tmp_path, "s1").open("a", encoding="utf-8") as stream:
+        stream.write('{"kind": "decision", "n": 1, "decision": "discarded"}\n')
+    assert _run(tmp_path, "--check").returncode == 2
+
+
+def test_blank_task_id_is_refused(tmp_path: Path) -> None:
+    _session(tmp_path, notes=1)
+    assert _run(tmp_path, "--decide", "1", "seeded", "--task", "  ").returncode != 0
+    assert _run(tmp_path, "--check").returncode == 1

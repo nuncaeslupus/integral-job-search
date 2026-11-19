@@ -463,7 +463,7 @@ class DecisionRow(Strict):
 
     @model_validator(mode="after")
     def _carries_its_justification(self) -> DecisionRow:
-        if self.decision == "seeded" and not self.task:
+        if self.decision == "seeded" and not (self.task or "").strip():
             raise ValueError("a seeded note needs the task id it became")
         if self.decision == "discarded" and not (self.reason or "").strip():
             raise ValueError("a discarded note needs a short reason")

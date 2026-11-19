@@ -140,7 +140,7 @@ def main(argv: list[str]) -> int:
 
     try:
         review = build_review(ledger)
-    except MetaNoteError as exc:
+    except (ValueError, MetaNoteError) as exc:  # pydantic's ValidationError is a ValueError
         print(f"query_notes: {exc}", file=sys.stderr)
         return 2
 
@@ -154,6 +154,10 @@ def main(argv: list[str]) -> int:
         for row in review.undecided:
             print(f"  {row.n}. {row.text}", file=sys.stderr)
         return 1
+    if args.check:
+        # Lost markers are printed above, but no decision can clear them, so they
+        # must not stop the session from ending once every note is decided.
+        return 0
 
     confirmed = _confirmed(args.seed)
     if confirmed:
