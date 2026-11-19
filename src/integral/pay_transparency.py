@@ -52,13 +52,23 @@ _PERIOD = (
     r"por hora|per hora|a l'hora|a day|per day|daily|al d[ií]a|por d[ií]a|al dia|per dia)"
 )
 _CURRENCY = r"(?:[€$£]|\b(?:euros?|eur|usd|dollars?)\b)"
-# Words that may sit between a figure and its period or follow a bare number as pay talk (net,
-# gross, currency, connectors). Any other word after a number is a unit noun: "3 releases a week".
+# Words that may sit between a figure and its period: net, gross, currency.
 _PAY_TAIL = r"(?:net\w*|nets|brut\w*|gross|euros?|eur|usd|dollars?)"
-_TAIL_WORDS = re.compile(
-    rf"{_PAY_TAIL}|now|and|per|pero|but|the|for|ara|ahora|hoy|avui|m[aeé]s|plus|amb|con|with|"
-    r"before|after|antes|abans|today|still|a[uú]n|ya",
+# Countable things a number can measure beside an earning word ("I make 3 releases a week").
+# ponytail: an allowlist on purpose. A word missing here makes the number read as pay and the
+# sentence refused (fail-closed); an open "any other word" test let "38 bucks" through.
+_UNIT = re.compile(
+    r"(?:releases?|deploy\w*|desplieg\w*|desplegament\w*|prs?|pull|commits?|hires?|"
+    r"contrataci\w*|contractaci\w*|certifica\w*|hours?|horas?|hores|years?|a[nñ]os?|anys?|"
+    r"people|persones|personas|engineers?|ingenier\w*|enginyer\w*|developers?|"
+    r"desarrollador\w*|desenvolupador\w*|teams?|equip\w*|projects?|proyectos?|projectes?|apps?|"
+    r"clients?|clientes?|users?|usuari\w*|awards?|premi\w*|patents?|patentes?|papers?|"
+    r"articles?|art[ií]culos?|courses?|cursos?|promotions?|ascensos?)",
     re.I,
+)
+# A four-digit year counts as a year only after a word that introduces one ("in 2023").
+_YEAR_BEFORE = re.compile(
+    r"\b(?:in|since|from|until|during|en|desde|des de|hasta|durante|fins|durant|el|l')\s*$", re.I
 )
 # One money figure: "38k", a thousands number (dot, comma or space separated), five digits or
 # more, a figure beside a currency or a pay period, or a figure in words (mil / thousand / grand).
@@ -112,16 +122,20 @@ _SENTENCE = re.compile(r"[.!?;]+(?:\s+|$)|\n")
 
 
 def _bare_pay_number(text: str) -> bool:
-    """A bare number within three words after an earning, payer, time or rate word, unless a unit
-    noun follows it ("3 releases") or it is a year."""
+    """A bare number after an earning, payer or rate word (anywhere later in the text) or within
+    three words after a time word, unless a countable noun follows it ("3 releases") or it is a
+    year introduced as one ("in 2023")."""
     for ctx in _CTX.finditer(text):
-        toks = list(_TOKEN.finditer(text, ctx.end()))[:4]
-        for i, tok in enumerate(toks):
+        toks = list(_TOKEN.finditer(text, ctx.end()))
+        reach = len(toks) if _STRONG_CTX.fullmatch(ctx.group()) else 4
+        for i, tok in enumerate(toks[:reach]):
             n = tok.group()
-            if not n[0].isdigit() or n[-1] == "k" or _YEAR.fullmatch(n):
+            if not n[0].isdigit() or n[-1] == "k":
+                continue
+            if _YEAR.fullmatch(n) and _YEAR_BEFORE.search(text, 0, tok.start()):
                 continue
             nxt = toks[i + 1].group() if i + 1 < len(toks) else ""
-            if not (len(nxt) >= 3 and nxt[0].isalpha() and not _TAIL_WORDS.fullmatch(nxt)):
+            if not _UNIT.fullmatch(nxt):
                 return True
     return False
 
@@ -152,14 +166,13 @@ def states_own_pay(text: str) -> bool:
     """
     sentences = _SENTENCE.split(text)
     for i, sentence in enumerate(sentences):
-        # "I earn well. It is 38.": an earning word with no number looks into the next sentence.
-        if (
-            i + 1 < len(sentences)
-            and _STRONG_CTX.search(sentence)
-            and not any(c.isdigit() for c in sentence)
-            and _bare_pay_number(f"{sentence} {sentences[i + 1]}")
-        ):
-            return True
+        # "I earn well. Really well. It is 38.": an earning word with no number looks ahead to the
+        # next sentence that has one.
+        if _STRONG_CTX.search(sentence) and not any(c.isdigit() for c in sentence):
+            later = sentences[i + 1 :]
+            j = next((k for k, s in enumerate(later) if any(c.isdigit() for c in s)), None)
+            if j is not None and _bare_pay_number(" ".join([sentence, *later[: j + 1]])):
+                return True
         talks_pay = (
             _FIGURE.search(sentence)
             or _TALKS_PAY.search(sentence)

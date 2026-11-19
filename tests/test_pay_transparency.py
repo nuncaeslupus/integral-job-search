@@ -149,6 +149,30 @@ def test_a_pay_figure_that_is_not_an_expectation_is_refused(tmp_path: Path, row:
 # Round-1 review of #971: a want word beside a current figure, and figures the old money
 # pattern missed. Each must be refused.
 MIXED_OR_MISSED_ROWS = [
+    # #977 round 1: a year-shaped figure, a slang unit or a far figure after an earning word.
+    "I earn 2000 net.",
+    "Gano 2000 netos.",
+    "Guanyo 2000 nets.",
+    "Cobro unos 2000.",
+    "I take home 2050.",
+    "Me pagan 1990.",
+    "Em paguen 2000.",
+    "Actualmente 2000.",
+    "Currently on 2000.",
+    "Day rate 2000.",
+    "I earn 25 bucks an hour.",
+    "Gano 9 pavos la hora.",
+    "Guanyo 38 milers.",
+    "Cobro 1500 limpios al mes.",
+    "Cobro 1500 nets nets al mes.",
+    "Currently 1500 clean a month.",
+    "Mi tarifa: 1500 limpios al mes.",
+    "I earn, at the moment, around 38.",
+    "Cobro cada mes más o menos 1800.",
+    "Guanyo cada mes més o menys 1800.",
+    "I earn well. Really well. It is 38.",
+    "Gano bien. Muy bien. Son 38.",
+    "Guanyo bé. Molt bé. Són 38.",
     "I'm paid 38k, looking for 45k.",
     "I earn 38k and I'm looking for 45k.",
     "I make 38,000 and expect 45,000.",
@@ -261,6 +285,12 @@ STILL_SENDABLE_ROWS = [
     "Guanyo 2 certificacions.",
     "Hago 10 despliegues al día.",
     "Faig 10 desplegaments al dia.",
+    "I earn trust. I led 12 people.",
+    "Gano experiencia. Lideré 5 equipos.",
+    "Guanyo experiència. Vaig liderar 5 equips.",
+    "Currently leading 5 engineers.",
+    "Actualmente lidero 5 ingenieros.",
+    "Ara lidero 5 enginyers.",
 ]
 
 
