@@ -389,7 +389,7 @@ def answer_defects(
     if cited and (extra := sorted(set(_tokens(text)) - held)):
         defects.append(f"{SOURCE_DEFECT}: {', '.join(extra)} come from no cited row")
     flat = " ".join(text.split())
-    defects += current_pay_defects(answer.question, cited)
+    defects += current_pay_defects(text, cited)
     defects += _denial_defects(text, cited)
     defects += [
         f"{d.kind}: {d.detail}"

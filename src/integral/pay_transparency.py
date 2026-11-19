@@ -39,22 +39,46 @@ def range_prompt(offer: OfferFacts, language: Language) -> str | None:
 
 
 _PAY = (
-    r"(?:salary|salaries|pay|wage|earn\w*|sueldo|salario|cobr\w+|gano|ganaba|sou|salari|guany\w*)"
+    r"(?:salary|salaries|pay|wages?|compensation|earnings|income|sueldo|salario|ingresos|"
+    r"retribuci\w+|remuneraci\w+|sou|salari)"
 )
-_PAST = r"(?:current\w*|present|past|previous|last|former|now|actual\w*|anterior\w*|pasad\w+|ara)"
-_ROW = re.compile(rf"\b{_PAST}\b.*\b{_PAY}\b|\b{_PAY}\b.*\b{_PAST}\b", re.I | re.S)
-_QUESTION = re.compile(rf"\b{_PAST}\W+(?:\w+\W+)?{_PAY}\b|\b{_PAY}\W+(?:\w+\W+)?{_PAST}\b", re.I)
+_WHEN = (
+    r"(?:current\w*|present|now|today|past|previous|prior|last|former|actual\w*|anterior\w*|"
+    r"pasad\w+|[uú]ltim\w+|ara|avui|hoy|passat)"
+)
+_MINE = r"(?:my|mi|mis|meu|meva|el meu|la meva)"
+_VERB = (
+    r"(?:\bi\s+(?:earn\w*|make|made|am\s+paid|was\s+paid|get\s+paid|am\s+making)\b|"
+    r"\b(?:cobro|cobraba|gano|ganaba|percibo|guanyo|guanyava|cobraré)\b)"
+)
+# What the candidate wants, not what they get: a floor or an expectation stays sendable.
+_WANT = re.compile(
+    r"floor|minimum|expect\w*|looking for|seeking|target|desired|busco|m[ií]nim\w*|suelo|"
+    r"espero|expectativ\w*|deseo|objetivo|objectiu|cerco|aspir\w+|pretens\w*|desitj\w*|vull",
+    re.I,
+)
+_OWN_PAY = re.compile(
+    rf"{_VERB}|\b{_PAY}\b.*\b{_WHEN}\b|\b{_WHEN}\b.*\b{_PAY}\b|\b{_MINE}\W+(?:\w+\W+){{0,2}}{_PAY}\b",
+    re.I,
+)
+# ponytail: clause cut by punctuation and a few conjunctions; a figure joined by other words
+# can still slip, then the candidate reads the staged answer.
+_CLAUSE = re.compile(r"[.!?;:]\s|[.!?;:]$|,\s|\n|\b(?:but|and|pero|però|y)\b", re.I)
 
 
-def asks_current_pay(question: str) -> bool:
-    return _QUESTION.search(question) is not None
+def states_own_pay(text: str) -> bool:
+    """A clause with a figure that gives the candidate's own pay (not a floor or expectation)."""
+    return any(
+        any(c.isdigit() for c in clause) and not _WANT.search(clause) and _OWN_PAY.search(clause)
+        for clause in _CLAUSE.split(text)
+    )
 
 
-def current_pay_defects(question: str, cited_rows: list[str]) -> list[str]:
-    """A current-pay question may rest only on rows that say nothing about current or past pay."""
-    if asks_current_pay(question) and any(_ROW.search(row) for row in cited_rows):
+def current_pay_defects(text: str, cited_rows: list[str]) -> list[str]:
+    """No form answer rests on, or says, the candidate's own current or past pay."""
+    if states_own_pay(text) or any(states_own_pay(row) for row in cited_rows):
         return [
-            "pay: the question asks for current or past pay, which is never given; answer "
-            "with the expected range from the stated floor"
+            "pay: current or past pay is never given in a form answer; use the expected "
+            "range from the stated floor"
         ]
     return []
