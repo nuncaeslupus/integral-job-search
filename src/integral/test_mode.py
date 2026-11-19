@@ -111,7 +111,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from integral.identity import (
     Identity,
@@ -447,6 +447,29 @@ class TallyRow(Strict):
     at: str
 
 
+class DecisionRow(Strict):
+    """What the owner decided about one note: seeded as a task, or discarded.
+
+    Appended to the ledger, so the next query shows it and the session end can
+    refuse to close while a note has none.
+    """
+
+    kind: Literal["decision"] = "decision"
+    n: int = Field(ge=1)
+    decision: Literal["seeded", "discarded"]
+    task: str | None = None
+    reason: str | None = None
+    at: str
+
+    @model_validator(mode="after")
+    def _carries_its_justification(self) -> DecisionRow:
+        if self.decision == "seeded" and not (self.task or "").strip():
+            raise ValueError("a seeded note needs the task id it became")
+        if self.decision == "discarded" and not (self.reason or "").strip():
+            raise ValueError("a discarded note needs a short reason")
+        return self
+
+
 class SessionRow(Strict):
     """The ledger's opening line — entering test mode, in the record.
 
@@ -500,6 +523,22 @@ class NoteLedger:
         self._append(row.model_dump(mode="json"))
         return row
 
+    def decide(self, row: DecisionRow) -> DecisionRow:
+        """Record a decision; refuse an unknown note or a second decision."""
+        if row.n not in {note.n for note in self.notes()}:
+            raise MetaNoteError(f"no note {row.n} in this session")
+        if row.n in self.decisions():
+            raise MetaNoteError(f"note {row.n} already has a decision")
+        self._append(row.model_dump(mode="json"))
+        return row
+
+    def decisions(self) -> dict[int, DecisionRow]:
+        return {
+            row["n"]: DecisionRow.model_validate(row)
+            for row in self.raw_rows()
+            if row.get("kind") == "decision"
+        }
+
     def _append(self, payload: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as stream:
@@ -525,7 +564,7 @@ class NoteLedger:
         return [
             NoteRow.model_validate(row)
             for row in self.raw_rows()
-            if row.get("kind") not in {"session", "tally"}
+            if row.get("kind") not in {"session", "tally", "decision"}
         ]
 
     def losses(self) -> tuple[int, int]:
@@ -577,6 +616,7 @@ class ReviewRow(Strict):
     step: str | None
     skill: str | None
     at: str
+    decision: DecisionRow | None = None
 
 
 class Review(Strict):
@@ -598,6 +638,10 @@ class Review(Strict):
     @property
     def is_complete(self) -> bool:
         return self.captured == len(self.rows)
+
+    @property
+    def undecided(self) -> tuple[ReviewRow, ...]:
+        return tuple(row for row in self.rows if row.decision is None)
 
 
 def _skill_for_step(step: str | None) -> str | None:
@@ -625,6 +669,7 @@ def build_review(ledger: NoteLedger) -> Review:
     header = ledger.header()
     notes = ledger.notes()
     unparsed_markers, unclosed_markers = ledger.losses()
+    decisions = ledger.decisions()
     return Review(
         session_id=header.session_id if header else "",
         simulated=header.simulated if header else False,
@@ -638,6 +683,7 @@ def build_review(ledger: NoteLedger) -> Review:
                 step=note.step,
                 skill=_skill_for_step(note.step),
                 at=note.at,
+                decision=decisions.get(note.n),
             )
             for note in notes
         ),
@@ -1026,6 +1072,13 @@ def render_review(review: Review) -> str:
         where = row.skill or row.step or "step unknown"
         mark = " [act now]" if row.act_now else ""
         lines.append(f"  {row.n}. [{where}]{mark} {row.text}")
+        if row.decision:
+            d = row.decision
+            lines.append(
+                f"     -> seeded as {d.task}"
+                if d.decision == "seeded"
+                else f"     -> discarded: {d.reason}"
+            )
     if not review.rows:
         lines.append("  (none)")
     if review.unparsed_markers:

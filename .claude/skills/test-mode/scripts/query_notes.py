@@ -32,6 +32,9 @@ The profiles root defaults to the candidate store resolved from `$INTEGRAL_HOME`
 (`integral.state_home`), which refuses any path inside a git work tree —
 candidate state never lives in the clone (T51, `docs/distribution.md` §2).
 
+`--decide N seeded --task <t-id>` / `--decide N discarded --reason "<why>"` records
+each note's decision in the ledger; `--check` exits 1 while any note has none.
+
 Exit codes: 0 the ledger was read; 1 notes were captured but something was also
 lost to a guard or a typo (worth looking at before triage); 2 the ledger could
 not be read at all.
@@ -42,6 +45,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -49,6 +53,7 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 from integral.state_home import StateHomeRefused, profiles_root  # noqa: E402
 from integral.test_mode import (  # noqa: E402
+    DecisionRow,
     MetaNoteError,
     NoteLedger,
     build_review,
@@ -89,6 +94,19 @@ def main(argv: list[str]) -> int:
         metavar="N[,N…]",
         help="print the queue-add invocation for these note numbers; nothing is run",
     )
+    parser.add_argument(
+        "--decide",
+        nargs=2,
+        metavar=("N", "seeded|discarded"),
+        help="record the decision for note N (with --task or --reason); appended to the ledger",
+    )
+    parser.add_argument("--task", default=None, help="the task id a seeded note became")
+    parser.add_argument("--reason", default=None, help="why a note was discarded")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 and list the notes while any has no decision (the session may not end)",
+    )
     parser.add_argument("--json", action="store_true", help="print the review as JSON")
     args = parser.parse_args(argv[1:])
 
@@ -104,9 +122,25 @@ def main(argv: list[str]) -> int:
         print("test mode — 0 note(s) captured\n  (none)")
         return 2
 
+    ledger = NoteLedger(path)
+    if args.decide:
+        try:
+            ledger.decide(
+                DecisionRow(
+                    n=int(args.decide[0]),
+                    decision=args.decide[1],
+                    task=args.task,
+                    reason=args.reason,
+                    at=datetime.now(UTC).isoformat(timespec="seconds"),
+                )
+            )
+        except (ValueError, MetaNoteError) as exc:
+            print(f"query_notes: {exc}", file=sys.stderr)
+            return 2
+
     try:
-        review = build_review(NoteLedger(path))
-    except MetaNoteError as exc:
+        review = build_review(ledger)
+    except (ValueError, MetaNoteError) as exc:  # pydantic's ValidationError is a ValueError
         print(f"query_notes: {exc}", file=sys.stderr)
         return 2
 
@@ -114,6 +148,16 @@ def main(argv: list[str]) -> int:
         print(json.dumps(review.model_dump(mode="json"), ensure_ascii=False, indent=2))
     else:
         print(render_review(review))
+
+    if args.check and review.undecided:
+        print("\nUndecided — the session may not end:", file=sys.stderr)
+        for row in review.undecided:
+            print(f"  {row.n}. {row.text}", file=sys.stderr)
+        return 1
+    if args.check:
+        # Lost markers are printed above, but no decision can clear them, so they
+        # must not stop the session from ending once every note is decided.
+        return 0
 
     confirmed = _confirmed(args.seed)
     if confirmed:
