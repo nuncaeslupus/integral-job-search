@@ -215,7 +215,7 @@ def _place_logo(store: ProfileStore, slug: str, report: Report) -> str:
     drop = store.path(*_SOURCES)
     files = {f.name.lower(): f for f in drop.iterdir() if f.is_file()} if drop.is_dir() else {}
     raster = next((files[f"{slug}{s}"] for s in _RASTER if f"{slug}{s}" in files), None)
-    svg = drop / f"{slug}.svg"
+    svg = files.get(f"{slug}.svg")
     dest_dir = store.path(*LOGOS, _ISSUERS, slug)
     if raster:
         try:
@@ -226,12 +226,12 @@ def _place_logo(store: ProfileStore, slug: str, report: Report) -> str:
         except BlankLogo:  # all background: a blank square is not a logo, report it
             report.blank.append(slug)
             return "blank"
-        if svg.is_file():
+        if svg:
             dest_dir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(svg, dest_dir / "logo.svg")
         report.squared.append(slug)
         return "squared"
-    if svg.is_file():
+    if svg:
         dest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(svg, dest_dir / "logo.svg")
         report.vector_only.append(slug)

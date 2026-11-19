@@ -233,6 +233,19 @@ def test_uppercase_suffix_source_is_squared(tmp_path: Path) -> None:
     assert slug in report.squared and slug not in report.missing
 
 
+def test_uppercase_svg_source_is_kept(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    slug = pk.slugify("Cintra Logistics")
+    drop = store.path("profile", "logos", "_sources")
+    drop.mkdir(parents=True)
+    (drop / f"{slug}.SVG").write_text("<svg/>")
+
+    report = pk.build_kit(store)
+
+    assert slug in report.vector_only and slug not in report.missing
+    assert (store.path("profile", "logos", "issuers", slug) / "logo.svg").read_text() == "<svg/>"
+
+
 def test_generated_slug_never_collides_with_a_natural_one() -> None:
     for orgs in [
         ["東京大学", "北京大学", "Entity 2"],

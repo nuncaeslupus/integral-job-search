@@ -3,6 +3,7 @@ id: t-c2cd850d
 title: "Match an uppercase .SVG logo in the profile kit"
 label: "profile kit svg case"
 priority: 10
+status: merged
 ---
 
 Review leftovers from #963 (profile kit), batched per policy G.
