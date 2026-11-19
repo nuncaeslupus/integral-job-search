@@ -19,7 +19,7 @@ from integral.sourcing_exclusions import Exclusion, record_exclusion
 CONSULTANCY = {
     "es": [
         "Para importante cliente del sector banca",
-        "Empresa cliente en Madrid",
+        "Puesto para empresa cliente en Madrid",
         "Incorporación a cliente final",
         "Buscamos para nuestro cliente un analista",
     ],
@@ -28,10 +28,11 @@ CONSULTANCY = {
         "Working for a client in banking",
         "Our client is a leading insurer",
         "Placed with the end client",
+        "Working at our client's site",
     ],
     "ca": [
         "Per a un client del sector bancari",
-        "Empresa client a Barcelona",
+        "Lloc per a una empresa client a Barcelona",
         "Incorporació a client final",
         "Per al nostre client busquem un analista",
     ],
@@ -69,6 +70,78 @@ def test_an_advert_with_no_cue_is_unknown_never_direct(text: str) -> None:
 
 @pytest.mark.parametrize("text", OWN_CLIENTS.values(), ids=OWN_CLIENTS.keys())
 def test_a_product_company_describing_its_own_clients_is_not_a_consultancy(text: str) -> None:
+    assert pk.publisher_kind(text) == "unknown"
+
+
+# One sample per language for every concept in the module's table, in its order.
+CONCEPT_SAMPLES = [
+    (
+        "Para un importante cliente del sector bancario",
+        "For an important client in banking",
+        "Per a un important client del sector bancari",
+    ),
+    (
+        "Incorporarte a nuestro cliente en Madrid",
+        "Join our client in Madrid",
+        "Incorporar-te al nostre client a Barcelona",
+    ),
+    (
+        "Nuestro cliente busca un analista",
+        "Our client is a leading insurer",
+        "El nostre client busca un analista",
+    ),
+    ("Trabajarás en cliente final", "Working at the end client", "Treballaràs a client final"),
+    ("En nombre de nuestro cliente", "On behalf of our client", "En nom del nostre client"),
+]
+AGENCY_SAMPLES = [
+    ("Oferta de ETT", "Temporary staffing role", "Oferta d'ETT"),
+    ("Agencia de selección", "Recruitment agency", "Agència de selecció"),
+]
+OWN_CUSTOMERS = [
+    "Nuestra app mejora la experiencia del cliente final.",
+    "We build software that delights the end client.",
+    "La nostra app millora l'experiència del client final.",
+    "Orientación al cliente final y atención al cliente final.",
+    "Cada empresa cliente usa nuestra plataforma SaaS.",
+    "Each client company is onboarded onto our platform.",
+    "Cada empresa client fa servir la nostra plataforma.",
+    "Serás el account manager de un importante cliente de nuestra cartera.",
+]
+NEGATED = [
+    "Contratación directa, sin ETT ni intermediarios.",
+    "No somos una ETT: trabajarás en producto propio.",
+    "Contractació directa, sense ETT.",
+    "Direct hire, not through a staffing agency.",
+    "Producto propio, no trabajarás en cliente final.",
+    "Som producte propi, mai treballaràs a client final.",
+    "We are not a recruitment agency; we never place you at a client.",
+]
+
+
+def test_the_concept_tables_cover_all_three_languages_alike() -> None:
+    assert len(CONCEPT_SAMPLES) == len(pk._CONSULTANCY_CONCEPTS)
+    assert len(AGENCY_SAMPLES) == len(pk._AGENCY_CONCEPTS)
+    for concept in (*pk._CONSULTANCY_CONCEPTS, *pk._AGENCY_CONCEPTS):
+        assert len(concept) == 3
+
+
+@pytest.mark.parametrize("text", [t for row in CONCEPT_SAMPLES for t in row])
+def test_every_concept_is_a_consultancy_in_every_language(text: str) -> None:
+    assert pk.publisher_kind(text) == "consultancy"
+
+
+@pytest.mark.parametrize("text", [t for row in AGENCY_SAMPLES for t in row])
+def test_every_agency_concept_is_an_agency_in_every_language(text: str) -> None:
+    assert pk.publisher_kind(text) == "agency"
+
+
+@pytest.mark.parametrize("text", OWN_CUSTOMERS)
+def test_a_bare_client_noun_phrase_is_not_a_placement(text: str) -> None:
+    assert pk.publisher_kind(text) == "unknown"
+
+
+@pytest.mark.parametrize("text", NEGATED)
+def test_a_negated_cue_is_not_a_cue(text: str) -> None:
     assert pk.publisher_kind(text) == "unknown"
 
 
