@@ -98,7 +98,7 @@ _WANT_WORDS = (
 _WANT = re.compile(rf"\b{_WANT_WORDS}\b", re.I)
 # Earning verbs in any tense, ES/EN/CA: a sentence with one states pay the candidate has or had.
 _EARNS = re.compile(
-    r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a|[eéoó])|guany(?:o|ava|es|a|ar)|earn(?:s|ed|ing)?|make|makes|made|"
+    r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a|é)|guany(?:o|ava|es|a)|vaig guanyar|earn(?:s|ed|ing)?|make|makes|made|"
     r"paid|pays?|takes? home|taking home|took home|pagan|paguen|perc[ei]b\w*|recib\w*|rebo)\b",
     re.I,
 )
@@ -136,7 +136,9 @@ def _bare_pay_number(text: str) -> bool:
             yb = _YEAR.fullmatch(n) and _YEAR_BEFORE.search(text, 0, tok.start())
             # "Gano el 2000": these year words right after the earning word read as an amount.
             if yb and (
-                _AMOUNT_WORD.search(yb.group()) is None or text[ctx.end() : yb.start()].strip()
+                not _STRONG_CTX.fullmatch(ctx.group())
+                or _AMOUNT_WORD.search(yb.group()) is None
+                or text[ctx.end() : yb.start()].strip()
             ):
                 continue
             nxt = toks[i + 1].group() if i + 1 < len(toks) else ""
