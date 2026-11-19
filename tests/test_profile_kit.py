@@ -99,7 +99,8 @@ def test_offwhite_and_jpeg_margins_are_trimmed() -> None:
     with Image.open(buf) as jpeg:
         x0, y0, x1, y1 = _content_bbox(pk.square_logo(jpeg))
     assert max(x1 - x0, y1 - y0) == 420  # ringing trimmed, longest side still fits
-    assert abs((x1 - x0) / (y1 - y0) - 2.0) < 0.05  # 2:1 survives the round trip
+    # 2:1 survives the round trip; per-channel trim keeps some chroma ringing, hence 0.15
+    assert abs((x1 - x0) / (y1 - y0) - 2.0) < 0.15
 
 
 def test_transparency_composites_onto_white() -> None:
@@ -211,3 +212,43 @@ def test_blank_dropped_raster_is_reported(tmp_path: Path) -> None:
 
     assert slug in report.blank and slug not in report.squared
     assert not store.exists("profile", "logos", "issuers", slug, "logo.png")  # no blank square
+
+
+def test_multiline_description_stays_inside_its_bullet() -> None:
+    ent = pk.Entity("Acme", "acme", ((("description", "First para.\n\nSecond para."),),))
+    lines = pk._texts_md(ent).splitlines()
+    i = lines.index("- **description:** First para.")
+    assert lines[i + 1] == "" and lines[i + 2] == "  Second para."  # indented, still the bullet
+
+
+def test_uppercase_suffix_source_is_squared(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    slug = pk.slugify("Cintra Logistics")
+    drop = store.path("profile", "logos", "_sources")
+    drop.mkdir(parents=True)
+    _rect(800, 200, (0, 0, 800, 200)).save(drop / f"{slug}.PNG")
+
+    report = pk.build_kit(store)
+
+    assert slug in report.squared and slug not in report.missing
+
+
+def test_generated_slug_never_collides_with_a_natural_one() -> None:
+    for orgs in [
+        ["東京大学", "北京大学", "Entity 2"],
+        ["C&A", "C.A.", "C-A 2"],
+    ]:
+        slugs = [e.slug for e in _entities_for(orgs)]
+        assert len(slugs) == 3 and len(set(slugs)) == 3, slugs
+
+
+def test_pale_channel_content_is_not_trimmed() -> None:
+    # (255,255,140) is 115 off white on blue alone: luma scores it ~13, under the
+    # 16 tolerance, so a luma threshold cropped it. A dark block sits far away.
+    im = Image.new("RGB", (400, 100), (255, 255, 255))
+    im.paste((255, 255, 140), (0, 40, 20, 60))
+    im.paste((0, 0, 0), (380, 40, 400, 60))
+    out = pk.square_logo(im)
+    left, top, _, bottom = _content_bbox(out)
+    r, _g, b = out.convert("RGB").getpixel((left + 2, (top + bottom) // 2))  # type: ignore[misc]
+    assert r > 200 and b < 200  # the pale block survived at the left edge, not cropped
