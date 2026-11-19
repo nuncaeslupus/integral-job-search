@@ -1,5 +1,27 @@
 # Session handover
 
+## 00028. Pay-statement and publisher-kind fixes merged (#981, #982); leftovers seeded (#983)
+
+Merged: #981 (pay_transparency leftovers from #977), #982 (publisher_kind fixes), #983 (two task files).
+
+- Both PRs took one Opus BLOCK (#981: three fail-closed regressions plus an unpinned adjacency clause;
+  #982: fail-open on English participles, fail-closed on a comma split). Sonnet fixers closed them;
+  round 2 CLEAR on both, CI green, squash-merged.
+- **Seeded under policy C/G (#983):** `t-a3f7ad2a` "Close the pay-statement leftovers from #981" and
+  `t-41dfc5c1` "Close the publisher-kind leftovers from #982". No issue handles yet; the next
+  orchestrator's `handle_sync.py` step creates them.
+- **Auto-merge is not allowed on this repo** (GraphQL refuses enablePullRequestAutoMerge): watch
+  `gh pr checks --watch` and merge with `--match-head-commit`.
+- **Stray local commit on the main checkout:** a fixer left `d453c185` ("style: wrap the _EARNS
+  pattern…") on local `main`, never pushed. Local main has diverged from origin; the owner resets it
+  (`git reset --hard origin/main`). Work from worktrees off `origin/main` until then.
+- **Candidate sweep (scratch, `tmp/sweep.py` + `tmp/triage_new.py` + `tmp/live_check.py`):**
+  every board, every aim term, 165 new offers; the coarse filter keeps 17 and liveness at source
+  leaves few fits. Known gaps seen: `trabajos_es` robots unreachable, `justjoin_en` and `talent_es`
+  serve a challenge page, foorilla and weworkremotely adverts read `unverified` (the fetched page
+  does not carry the title), and `publisher_kind` returns `unknown` on short tecnoempleo texts.
+  The sweep script drops `constraints.json`'s `unattributed` field because the loader refuses it.
+
 ## 00027. Profile kit merged (#914, T07b591f4); review follow-ups filed as T-d98c885c (#915)
 
 Merged: #914 (T07b591f4 / #909, `profile_kit`: squared logos + field texts for Manfred-style
