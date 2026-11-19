@@ -3,6 +3,7 @@ id: t-bd07e01a
 title: "Close the pay-statement leftovers from #977"
 label: "pay statement leftovers 3"
 priority: 5
+status: merged
 ---
 
 Review leftovers from #977, batched per policy G after its second review round (report on #977).

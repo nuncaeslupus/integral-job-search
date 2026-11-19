@@ -58,7 +58,7 @@ _PAY_TAIL = r"(?:net\w*|nets|brut\w*|gross|euros?|eur|usd|dollars?)"
 # ponytail: an allowlist on purpose. A word missing here makes the number read as pay and the
 # sentence refused (fail-closed); an open "any other word" test let "38 bucks" through.
 _UNIT = re.compile(
-    r"(?:releases?|deploy\w*|desplieg\w*|desplegament\w*|prs?|pull|commits?|hires?|"
+    r"(?:releases?|lanzamient\w*|llançament\w*|deploy\w*|desplieg\w*|desplegament\w*|prs?|pull|commits?|hires?|"
     r"contrataci\w*|contractaci\w*|certifica\w*|hours?|horas?|hores|years?|a[nñ]os?|anys?|"
     r"people|persones|personas|engineers?|ingenier\w*|enginyer\w*|developers?|"
     r"desarrollador\w*|desenvolupador\w*|teams?|equip\w*|projects?|proyectos?|projectes?|apps?|"
@@ -70,6 +70,7 @@ _UNIT = re.compile(
 _YEAR_BEFORE = re.compile(
     r"\b(?:in|since|from|until|during|en|desde|des de|hasta|durante|fins|durant|el|l')\s*$", re.I
 )
+_AMOUNT_WORD = re.compile(r"\b(?:until|during|durante|hasta|fins|durant|el|l')", re.I)
 # One money figure: "38k", a thousands number (dot, comma or space separated), five digits or
 # more, a figure beside a currency or a pay period, or a figure in words (mil / thousand / grand).
 _FIGURE = re.compile(
@@ -97,8 +98,9 @@ _WANT_WORDS = (
 _WANT = re.compile(rf"\b{_WANT_WORDS}\b", re.I)
 # Earning verbs in any tense, ES/EN/CA: a sentence with one states pay the candidate has or had.
 _EARNS = re.compile(
-    r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a)|guany(?:o|ava|es|a)|earn(?:s|ed|ing)?|make|makes|made|"
-    r"paid|pays?|takes? home|taking home|took home|pagan|paguen|perc[ei]b\w*|recib\w*|rebo)\b",
+    r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a|é)|guany(?:o|ava|es|a)|vaig guanyar|"
+    r"earn(?:s|ed|ing)?|make|makes|made|paid|pays?|takes? home|taking home|took home|"
+    r"pagan|paguen|perc[ei]b\w*|recib\w*|rebo)\b",
     re.I,
 )
 # Rate words and "I am on": a bare number after them is pay too ("Day rate 300", "I am on 38").
@@ -132,7 +134,13 @@ def _bare_pay_number(text: str) -> bool:
             n = tok.group()
             if not n[0].isdigit() or n[-1] == "k":
                 continue
-            if _YEAR.fullmatch(n) and _YEAR_BEFORE.search(text, 0, tok.start()):
+            yb = _YEAR.fullmatch(n) and _YEAR_BEFORE.search(text, 0, tok.start())
+            # "Gano el 2000": these year words right after the earning word read as an amount.
+            if yb and (
+                not _STRONG_CTX.fullmatch(ctx.group())
+                or _AMOUNT_WORD.search(yb.group()) is None
+                or text[ctx.end() : yb.start()].strip()
+            ):
                 continue
             nxt = toks[i + 1].group() if i + 1 < len(toks) else ""
             if not _UNIT.fullmatch(nxt):

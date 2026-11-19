@@ -252,6 +252,18 @@ MIXED_OR_MISSED_ROWS = [
     "Mi sueldo mínimo era 38k.",
     "My salary minimum was 38k.",
     "El meu sou mínim era 38k.",
+    # #977 leftovers: a year word right after the earning word, and past earning forms.
+    "Gano el 2000.",
+    "Cobro el 1990.",
+    "Me pagan el 1950.",
+    "Em paguen el 1950.",
+    "Cobro durante 2000",
+    "I get paid until 2000",
+    "Guanyo fins 2000.",
+    "Gané 2000.",
+    "Vaig guanyar 2000.",
+    "En 2024 gané 2000.",
+    "El 2024 vaig guanyar 2000.",
 ]
 
 STILL_SENDABLE_ROWS = [
@@ -291,6 +303,18 @@ STILL_SENDABLE_ROWS = [
     "Currently leading 5 engineers.",
     "Actualmente lidero 5 ingenieros.",
     "Ara lidero 5 enginyers.",
+    "Hago 3 lanzamientos a la semana.",
+    "Faig 3 llançaments a la setmana.",
+    # #981 review: a year after a time word, expectations, a word between earning word and year.
+    "Ahora hasta 2026 trabajo en remoto.",
+    "Ara fins 2025 treballo a Barcelona.",
+    "Currently until 2025 I work in Madrid.",
+    "Actualmente durante 2023 lideré 5 ingenieros.",
+    "Vull guanyar 45k.",
+    "Espero que gane 45k.",
+    "Vaig guanyar el premi el 2019.",
+    "Gano 3 lanzamientos a la semana.",
+    "Guanyo 3 llançaments a la setmana.",
 ]
 
 
