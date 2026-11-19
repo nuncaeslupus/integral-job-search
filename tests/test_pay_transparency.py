@@ -100,7 +100,47 @@ def test_own_pay_is_refused_whatever_the_question_asks(tmp_path: Path, question:
         ("¿Expectativa salarial?", "Busco entre 45000 y 50000 euros"),
         ("Expectativa salarial?", "My salary floor is 45000 euros."),
         ("Quines són les teves expectatives salarials?", "Vull entre 45000 i 50000 euros"),
+        ("Salary?", "My ideal salary is 45k."),
+        ("¿Salario?", "Mi salario deseado es 45000 euros."),
+        ("Sou?", "El meu sou ideal és 45.000 €."),
+        ("¿Salario?", "Mi mínimo son cuarenta y cinco mil euros."),
+        ("Sou?", "El meu sou mínim és quaranta-cinc mil euros."),
     ],
 )
 def test_an_expectation_or_floor_is_sendable(tmp_path: Path, question: str, row: str) -> None:
     assert not _defects(tmp_path, question, row, "constraint")
+
+
+LEAKING_ROWS = [
+    # a label and its figure split across clauses
+    "Current salary: 38k",
+    "Salario actual: 38.000 €",
+    "Sou actual: 38.000 €",
+    "My current salary, 38000 euros.",
+    "My current salary and bonus total 45000 euros.",
+    # first-person phrasings
+    "I'm paid 38k.",
+    "I currently earn 38k.",
+    "I was earning 38000 euros.",
+    "My base is 38k.",
+    "Me pagan 38000 euros.",
+    "Suelo cobrar 38000 euros.",
+    "Em paguen 38.000 €.",
+    "Cobrava 38.000 euros.",
+    "Percebo 38.000 euros.",
+    # a bonus word is not an expectation
+    "Mi salario actual es 38000 euros con variable por objetivos.",
+    "I earn 38000 plus a target bonus.",
+    "El meu sou actual és 38000 euros amb variable per objectius.",
+    # figures in words
+    "Treinta y ocho mil euros es mi salario actual.",
+    "My current salary is thirty-eight thousand euros.",
+    "Trenta-vuit mil euros és el meu sou actual.",
+    # a want word beside a current one does not launder it
+    "My current salary is 38000 euros and I am looking for 45000.",
+]
+
+
+@pytest.mark.parametrize("row", LEAKING_ROWS)
+def test_a_pay_figure_that_is_not_an_expectation_is_refused(tmp_path: Path, row: str) -> None:
+    assert _defects(tmp_path, "Anything", row)

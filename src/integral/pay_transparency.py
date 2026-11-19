@@ -46,32 +46,38 @@ _WHEN = (
     r"(?:current\w*|present|now|today|past|previous|prior|last|former|actual\w*|anterior\w*|"
     r"pasad\w+|[uú]ltim\w+|ara|avui|hoy|passat)"
 )
-_MINE = r"(?:my|mi|mis|meu|meva|el meu|la meva)"
-_VERB = (
-    r"(?:\bi\s+(?:earn\w*|make|made|am\s+paid|was\s+paid|get\s+paid|am\s+making)\b|"
-    r"\b(?:cobro|cobraba|gano|ganaba|percibo|guanyo|guanyava|cobraré)\b)"
+# A money figure: a thousands number, a "38k", a figure in words (mil / thousand) or a currency.
+_MONEY = re.compile(
+    r"\d[\d.,]*\s?k\b|\b\d{1,3}(?:[.,]\d{3})+\b|\b\d{5,}\b|\b(?:mil|thousand)\b|"
+    r"[€$£]|\b(?:euros?|eur|usd|dollars?|bruts?|brutos?|gross)\b",
+    re.I,
 )
-# What the candidate wants, not what they get: a floor or an expectation stays sendable.
+# What the candidate asks for, in ES, EN and CA. "target", "objetivo" and "suelo" are not here:
+# a target bonus sits beside a current salary, and "suelo cobrar" means "I usually earn".
 _WANT = re.compile(
-    r"floor|minimum|expect\w*|looking for|seeking|target|desired|busco|m[ií]nim\w*|suelo|"
-    r"espero|expectativ\w*|deseo|objetivo|objectiu|cerco|aspir\w+|pretens\w*|desitj\w*|vull",
+    r"\b(?:floor|minimum|expect\w*|looking for|seeking|desired|ideal|"
+    r"busco|m[ií]nim\w*|espero|expectativ\w*|dese\w+|pretens\w*|aspir\w+|"
+    r"cerco|desitj\w*|vull)\b",
     re.I,
 )
-_OWN_PAY = re.compile(
-    rf"{_VERB}|\b{_PAY}\b.*\b{_WHEN}\b|\b{_WHEN}\b.*\b{_PAY}\b|\b{_MINE}\W+(?:\w+\W+){{0,2}}{_PAY}\b",
-    re.I,
-)
-# ponytail: clause cut by punctuation and a few conjunctions; a figure joined by other words
-# can still slip, then the candidate reads the staged answer.
-_CLAUSE = re.compile(r"[.!?;:]\s|[.!?;:]$|,\s|\n|\b(?:but|and|pero|però|y)\b", re.I)
+_SENTENCE = re.compile(r"[.!?;]+(?:\s+|$)|\n")
 
 
 def states_own_pay(text: str) -> bool:
-    """A clause with a figure that gives the candidate's own pay (not a floor or expectation)."""
-    return any(
-        any(c.isdigit() for c in clause) and not _WANT.search(clause) and _OWN_PAY.search(clause)
-        for clause in _CLAUSE.split(text)
-    )
+    """A sentence with a pay figure that is not clearly an expectation or a floor.
+
+    The default is refusal: a sentence that talks pay with a figure is sendable only when a want
+    word is in it and no current or past marker is, whatever else it says.
+    """
+    for sentence in _SENTENCE.split(text):
+        talks_pay = _MONEY.search(sentence) or (
+            re.search(rf"\b{_PAY}\b", sentence, re.I) and any(c.isdigit() for c in sentence)
+        )
+        if talks_pay and not (
+            _WANT.search(sentence) and not re.search(rf"\b{_WHEN}\b", sentence, re.I)
+        ):
+            return True
+    return False
 
 
 def current_pay_defects(text: str, cited_rows: list[str]) -> list[str]:

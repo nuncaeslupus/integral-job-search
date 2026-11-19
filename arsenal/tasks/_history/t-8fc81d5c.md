@@ -3,6 +3,7 @@ id: t-8fc81d5c
 title: "Close the current-pay leak class left over from #956"
 label: "current pay leak class"
 priority: 5
+status: merged
 ---
 
 Review leftovers from #956 (pay transparency), batched per policy G after its second review round. Full cases in the two second-reader reports on #956.
