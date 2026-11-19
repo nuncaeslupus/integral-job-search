@@ -9,7 +9,7 @@ import pytest
 from integral.candidate import OfferFacts
 from integral.form_answers import FormAnswer, answer_defects
 from integral.identity import ProfileStore, create_profile
-from integral.pay_transparency import RANGE_PROMPT, range_prompt
+from integral.pay_transparency import RANGE_PROMPT, range_prompt, states_own_pay
 from integral.profile import EvidenceLog
 
 NO_RANGE = OfferFacts(offer_id="o1", country="ES", delivery="remote")
@@ -144,3 +144,57 @@ LEAKING_ROWS = [
 @pytest.mark.parametrize("row", LEAKING_ROWS)
 def test_a_pay_figure_that_is_not_an_expectation_is_refused(tmp_path: Path, row: str) -> None:
     assert _defects(tmp_path, "Anything", row)
+
+
+# Round-1 review of #971: a want word beside a current figure, and figures the old money
+# pattern missed. Each must be refused.
+MIXED_OR_MISSED_ROWS = [
+    "I'm paid 38k, looking for 45k.",
+    "I earn 38k and I'm looking for 45k.",
+    "I make 38,000 and expect 45,000.",
+    "My expected salary is 45k, I get 38k.",
+    "Cobro 38k y busco 45k.",
+    "Cobro 38.000 € y busco 45.000 €.",
+    "Gano 38.000 euros, espero 45.000.",
+    "Busco 45k pero cobro 38k",
+    "Expectativa 45k (cobro 38k)",
+    "Guanyo 38.000 € i busco 45.000 €.",
+    "Guanyo 38.000 € i vull 45.000 €.",
+    "I earn 38 000.",
+    "I earn 38 000 a year.",
+    "Cobro 38 000 al año.",
+    "I make 38 000 and expect 45 000.",
+    "I earn 3200 a month.",
+    "Cobro 3200 al mes.",
+    "Guanyo 3200 al mes.",
+    "I earn 3.200 per month, looking for more.",
+    "I earn thirty eight grand.",
+    "Expectativa 45k (ahora 38k).",
+]
+
+STILL_SENDABLE_ROWS = [
+    "Mi salario deseado es 45000 euros.",
+    "My ideal salary is 45k.",
+    "El meu sou ideal és 45.000 €.",
+    "Minimum 40k.",
+    "My floor is 40.000 €.",
+    "Busco 45.000 € brutos.",
+    "Expectativa salarial: 45k.",
+    "Expected salary: 45k",
+    "Salario mínimo: 40.000 €",
+    "Sou mínim: 40.000 €",
+    "Desitjo 45.000 €.",
+    "Looking for 45-50k.",
+    "Expected range 45,000-50,000 EUR.",
+    "I have 5 years of experience.",
+]
+
+
+@pytest.mark.parametrize("row", MIXED_OR_MISSED_ROWS)
+def test_a_current_figure_beside_a_want_word_is_refused(row: str) -> None:
+    assert states_own_pay(row)
+
+
+@pytest.mark.parametrize("row", STILL_SENDABLE_ROWS)
+def test_a_lone_expectation_stays_sendable(row: str) -> None:
+    assert not states_own_pay(row)
