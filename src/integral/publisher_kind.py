@@ -16,6 +16,7 @@ from typing import Literal
 PublisherKind = Literal["direct", "consultancy", "agency", "unknown"]
 
 FACET = "publisher"
+EXCLUDABLE = frozenset(["consultancy", "agency"])  # `unknown` would exclude every cue-less advert
 
 # One row per concept, its Spanish, English and Catalan form side by side, so a
 # placement cannot be recognised in one language and missed in the others.
@@ -27,38 +28,52 @@ _CA_M = r"(?:(?:important|gran) )?"
 _ES_D = r"(?:(?:un|una|nuestro|nuestra) )?"
 _EN_D = r"(?:(?:a|an|our|the) )?"
 _CA_D = r"(?:(?:un|una|el nostre|el) )?"
+# "client" is a placement only as the head noun: not before a hyphen ("client-facing"),
+# and in English not before another noun ("client success team"), which is a modifier.
+# Spanish and Catalan put modifiers after the noun, so only the hyphen rule applies.
+_FN = "in|at|of|for|on|to|with|from|and|or|who|whose|which|that|where|is|are|seeks|by|as|will|can"
+_PART = r"\w{3,}ed\b"  # "client based in", "client located in": a participle is not a noun
+_END = r"(?![\w-])"
+_END_EN = rf"(?![\w-])(?![ ]+(?!(?:{_FN})\b)(?!{_PART})[a-z])"
+_NOT_PAST = r"(?![ ]+(?:in|en) (?:19|20)\d\d)"  # "built X for a client in 2019"
 _CONSULTANCY_CONCEPTS: tuple[tuple[str, str, str], ...] = (
     # for a client
     (
-        rf"(?:para {_ES_D}|a (?:un|nuestro) ){_ES_M}(?:empresa )?cliente\b",
-        rf"for (?:a|an|our) {_EN_M}(?:end )?client\b",
-        rf"per (?:a (?:un|una)|al nostre) {_CA_M}(?:empresa )?client\b",
+        rf"para {_ES_D}{_ES_M}(?:empresa )?cliente{_END}{_NOT_PAST}",
+        rf"for (?:a|an|our) {_EN_M}(?:end )?client{_END_EN}{_NOT_PAST}",
+        rf"per (?:a (?:un|una)|al nostre) {_CA_M}(?:empresa )?client{_END}{_NOT_PAST}",
     ),
     # joining a client
     (
-        rf"incorporacion a {_ES_D}{_ES_M}(?:empresa )?cliente\b"
-        rf"|incorporar(?:te|se)? a (?:un|nuestro) {_ES_M}cliente\b",
-        rf"join(?:ing)? (?:a|an|our|the) {_EN_M}client\b",
-        rf"incorporacio a {_CA_D}{_CA_M}(?:empresa )?client\b"
-        rf"|incorporar-(?:te|se) a(?:l nostre| un) {_CA_M}client\b",
+        rf"incorporacion a {_ES_D}{_ES_M}(?:empresa )?cliente{_END}"
+        rf"|incorporar(?:te|se)? a (?:un|nuestro) {_ES_M}cliente{_END}",
+        rf"join(?:ing)? (?:a|an|our|the) {_EN_M}client{_END_EN}",
+        rf"incorporacio a {_CA_D}{_CA_M}(?:empresa )?client{_END}"
+        rf"|incorporar-(?:te|se) a(?:l nostre| un) {_CA_M}client{_END}",
     ),
     # the advert is written in the client's voice
     (
-        r"nuestro cliente (?:es|busca)\b",
-        r"our client (?:is|seeks)\b",
-        r"el nostre client (?:es|busca)\b",
+        r"nuestro cliente (?:busca|es (?:un|una)\b)",
+        r"our client (?:seeks|is (?:a|an|looking|seeking|hiring)\b)",
+        r"el nostre client (?:busca|es (?:un|una)\b)",
+    ),
+    # a self-description
+    (
+        r"somos una consultor(?:a|ia)\b",
+        r"we are a (?:consultancy|consulting (?:firm|company))\b",
+        r"som una consultor(?:a|ia)\b",
     ),
     # working at the client
     (
-        rf"trabajar(?:as)? en {_ES_D}{_ES_M}cliente\b",
-        rf"(?:placed|work|working|based) (?:with|at|for) {_EN_D}{_EN_M}(?:end )?client\b",
-        rf"treballar(?:as)? (?:a|en) {_CA_D}{_CA_M}client\b",
+        rf"trabajar(?:as)? en {_ES_D}{_ES_M}cliente{_END}",
+        rf"(?:placed|work|working|based) (?:with|at|for) {_EN_D}{_EN_M}(?:end )?client{_END_EN}",
+        rf"treballar(?:as)? (?:a|en) {_CA_D}{_CA_M}client{_END}",
     ),
     # on behalf of a client
     (
-        r"en nombre de (?:un|nuestro) cliente\b",
-        r"on behalf of (?:a|our) client\b",
-        r"en nom (?:d'un|del nostre) client\b",
+        rf"en nombre de (?:un|nuestro) cliente{_END}",
+        rf"on behalf of (?:a|our) client{_END_EN}",
+        rf"en nom (?:d'un|del nostre) client{_END}",
     ),
 )
 _AGENCY_CONCEPTS: tuple[tuple[str, str, str], ...] = (
@@ -82,11 +97,26 @@ _NEGATORS = frozenset(["sin", "ni", "no", "nunca", "sense", "mai", "not", "never
 _NEGATION_WINDOW = 4  # words before a cue, within its sentence
 
 
+_JOINER = re.compile(r"\b(?:ni|or|nor|o)\b")
+_ASIDE = re.compile(r"\s*(?:and|y|i|or|o)\b")
+
+
 def _cue(pattern: re.Pattern[str], folded: str) -> bool:
-    """A cue counts unless a negator sits in the few words before it ("sin ETT")."""
+    """A cue counts unless a negator sits in the few words before it ("sin ETT").
+
+    A negation runs through a comma list ("no X, ETT ni Y") or aside ("not, and never
+    will be, a staffing agency"); any other comma ends it ("No cal angles, treballaras a").
+    """
     for match in pattern.finditer(folded):
-        sentence = re.split(r"[.;:!?\n]", folded[: match.start()])[-1]
-        if not _NEGATORS & set(re.findall(r"\w+", sentence)[-_NEGATION_WINDOW:]):
+        parts = re.split(r"[.;:!?\n]", folded[: match.start()])[-1].split(",")
+        tail = folded[match.end() :].split(",")[0]
+        words = re.findall(r"\w+", parts[-1])
+        # ponytail: one-word list items and joiner-led asides only; add shapes as they appear
+        for part in reversed(parts[:-1]):
+            if len(words) > 1 or not (_JOINER.search(tail) or _ASIDE.match(part)):
+                break
+            words = re.findall(r"\w+", part) + words
+        if not _NEGATORS & set(words[-_NEGATION_WINDOW:]):
             return True
     return False
 
