@@ -46,7 +46,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from integral import skill_requirement, topic_scope
+from integral import publisher_kind, skill_requirement, topic_scope
 from integral.candidate import CONSTRAINT_FIELD_NAMES, FIELD_MODELS
 from integral.identity import IdentityError, ProfileStore
 from integral.offers import Offer, names_an_employer
@@ -638,6 +638,10 @@ def matches(candidate: Candidate, exclusion: Exclusion) -> bool:
             candidate.required_skills,
             skill_requirement.target_of(exclusion.value, exclusion.terms),
         )
+    if exclusion.facet.strip().lower() == publisher_kind.FACET:
+        # `publisher:consultancy` / `publisher:agency`: who published it, from cues.
+        text = f"{candidate.title or ''}\n{candidate.text}"
+        return publisher_kind.publisher_kind(text) == exclusion.value.strip().lower()
     return bool(topic_hits(candidate, exclusion))
 
 
@@ -677,7 +681,11 @@ def topic_hits(candidate: Candidate, exclusion: Exclusion) -> tuple[tuple[str, s
 
 
 def _is_topic(exclusion: Exclusion) -> bool:
-    return exclusion.facet.strip().lower() not in {"employer", skill_requirement.FACET}
+    return exclusion.facet.strip().lower() not in {
+        "employer",
+        skill_requirement.FACET,
+        publisher_kind.FACET,
+    }
 
 
 def held_in_words(candidate: Candidate, exclusions: Iterable[Exclusion]) -> tuple[str, ...]:
