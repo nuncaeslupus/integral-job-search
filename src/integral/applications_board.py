@@ -90,7 +90,10 @@ def follow_up(status: str, applied_on: str, today: date) -> str:
     """
     if status != "applied" or not re.match(r"\d{4}-\d{2}-\d{2}", applied_on):
         return ""
-    days = (today - date.fromisoformat(applied_on[:10])).days
+    try:
+        days = (today - date.fromisoformat(applied_on[:10])).days
+    except ValueError:  # an impossible date is still a row on the board, just with no reminder
+        return ""
     return STALLED if days >= STALLED_DAYS else FOLLOW_UP if days >= FOLLOW_UP_DAYS else ""
 
 
