@@ -29,6 +29,7 @@ An offer with status `applied` and an interview arranged, for the preparation ha
 ## Protocol — the manner, not the mechanism
 
 - *Before:* work out what this employer is likely to press on — from the advert's emphases, the application's claims, previous interviews — and rehearse the episodes that answer it, using the bank rather than inventing. Offer, once, to record the real interview so the candidate and the tool can go through it together afterwards; the `transcribe-interview` skill has the how-to and the tools.
+- *Pay:* when the advert published no pay range (`integral.pay_transparency.range_prompt`), the preparation includes the candidate asking for it before the first interview, worded in their language (Spanish, English or Catalan). Never put the candidate's current or past pay in a script or rehearsed answer; if asked, the answer is the expected range from their stated floor.
 - **The mock interview is a role-play, and it is strict.** Say so before it starts: from that point the tool is the interviewer and nothing else — no coaching mid-answer, no breaking character. It ends when it ends, then the ordinary voice comes back with the feedback. Offer dictation.
 - *After:* record what was actually asked, what went well, what they wish they had said, and the outcome when it comes — and **give the feedback then**, while it is fresh. If they recorded it, turn the recording into a dialog with `transcribe-interview` first and work from that rather than from memory.
 
