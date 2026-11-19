@@ -22,3 +22,14 @@ def test_step_11_relies_on_the_step_0_grant() -> None:
     line = next(ln for ln in _text("step-11-application").splitlines() if GRANT in ln)
     assert "granted at step 0" in line
     assert "only if this session never passed step 0" in line
+
+
+def test_step_0_grants_only_once_the_candidate_has_confirmed_who_they_are() -> None:
+    line = next(ln for ln in _text("step-00-identify").splitlines() if GRANT in ln)
+    assert "the candidate has confirmed who they are" in line
+
+
+def test_step_0_and_step_11_agree_on_when_the_grant_repeats() -> None:
+    line = next(ln for ln in _text("step-00-identify").splitlines() if GRANT in ln)
+    assert "never repeat" not in line
+    assert "repeat it only when the session never passed step 0" in line
