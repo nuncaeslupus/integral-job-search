@@ -84,7 +84,8 @@ Required, not optional. A note captured and never surfaced is the failure this w
 
 1. Print the full list — `query_notes.py --id <session-id>`.
 2. Ask which notes should be addressed. Ask; do not choose.
-3. Seed only those — `query_notes.py --id <session-id> --seed 1,3` prints one `create_task.py` invocation per confirmed note. Run them yourself after reading them.
+3. Seed only those — `query_notes.py --id <session-id> --seed 1,3` prints one `create_task.py` invocation per confirmed note. Run them yourself after reading them. Then record every note's decision in the ledger: `--decide <n> seeded --task <t-id>` or `--decide <n> discarded --reason "<why>"`.
+4. The session ends only when `query_notes.py --id <session-id> --check` exits 0; it exits 1 and lists any note still undecided.
 
 **Never:**
 
