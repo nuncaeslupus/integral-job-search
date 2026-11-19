@@ -170,6 +170,37 @@ MIXED_OR_MISSED_ROWS = [
     "I earn 3.200 per month, looking for more.",
     "I earn thirty eight grand.",
     "Expectativa 45k (ahora 38k).",
+    "I earn 25 an hour.",
+    "Cobro 20 la hora.",
+    "Guanyo 20 per hora.",
+    "I make 300 a day.",
+    "Cobro 150 al día.",
+    "Gano 38.",
+    "Looking for 45k. Earn 38 now.",
+    "Minimum: what my employer pays me, 38k.",
+    "Busco pasar desde 38k a 45k.",
+    # Leftovers from #971 round 2: a range start, a possessive, past tense, figures with words
+    # between the number and its period.
+    "Busco pasar de 38k a 45k.",
+    "Vull passar de 38k a 45k.",
+    "Expecting a raise from 38k to 45k.",
+    "Looking for more than the 38k I make.",
+    "Espero mantener mi sueldo de 38k.",
+    "Vull mantenir el meu sou de 38k.",
+    "Busco lo mismo que cobraba en 2023: 38k.",
+    "Minimum is what I was paid in 2022, 38k.",
+    "Busco el que cobrava, 38k.",
+    "Busco 45k, cobro 38.",
+    "Busco 45k i cobro 38.",
+    "Looking for 45k, I make 38 at the moment.",
+    "Cobro 1800 netos al mes.",
+    "Cobro 1800 nets al mes.",
+    "I take home 2500 net a month.",
+    "Gano 38 al año.",
+    "Minimum 40k, I earned 38k.",
+    "Mi sueldo es 38k.",
+    "1800 netos al mes.",
+    "2500 net a month.",
 ]
 
 STILL_SENDABLE_ROWS = [
@@ -187,6 +218,9 @@ STILL_SENDABLE_ROWS = [
     "Looking for 45-50k.",
     "Expected range 45,000-50,000 EUR.",
     "I have 5 years of experience.",
+    "I'd like 45k.",
+    "Mi expectativa actualizada es 45k.",
+    "My expected salary is 45k.",
 ]
 
 

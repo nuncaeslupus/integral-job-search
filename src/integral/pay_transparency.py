@@ -43,35 +43,49 @@ _PAY = (
     r"retribuci\w+|remuneraci\w+|sou|salari)"
 )
 _WHEN = (
-    r"(?:current\w*|present|now|today|past|previous|prior|last|former|actual\w*|anterior\w*|"
+    r"(?:current\w*|present|now|today|past|previous|prior|last|former|actual(?!iz)\w*|anterior\w*|"
     r"pasad\w+|[uú]ltim\w+|ara|avui|ahora|hoy|passat)"
 )
 _PERIOD = (
     r"(?:al mes|a month|per month|/\s?mes|/\s?month|mensual\w*|monthly|al año|a year|per year|"
-    r"per annum|anual\w*|annual\w*|yearly|a l'any|al any|l'any)"
+    r"per annum|anual\w*|annual\w*|yearly|a l'any|al any|l'any|an hour|per hour|hourly|la hora|"
+    r"por hora|per hora|a l'hora|a day|per day|daily|al d[ií]a|por d[ií]a|al dia|per dia)"
 )
 _CURRENCY = r"(?:[€$£]|\b(?:euros?|eur|usd|dollars?)\b)"
 # One money figure: "38k", a thousands number (dot, comma or space separated), five digits or
 # more, a figure beside a currency or a pay period, or a figure in words (mil / thousand / grand).
 _FIGURE = re.compile(
     rf"\d[\d.,]*\s?k\b|\b\d{{1,3}}(?:[.,\u00a0\u202f ]\d{{3}})+\b|\b\d{{5,}}\b|"
-    rf"\b\d+(?:[.,]\d+)?\s?{_CURRENCY}|[€$£]\s?\d|\b\d{{3,4}}\s*{_PERIOD}|"
+    rf"\b\d+(?:[.,]\d+)?\s?{_CURRENCY}|[€$£]\s?\d|\b\d{{2,4}}(?:\s+[^\W\d]+){{0,2}}\s*{_PERIOD}|"
     r"\b(?:mil|thousand|grand)\b",
     re.I,
 )
 _TALKS_PAY = re.compile(rf"{_CURRENCY}|\b(?:bruts?|brutos?|gross)\b", re.I)
-# The low end of a range is dropped, so "45-50k" or "entre 45 y 50k" is one figure.
+# The low end of a range is dropped, so "45-50k" or "entre 45 y 50k" is one figure. "de/from 38k a
+# 45k" is not a range to drop: it says where the candidate stands now, so both figures count.
 _RANGE_LOW = re.compile(
+    r"(?<![\d.,])(?<!de )(?<!from )"
     r"\d[\d.,\u00a0\u202f ]*\s?k?\s*(?:-|\u2013|\bto\b|\ba\b|\bal\b)\s*(?=[€$£]?\d)|"
     r"\b(?:entre|between)\s+\d[\d.,\u00a0\u202f ]*\s?k?\s*(?:y|and|i)\s+(?=[€$£]?\d)",
     re.I,
 )
 # What the candidate asks for, in ES, EN and CA. "target", "objetivo" and "suelo" are not here:
 # a target bonus sits beside a current salary, and "suelo cobrar" means "I usually earn".
-_WANT = re.compile(
-    r"\b(?:floor|minimum|expect\w*|looking for|seeking|desired|ideal|"
+_WANT_WORDS = (
+    r"(?:floor|minimum|expect\w*|looking for|seeking|desired|ideal|(?:'d|would) like|"
     r"busco|m[ií]nim\w*|espero|expectativ\w*|dese\w+|pretens\w*|aspir\w+|"
-    r"cerco|desitj\w*|vull)\b",
+    r"cerco|desitj\w*|vull)"
+)
+_WANT = re.compile(rf"\b{_WANT_WORDS}\b", re.I)
+# Earning verbs in any tense, ES/EN/CA: a sentence with one states pay the candidate has or had.
+_EARNS = re.compile(
+    r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a)|guany(?:o|ava|es|a)|earn(?:s|ed|ing)?|make|makes|made|"
+    r"paid|pays?|takes? home|taking home|took home)\b",
+    re.I,
+)
+# "my salary" with no want word right beside it ("my ideal salary", "salario deseado" are fine).
+_OWN_PAY = re.compile(
+    rf"\b(?:my|mi|mis|el meu|la meva|els meus|les meves)\s+{_PAY}\b(?!\s+{_WANT_WORDS}\b)",
     re.I,
 )
 _SENTENCE = re.compile(r"[.!?;]+(?:\s+|$)|\n")
@@ -80,7 +94,9 @@ _SENTENCE = re.compile(r"[.!?;]+(?:\s+|$)|\n")
 def _sendable(sentence: str) -> bool:
     """Clearly an expectation or a floor: one figure (or range), a want word before it, and no
     current or past marker anywhere in the sentence."""
-    if re.search(rf"\b{_WHEN}\b", sentence, re.I):
+    if re.search(rf"\b{_WHEN}\b", sentence, re.I) or _EARNS.search(sentence):
+        return False
+    if _OWN_PAY.search(sentence):
         return False
     flat = _RANGE_LOW.sub("", sentence)
     # A pay word with only a bare number ("floor is not under 50") counts that number.
@@ -104,6 +120,8 @@ def states_own_pay(text: str) -> bool:
             _FIGURE.search(sentence)
             or _TALKS_PAY.search(sentence)
             or (re.search(rf"\b{_PAY}\b", sentence, re.I) and any(c.isdigit() for c in sentence))
+            # An earning verb beside any number states pay: "Gano 38", "I earn 25 an hour".
+            or (_EARNS.search(sentence) and any(c.isdigit() for c in sentence))
         )
         if talks_pay and not _sendable(sentence):
             return True
