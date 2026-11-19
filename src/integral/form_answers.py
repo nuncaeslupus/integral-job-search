@@ -85,6 +85,7 @@ from integral.claim_trace import (
 )
 from integral.cv_store import _atomic_write_json, _atomic_write_text
 from integral.identity import ProfileStore, create_profile
+from integral.pay_transparency import current_pay_defects
 from integral.profile import EvidenceLog, EvidenceRow
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -388,6 +389,7 @@ def answer_defects(
     if cited and (extra := sorted(set(_tokens(text)) - held)):
         defects.append(f"{SOURCE_DEFECT}: {', '.join(extra)} come from no cited row")
     flat = " ".join(text.split())
+    defects += current_pay_defects(answer.question, cited)
     defects += _denial_defects(text, cited)
     defects += [
         f"{d.kind}: {d.detail}"
