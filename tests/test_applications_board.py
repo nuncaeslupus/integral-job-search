@@ -462,3 +462,30 @@ def test_the_planned_deletion_names_the_new_folders(store: ProfileStore) -> None
     board.write_board(store)
     areas = plan_deletion(store.path().parent, "ada").areas
     assert "tracking links" in areas and "reports" in areas
+
+
+@pytest.mark.parametrize(
+    ("today", "expected"),
+    [("2026-09-24", ""), ("2026-09-25", board.FOLLOW_UP), ("2026-11-03", board.STALLED)],
+)
+def test_collect_fills_the_follow_up_from_the_send_date(
+    store: ProfileStore, today: str, expected: str
+) -> None:
+    from datetime import date
+
+    _offer(store, "f1")
+    _sent(store, "f1", "2026-09-04T12:00:00Z")
+    record_application_status(store, "f1", status="applied", at="2026-09-04T12:00:00Z")
+    row = {r.offer_id: r for r in board.collect(store, today=date.fromisoformat(today)).rows}["f1"]
+    assert row.follow_up == expected
+
+
+def test_an_impossible_send_date_is_still_a_row_without_a_reminder(store: ProfileStore) -> None:
+    _offer(store, "bad")
+    _sent(store, "bad", "2026-13-45T12:00:00Z")
+    record_application_status(store, "bad", status="applied", at="2026-09-04T12:00:00Z")
+    _offer(store, "ok")
+    _sent(store, "ok", "2026-09-04T12:00:00Z")
+    rows = _rows(store)
+    assert set(rows) == {"bad", "ok"}
+    assert rows["bad"].follow_up == ""
