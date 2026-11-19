@@ -85,7 +85,8 @@ def square_logo(im: PILImage, *, canvas: int = CANVAS, fit: int = FIT) -> PILIma
     flat = Image.new("RGBA", im.size, (*_WHITE, 255))
     flat.alpha_composite(im.convert("RGBA"))
     rgb = flat.convert("RGB")
-    diff = ImageChops.difference(rgb, Image.new("RGB", rgb.size, _WHITE)).convert("L")
+    dr, dg, db = ImageChops.difference(rgb, Image.new("RGB", rgb.size, _WHITE)).split()
+    diff = ImageChops.lighter(ImageChops.lighter(dr, dg), db)  # per-channel max, not luma
     bbox = diff.point(lambda v: 255 if v > _WHITE_TOL else 0).getbbox()
     if not bbox:
         raise BlankLogo
@@ -126,13 +127,17 @@ def _dates(start: str | None, end: str | None) -> str:
     return start or end or ""
 
 
-def _unique_slug(base: str, used: dict[str, int]) -> str:
+def _unique_slug(base: str, used: set[str]) -> str:
     """A folder-safe slug unique within this run. slugify is lossy — non-Latin names
     and long names collapse to one slug — so distinct entities would otherwise share a
-    folder; suffix the repeats (``entity``, ``entity-2``) rather than overwrite."""
-    n = used.get(base, 0) + 1
-    used[base] = n
-    return base if n == 1 else f"{base}-{n}"
+    folder; suffix the repeats (``entity``, ``entity-2``) rather than overwrite. ``used``
+    holds every slug already emitted, so a suffix never lands on another entity's slug."""
+    slug, n = base, 1
+    while slug in used:
+        n += 1
+        slug = f"{base}-{n}"
+    used.add(slug)
+    return slug
 
 
 def entities(master: CVMaster) -> list[Entity]:
@@ -163,7 +168,7 @@ def entities(master: CVMaster) -> list[Entity]:
         if c.issuer and c.issuer.strip():
             add(c.issuer, [("certificate", c.name), ("obtained", c.obtained or "")])
 
-    used: dict[str, int] = {}
+    used: set[str] = set()
     return [
         Entity(by_key[k][0], _unique_slug(slugify(by_key[k][0]), used), tuple(by_key[k][1]))
         for k in order
@@ -175,7 +180,8 @@ def _texts_md(entity: Entity) -> str:
     for i, block in enumerate(entity.blocks):
         if i:
             out.append("---")
-        out += [f"- **{label}:** {value}" for label, value in block]
+        # indent continuation lines so a multi-line value stays inside its bullet
+        out += [f"- **{label}:** " + re.sub(r"\n(?=.)", "\n  ", value) for label, value in block]
         out.append("")
     return "\n".join(out).rstrip() + "\n"
 
@@ -207,7 +213,8 @@ def _place_logo(store: ProfileStore, slug: str, report: Report) -> str:
     """Square a dropped raster into the entity folder, keep an .svg beside, or report
     the logo missing. Returns the logo status for this slug."""
     drop = store.path(*_SOURCES)
-    raster = next((drop / f"{slug}{s}" for s in _RASTER if (drop / f"{slug}{s}").is_file()), None)
+    files = {f.name.lower(): f for f in drop.iterdir() if f.is_file()} if drop.is_dir() else {}
+    raster = next((files[f"{slug}{s}"] for s in _RASTER if f"{slug}{s}" in files), None)
     svg = drop / f"{slug}.svg"
     dest_dir = store.path(*LOGOS, _ISSUERS, slug)
     if raster:
