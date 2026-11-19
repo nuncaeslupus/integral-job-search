@@ -52,11 +52,29 @@ _PERIOD = (
     r"por hora|per hora|a l'hora|a day|per day|daily|al d[ií]a|por d[ií]a|al dia|per dia)"
 )
 _CURRENCY = r"(?:[€$£]|\b(?:euros?|eur|usd|dollars?)\b)"
+# Words that may sit between a figure and its period: net, gross, currency.
+_PAY_TAIL = r"(?:net\w*|nets|brut\w*|gross|euros?|eur|usd|dollars?)"
+# Countable things a number can measure beside an earning word ("I make 3 releases a week").
+# ponytail: an allowlist on purpose. A word missing here makes the number read as pay and the
+# sentence refused (fail-closed); an open "any other word" test let "38 bucks" through.
+_UNIT = re.compile(
+    r"(?:releases?|deploy\w*|desplieg\w*|desplegament\w*|prs?|pull|commits?|hires?|"
+    r"contrataci\w*|contractaci\w*|certifica\w*|hours?|horas?|hores|years?|a[nñ]os?|anys?|"
+    r"people|persones|personas|engineers?|ingenier\w*|enginyer\w*|developers?|"
+    r"desarrollador\w*|desenvolupador\w*|teams?|equip\w*|projects?|proyectos?|projectes?|apps?|"
+    r"clients?|clientes?|users?|usuari\w*|awards?|premi\w*|patents?|patentes?|papers?|"
+    r"articles?|art[ií]culos?|courses?|cursos?|promotions?|ascensos?)",
+    re.I,
+)
+# A four-digit year counts as a year only after a word that introduces one ("in 2023").
+_YEAR_BEFORE = re.compile(
+    r"\b(?:in|since|from|until|during|en|desde|des de|hasta|durante|fins|durant|el|l')\s*$", re.I
+)
 # One money figure: "38k", a thousands number (dot, comma or space separated), five digits or
 # more, a figure beside a currency or a pay period, or a figure in words (mil / thousand / grand).
 _FIGURE = re.compile(
     rf"\d[\d.,]*\s?k\b|\b\d{{1,3}}(?:[.,\u00a0\u202f ]\d{{3}})+\b|\b\d{{5,}}\b|"
-    rf"\b\d+(?:[.,]\d+)?\s?{_CURRENCY}|[€$£]\s?\d|\b\d{{2,4}}(?:\s+[^\W\d]+){{0,2}}\s*{_PERIOD}|"
+    rf"\b\d+(?:[.,]\d+)?\s?{_CURRENCY}|[€$£]\s?\d|\b\d{{2,4}}(?:\s+{_PAY_TAIL}){{0,2}}\s*{_PERIOD}|"
     r"\b(?:mil|thousand|grand)\b",
     re.I,
 )
@@ -80,9 +98,21 @@ _WANT = re.compile(rf"\b{_WANT_WORDS}\b", re.I)
 # Earning verbs in any tense, ES/EN/CA: a sentence with one states pay the candidate has or had.
 _EARNS = re.compile(
     r"\b(?:cobr\w*|gan(?:o|aba|[aá]s|a)|guany(?:o|ava|es|a)|earn(?:s|ed|ing)?|make|makes|made|"
-    r"paid|pays?|takes? home|taking home|took home)\b",
+    r"paid|pays?|takes? home|taking home|took home|pagan|paguen|perc[ei]b\w*|recib\w*|rebo)\b",
     re.I,
 )
+# Rate words and "I am on": a bare number after them is pay too ("Day rate 300", "I am on 38").
+_RATE = r"\b(?:rates?|tarifa\w*)\b|\bI(?:'m|\s+am)\s+on\b"
+_CTX = re.compile(rf"{_EARNS.pattern}|\b{_WHEN}\b|{_RATE}", re.I)
+_STRONG_CTX = re.compile(rf"{_EARNS.pattern}|{_RATE}", re.I)
+# Comparison with what they have now, and past tense: "same as I have", "mínimo era 38k".
+_SAME = re.compile(
+    r"\b(?:same as|igual que|lo mismo|el mateix|como en mi|com (?:al|en el) meu|como (?:en )?mi)\b",
+    re.I,
+)
+_PAST = re.compile(r"\b(?:was|were|had|era|eren|fue|fueron|ten[ií]a)\b", re.I)
+_TOKEN = re.compile(r"\d+(?:[.,]\d+)?(?:\s?k\b)?|[^\W\d]+")
+_YEAR = re.compile(r"(?:19|20)\d{2}")
 # "my salary" with no want word right beside it ("my ideal salary", "salario deseado" are fine).
 _OWN_PAY = re.compile(
     rf"\b(?:my|mi|mis|el meu|la meva|els meus|les meves)\s+{_PAY}\b(?!\s+{_WANT_WORDS}\b)",
@@ -91,12 +121,31 @@ _OWN_PAY = re.compile(
 _SENTENCE = re.compile(r"[.!?;]+(?:\s+|$)|\n")
 
 
+def _bare_pay_number(text: str) -> bool:
+    """A bare number after an earning, payer or rate word (anywhere later in the text) or within
+    three words after a time word, unless a countable noun follows it ("3 releases") or it is a
+    year introduced as one ("in 2023")."""
+    for ctx in _CTX.finditer(text):
+        toks = list(_TOKEN.finditer(text, ctx.end()))
+        reach = len(toks) if _STRONG_CTX.fullmatch(ctx.group()) else 4
+        for i, tok in enumerate(toks[:reach]):
+            n = tok.group()
+            if not n[0].isdigit() or n[-1] == "k":
+                continue
+            if _YEAR.fullmatch(n) and _YEAR_BEFORE.search(text, 0, tok.start()):
+                continue
+            nxt = toks[i + 1].group() if i + 1 < len(toks) else ""
+            if not _UNIT.fullmatch(nxt):
+                return True
+    return False
+
+
 def _sendable(sentence: str) -> bool:
     """Clearly an expectation or a floor: one figure (or range), a want word before it, and no
     current or past marker anywhere in the sentence."""
     if re.search(rf"\b{_WHEN}\b", sentence, re.I) or _EARNS.search(sentence):
         return False
-    if _OWN_PAY.search(sentence):
+    if _OWN_PAY.search(sentence) or _SAME.search(sentence) or _PAST.search(sentence):
         return False
     flat = _RANGE_LOW.sub("", sentence)
     # A pay word with only a bare number ("floor is not under 50") counts that number.
@@ -115,13 +164,21 @@ def states_own_pay(text: str) -> bool:
     or past marker is in it. So "I earn 38k, looking for 45k" (two figures) and "I'm paid 38k,
     looking for more" (want word after the figure) are refused.
     """
-    for sentence in _SENTENCE.split(text):
+    sentences = _SENTENCE.split(text)
+    for i, sentence in enumerate(sentences):
+        # "I earn well. Really well. It is 38.": an earning word with no number looks ahead to the
+        # next sentence that has one.
+        if _STRONG_CTX.search(sentence) and not any(c.isdigit() for c in sentence):
+            later = sentences[i + 1 :]
+            j = next((k for k, s in enumerate(later) if any(c.isdigit() for c in s)), None)
+            if j is not None and _bare_pay_number(" ".join([sentence, *later[: j + 1]])):
+                return True
         talks_pay = (
             _FIGURE.search(sentence)
             or _TALKS_PAY.search(sentence)
             or (re.search(rf"\b{_PAY}\b", sentence, re.I) and any(c.isdigit() for c in sentence))
-            # An earning verb beside any number states pay: "Gano 38", "I earn 25 an hour".
-            or (_EARNS.search(sentence) and any(c.isdigit() for c in sentence))
+            # A bare number after an earning, time or rate word states pay: "Gano 38".
+            or _bare_pay_number(sentence)
         )
         if talks_pay and not _sendable(sentence):
             return True
