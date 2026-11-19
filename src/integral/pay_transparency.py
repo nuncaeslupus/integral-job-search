@@ -44,34 +44,70 @@ _PAY = (
 )
 _WHEN = (
     r"(?:current\w*|present|now|today|past|previous|prior|last|former|actual\w*|anterior\w*|"
-    r"pasad\w+|[uú]ltim\w+|ara|avui|hoy|passat)"
+    r"pasad\w+|[uú]ltim\w+|ara|avui|ahora|hoy|passat)"
 )
-_MINE = r"(?:my|mi|mis|meu|meva|el meu|la meva)"
-_VERB = (
-    r"(?:\bi\s+(?:earn\w*|make|made|am\s+paid|was\s+paid|get\s+paid|am\s+making)\b|"
-    r"\b(?:cobro|cobraba|gano|ganaba|percibo|guanyo|guanyava|cobraré)\b)"
+_PERIOD = (
+    r"(?:al mes|a month|per month|/\s?mes|/\s?month|mensual\w*|monthly|al año|a year|per year|"
+    r"per annum|anual\w*|annual\w*|yearly|a l'any|al any|l'any)"
 )
-# What the candidate wants, not what they get: a floor or an expectation stays sendable.
+_CURRENCY = r"(?:[€$£]|\b(?:euros?|eur|usd|dollars?)\b)"
+# One money figure: "38k", a thousands number (dot, comma or space separated), five digits or
+# more, a figure beside a currency or a pay period, or a figure in words (mil / thousand / grand).
+_FIGURE = re.compile(
+    rf"\d[\d.,]*\s?k\b|\b\d{{1,3}}(?:[.,\u00a0\u202f ]\d{{3}})+\b|\b\d{{5,}}\b|"
+    rf"\b\d+(?:[.,]\d+)?\s?{_CURRENCY}|[€$£]\s?\d|\b\d{{3,4}}\s*{_PERIOD}|"
+    r"\b(?:mil|thousand|grand)\b",
+    re.I,
+)
+_TALKS_PAY = re.compile(rf"{_CURRENCY}|\b(?:bruts?|brutos?|gross)\b", re.I)
+# The low end of a range is dropped, so "45-50k" or "entre 45 y 50k" is one figure.
+_RANGE_LOW = re.compile(
+    r"\d[\d.,\u00a0\u202f ]*\s?k?\s*(?:-|\u2013|\bto\b|\ba\b|\bal\b)\s*(?=[€$£]?\d)|"
+    r"\b(?:entre|between)\s+\d[\d.,\u00a0\u202f ]*\s?k?\s*(?:y|and|i)\s+(?=[€$£]?\d)",
+    re.I,
+)
+# What the candidate asks for, in ES, EN and CA. "target", "objetivo" and "suelo" are not here:
+# a target bonus sits beside a current salary, and "suelo cobrar" means "I usually earn".
 _WANT = re.compile(
-    r"floor|minimum|expect\w*|looking for|seeking|target|desired|busco|m[ií]nim\w*|suelo|"
-    r"espero|expectativ\w*|deseo|objetivo|objectiu|cerco|aspir\w+|pretens\w*|desitj\w*|vull",
+    r"\b(?:floor|minimum|expect\w*|looking for|seeking|desired|ideal|"
+    r"busco|m[ií]nim\w*|espero|expectativ\w*|dese\w+|pretens\w*|aspir\w+|"
+    r"cerco|desitj\w*|vull)\b",
     re.I,
 )
-_OWN_PAY = re.compile(
-    rf"{_VERB}|\b{_PAY}\b.*\b{_WHEN}\b|\b{_WHEN}\b.*\b{_PAY}\b|\b{_MINE}\W+(?:\w+\W+){{0,2}}{_PAY}\b",
-    re.I,
-)
-# ponytail: clause cut by punctuation and a few conjunctions; a figure joined by other words
-# can still slip, then the candidate reads the staged answer.
-_CLAUSE = re.compile(r"[.!?;:]\s|[.!?;:]$|,\s|\n|\b(?:but|and|pero|però|y)\b", re.I)
+_SENTENCE = re.compile(r"[.!?;]+(?:\s+|$)|\n")
+
+
+def _sendable(sentence: str) -> bool:
+    """Clearly an expectation or a floor: one figure (or range), a want word before it, and no
+    current or past marker anywhere in the sentence."""
+    if re.search(rf"\b{_WHEN}\b", sentence, re.I):
+        return False
+    flat = _RANGE_LOW.sub("", sentence)
+    # A pay word with only a bare number ("floor is not under 50") counts that number.
+    figures = list(_FIGURE.finditer(flat)) or list(re.finditer(r"\d[\d.,]*", flat))
+    if len(figures) != 1:
+        return False
+    want = _WANT.search(flat)
+    return want is not None and want.start() < figures[0].start()
 
 
 def states_own_pay(text: str) -> bool:
-    """A clause with a figure that gives the candidate's own pay (not a floor or expectation)."""
-    return any(
-        any(c.isdigit() for c in clause) and not _WANT.search(clause) and _OWN_PAY.search(clause)
-        for clause in _CLAUSE.split(text)
-    )
+    """A sentence with a pay figure that is not clearly an expectation or a floor.
+
+    The default is refusal. A sentence that talks pay with a figure is sendable only when it
+    holds one figure (a range counts as one), a want word governs it from before, and no current
+    or past marker is in it. So "I earn 38k, looking for 45k" (two figures) and "I'm paid 38k,
+    looking for more" (want word after the figure) are refused.
+    """
+    for sentence in _SENTENCE.split(text):
+        talks_pay = (
+            _FIGURE.search(sentence)
+            or _TALKS_PAY.search(sentence)
+            or (re.search(rf"\b{_PAY}\b", sentence, re.I) and any(c.isdigit() for c in sentence))
+        )
+        if talks_pay and not _sendable(sentence):
+            return True
+    return False
 
 
 def current_pay_defects(text: str, cited_rows: list[str]) -> list[str]:
