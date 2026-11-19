@@ -1907,18 +1907,6 @@ def test_a_list_row_with_no_body_is_completed_from_the_adverts_own_page(
     assert starved & recovered, with_detail.summary()
 
 
-def test_the_detail_page_is_fetched_only_for_a_row_that_needs_it(
-    store: ProfileStore,
-) -> None:
-    """A listing whose rows already carry a body must not double the requests."""
-    seen: list[str] = []
-    run = _run(store, _answer_with_detail(seen=seen))
-    needed = sum(o.detail_needed for o in run.outcomes)
-    assert len(seen) <= needed, run.summary()
-    complete = [o for o in run.outcomes if o.items and not o.detail_needed]
-    assert complete, "no board completed a row from its list page alone"
-
-
 def test_robots_is_consulted_for_the_detail_page_too(store: ProfileStore) -> None:
     """The list URL and the advert URL are different paths, and a board may
     allow one and refuse the other — `getmanfred_es` lists under `/api/` and
@@ -1965,7 +1953,6 @@ def test_the_detail_budget_is_capped_and_the_shortfall_is_reported(
     run = _run(store, _answer_with_detail(seen=seen))
     for outcome in run.outcomes:
         assert outcome.detail_fetched <= 1, outcome
-        assert outcome.detail_fetched <= outcome.detail_needed, outcome
     starved = [o for o in run.outcomes if o.detail_needed > o.detail_fetched]
     assert starved, "the ceiling stopped nothing, so this proves nothing"
 
@@ -2780,3 +2767,80 @@ def test_a_refused_duplicate_is_recorded_under_the_copy_that_is_stored(
     recorded = {i for row in rows for i in row["offer_ids"]}
     assert recorded, "the second run recorded nothing"
     assert recorded <= stored
+
+
+# ---------------------------------------------------------------------------
+# The advert's own page for a row that already has a teaser
+
+
+def _tecnoempleo(store: ProfileStore, detail: Response, robots: Robots | None = None) -> Any:
+    from integral.connector_coverage import installed_packages
+    from integral.sourcing import _one_board
+
+    package = next(p for p in installed_packages(_CONNECTORS) if p.name == "tecnoempleo_es")
+    fixture = (_CONNECTORS / "tecnoempleo_es" / "fixture" / "list.html").read_text(encoding="utf-8")
+
+    def answer(request: ListRequest) -> Response:
+        return Response(200, fixture) if "?te=" in request.url else detail
+
+    return _one_board(
+        store,
+        package,
+        "python",
+        fetch=answer,
+        at=AT,
+        directory=_CONNECTORS,
+        page_count=1,
+        robots=robots or _robots(),
+    )
+
+
+def _stored_offers(store: ProfileStore) -> list[Any]:
+    return [json.loads(p.read_text(encoding="utf-8")) for p in store.path("offers").glob("*.json")]
+
+
+def test_a_teaser_row_is_stored_with_the_adverts_own_text_and_location(
+    store: ProfileStore,
+) -> None:
+    page = (_CONNECTORS / "tecnoempleo_es" / "fixture" / "detail.html").read_text(encoding="utf-8")
+    outcome = _tecnoempleo(store, Response(200, page))
+    assert outcome.added and outcome.detail_fetched == outcome.items, outcome
+    assert outcome.list_text_only == 0, outcome
+    assert not any(o["text"].endswith("...") for o in _stored_offers(store))
+    # detail wins on overlap: no stored location is the list card's "100% remoto"
+    assert all((o.get("location") or {}).get("raw") != "100% remoto" for o in _stored_offers(store))
+    # the detail page's body, which the list teaser only begins
+    longest = max(len(o["text"]) for o in _stored_offers(store))
+    assert longest > 400, longest
+
+
+@pytest.mark.parametrize("how", ["error", "robots"])
+def test_a_failed_or_refused_detail_fetch_keeps_the_list_only_offer(
+    store: ProfileStore, how: str
+) -> None:
+    if how == "error":
+        outcome = _tecnoempleo(store, Response(500, "", error="HTTP 500"))
+    else:
+        outcome = _tecnoempleo(
+            store,
+            Response(200, ""),
+            robots=_robots(
+                "User-agent: *\nDisallow: /programador\nDisallow: /ofertas-trabajo/rf-\n"
+            ),
+        )
+    assert outcome.added == outcome.items > 0, outcome
+    assert outcome.list_text_only == outcome.added, outcome
+    assert outcome.refused_rows == 0 and outcome.dropped == 0, outcome
+
+
+def test_a_stored_advert_is_not_read_again_from_its_own_page(store: ProfileStore) -> None:
+    page = Response(
+        200,
+        (_CONNECTORS / "tecnoempleo_es" / "fixture" / "detail.html").read_text(encoding="utf-8"),
+    )
+    first = _tecnoempleo(store, page)
+    assert first.added and first.detail_fetched, first
+    second = _tecnoempleo(store, page)
+    # One fixture page serves every row, so the rows that collapse into a twin of
+    # the first are not stored and are read again; the stored one is not.
+    assert second.detail_fetched == first.detail_fetched - first.added, (first, second)

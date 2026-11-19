@@ -4,6 +4,7 @@ title: "Read the advert page when the list row only carries a teaser"
 label: "full advert text"
 priority: 5
 tags: [sourcing]
+status: merged
 ---
 
 A listing row that carries a teaser builds an offer by itself, so the advert's own page is never fetched and the stored `text` is the teaser alone. In `integral.sourcing` (the `if offer is None and connector.detail is not None` branch, about line 1806), the detail page is read only when the list row cannot complete an offer.

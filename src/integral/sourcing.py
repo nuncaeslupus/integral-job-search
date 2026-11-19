@@ -81,7 +81,9 @@ from integral.gate_exit import worst
 from integral.identity import ProfileStore, id_from_name
 from integral.lifecycle import (
     collect_offer,
+    offer_identity,
     save_lifecycle_offer,
+    stored_copies_of,
     track_new_offer,
 )
 from integral.offers import Offer, SourceKind, compute_offer_id, names_an_employer
@@ -309,6 +311,10 @@ class BoardOutcome:
     #: Rows that needed the advert page after `DETAIL_FETCH_CEILING` was spent.
     #: Not `dropped`: nothing is wrong with the advert, it was never opened.
     unopened: int = 0
+    #: Offers kept from the list row alone although the connector has an advert
+    #: page: the fetch failed, was refused, found nothing, or the budget was
+    #: spent. Their `text` may be a teaser. Not a missing row, so not unrealized.
+    list_text_only: int = 0
     #: Matching rows left uncollected because the run reached `OFFER_CEILING`.
     over_ceiling: int = 0
     #: T253. Matching rows left uncollected because this board had written its
@@ -421,6 +427,7 @@ _NOT_AN_UNREALIZED_ROW_FIELD = frozenset(
         "detail_needed",
         "detail_fetched",
         "empty_detail",
+        "list_text_only",
         "employers_failed",
         "excluded_because",
         "off_role_because",
@@ -805,6 +812,11 @@ class Run:
                 lines.append(
                     f"  NO EMPLOYER {outcome.connector}: {outcome.no_employer} of "
                     f"{outcome.items} row(s) became an offer with no employer name — {note}"
+                )
+            if outcome.list_text_only:
+                lines.append(
+                    f"  LIST TEXT ONLY {outcome.connector}: {outcome.list_text_only} offer(s) "
+                    "kept with the list row's text because the advert's page could not be read"
                 )
             if outcome.unopened:
                 lines.append(
@@ -1609,6 +1621,7 @@ def _one_board(
     empty_detail = 0
     off_aim = 0
     unopened = 0
+    list_text_only = 0
     over_ceiling = 0
     over_board_cap = 0
     out_of_reach = 0
@@ -1651,6 +1664,7 @@ def _one_board(
             empty_detail=empty_detail,
             off_aim=off_aim,
             unopened=unopened,
+            list_text_only=list_text_only,
             over_ceiling=over_ceiling,
             over_board_cap=over_board_cap,
             out_of_reach=out_of_reach,
@@ -1803,20 +1817,24 @@ def _one_board(
                 item = {**item, "company": request.employer}
             detail_url = _absolute(item.get("detail_url"), request.url)
             offer, why = _offer_from(connector, item, url=detail_url)
-            if offer is None and connector.detail is not None and detail_url:
-                # The list row cannot complete an offer and the connector says
-                # the rest of the advert is on its own page. Six installed
-                # connectors declare `text` only under `detail:` — correctly,
-                # since their list rows carry no teaser — and every one of them
-                # produced zero offers for as long as nothing fetched it.
-                detail_needed += 1
+            if connector.detail is not None and detail_url and not _already_stored(store, offer):
+                # The connector says the rest of the advert is on its own page.
+                # A row the list cannot complete needs it; a row that completes
+                # on a teaser (`tecnoempleo_es`: ~190 characters ending "...")
+                # still gets it, so the stored text is the advert and not the
+                # teaser. Six installed connectors declare `text` only under
+                # `detail:` and produced zero offers while nothing fetched it.
+                needed = offer is None
+                detail_needed += needed
                 origin = _origin(detail_url)
                 if detail_fetched >= DETAIL_FETCH_CEILING:
                     # A budget stop, not a connector that produced no text
                     # (#445 round 2 N5, T167): counted apart from `dropped`.
-                    unopened += 1
-                    continue
-                if origin not in refused_origins and _may_fetch(robots, detail_url):
+                    if needed:
+                        unopened += 1
+                        continue
+                    list_text_only += 1
+                elif origin not in refused_origins and _may_fetch(robots, detail_url):
                     _space(robots, detail_url)
                     detail_fetched += 1
                     fields, refusal = _detail_record(connector, detail_url, fetch=fetch)
@@ -1824,6 +1842,8 @@ def _one_board(
                         refused_origins[origin] = f"{refusal}, on an advert page ({detail_url})"
                     elif fields:
                         offer, why = _offer_from(connector, item, fields, url=detail_url)
+                    if not needed and not fields:
+                        list_text_only += 1
                     if (
                         refusal is None
                         and fields is not None
@@ -1833,7 +1853,9 @@ def _one_board(
                         # T234. A 200 page, parsed, with no body where the
                         # connector says one is: counted and printed per board.
                         empty_detail += 1
-                if origin in refused_origins:
+                elif not needed:
+                    list_text_only += 1
+                if needed and origin in refused_origins:
                     # T174: the host refused, not the row — so it is unread,
                     # never "dropped" as a connector that produced no text.
                     # Counted in `refused_rows` (#466 review, round 1 F6):
@@ -1938,6 +1960,13 @@ def _with_stated_band(fields: dict[str, str]) -> dict[str, str]:
         **({"salary_currency": band.currency} if band.currency else {}),
         **({"salary_period": band.period} if band.period else {}),
     }
+
+
+def _already_stored(store: ProfileStore, offer: Any) -> bool:
+    """A complete list row whose advert is already stored: `collect_offer` will
+    call it a re-sighting, so its page is not worth a request."""
+    identity = offer_identity(offer) if offer is not None else None
+    return bool(identity and stored_copies_of(store, identity, excluding=""))
 
 
 def _offer_from(
@@ -2234,9 +2263,10 @@ def measure_fixture() -> dict[str, Any]:
             "advert_requests_after_a_refusal": len(hosts_asked) - len(set(hosts_asked)),
             # Boards that asked for an advert, every one of which was refused —
             # not `Run.refused`, which is the fix's own output and would read
-            # a vacuous zero if the refusal were never recorded.
+            # a vacuous zero if the refusal were never recorded. A board that
+            # kept offers from complete list rows did reach the board.
             "refused_boards_listed_as_reached": len(
-                {o.connector for o in refused_run.outcomes if o.detail_fetched}
+                {o.connector for o in refused_run.outcomes if o.detail_fetched and not o.added}
                 & set(refused_run.steered + refused_run.unsteered)
             ),
             "boards_with_a_second_advert_to_refuse": second_advert,
