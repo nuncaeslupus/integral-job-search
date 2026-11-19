@@ -201,6 +201,33 @@ MIXED_OR_MISSED_ROWS = [
     "Mi sueldo es 38k.",
     "1800 netos al mes.",
     "2500 net a month.",
+    # Leftovers from #974: pay across sentences, payer verbs and time or rate words with a bare
+    # number, and "the same as now" / past tense.
+    "I earn well. It is 38.",
+    "Gano bien. Son 38.",
+    "Guanyo bé. Són 38.",
+    "Me pagan 38.",
+    "Em paguen 38.",
+    "Percibo 38.",
+    "Percebo 38.",
+    "Actualmente 38.",
+    "Currently on 38.",
+    "I am on 38.",
+    "Ara 38.",
+    "Actualment 38.",
+    "My rate is 9 an hour.",
+    "Hourly rate: 25.",
+    "Day rate 300.",
+    "Tarifa diaria 300.",
+    "Tarifa diària 300.",
+    "La meva tarifa és 9 per hora.",
+    "Looking for 38k, same as I have.",
+    "Busco 38k, como en mi puesto.",
+    "Cerco 38k, com al meu lloc.",
+    "Cerco 38k, igual que ara.",
+    "Mi sueldo mínimo era 38k.",
+    "My salary minimum was 38k.",
+    "El meu sou mínim era 38k.",
 ]
 
 STILL_SENDABLE_ROWS = [
@@ -221,6 +248,19 @@ STILL_SENDABLE_ROWS = [
     "I'd like 45k.",
     "Mi expectativa actualizada es 45k.",
     "My expected salary is 45k.",
+    # Earning words beside a count or a year, not a pay figure (#974 fail-closed).
+    "I make 3 releases a week.",
+    "I make 10 deploys a day.",
+    "Made 3 PRs per day.",
+    "I made 4 hires in 2023.",
+    "I earned 2 certifications.",
+    "Earned a promotion in 2022.",
+    "Cobro desde 2019 en la empresa.",
+    "Guanyo 2 hores al dia en desplaçaments.",
+    "Gano 2 certificaciones.",
+    "Guanyo 2 certificacions.",
+    "Hago 10 despliegues al día.",
+    "Faig 10 desplegaments al dia.",
 ]
 
 
