@@ -43,7 +43,7 @@ import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +70,28 @@ NOTED = "noted"
 DATE_LABELS = {SENT: "Sent", NOTED: "Noted (not the send date)"}
 
 HOLDS, LACKS, UNRECORDED = "holds", "lacks", "not on record"
+
+
+# Manfred Tech Career Report 2026: the median hiring process is 42 days. A follow-up
+# message is reasonable at half that; at 60 (past the median by half again) the
+# application reads stalled. `stalled` is a display state, never `rejected`.
+FOLLOW_UP_DAYS = 21
+STALLED_DAYS = 60
+FOLLOW_UP = "a follow-up message is reasonable (the tool never sends it)"
+STALLED = "stalled"
+
+
+def follow_up(status: str, applied_on: str, today: date) -> str:
+    """'' / FOLLOW_UP / STALLED for an `applied` row; any recorded response clears it.
+
+    Derived on every render, so the reminder shows once per application, in the
+    21-59 day window; nothing is stored. ponytail: write a reminder timestamp if
+    "once" must survive a re-render past that window.
+    """
+    if status != "applied" or not re.match(r"\d{4}-\d{2}-\d{2}", applied_on):
+        return ""
+    days = (today - date.fromisoformat(applied_on[:10])).days
+    return STALLED if days >= STALLED_DAYS else FOLLOW_UP if days >= FOLLOW_UP_DAYS else ""
 
 
 class BoardError(Exception):
@@ -101,6 +123,7 @@ class Row:
     tracking_url: str
     fit: Fit
     notes: tuple[str, ...] = field(default=())
+    follow_up: str = ""
 
 
 @dataclass(frozen=True)
@@ -290,7 +313,7 @@ def fit_for(store: ProfileStore, offer_id: str, levels: dict[str, str | None]) -
     )
 
 
-def collect(store: ProfileStore) -> Board:
+def collect(store: ProfileStore, today: date | None = None) -> Board:
     """Every application folder, as a row, unless it was only ever drafted.
 
     An application whose offer, status or send record cannot be read is still a
@@ -347,6 +370,7 @@ def collect(store: ProfileStore) -> Board:
                 tracking_url=links.get(offer_id, NOT_RECORDED),
                 fit=fit_for(store, offer_id, levels),
                 notes=tuple(notes),
+                follow_up=follow_up(status, date, today or datetime.now(UTC).date()),
             )
         )
     rows.sort(key=lambda r: (r.date == NOT_RECORDED, r.date))
@@ -408,6 +432,8 @@ def _card(row: Row) -> str:
         ]
     )
     notes = "".join(f'<p class="muted">{html.escape(n)}</p>' for n in row.notes)
+    if row.follow_up:
+        notes += f"<p><strong>{html.escape(row.follow_up)}</strong></p>"
     return report_style.card(f"{row.employer} — {row.role}", details + _fit_facts(row.fit) + notes)
 
 
