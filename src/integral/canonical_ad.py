@@ -47,8 +47,8 @@ from integral.offers import Location, Offer, Salary, compute_offer_id, load_offe
 from integral.robots import Robots, RobotsError
 from integral.salary_period import normalize_period
 from integral.transport import (
-    BodyTooLarge,
     FetchRefused,
+    RobotsRefused,
     Send,
     Transport,
     shared_robots,
@@ -363,10 +363,10 @@ def resolve_canonical(
     get = fetch or guarded_fetch(checker, delay_floor)
     try:
         reply = get(url)
-    except BodyTooLarge as exc:
-        return fallback("fetch_error", str(exc))
-    except FetchRefused as exc:
+    except RobotsRefused as exc:
         return fallback("robots_refused", str(exc))
+    except FetchRefused as exc:  # https-only, a private address, over the cap, ...
+        return fallback("fetch_error", f"the fetch was refused: {exc}")
     except (OSError, ValueError, http.client.HTTPException) as exc:
         return fallback("fetch_error", f"the fetch failed: {exc}")
 
