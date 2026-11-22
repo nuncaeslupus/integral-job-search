@@ -1444,7 +1444,12 @@ def _detail_record(
     """
     detail = connector.detail
     headers = client_headers(detail.client, detail.client_target) if detail else {}
-    response = fetch(ListRequest(url=url, method="GET", headers=headers, body=None))
+    # The board's declared charset, even when the advert page is on another host
+    # (an employer's own page): the connector is the only charset anyone declared,
+    # and `decode_body` refuses rather than guesses when it is wrong.
+    response = fetch(
+        ListRequest(url=url, method="GET", headers=headers, body=None, charset=connector.charset)
+    )
     refusal = rate_limited(None, response.status)
     if refusal is not None:
         return None, refusal
