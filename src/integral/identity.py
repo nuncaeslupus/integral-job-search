@@ -50,7 +50,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from integral.corpus import LANGUAGES
 from integral.state_home import StateHomeRefused, profiles_root
@@ -139,6 +139,13 @@ class Identity(Strict):
     # Optional: the surname in use, for `<First>-<Last>` file names when it is not
     # the last token (`José María García López` -> `Jose-Garcia`).
     family_name: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @field_validator("family_name", mode="before")
+    @classmethod
+    def _blank_family_name_is_absent(cls, value: object) -> object:
+        # "" or "   " means "no family name", not an unloadable profile (#856); one
+        # place, so the loader and `create_profile` both get it.
+        return value.strip() or None if isinstance(value, str) else value
 
     def summary(self) -> str:
         """How the tool refers to this person out loud."""
