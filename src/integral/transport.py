@@ -117,20 +117,26 @@ def _unsafe_host_text(host: str) -> bool:
     return any(c == "%" or c.isspace() or ord(c) < 0x20 or ord(c) == 0x7F for c in host)
 
 
+def _has_userinfo(url: str) -> bool:
+    """`https://u@host/`: no board needs one, and http.client raises on it (#993 F6)."""
+    return "@" in urlsplit(url).netloc
+
+
 def is_public_web_url(url: str) -> bool:
     """http(s) to a named host or a public IP; never localhost or a private address.
 
     Links come from scraped adverts, so one pointing at `http://127.0.0.1:8080/` or an
     intranet address must not be requested from the candidate's machine. A named host
-    passes here and is checked again where it is resolved (`_checked_connection`).
-    A URL carrying userinfo (`https://u@host/`) is refused: no board needs one.
+    passes here and is checked again where it is resolved (`_checked_create_connection`).
+    Userinfo is not part of the address and is ignored here, as RFC 9309 matching
+    ignores it; the transport refuses to *send* one (`_has_userinfo`).
     """
     parts = urlsplit(url)
     raw_host = parts.netloc.rpartition("@")[2]
     host = (parts.hostname or "").lower().rstrip(".")
     if parts.scheme.lower() not in ("http", "https") or not host:
         return False
-    if "@" in parts.netloc or _unsafe_host_text(raw_host) or _unsafe_host_text(host):
+    if _unsafe_host_text(raw_host) or _unsafe_host_text(host):
         return False
     if host == "localhost" or host.endswith(".localhost"):
         return False
@@ -362,7 +368,7 @@ def fetch_policy(
     """A robots.txt: public addresses only, no https->http downgrade, capped, <= 5 hops."""
     send = send if send is not None else urllib_send
     for _ in range(MAX_REDIRECTS + 1):
-        if not is_public_web_url(url):
+        if not is_public_web_url(url) or _has_userinfo(url):
             raise FetchRefused(f"{url} is not a public web address")
         hop = send(
             "GET",
@@ -419,6 +425,8 @@ class Transport:
             raise FetchRefused(f"https only, not {url}")
         if not is_public_web_url(url):
             raise FetchRefused(f"{url} is not a public web address")
+        if _has_userinfo(url):
+            raise FetchRefused(f"{url} carries userinfo, which this tool never sends")
         if self._refuse is not None and (why := self._refuse(url)):
             raise FetchRefused(why)
         try:

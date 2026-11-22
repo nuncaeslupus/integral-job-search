@@ -263,7 +263,20 @@ def test_the_transport_refuses_it_even_under_a_policy_that_checks_nothing(url: s
     with pytest.raises(transport.FetchRefused):
         transport.Transport(_AllowAll(), send=_recording_send(sent, {})).request(url)
     assert sent == []
+
+
+@pytest.mark.parametrize("url", UNSAFE_HOSTS + EMBEDDED_V4)
+def test_the_address_rule_itself_refuses_it(url: str) -> None:
     assert transport.is_public_web_url(url) is False
+
+
+def test_a_robots_txt_url_with_userinfo_is_refused_not_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sock = _socket(monkeypatch, {})
+    with pytest.raises(transport.FetchRefused):
+        transport.fetch_policy("https://u:p@jobs.example.com/robots.txt")
+    assert sock.asked == []
 
 
 @pytest.mark.parametrize("target", UNSAFE_HOSTS[:3] + EMBEDDED_V4[:2])
