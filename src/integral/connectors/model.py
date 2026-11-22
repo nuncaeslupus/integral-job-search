@@ -2318,11 +2318,15 @@ def decode_body(raw: bytes | str, charset: str = "utf-8") -> str:
     """
     if isinstance(raw, str):
         return raw
-    for mark, codec in _BOMS:
+    codec, start = encoding_for(charset), 0
+    for mark, marked in _BOMS:
         if raw.startswith(mark):
-            return raw[len(mark) :].decode(codec)
+            codec, start = marked, len(mark)
+            break
     try:
-        return raw.decode(encoding_for(charset))
+        # Inside the `try` for a BOM too: a BOM followed by bytes its own codec
+        # refuses is the same undecodable body (#994 second reader).
+        return raw[start:].decode(codec)
     except UnicodeDecodeError as error:
         raise ConnectorError(
             f"body does not decode as {charset!r}: {error}. The connector declares "
