@@ -18,11 +18,14 @@ from integral import evidence_runner
 
 _ROOT = Path(__file__).resolve().parent.parent
 
-# The Makefile's former serial loop selected modules with exactly this pipeline.
+# The Makefile's former serial loop selected modules with exactly this pipeline,
+# plus a package run through its `__main__.py` (`connectors`, since #928).
 _OLD_PIPELINE = (
-    "grep -l '__main__' src/integral/*.py"
+    "{ grep -l '__main__' src/integral/*.py"
     " | xargs grep -lE 'status/evidence|\"evidence\"|EVIDENCE'"
-    " | sed 's|.*/||; s|\\.py$||'"
+    " | sed 's|.*/||; s|\\.py$||';"
+    " for d in src/integral/*/__main__.py; do d=${d%/__main__.py};"
+    ' grep -qlE \'status/evidence|"evidence"|EVIDENCE\' "$d"/*.py && basename "$d"; done; }'
 )
 
 
