@@ -8,7 +8,7 @@ conformance rule and still does nothing.
 
 That is not hypothetical. §5 advertised an optional `parse.py` as the escape
 hatch "for sites the declarative form cannot express", and nothing in
-`src/integral` ever executed one: `connectors.py` interprets `connector.yaml`
+`src/integral` ever executed one: `integral.connectors` interprets `connector.yaml`
 and matches selectors, and there is no import machinery anywhere in the package.
 Review on PR #77 found it; it was seeded as D-10 (#78) rather than resolved
 there, because dropping the hatch and building a sandbox for it are both design

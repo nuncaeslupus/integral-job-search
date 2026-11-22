@@ -120,7 +120,7 @@ DEFAULT_CREDENTIAL_CASES_PATH = (
 #: name a refusal reports. **Only the name is ever kept** — `parse_curl` records
 #: which of these appeared and discards the value, because a credential read out
 #: of a ledger and held in a dataclass is a credential this library carries, and
-#: `connectors.py`'s rule is that it may not.
+#: `integral.connectors`'s rule is that it may not.
 _CREDENTIAL_OPTIONS = {
     "-u": "--user",
     "--user": "--user",

@@ -7,7 +7,7 @@ do not share an implementation:
 
 * the connector uses the repo's own hand-rolled tree builder over stdlib
   `html.parser`, and a deliberately tiny selector subset (no combinators, no
-  pseudo-classes) — see `src/integral/connectors.py`;
+  pseudo-classes) — see `src/integral/connectors/`;
 * this script uses `lxml` for parsing and BeautifulSoup's full CSS engine.
 
 They disagree exactly where the small parser mishandles real markup — unclosed

@@ -182,7 +182,7 @@ def test_every_write_path_into_cv_generated_calls_refresh_index() -> None:
     """A function that creates a version, an employer link or a send folder must
     end in `refresh_index`; found by AST over every module, not from a list."""
     writers: list[str] = []
-    for path in sorted(SRC.glob("*.py")):
+    for path in sorted(SRC.rglob("*.py")):
         if path.stem == "generated_index":
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))

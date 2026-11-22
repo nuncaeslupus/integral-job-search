@@ -888,7 +888,7 @@ def write_evidence(evidence: Path | None = None, directory: Path | None = None) 
 #   final-sigma/sigma query-key duplicate loaded — refused before round 5,
 #   at commit `7807824`.
 # * **R2** — the comparator this changed was pinned by nothing: reverting
-#   all six `.lower()` call sites in `connectors.py` back to `.casefold()`
+#   all six `.lower()` call sites in `integral.connectors` back to `.casefold()`
 #   survived the entire suite. Reverted to `.casefold()` (R1's fix) and now
 #   pinned by probes below, including one that documents the "wider" merge
 #   (`straße`/`strasse`) as a deliberate, accepted cost rather than an
@@ -1043,7 +1043,7 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
     # ---- round 4, NF2/NF3: the namespace-axis mirror now covers `path_segment`
     # too. Round 3 scoped it to `query_param` alone on the premise that
     # `path_segment` binds `param` to a URL position a merged namespace never
-    # sees — false twice over (see `connectors.py`'s own docstring paragraph on
+    # sees — false twice over (see `integral.connectors`'s own docstring paragraph on
     # this): nothing about `mode: path_segment` requires the sole `{page}` to
     # sit outside the query string, so this exact config — a query-string
     # *value* under an unrelated key name, `o` — loaded under `path_segment`
@@ -1113,7 +1113,7 @@ DUPLICATE_KEY_PROBES: tuple[UrlProbe, ...] = (
         "repeated query keys in general",
     ),
     # ---- round 4, NF7: this library's POST-paginated boards are ASP.NET-shaped
-    # (see `connectors.py`'s own docstring paragraph on this), and ASP.NET's
+    # (see `integral.connectors`'s own docstring paragraph on this), and ASP.NET's
     # query and form collections compare keys case-insensitively — so a
     # case-only difference must not be read as two different keys.
     UrlProbe(
@@ -1296,7 +1296,7 @@ MINIMUM_DUPLICATE_KEY_PROBES = 26
 #: returns a `frozenset`, so a `url_pattern` naming a key twice would
 #: contribute 1 to a count built from it — collapsing the very duplication
 #: this gate exists to measure out of its own denominator. `query_pair_names`
-#: (occurrences, `connectors.py`) is what this counts instead.
+#: (occurrences, `integral.connectors`) is what this counts instead.
 #:
 #: **Scoped to the packages route 4 actually reaches** (F6): every package
 #: whose `pagination.mode` is not `"none"` — the same test route 4's own load

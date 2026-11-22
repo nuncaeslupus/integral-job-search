@@ -65,7 +65,7 @@ Then read what that request actually needed. Three outcomes:
 | what the capture shows | what to do |
 |---|---|
 | a plain URL with a query parameter | that is the listing URL; write the connector |
-| fixed headers with no credential (`HX-Request`, `X-Requested-With`) | `client:` may cover it — see `Client` in `connectors.py` |
+| fixed headers with no credential (`HX-Request`, `X-Requested-With`) | `client:` may cover it — see `Client` in `integral.connectors` |
 | an API key, a bearer token, a session cookie | **stop.** There is no field for a credential and there must not be one |
 
 `foorilla.com` was ruled unreachable by eye and turned out to be the second row:
@@ -98,7 +98,7 @@ wrong one is a number that looks fine and ranks the offer wrongly.
 
 **One text node holding several values** — `€50.000 - €65.000`, or a title
 carrying `1.&nbsp;` in front of it — is what `take:` is for. Four members,
-implemented in `connectors.py`, and the connector names one:
+implemented in `integral.connectors`, and the connector names one:
 
 ```yaml
 salary_min:      {css: ".salary", take: "range_low"}

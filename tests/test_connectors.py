@@ -110,7 +110,7 @@ def test_the_gate_never_shells_out_over_a_malicious_url_pattern() -> None:
     explode if called must see nothing happen."""
 
     def _boom(*args: object, **kwargs: object) -> None:
-        raise AssertionError("connectors.py must never shell out")
+        raise AssertionError("integral.connectors must never shell out")
 
     connector = parse_connector(
         "site: acme\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-01-01'\n"
@@ -2247,7 +2247,7 @@ def test_every_committed_connector_still_builds_a_plain_get() -> None:
             continue
         # T133: a GET still carries no body and no headers of its own. What a
         # connector declaring a `client` carries is that client's fixed set and
-        # nothing else — the header names are literals in `connectors.py`, so
+        # nothing else — the header names are literals in `integral.connectors`, so
         # this asserts the derivation rather than a fixed empty dict, which
         # would have to be relaxed to `!= None` the first time a client landed
         # and would then assert nothing at all.
@@ -3081,7 +3081,7 @@ def test_a_recorded_curl_that_authenticates_is_refused_and_its_secret_is_not_kep
     sends neither (#295 review).
 
     The second assertion is the other half of the rule. A refusal has to name
-    the option, and it may not carry the secret: `connectors.py`'s line is that
+    the option, and it may not carry the secret: `integral.connectors`'s line is that
     a connector may not carry a credential, and a ledger value copied into a
     dataclass and then into an evidence file is exactly that.
     """
@@ -3620,7 +3620,7 @@ def test_a_target_without_a_client_is_refused() -> None:
 
 def test_no_client_can_name_a_header() -> None:
     """The rule this relaxes, asserted rather than described: every header name
-    the engine can emit is a literal in `connectors.py`. A connector declaring
+    the engine can emit is a literal in `integral.connectors`. A connector declaring
     `headers:` is refused by `Strict` for not being a field at all."""
     from integral.connectors import client_headers
 

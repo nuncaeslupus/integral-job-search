@@ -59,7 +59,7 @@ wrong in the direction that matters.
 
 What actually holds the line is one property, and it is stronger than the lint:
 **nothing in this repository ever executes a connector's `parse.py`.** The
-interpreter in `connectors.py` reads `connector.yaml` and matches selectors; it
+interpreter in `integral.connectors` reads `connector.yaml` and matches selectors; it
 has no import machinery, and `test_nothing_in_the_codebase_executes_a_contributed_parse_module`
 asserts that rather than trusting it. So today `parse.py` is a file the contract
 *admits* and nothing *runs*.
@@ -69,7 +69,7 @@ safe — process-level isolation is, or dropping `parse.py` in favour of widenin
 the declarative grammar. Raised by review on #77 and recorded here rather than
 in a thread, because the person who needs it is whoever writes that runner.
 
-This is the same argument `connectors.py` makes for its selector grammar, and
+This is the same argument `integral.connectors` makes for its selector grammar, and
 it is deliberately the same shape: match against a closed vocabulary, never
 evaluate.
 
@@ -526,7 +526,7 @@ class ContractReport:
 def _load_yaml(path: Path) -> Any:
     """`safe_load`, and only ever `safe_load`.
 
-    The same reason `connectors.py` gives: a `!!python/object/apply:` tag in a
+    The same reason `integral.connectors` gives: a `!!python/object/apply:` tag in a
     contributed file constructs whatever it names, at load time, before any
     rule below has had a chance to look at it.
     """
