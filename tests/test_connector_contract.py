@@ -673,16 +673,17 @@ def test_nothing_in_the_codebase_executes_a_contributed_parse_module() -> None:
     # binding flagged 59 honest regex compiles and nothing else.
     builtins_that_run_text = {"exec", "eval", "compile", "__import__"}
     offenders: list[str] = []
-    for module in sorted((_REPO_ROOT / "src" / "integral").glob("*.py")):
+    for module in sorted((_REPO_ROOT / "src" / "integral").rglob("*.py")):
         tree = ast.parse(module.read_text(encoding="utf-8"), filename=str(module))
+        where = module.relative_to(_REPO_ROOT)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             func = node.func
             if isinstance(func, ast.Attribute) and func.attr in loaders:
-                offenders.append(f"{module.name}:{node.lineno} calls .{func.attr}()")
+                offenders.append(f"{where}:{node.lineno} calls .{func.attr}()")
             elif isinstance(func, ast.Name) and func.id in (loaders | builtins_that_run_text):
-                offenders.append(f"{module.name}:{node.lineno} calls {func.id}()")
+                offenders.append(f"{where}:{node.lineno} calls {func.id}()")
     assert offenders == [], (
         "code-loading machinery appeared in the package — if a runner now executes a "
         f"contributed parse.py, the contract check is not what makes that safe: {offenders}"

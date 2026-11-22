@@ -322,7 +322,7 @@ PROBES: tuple[Probe, ...] = (
         varies=(),
         clause="R7 — `page` names a URL key here, so no body position varies",
     ),
-    # T154 round 3 (R1's mirror), on `connectors.py`'s own separate rule
+    # T154 round 3 (R1's mirror), on `integral.connectors`'s own separate rule
     # (`_a_page_placeholder_and_a_query_key_imply_each_other`, route 4). R7's
     # own point about this shape is still true and stated in the clause below
     # — the *builder* never touches a body key `param` does not name, so

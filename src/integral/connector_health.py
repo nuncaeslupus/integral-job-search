@@ -7,7 +7,7 @@ connector itself still works — and `trabajos_es` is the only real board this
 library has, so one restyle takes sourcing to zero with no signal at all
 (`status/spec-v3-silent-success.md`).
 
-`connectors.py`'s own module docstring settles where a request may come
+`integral.connectors`'s own module docstring settles where a request may come
 from: "Fetching is not this module's job… a cloud session cannot reach one —
 403 at the egress proxy." T12 is the module that turns a connector into a
 live HTTP request, and it is `[LAPTOP]`-only for exactly that reason.

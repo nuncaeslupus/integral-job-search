@@ -41,7 +41,14 @@ def discover(src: Path = _SRC) -> list[str]:
         text = path.read_text(encoding="utf-8", errors="replace")
         if path.stem != SELF and "__main__" in text and _MARKER.search(text):
             found.append(path.stem)
-    return found
+    # A package runs as `python -m integral.<package>` through its `__main__.py`
+    # (`connectors` became one in #928); its gate code lives in its other files.
+    for main in sorted(src.glob("*/__main__.py")):
+        files = sorted(main.parent.glob("*.py"))
+        text = "".join(p.read_text(encoding="utf-8", errors="replace") for p in files)
+        if _MARKER.search(text):
+            found.append(main.parent.name)
+    return sorted(found)
 
 
 def status_line(returncode: int) -> str:

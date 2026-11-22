@@ -7,7 +7,7 @@ tag tokens (`lt p gt`): the same advert read escaped and read clean scored a
 Jaccard of 0.34-0.46 against a `SIMILARITY_THRESHOLD` of 0.25, which is most of
 T75's employer-vs-aggregator margin spent on markup.
 
-The fix is two `take:` members in `connectors.py`, and this module is the check
+The fix is two `take:` members in `integral.connectors`, and this module is the check
 that they are actually *applied* — a vocabulary nobody uses fixes nothing. It
 measures the property rather than the connectors: every offer every fixture can
 build, counted for markup, with the population discovered from `connectors/`
@@ -407,7 +407,7 @@ MARKUP_CONTRACTS: tuple[tuple[str, str, str | None, str], ...] = (
         "FIXED, not pinned: an EOF-truncated tag has no settled cross-patch "
         "behaviour (html.parser has been measured to discard it, and "
         "separately to resurface it as data, on different CPython 3.12 "
-        "builds this repository's own CI can draw) - so connectors.py's "
+        "builds this repository's own CI can draw) - so integral.connectors' "
         "_neutralise_unterminated_tail() now recovers it as literal prose "
         "before parsing, deterministically, rather than pinning this row to "
         "whichever interpreter behaviour a given CI run happens to draw. "

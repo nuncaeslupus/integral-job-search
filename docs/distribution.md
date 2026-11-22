@@ -149,7 +149,7 @@ unexpected file.
 **This shape used to advertise an optional `parse.py`** — described here as the
 escape hatch "for sites that need it". Nothing ever executed it. A connector for
 a site the declarative form cannot express could be written, could pass the
-whole conformance check, and could not work: `connectors.py` interprets
+whole conformance check, and could not work: `integral.connectors` interprets
 `connector.yaml` and matches selectors, and there is no import machinery
 anywhere in `src/integral`. A promise a contributor can act on and the tool
 cannot keep is worse than no promise, so the promise is withdrawn (D-10, #78).
@@ -163,7 +163,7 @@ milestone of work to keep a hatch nothing currently needs, and the one
 committed connector has no `parse.py`.
 
 Sites the declarative grammar cannot reach — JS-rendered pages are already
-outside it, see `connectors.py`, "What the format does not cover" — are met by
+outside it, see `integral.connectors`, "What the format does not cover" — are met by
 growing the grammar, when there is a real site to grow it against.
 
 The withdrawal is measured, not just written down: `integral.connector_shape`
