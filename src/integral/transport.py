@@ -82,9 +82,9 @@ class RobotsRefused(FetchRefused):
 def _embedded_ipv4(address: ipaddress.IPv6Address) -> list[ipaddress.IPv4Address]:
     """Every IPv4 address an IPv6 literal can carry: mapped, 6to4, Teredo, and the low 32 bits.
 
-    A closed rule rather than a list of prefixes: IPv4-compatible (`::127.0.0.1`),
-    NAT64 (`64:ff9b::7f00:1`, RFC 6052) and any translator prefix not yet named all
-    put the IPv4 address in the last 32 bits. Taking those bits from *every* IPv6
+    A closed rule rather than a list of prefixes: IPv4-compatible addresses, NAT64
+    (RFC 6052) and any translator prefix not yet named all put the IPv4 address in
+    the last 32 bits. Taking those bits from *every* IPv6
     literal also refuses a public IPv6 address whose last four bytes happen to read
     as a private IPv4 one — accepted, since no board is reached by IPv6 literal.
     """
