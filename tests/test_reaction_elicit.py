@@ -353,7 +353,7 @@ def test_a_host_is_validated_never_repaired() -> None:
     between the slashes. The two fail-open ones end with a permitted host's
     spelling and are not that host; the two fail-closed ones are real adverts
     from real boards (`usajobs_en` serves `…usajobs.gov:443/job/…`, which is
-    why `sourcing._origin` exists).
+    why `transport.origin` exists).
     """
     # fail-open: neither of these is `remotive.com`, and both used to pass.
     for forged in (
