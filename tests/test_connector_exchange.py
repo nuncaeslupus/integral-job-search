@@ -657,11 +657,12 @@ def test_the_prepared_submission_carries_the_generated_body(home: Path, installe
 
 def test_an_oversized_exchange_answer_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     """#934: an endless answer must not be read whole into memory."""
-    import urllib.request
-
     from integral import connector_exchange as ex
 
     class _Reply:
+        status = 200
+        headers: dict[str, str] = {}
+
         def read(self, limit: int = -1) -> bytes:
             return b"x" * (limit if limit >= 0 else 10**7)
 
@@ -675,6 +676,10 @@ def test_an_oversized_exchange_answer_is_refused(monkeypatch: pytest.MonkeyPatch
         def open(self, *_a: object, **_k: object) -> _Reply:
             return _Reply()
 
-    monkeypatch.setattr(urllib.request, "build_opener", lambda *_a: _Opener())
-    with pytest.raises(ex.ExchangeError, match="larger than"):
-        ex.https_fetcher()("https://example.org/manifest.yaml")
+    from integral import transport
+    from integral.robots import Robots
+
+    monkeypatch.setattr(transport, "_OPENER", _Opener())
+    allow_all = Robots(fetch=lambda _url: "User-agent: *\nAllow: /\n")
+    with pytest.raises(ex.ExchangeError, match="more than"):
+        ex.https_fetcher(robots=allow_all)("https://example.org/manifest.yaml")

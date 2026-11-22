@@ -31,10 +31,8 @@ from __future__ import annotations
 
 import contextlib
 import http.client
-import ipaddress
 import json
 import re
-import socket
 import string
 import sys
 import time
@@ -42,19 +40,22 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from email.message import Message
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from integral.gate_exit import worst
+from integral.transport import (
+    USER_AGENT,
+    FetchRefused,
+    fetch_policy,
+    is_public_web_url,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T70.json"
 DEFAULT_T71_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T71.json"
-
-# Who we say we are. A contact URL, because a board that wants this to stop
-# needs somewhere to say so — that is the half of politeness a delay cannot do.
-USER_AGENT = "integral-job-search/0.1 (+https://github.com/nuncaeslupus/integral-job-search)"
 
 # RFC 9309 §2.2.1: a group is selected by the *product token*, which is a
 # substring of the identification string — not the whole `User-Agent` header.
@@ -131,39 +132,16 @@ class RobotsUnreachable(RobotsError):
 RETRY_DELAYS: tuple[float, ...] = (1.0, 3.0)
 
 
-def is_public_web_url(url: str) -> bool:
-    """http(s) to a named host or a public IP; never localhost or a private address.
-
-    Links come from scraped adverts, so one pointing at `http://127.0.0.1:8080/` or an
-    intranet address must not be requested from the candidate's machine.
-    """
-    parts = urlsplit(url)
-    host = (parts.hostname or "").lower().rstrip(".")
-    if parts.scheme.lower() not in ("http", "https") or not host:
-        return False
-    if host == "localhost" or host.endswith(".localhost"):
-        return False
-    try:
-        address: ipaddress.IPv4Address | ipaddress.IPv6Address = ipaddress.ip_address(host)
-    except ValueError:
-        # The resolver also reads the legacy IPv4 spellings `ipaddress` refuses —
-        # `2130706433`, `0x7f000001`, `0177.0.0.1`, `127.1` are all 127.0.0.1.
-        try:
-            address = ipaddress.IPv4Address(socket.inet_aton(host))
-        except OSError:
-            return True
-    return address.is_global
-
-
-#: RFC 9309 asks a crawler to parse at least 500 KiB of robots.txt and allows it to ignore the
-#: rest, so an endless or huge answer is cut here rather than read whole into memory.
-MAX_ROBOTS_BYTES = 512 * 1024
+def _policy_read(url: str, agent: str) -> str:
+    """The body of a robots.txt through `integral.transport`; an HTTP error status raises."""
+    hop = fetch_policy(url, user_agent=agent)
+    if hop.status >= 300:
+        raise urllib.error.HTTPError(url, hop.status, "robots.txt", Message(), None)
+    return hop.raw.decode("utf-8", errors="replace")
 
 
 def _read(url: str) -> str:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=20) as response:
-        return str(response.read(MAX_ROBOTS_BYTES).decode("utf-8", errors="replace"))
+    return _policy_read(url, USER_AGENT)
 
 
 # T71: some sites put a WAF in front of everything, so the honest agent above
@@ -178,9 +156,7 @@ _BROWSER_USER_AGENT = (
 
 
 def _browser_read(url: str) -> str:
-    request = urllib.request.Request(url, headers={"User-Agent": _BROWSER_USER_AGENT})
-    with urllib.request.urlopen(request, timeout=20) as response:
-        return str(response.read(MAX_ROBOTS_BYTES).decode("utf-8", errors="replace"))
+    return _policy_read(url, _BROWSER_USER_AGENT)
 
 
 @dataclass(frozen=True)
@@ -914,7 +890,12 @@ class Robots:
                 # recovering it is not license to read it more loosely.
                 try:
                     text = self._browser_fetch(robots_url)
-                except (urllib.error.HTTPError, OSError, http.client.HTTPException) as retry_exc:
+                except (
+                    urllib.error.HTTPError,
+                    OSError,
+                    http.client.HTTPException,
+                    FetchRefused,
+                ) as retry_exc:
                     raise RobotsError(
                         f"{origin}/robots.txt returned 403, and the browser-agent "
                         f"retry could not read it either: {retry_exc}"
@@ -923,6 +904,11 @@ class Robots:
                 # 500, a redirect loop, anything else — an unanswered
                 # question, and an unanswered question is not a yes.
                 raise RobotsError(f"{origin}/robots.txt returned {exc.code}") from exc
+        except FetchRefused as exc:
+            # The transport would not read it (a private address, a redirect off
+            # https, an answer over the cap): a decision, so not retried, and not
+            # a permission either.
+            raise RobotsError(f"{origin}/robots.txt was not read: {exc}") from exc
         except (OSError, http.client.HTTPException) as exc:
             attempts = 1 + len(self._retry_delays)
             raise RobotsUnreachable(

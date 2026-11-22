@@ -3,8 +3,8 @@
 `employer_brief` records `source_posting_url` for an aggregator copy. This module
 goes and reads that page, through the same pieces every other fetch uses: the
 `integral.robots` check under `USER_AGENT`, the site's crawl-delay, and
-`liveness.read_response` for the live/closed verdict. `guarded_fetch` is `urllib`
-with the honest agent and nothing else.
+`liveness.read_response` for the live/closed verdict. `guarded_fetch` is
+`integral.transport`, the one HTTP layer, adapted to this module's `Response`.
 
 When the page is a live posting with a parseable `JobPosting` (schema.org JSON-LD),
 the employer copy is stored as a new offer (`source_kind="employer"`) and becomes
@@ -24,8 +24,6 @@ import http.client
 import json
 import re
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -46,8 +44,16 @@ from integral.lifecycle import (
 )
 from integral.liveness import read_response
 from integral.offers import Location, Offer, Salary, compute_offer_id, load_offer
-from integral.robots import USER_AGENT, Robots, RobotsError
+from integral.robots import Robots, RobotsError
 from integral.salary_period import normalize_period
+from integral.transport import (
+    BodyTooLarge,
+    FetchRefused,
+    Send,
+    Transport,
+    shared_robots,
+    urllib_send,
+)
 
 Outcome = Literal["canonical", "fallback"]
 Reason = Literal[
@@ -84,57 +90,21 @@ class Response:
 Fetch = Callable[[str], Response]
 
 
-class RedirectRefused(OSError):
-    """A redirect hop that robots.txt, or the https-only rule, does not allow."""
-
-
-class _GuardedRedirects(urllib.request.HTTPRedirectHandler):
-    """Check every redirect hop like a first request: https only, robots, crawl-delay."""
-
-    def __init__(self, robots: Robots, sleep: Callable[[float], None], floor: float) -> None:
-        self._robots, self._sleep, self._floor = robots, sleep, floor
-
-    def redirect_request(
-        self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
-    ) -> Any:
-        if urlsplit(newurl).scheme != "https":
-            raise RedirectRefused(f"redirect off https refused: {newurl}")
-        try:
-            allowed = self._robots.allows(newurl)
-        except RobotsError as exc:
-            raise RedirectRefused(f"robots.txt unreadable for redirect {newurl}: {exc}") from exc
-        if not allowed:
-            raise RedirectRefused(f"robots.txt disallows the redirect target {newurl}")
-        wait = self._robots.delay(newurl, self._floor)
-        if wait > 0:
-            self._sleep(wait)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-#: A starting value: an advert page is some hundreds of KiB, and an endless answer
-#: must not be read whole into memory.
-MAX_PAGE_BYTES = 5 * 1024 * 1024
-
-
 def guarded_fetch(
-    robots: Robots, sleep: Callable[[float], None] = time.sleep, floor: float = 1.0
+    robots: Robots, floor: float = DEFAULT_DELAY_FLOOR, send: Send = urllib_send
 ) -> Fetch:
-    """A plain GET with the honest agent, whose redirects are each checked against robots.txt."""
-    opener = urllib.request.build_opener(_GuardedRedirects(robots, sleep, floor))
+    """A GET through `integral.transport`: every hop checked, spaced and size-capped.
+
+    An HTTP error status is an answer, not a failure (`Response(status, None)`); a
+    refusal raises `FetchRefused` and a network fault `OSError`.
+    """
+    transport = Transport(robots, floor=floor, send=send)
 
     def fetch(url: str, timeout: float = 20.0) -> Response:
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        try:
-            with opener.open(request, timeout=timeout) as reply:
-                raw = reply.read(MAX_PAGE_BYTES)
-                charset = reply.headers.get_content_charset() or "utf-8"
-                try:
-                    body = raw.decode(charset, "replace")
-                except LookupError:  # a charset name Python does not know
-                    body = raw.decode("utf-8", "replace")
-                return Response(reply.status, body, reply.url)
-        except urllib.error.HTTPError as exc:
-            return Response(exc.code, None, url)
+        hop = transport.request(url, timeout=timeout)
+        if hop.status >= 300:
+            return Response(hop.status, None, url)
+        return Response(hop.status, hop.text(), hop.url)
 
     return fetch
 
@@ -339,17 +309,6 @@ def primary_offer(store: ProfileStore, offer_id: str) -> Offer:
     return load_offer(store, offer_id)
 
 
-_default_robots: Robots | None = None
-
-
-def _shared_robots() -> Robots:
-    """One Robots per process, so resolving many offers of one host reads its robots.txt once."""
-    global _default_robots
-    if _default_robots is None:
-        _default_robots = Robots()
-    return _default_robots
-
-
 def resolve_canonical(
     store: ProfileStore,
     offer_id: str,
@@ -392,7 +351,7 @@ def resolve_canonical(
             )
     if aggregator.status != "new":
         return fallback("already_in_progress", f"the advert is already {aggregator.status}")
-    checker = robots or _shared_robots()
+    checker = robots or shared_robots()
     try:
         allowed = checker.allows(url)
     except RobotsError as exc:
@@ -402,10 +361,12 @@ def resolve_canonical(
     wait = checker.delay(url, delay_floor)
     if wait > 0:
         sleep(wait)
-    get = fetch or guarded_fetch(checker, sleep, delay_floor)
+    get = fetch or guarded_fetch(checker, delay_floor)
     try:
         reply = get(url)
-    except RedirectRefused as exc:
+    except BodyTooLarge as exc:
+        return fallback("fetch_error", str(exc))
+    except FetchRefused as exc:
         return fallback("robots_refused", str(exc))
     except (OSError, ValueError, http.client.HTTPException) as exc:
         return fallback("fetch_error", f"the fetch failed: {exc}")
