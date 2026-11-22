@@ -68,15 +68,12 @@ import json
 import re
 import shutil
 import sys
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from http.client import HTTPMessage
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import IO, Any
+from typing import Any
 
 import yaml
 
@@ -92,7 +89,9 @@ from integral.connectors import (
     load_connector,
     parse_connector,
 )
+from integral.robots import Robots
 from integral.state_home import candidate_root
+from integral.transport import FetchRefused, Send, Transport
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T54.json"
@@ -174,46 +173,28 @@ def _package_dir(root: Path, name: str) -> Path:
 # coming in
 
 
-class _HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
-    """Refuse a redirect that leaves https — on every hop, not just the first.
-
-    `urlopen` follows redirects, and the stock handler is happy to send an
-    `https` request onward to `http` or `ftp`. Checking only the URL the caller
-    passed makes "no redirect off https" a comment rather than a guarantee, and
-    the party choosing the redirect is the same unauthenticated server that
-    supplies the package names `_package_dir` refuses to trust.
-    """
-
-    def redirect_request(
-        self,
-        req: urllib.request.Request,
-        fp: IO[bytes],
-        code: int,
-        msg: str,
-        headers: HTTPMessage,
-        newurl: str,
-    ) -> urllib.request.Request | None:
-        if urllib.parse.urlsplit(newurl).scheme != "https":
-            raise ExchangeError(f"the exchange refuses a redirect off https: {newurl!r}")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
 #: A starting value: a manifest or a connector file is a few KiB.
 MAX_EXCHANGE_BYTES = 1024 * 1024
 
 
-def https_fetcher(timeout: float = 20.0) -> Fetch:
-    """The real reader: plain HTTPS, no credentials, and https on every hop."""
-    opener = urllib.request.build_opener(_HttpsOnlyRedirects())
+def https_fetcher(
+    timeout: float = 20.0, send: Send | None = None, robots: Robots | None = None
+) -> Fetch:
+    """The real reader, through `integral.transport`: https, robots and the cap on every hop.
+
+    The party choosing a redirect is the same unauthenticated server that supplies
+    the package names `_package_dir` refuses to trust, so every hop is checked.
+    """
+    transport = Transport(robots, send=send)
 
     def fetch(url: str) -> str:
-        if urllib.parse.urlsplit(url).scheme != "https":
-            raise ExchangeError(f"the exchange reads https only, not {url!r}")
-        with opener.open(url, timeout=timeout) as response:
-            raw = response.read(MAX_EXCHANGE_BYTES + 1)
-            if len(raw) > MAX_EXCHANGE_BYTES:
-                raise ExchangeError(f"{url!r} is larger than {MAX_EXCHANGE_BYTES} bytes")
-            return str(raw.decode("utf-8"))
+        try:
+            hop = transport.request(url, timeout=timeout, max_bytes=MAX_EXCHANGE_BYTES)
+        except FetchRefused as exc:
+            raise ExchangeError(f"the exchange will not read {url!r}: {exc}") from exc
+        if hop.status != 200:
+            raise ExchangeError(f"{url!r} answered {hop.status}")
+        return hop.raw.decode("utf-8")
 
     return fetch
 

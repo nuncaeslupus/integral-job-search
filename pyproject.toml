@@ -16,7 +16,6 @@ collect = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "py3langid>=0.3",
-    "requests>=2.32",
 ]
 # Only `integral.cv_store`'s PDF importer needs this. DOCX is a zip of XML —
 # stdlib `zipfile` + `xml.etree` read it directly — and the S4 gate

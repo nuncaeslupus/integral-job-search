@@ -5,7 +5,6 @@ from __future__ import annotations
 import email.message
 import http.client
 import json
-import urllib.request
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,9 +13,7 @@ import pytest
 
 from integral.canonical_ad import (
     CanonicalResult,
-    RedirectRefused,
     Response,
-    _GuardedRedirects,
     load_result,
     primary_offer,
     resolve_canonical,
@@ -33,6 +30,7 @@ from integral.lifecycle import (
 )
 from integral.offers import connect_manual, load_offer, load_offers, save_offer
 from integral.robots import Robots
+from integral.transport import FetchRefused, RobotsRefused
 
 URL = "https://careers.real.example/jobs/42"
 NOW = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
@@ -297,27 +295,38 @@ def test_b2_an_ambiguous_page_is_not_promoted(tmp_path: Path) -> None:
     _fell_back(store, agg_id, result, "mismatch")
 
 
-def test_b3_each_redirect_hop_is_checked_against_robots() -> None:
+def test_b3_each_redirect_hop_is_checked_against_robots(monkeypatch: pytest.MonkeyPatch) -> None:
+    from integral import canonical_ad, transport
+
     robots = _robots("User-agent: *\nDisallow: /private\n")
-    sleeps: list[float] = []
-    handler = _GuardedRedirects(robots, sleeps.append, 0.0)
-    req = urllib.request.Request(URL)
-    headers = email.message.Message()
-    ok = handler.redirect_request(
-        req, None, 302, "Found", headers, "https://careers.real.example/jobs/43"
-    )
-    assert ok is not None and ok.full_url.endswith("/jobs/43")
-    with pytest.raises(RedirectRefused):
-        handler.redirect_request(
-            req, None, 302, "Found", headers, "https://careers.real.example/private/x"
-        )
-    with pytest.raises(RedirectRefused):
-        handler.redirect_request(req, None, 302, "Found", headers, "http://careers.real.example/x")
+    monkeypatch.setattr(transport, "_pause", lambda _s: None)
+    for target, refused in (
+        ("https://careers.real.example/jobs/43", False),
+        ("https://careers.real.example/private/x", True),
+        ("http://careers.real.example/x", True),
+    ):
+        asked: list[str] = []
+
+        def send(
+            _m: str, url: str, *_a: object, target: str = target, asked: list[str] = asked
+        ) -> transport.Hop:
+            asked.append(url)
+            if url == URL:
+                return transport.Hop(302, {"Location": target}, b"", url)
+            return transport.Hop(200, {}, b"ok", url)
+
+        get = canonical_ad.guarded_fetch(robots, send=send)
+        if refused:
+            with pytest.raises(transport.FetchRefused):
+                get(URL)
+            assert asked == [URL], f"{target} was requested anyway"
+        else:
+            assert get(URL).final_url == target
 
 
 def test_b3_a_refused_redirect_is_recorded_as_robots_refused(tmp_path: Path) -> None:
     store, agg_id = _setup(tmp_path)
-    result, _ = _run(store, agg_id, RedirectRefused("robots.txt disallows the redirect target"))
+    result, _ = _run(store, agg_id, RobotsRefused("robots.txt disallows the redirect target"))
     _fell_back(store, agg_id, result, "robots_refused")
 
 
@@ -529,7 +538,9 @@ def _fetch_reply(monkeypatch: pytest.MonkeyPatch, reply: _Reply) -> str | None:
         def open(self, *_a: object, **_k: object) -> _Reply:
             return reply
 
-    monkeypatch.setattr(urllib.request, "build_opener", lambda *_a: _Opener())
+    from integral import transport
+
+    monkeypatch.setattr(transport, "_OPENER", _Opener())
     return canonical_ad.guarded_fetch(Robots(fetch=lambda _u: ""))(reply.url).body
 
 
@@ -538,15 +549,31 @@ def test_a_latin1_page_is_decoded_by_its_declared_charset(monkeypatch: pytest.Mo
     assert _fetch_reply(monkeypatch, reply) == "Ingeniero de datos, Málaga"
 
 
-def test_a_page_is_read_up_to_a_cap_not_whole(monkeypatch: pytest.MonkeyPatch) -> None:
-    from integral import canonical_ad
+def test_an_over_size_page_is_refused_not_truncated(monkeypatch: pytest.MonkeyPatch) -> None:
+    from integral import transport
 
-    reply = _Reply(b"x" * (canonical_ad.MAX_PAGE_BYTES + 10), None)
-    body = _fetch_reply(monkeypatch, reply)
-    assert body is not None and len(body) == canonical_ad.MAX_PAGE_BYTES
+    reply = _Reply(b"x" * (transport.MAX_PAGE_BYTES + 10), None)
+    with pytest.raises(transport.BodyTooLarge):
+        _fetch_reply(monkeypatch, reply)
+    assert reply.asked == transport.MAX_PAGE_BYTES + 1  # never read whole
+
+
+def test_a_refusal_that_is_not_robots_is_not_labelled_robots_refused(tmp_path: Path) -> None:
+    """#993 F6: https-only or a private address is a refused fetch, not robots.txt."""
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(store, agg_id, FetchRefused("https://10.0.0.1/x is not a public web address"))
+    _fell_back(store, agg_id, result, "fetch_error")
+
+
+def test_an_over_size_page_is_a_fetch_error(tmp_path: Path) -> None:
+    from integral.transport import BodyTooLarge
+
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(store, agg_id, BodyTooLarge("too big"))
+    _fell_back(store, agg_id, result, "fetch_error")
 
 
 def test_resolving_many_offers_shares_one_robots() -> None:
-    from integral import canonical_ad
+    from integral import transport
 
-    assert canonical_ad._shared_robots() is canonical_ad._shared_robots()
+    assert transport.shared_robots() is transport.shared_robots()

@@ -282,7 +282,8 @@ def attribution_round() -> tuple[list[tuple[str, SourceKind | None]], str]:
     from integral.identity import ProfileStore, create_profile
     from integral.lifecycle import collect_offer, load_lifecycle_offer
     from integral.offers import Offer, compute_offer_id
-    from integral.sourcing import OFFER_CEILING, Response, no_waiting, source
+    from integral.sourcing import OFFER_CEILING, Response, source
+    from integral.transport import no_waiting
 
     at = "2026-01-01T00:00:00+00:00"
     meta = (DEFAULT_CONNECTORS_DIR / "greenhouse_en" / "meta.yaml").read_text(encoding="utf-8")

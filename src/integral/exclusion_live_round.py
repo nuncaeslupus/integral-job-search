@@ -134,7 +134,8 @@ def measure_live_round(corpus: Path = DEFAULT_LABELLED_ADS) -> dict[str, Any]:
     from integral.identity import create_profile
     from integral.offers import load_offer
     from integral.robots import Robots
-    from integral.sourcing import _FLOOD_CONNECTOR, GLOBAL, Response, no_waiting, source
+    from integral.sourcing import _FLOOD_CONNECTOR, GLOBAL, Response, source
+    from integral.transport import no_waiting
 
     exclusions = tuple(
         Exclusion(about=about, stated_at_cycle=1, words=words, terms=terms)

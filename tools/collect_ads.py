@@ -22,15 +22,14 @@ import argparse
 import json
 import re
 import sys
-import time
 from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 import py3langid
-import requests
 from bs4 import BeautifulSoup
 
 from integral.connector_policy import DEFAULT_LEDGER_PATH, refusals
@@ -45,7 +44,8 @@ from integral.corpus import (
     write_family_evidence,
 )
 from integral.corpus_scope import load_draws
-from integral.robots import USER_AGENT, Robots
+from integral.robots import Robots
+from integral.transport import FetchRefused, Transport
 
 # The host each named source fetches from, so the plan below can be put through the
 # policy ledger by name. A source with no host here is refused too: an unrecorded host
@@ -200,49 +200,43 @@ def detect_language(text: str) -> str:
     return str(lang)
 
 
-MAX_REDIRECTS = 5
+def ledger_refusal(url: str) -> str | None:
+    """Why the policy ledger refuses `url`, put to `Transport` as its refusal hook.
 
-
-def get(session: requests.Session, url: str, **kw: Any) -> requests.Response:
-    """Fetch `url`, or refuse because the policy ledger or the site's robots.txt says not to.
-
-    The check is here rather than in each board adapter because every fetch
-    goes through here: a rule that has to be remembered at each call site is a
-    rule that is one new adapter away from not applying.
-
-    **Redirects are followed by hand, one hop at a time.** `requests` follows
-    them itself, which would check the first URL and fetch the last — so a
-    board that redirects a permitted path onto a disallowed one, or onto
-    another host entirely, would walk straight through the check. Every hop is
-    a fetch, so every hop is put through the refusal ledger, asks that origin's
-    own robots.txt and waits for that origin's own crawl delay.
+    The ledger is asked on every hop, before robots and before the request leaves
+    the process. The plan is filtered before it is walked and `--ca-urls` before it
+    is read; neither reaches a redirect target, which is the one URL nobody typed —
+    an allowed first hop landing on a refused board is the refusal routed around by
+    the board itself. `url_refusals` is the same reader the other two paths use, so
+    there is still exactly one parser of `connectors/ruled-out.yaml`.
     """
-    for _ in range(MAX_REDIRECTS + 1):
-        if urlsplit(url).scheme != "https":
-            raise PermissionError(f"the collector reads https only, not {url!r}")
-        # The ledger, before robots and before the request leaves the process. The plan
-        # is filtered before it is walked and `--ca-urls` before it is read; neither
-        # reaches a redirect target, which is the one URL nobody typed — an allowed
-        # first hop landing on a refused board is the refusal routed around by the
-        # board itself. Asking robots.txt first would put a question to a board we may
-        # not fetch at all. `url_refusals` is the same reader the other two paths use,
-        # so there is still exactly one parser of `connectors/ruled-out.yaml`.
-        refused = url_refusals([url])
-        if url in refused:
-            raise PermissionError(f"the policy ledger refuses {url} — {refused[url]}")
-        if not ROBOTS.allows(url):
-            raise PermissionError(f"robots.txt disallows {USER_AGENT} on {url}")
-        # Before, not after: a delay that only follows the final response does
-        # not pace the redirect chain that led to it.
-        time.sleep(ROBOTS.delay(url, POLITENESS_FLOOR))
-        r = session.get(
-            url, timeout=30, headers={"User-Agent": USER_AGENT}, allow_redirects=False, **kw
-        )
-        if not r.is_redirect:
-            r.raise_for_status()
-            return r
-        url = urljoin(url, r.headers["Location"])
-    raise RuntimeError(f"more than {MAX_REDIRECTS} redirects fetching {url!r}")
+    refused = url_refusals([url])
+    return f"the policy ledger refuses {url} — {refused[url]}" if url in refused else None
+
+
+@dataclass(frozen=True)
+class Page:
+    """What the board adapters read off an answer: its text, or its JSON."""
+
+    text: str
+
+    def json(self) -> Any:
+        return json.loads(self.text)
+
+
+def get(session: Transport, url: str) -> Page:
+    """Fetch `url` through `integral.transport`, or refuse with `PermissionError`.
+
+    Every hop — redirects included — goes through the ledger, the origin's own
+    robots.txt and its crawl delay, https only (`integral.transport`).
+    """
+    try:
+        hop = session.request(url, timeout=30)
+    except FetchRefused as exc:
+        raise PermissionError(str(exc)) from exc
+    if hop.status >= 300:
+        raise RuntimeError(f"{url} answered {hop.status}")
+    return Page(hop.text())
 
 
 # T98: the draw this run is executing, set once from `--draw` and stamped onto every row
@@ -291,7 +285,7 @@ def jobposting_ld(html: str) -> dict[str, Any] | None:
 # --------------------------------------------------------------------------- sources
 
 
-def from_manfred(session: requests.Session, limit: int) -> Iterator[dict[str, Any]]:
+def from_manfred(session: Transport, limit: int) -> Iterator[dict[str, Any]]:
     """getManfred — Spanish board, full-remote flag and long-form ad text."""
     offers = get(session, "https://www.getmanfred.com/api/v2/public/offers?lang=ES").json()
     picked = [
@@ -333,7 +327,7 @@ def from_manfred(session: requests.Session, limit: int) -> Iterator[dict[str, An
             yield rec
 
 
-def from_tecnoempleo(session: requests.Session, limit: int) -> Iterator[dict[str, Any]]:
+def from_tecnoempleo(session: Transport, limit: int) -> Iterator[dict[str, Any]]:
     """Tecnoempleo — Spanish IT board; its `teletrabajo` listing is already remote-only."""
     seen: set[str] = set()
     count = 0
@@ -373,7 +367,7 @@ def from_tecnoempleo(session: requests.Session, limit: int) -> Iterator[dict[str
                 yield rec
 
 
-def from_remotive(session: requests.Session, limit: int) -> Iterator[dict[str, Any]]:
+def from_remotive(session: Transport, limit: int) -> Iterator[dict[str, Any]]:
     """Remotive — English remote board, full description in its public JSON API."""
     jobs = get(
         session, "https://remotive.com/api/remote-jobs?category=software-dev&limit=200"
@@ -398,7 +392,7 @@ def from_remotive(session: requests.Session, limit: int) -> Iterator[dict[str, A
             yield rec
 
 
-def from_weworkremotely(session: requests.Session, limit: int) -> Iterator[dict[str, Any]]:
+def from_weworkremotely(session: Transport, limit: int) -> Iterator[dict[str, Any]]:
     """We Work Remotely — English; its programming RSS carries the whole ad body."""
     feeds = (
         "https://weworkremotely.com/categories/remote-programming-jobs.rss",
@@ -435,7 +429,7 @@ def from_weworkremotely(session: requests.Session, limit: int) -> Iterator[dict[
                 yield rec
 
 
-def from_remoteok(session: requests.Session, limit: int) -> Iterator[dict[str, Any]]:
+def from_remoteok(session: Transport, limit: int) -> Iterator[dict[str, Any]]:
     """RemoteOK — English; public JSON feed, first element is the licence notice."""
     jobs = get(session, "https://remoteok.com/api").json()[1:]
     count = 0
@@ -518,7 +512,7 @@ FEINA_ACTIVA_KEYWORDS = (
 )
 
 
-def from_feinaactiva(session: requests.Session, limit: int) -> Iterator[dict[str, Any]]:
+def from_feinaactiva(session: Transport, limit: int) -> Iterator[dict[str, Any]]:
     """Feina Activa (Servei d'Ocupació de Catalunya) — the one board whose ads are
     natively written in Catalan. Its public search API pages 20 at a time."""
     base = "https://feinaactiva.gencat.cat/api/offers"
@@ -604,7 +598,7 @@ FAMILY_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 
-def feinaactiva_detail(session: requests.Session, ref: str) -> tuple[str, str, str]:
+def feinaactiva_detail(session: Transport, ref: str) -> tuple[str, str, str]:
     """One Feina Activa offer as (title, company, verbatim text)."""
     detail = get(session, f"https://feinaactiva.gencat.cat/api/offers/{ref}").json()
     text = clean(
@@ -621,7 +615,7 @@ def feinaactiva_detail(session: requests.Session, ref: str) -> tuple[str, str, s
 
 
 def from_feinaactiva_family(
-    session: requests.Session,
+    session: Transport,
     family: str,
     limit: int,
     known: set[str] | None = None,
@@ -690,7 +684,7 @@ def source_of(url: str) -> str | None:
 
 
 def from_urls(
-    session: requests.Session, urls: list[str], spec: Mapping[str, Any]
+    session: Transport, urls: list[str], spec: Mapping[str, Any]
 ) -> Iterator[dict[str, Any]]:
     """Any board that publishes schema.org JobPosting — used for the hand-picked CA ads.
 
@@ -804,7 +798,7 @@ def main() -> int:
 
     ads = {ad["id"]: ad for ad in load_ads()}
     texts = {ad["text"] for ad in ads.values()}
-    session = requests.Session()
+    session = Transport(ROBOTS, refuse=ledger_refusal, floor=POLITENESS_FLOOR)
 
     def absorb(name: str, it: Iterator[dict[str, Any]]) -> None:
         added = 0

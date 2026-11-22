@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
+import integral.transport as transport
 from integral.candidate import Aim, CandidateConstraints, Location
 from integral.connectors import (
     EMPLOYER_PLACEHOLDER,
@@ -690,8 +691,6 @@ def _detail_run(
     """Two employers, two rows each, every body on an advert host of its own."""
     import urllib.error
 
-    import integral.sourcing as sourcing
-
     directory = _package(tmp_path)
     (directory / "atshost_en" / "connector.yaml").write_text(
         _yaml(GOOD, "  employers:\n    acme: Acme Corp\n    beta: Beta Inc\n").replace(
@@ -705,8 +704,8 @@ def _detail_run(
     create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
     record_relevance(ProfileStore(tmp_path / "p", "test"), 0.0)  # the filter is not under test here
     pauses: list[float] = []
-    monkeypatch.setattr(sourcing, "_pause", pauses.append)
-    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
+    monkeypatch.setattr(transport, "_pause", pauses.append)
+    monkeypatch.setattr(transport, "_clock", lambda: 0.0)
     robots_asked: list[str] = []
 
     def robots_fetch(url: str) -> str:
@@ -895,11 +894,10 @@ def test_the_crawl_delay_is_kept_between_one_hosts_requests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """F11: api.lever.co states `Crawl-delay: 1`; a host is now many requests."""
-    import integral.sourcing as sourcing
 
     pauses: list[float] = []
-    monkeypatch.setattr(sourcing, "_pause", pauses.append)
-    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
+    monkeypatch.setattr(transport, "_pause", pauses.append)
+    monkeypatch.setattr(transport, "_clock", lambda: 0.0)
     answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
     _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\nCrawl-delay: 2\n")
     assert pauses == [2.0, 2.0]
@@ -909,27 +907,25 @@ def test_a_host_with_no_crawl_delay_is_still_spaced_by_the_floor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """#925: without a stated Crawl-delay requests used to go back to back."""
-    import integral.sourcing as sourcing
 
     pauses: list[float] = []
-    monkeypatch.setattr(sourcing, "_pause", pauses.append)
-    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
+    monkeypatch.setattr(transport, "_pause", pauses.append)
+    monkeypatch.setattr(transport, "_clock", lambda: 0.0)
     answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
     _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
-    assert pauses == [sourcing.REQUEST_FLOOR_SECONDS] * 2
+    assert pauses == [transport.REQUEST_FLOOR_SECONDS] * 2
 
 
 def test_a_same_day_cache_hit_does_not_wait_for_the_host_gap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Review follow-up on #943: the spacing check came before the cache lookup."""
-    import integral.sourcing as sourcing
 
-    monkeypatch.setattr(sourcing, "_clock", lambda: 0.0)
+    monkeypatch.setattr(transport, "_clock", lambda: 0.0)
     answers = {"acme": _jobs("A"), "gone": _jobs("G"), "beta": _jobs("B")}
     _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
     pauses: list[float] = []
-    monkeypatch.setattr(sourcing, "_pause", pauses.append)
+    monkeypatch.setattr(transport, "_pause", pauses.append)
     _, asked = _three_employer_run(tmp_path, answers, "User-agent: *\nAllow: /\n")
     assert asked == [] and pauses == []
 

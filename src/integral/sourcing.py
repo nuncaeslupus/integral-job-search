@@ -41,15 +41,13 @@ tests rather than a recording of one afternoon's internet.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import re
 import shutil
 import sys
-import time
 import unicodedata
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
@@ -92,6 +90,8 @@ from integral.relevance import record as record_relevance
 from integral.robots import Robots, RobotsError, RobotsUnreachable
 from integral.salary_recovery import applied, band_in_text, recover
 from integral.sourcing_exclusions import Exclusion, candidate_of, held_in_words, load_exclusions
+from integral.transport import origin as _origin
+from integral.transport import space
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONNECTORS_DIR = _REPO_ROOT / "connectors"
@@ -1031,33 +1031,6 @@ def matches_aim(item: dict[str, str], phrases: Sequence[str]) -> bool:
     return any((need := _words(phrase)) and need <= have for phrase in phrases)
 
 
-#: `time.sleep`, named so a test can replace it rather than wait.
-_pause = time.sleep
-_clock = time.monotonic
-
-#: The least gap kept between two requests to one host when its robots.txt
-#: states no `Crawl-delay` (one second, as `canonical_ad.DEFAULT_DELAY_FLOOR`).
-#: A starting value rather than a rule of the web: a stated Crawl-delay longer
-#: than this still wins, and a host that asks for less is not given less.
-REQUEST_FLOOR_SECONDS = 1.0
-
-
-@contextlib.contextmanager
-def no_waiting() -> Iterator[None]:
-    """Skip the request-spacing sleep: for constructed rounds that touch no real host."""
-    global _pause
-    kept, _pause = _pause, lambda _seconds: None
-    try:
-        yield
-    finally:
-        _pause = kept
-
-
-#: When this process last requested each origin. Per origin and not per board:
-#: 56 Greenhouse boards are one host, and each used to start its own count.
-_last_request_at: dict[str, float] = {}
-
-
 def _list_of_the_day(
     store: ProfileStore, request: ListRequest, at: str, fetch: Fetch, robots: Robots
 ) -> Response:
@@ -1075,7 +1048,7 @@ def _list_of_the_day(
     if store.exists("cache", "boards", day, name):
         kept = store.read_json("cache", "boards", day, name)
         return Response(kept["status"], kept["body"])
-    _space(robots, request.url)  # only a real request waits; a cache hit never does
+    space(robots, request.url)  # only a real request waits; a cache hit never does
     response = fetch(request)
     if (
         response.error is None
@@ -1088,18 +1061,6 @@ def _list_of_the_day(
                 shutil.rmtree(old, ignore_errors=True)
         store.write_json({"status": 200, "body": response.body}, "cache", "boards", day, name)
     return response
-
-
-def _space(robots: Robots, url: str) -> None:
-    """Wait out the host's gap since our previous request to the same origin,
-    then record this one. The first request to an origin never waits."""
-    origin = _origin(url)
-    last = _last_request_at.get(origin)
-    if last is not None:
-        wait = robots.delay(url, REQUEST_FLOOR_SECONDS) - (_clock() - last)
-        if wait > 0:
-            _pause(wait)
-    _last_request_at[origin] = _clock()
 
 
 def _check_offset(aim: Aim, offset: int) -> None:
@@ -1441,23 +1402,6 @@ def _may_fetch(robots: Robots, url: str) -> bool:
         return False
 
 
-def _origin(url: str) -> str:
-    """RFC 6454's (scheme, host, port), with the default port filled in.
-
-    `usajobs_en`'s adverts link to `https://www.usajobs.gov:443/job/…` while its
-    list is `https://www.usajobs.gov/…` — one host, and it must be one origin,
-    or a refusal on one spelling leaves the other free to be asked (#466 F1).
-    """
-    parts = urlsplit(url)
-    scheme = parts.scheme.lower()
-    port: int | str | None
-    try:
-        port = parts.port or {"http": 80, "https": 443}.get(scheme)
-    except ValueError:  # a malformed port in a board's own link: keep it as written
-        port = parts.netloc.rpartition(":")[2].lower()
-    return f"{scheme}://{parts.hostname or ''}:{port}"
-
-
 def _detail_declares_text(connector: Connector) -> bool:
     """Whether `connector.detail` promises an advert body at all (T234).
 
@@ -1749,7 +1693,7 @@ def _one_board(
         # The site's own Crawl-delay, or the floor, between requests to one
         # host. An ATS host is dozens of boards (T144).
         if steerable or request.method != "GET":
-            _space(robots, request.url)
+            space(robots, request.url)
             response = fetch(request)
         else:
             response = _list_of_the_day(store, request, at, fetch, robots)
@@ -1835,7 +1779,7 @@ def _one_board(
                         continue
                     list_text_only += 1
                 elif origin not in refused_origins and _may_fetch(robots, detail_url):
-                    _space(robots, detail_url)
+                    space(robots, detail_url)
                     detail_fetched += 1
                     fields, refusal = _detail_record(connector, detail_url, fetch=fetch)
                     if refusal is not None:
@@ -2107,7 +2051,6 @@ def measure_fixture() -> dict[str, Any]:
       returns the empty list.
     """
     import tempfile
-    from urllib.parse import urlsplit
 
     from integral.identity import create_profile
 
@@ -2648,7 +2591,6 @@ def measure_flood() -> dict[str, Any]:
     met the failing page — a zero over a run that never got there says nothing.
     """
     import tempfile
-    from urllib.parse import urlsplit
 
     from integral.candidate import Reach
     from integral.identity import create_profile

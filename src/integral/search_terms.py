@@ -324,10 +324,10 @@ def _drive(
         DEFAULT_CONNECTORS_DIR,
         Response,
         _connector_of,
-        no_waiting,
         packages_for,
         source,
     )
+    from integral.transport import no_waiting
 
     constraints = CandidateConstraints(
         location=_Location(

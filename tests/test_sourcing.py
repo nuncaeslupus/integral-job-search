@@ -2058,7 +2058,7 @@ def test_one_host_is_one_origin_however_its_links_spell_it() -> None:
     """#466 F1: `usajobs_en` lists at `https://www.usajobs.gov/…` and links its
     adverts as `https://www.usajobs.gov:443/…`. Two spellings of one origin
     (RFC 6454) must not be two keys, or a refusal on one leaves the other free."""
-    from integral.sourcing import _origin
+    from integral.transport import origin as _origin
 
     same = _origin("https://www.usajobs.gov/Search/ExecuteSearch")
     assert _origin("https://www.usajobs.gov:443/job/856726500") == same

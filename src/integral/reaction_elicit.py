@@ -152,7 +152,7 @@ def _hostname(url: str) -> str | None:
 
     `urlparse().hostname` rather than `.netloc`, which is not a host — it
     carries userinfo and a port. `usajobs_en` serves adverts as
-    `https://www.usajobs.gov:443/job/…` (`sourcing._origin` exists for that
+    `https://www.usajobs.gov:443/job/…` (`transport.origin` exists for that
     spelling), so reading the netloc refused a real board's every advert, while
     `https://permitted.example@evil.test/` read as one long host that ends the
     right way.
@@ -657,7 +657,7 @@ def probe_elicitation() -> dict[str, Any]:
     must_accept("board_advert_on_its_list_host", live)
     # A real board's real spelling, refused while this read `netloc`:
     # `usajobs_en` serves `https://www.usajobs.gov:443/job/…`, which is why
-    # `sourcing._origin` fills the default port in.
+    # `transport.origin` fills the default port in.
     must_accept(
         "board_advert_carrying_an_explicit_default_port",
         live.model_copy(update={"url": "https://remotive.com:443/ad/1"}),

@@ -12,13 +12,13 @@ consulted is `connector_policy.DEFAULT_SECOND_READER` read at call time, and the
 from __future__ import annotations
 
 import importlib.util
-import io
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
 from integral import connector_policy, second_reader
+from integral.transport import Hop
 
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / ".claude" / "skills" / "connector-new" / "scripts" / "query_board.py"
@@ -82,15 +82,7 @@ def test_the_probe_reports_two_parsers_agreed_when_the_reader_refuses(
     probe: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     served = LONGER_DISALLOW.encode()
-
-    class _Response(io.BytesIO):
-        def __enter__(self) -> _Response:
-            return self
-
-        def __exit__(self, *exc: object) -> None:
-            return None
-
-    monkeypatch.setattr(probe.urllib.request, "urlopen", lambda *a, **k: _Response(served))
+    monkeypatch.setattr(probe, "fetch_policy", lambda url: Hop(200, {}, served, url))
     lines = probe.second_reader(URLS)
     assert "  standing: two_parsers_agreed" in lines
     assert not any("single_parser" in line for line in lines)
@@ -117,7 +109,7 @@ def test_a_reader_that_cannot_be_run_is_single_parser_not_agreement(
     def refuse(*_: object, **__: object) -> None:
         raise OSError("no network")
 
-    monkeypatch.setattr(probe.urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(probe, "fetch_policy", refuse)
     assert probe.second_reader(URLS)[-1] == "  standing: single_parser"
 
 
