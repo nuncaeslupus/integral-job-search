@@ -199,11 +199,12 @@ uv run python3 -c "
 from datetime import UTC, datetime
 from integral.connector_coverage import installed_packages
 from integral.identity import ProfileStore, default_profiles_root
+from integral.live_fetch import live_fetch
 from integral.robots import Robots
 from integral.sourcing import DEFAULT_CONNECTORS_DIR, _one_board
 p = next(x for x in installed_packages(DEFAULT_CONNECTORS_DIR) if x.name == '<name>')
 print(_one_board(ProfileStore(default_profiles_root(), '<handle>'), p,
-      'python', phrases=('python',), fetch=<a live fetcher>,
+      'python', phrases=('python',), fetch=live_fetch(),
       at=datetime.now(UTC).isoformat(timespec='seconds'),
       directory=DEFAULT_CONNECTORS_DIR, page_count=1, robots=Robots()))"
 ```

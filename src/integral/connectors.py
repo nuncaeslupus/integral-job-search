@@ -3850,6 +3850,9 @@ class ListRequest:
     #: `list.employers` — never sent; the offer's `company` when the record
     #: names none. `None` for every board that is not an ATS host.
     employer: str | None = None
+    #: The connector's declared `charset`: what the fetcher decodes the answer with
+    #: (`decode_body`, refusing rather than replacing). Never sent.
+    charset: str = "utf-8"
 
 
 def _page_substituted(body: Any, page: int, param: str | None) -> Any:
@@ -3917,7 +3920,14 @@ def build_list_requests(
             )
         derived = client_headers(page.client, page.client_target)
         return [
-            ListRequest(url=url, method=page.method, headers=derived, body=None, employer=name)
+            ListRequest(
+                url=url,
+                method=page.method,
+                headers=derived,
+                body=None,
+                employer=name,
+                charset=connector.charset,
+            )
             for url, name in targets
         ]
     if page.method != "POST":
@@ -3948,6 +3958,7 @@ def build_list_requests(
                 **client_headers(page.client, page.client_target),
             },
             body=serialise_body(_page_substituted(page.body_json, start + offset, paginating_key)),
+            charset=connector.charset,
         )
         for offset, url in enumerate(urls)
     ]

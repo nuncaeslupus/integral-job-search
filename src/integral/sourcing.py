@@ -1444,7 +1444,9 @@ def _detail_record(
     """
     detail = connector.detail
     headers = client_headers(detail.client, detail.client_target) if detail else {}
-    response = fetch(ListRequest(url=url, method="GET", headers=headers, body=None))
+    response = fetch(
+        ListRequest(url=url, method="GET", headers=headers, body=None, charset=connector.charset)
+    )
     refusal = rate_limited(None, response.status)
     if refusal is not None:
         return None, refusal
