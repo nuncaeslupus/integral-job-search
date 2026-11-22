@@ -172,3 +172,144 @@ def test_the_command_says_what_is_missing_rather_than_improvising(tmp_path: Path
     create_profile(tmp_path, "Test", handle="test", language="es", fiction=True)
     assert _main(["run", "--handle", "test", "--root", str(tmp_path)]) == 2
     assert _main([]) == 2
+
+
+# --- #994 second reader ---------------------------------------------------------------
+
+_ATS_YAML = (
+    "site: atshost\nlocale: en\nversion: '1.0.0'\nlast_verified: '2026-09-10'\n"
+    "list:\n  url_pattern: 'https://api.ats.example.com/v1/boards/{employer}/jobs'\n"
+    "  pagination: {mode: none, max_pages: 1}\n"
+    "  from_json:\n    items: jobs\n    fields: {title: title, company: company, text: body}\n"
+    "  employers:\n    acme: Acme Corp\n    beta: Beta Inc\n    gamma: Gamma SL\n"
+)
+
+
+def _round(tmp_path: Path, answers: dict[str, bytes], rules: str = ALLOW) -> tuple[Any, list[str]]:
+    base = "https://api.ats.example.com/v1/boards"
+    sock = _Socket({f"{base}/{name}/jobs": body for name, body in answers.items()})
+    robots = Robots(fetch=lambda _url: rules)
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    store = ProfileStore(tmp_path / "p", "test")
+    record_relevance(store, 0.0)
+    run = source(
+        store,
+        CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+        Aim(state="stated", terms=("python",)),
+        fetch=live_fetch(robots, send=sock),
+        at="2026-11-22T00:00:00+00:00",
+        directory=_package(tmp_path),
+        robots=robots,
+    )
+    return run, [url for _, url, _, _ in sock.sent]
+
+
+def _jobs(name: str) -> bytes:
+    return json.dumps({"jobs": [{"title": f"Python developer {name}", "body": name}]}).encode()
+
+
+@pytest.mark.parametrize("bad", [b"\xef\xbb\xbf\xe9", b"\xff\xfe\x00\xd8"])
+def test_a_bom_followed_by_undecodable_bytes_fails_one_board_not_the_round(
+    tmp_path: Path, bad: bytes
+) -> None:
+    run, asked = _round(tmp_path, {"acme": bad, "beta": _jobs("beta"), "gamma": _jobs("gamma")})
+    assert len(asked) == 3, "the round stopped at the undecodable body"
+    assert run.added == 2
+    (outcome,) = run.outcomes
+    assert any("Acme Corp" in failed and "decode" in failed for failed in outcome.employers_failed)
+
+
+def test_every_request_builder_carries_the_connectors_charset(tmp_path: Path) -> None:
+    """Both list builders and the advert page: a non-UTF-8 board is decoded as declared."""
+    from integral import sourcing
+    from integral.connectors import build_list_requests, parse_connector
+
+    fixtures = REPO / "tests" / "fixtures" / "connectors"
+    ats = parse_connector(_ATS_YAML + "charset: iso-8859-1\n")
+    post = parse_connector(
+        (fixtures / "post_board.yaml").read_text(encoding="utf-8") + "charset: iso-8859-1\n"
+    )
+    built = build_list_requests(ats) + build_list_requests(post)
+    assert built and {request.charset for request in built} == {"iso-8859-1"}
+
+    detailed = parse_connector(
+        _ATS_YAML.replace("text: body", "detail_url: url")
+        + "detail:\n  fields:\n    text:\n      css: 'div.content'\n"
+        + "charset: iso-8859-1\n"
+    )
+    seen: list[str] = []
+
+    def fetch(request: ListRequest) -> Any:
+        seen.append(request.charset)
+        return sourcing.Response(200, "<div class='content'>x</div>")
+
+    sourcing._detail_record(detailed, "https://jobs.example.com/a/1", fetch=fetch)
+    assert seen == ["iso-8859-1"]
+
+
+class _Reply:
+    def __init__(self, url: str, body: bytes) -> None:
+        self.url, self.status, self._body = url, 200, body
+        self.headers: dict[str, str] = {}
+
+    def read(self, limit: int = -1) -> bytes:
+        return self._body[:limit] if limit >= 0 else self._body
+
+    def __enter__(self) -> _Reply:
+        return self
+
+    def __exit__(self, *_a: object) -> None:
+        return None
+
+
+def test_the_command_reads_robots_once_and_spaces_the_first_request_after_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI's own wiring, not a test that hands both halves one object."""
+    from integral import live_fetch as module
+    from integral import sourcing
+
+    asked: list[str] = []
+
+    class _Opener:
+        def open(self, request: Any, timeout: float = 0) -> _Reply:
+            asked.append(request.full_url)
+            if request.full_url.endswith("/robots.txt"):
+                return _Reply(request.full_url, b"User-agent: *\nAllow: /\nCrawl-delay: 4\n")
+            return _Reply(request.full_url, _jobs(request.full_url.split("/")[-2]))
+
+    waits: list[float] = []
+    monkeypatch.setattr(transport, "_OPENER", _Opener())
+    monkeypatch.setattr(transport, "_pause", waits.append)
+    monkeypatch.setattr(transport, "_clock", lambda: 0.0)
+    monkeypatch.setattr(sourcing, "DEFAULT_CONNECTORS_DIR", _package(tmp_path))
+    monkeypatch.setattr(
+        module,
+        "load_constraints",
+        lambda _payload: CandidateConstraints(
+            location=Location(state="stated", country="ES", accepts_onsite_in_country=True)
+        ),
+    )
+    monkeypatch.setattr(module, "load_aim", lambda _store: Aim(state="stated", terms=("python",)))
+    create_profile(tmp_path / "p", "Test", handle="test", language="es", fiction=True)
+    store = ProfileStore(tmp_path / "p", "test")
+    record_relevance(store, 0.0)
+    from integral.constraints_step import CONSTRAINTS_PARTS
+
+    store.write_json({}, *CONSTRAINTS_PARTS)
+
+    assert _main(["run", "--handle", "test", "--root", str(tmp_path / "p")]) == 0
+
+    robots_reads = [url for url in asked if url.endswith("/robots.txt")]
+    assert robots_reads == ["https://api.ats.example.com/robots.txt"]
+    assert len(asked) == 4  # robots.txt, then three employers
+    assert waits == [4.0, 4.0, 4.0], "every list request waits the crawl delay, the first too"
+
+
+def test_a_handle_that_is_not_a_name_exits_2_without_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _main(["run", "--handle", "../x", "--root", str(tmp_path)]) == 2
+    assert "Traceback" not in capsys.readouterr().err

@@ -203,10 +203,11 @@ from integral.live_fetch import live_fetch
 from integral.robots import Robots
 from integral.sourcing import DEFAULT_CONNECTORS_DIR, _one_board
 p = next(x for x in installed_packages(DEFAULT_CONNECTORS_DIR) if x.name == '<name>')
+robots = Robots()  # one for the fetch and the round, or robots.txt is read twice
 print(_one_board(ProfileStore(default_profiles_root(), '<handle>'), p,
-      'python', phrases=('python',), fetch=live_fetch(),
+      'python', phrases=('python',), fetch=live_fetch(robots),
       at=datetime.now(UTC).isoformat(timespec='seconds'),
-      directory=DEFAULT_CONNECTORS_DIR, page_count=1, robots=Robots()))"
+      directory=DEFAULT_CONNECTORS_DIR, page_count=1, robots=robots))"
 ```
 
 `items` far above `added` with `detail_fetched` non-zero is this failure. `drop_reason` names the field that went missing.

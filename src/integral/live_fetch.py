@@ -8,7 +8,11 @@ one a session uses instead, and the step-7 skill forbids any other:
 
     uv run python -m integral.live_fetch run --handle <handle> [--offset N] [--browser PAGE ...]
 
-or, from Python, `source_every_phrase(store, constraints, aim, fetch=live_fetch())`.
+or, from Python, with ONE `Robots` for both, so robots.txt is read once per origin and
+that read counts toward the crawl delay:
+
+    robots = Robots()
+    source_every_phrase(store, constraints, aim, fetch=live_fetch(robots), robots=robots, at=...)
 
 Every request goes through `Transport`: https only, a public address, robots.txt
 under `USER_AGENT` on every hop, the origin's crawl delay, a size cap. The body is
@@ -29,7 +33,7 @@ from pathlib import Path
 from integral.candidate import load_constraints
 from integral.connectors import ConnectorError, ListRequest, decode_body
 from integral.constraints_step import CONSTRAINTS_PARTS
-from integral.identity import ProfileStore, default_profiles_root
+from integral.identity import IdentityError, ProfileStore, default_profiles_root
 from integral.robots import Robots
 from integral.search_terms import load_aim
 from integral.sourcing import Fetch, Response, from_captures, source, source_every_phrase
@@ -85,20 +89,38 @@ def _run(argv: list[str]) -> int:
         help="pages the candidate's own browser saved, for `client: browser` boards",
     )
     args = parser.parse_args(argv)
-    store = ProfileStore(args.root or default_profiles_root(), args.handle)
-    if not store.exists(*CONSTRAINTS_PARTS):
+    try:
+        store = ProfileStore(args.root or default_profiles_root(), args.handle)
+        recorded = store.exists(*CONSTRAINTS_PARTS)
+    except IdentityError as exc:
+        print(f"no such profile {args.handle!r}: {exc}", file=sys.stderr)
+        return 2
+    if not recorded:
         print(f"no constraints recorded for {args.handle}: run step 2 first", file=sys.stderr)
         return 2
     constraints = load_constraints(store.read_json(*CONSTRAINTS_PARTS))
     aim = load_aim(store)
-    fetch = live_fetch()
+    # One adjudicator for the transport and for `source()`: two would read each
+    # robots.txt twice, and `first_hop_spaced` would then send the first request
+    # with no gap after the second read (#994 second reader).
+    robots = Robots()
+    fetch = live_fetch(robots)
     browser = from_captures(args.browser) if args.browser else None
     at = datetime.now(UTC).isoformat(timespec="seconds")
     if args.offset is None:
-        run = source_every_phrase(store, constraints, aim, fetch=fetch, browser=browser, at=at)
+        run = source_every_phrase(
+            store, constraints, aim, fetch=fetch, robots=robots, browser=browser, at=at
+        )
     else:
         run = source(
-            store, constraints, aim, fetch=fetch, browser=browser, at=at, offset=args.offset
+            store,
+            constraints,
+            aim,
+            fetch=fetch,
+            robots=robots,
+            browser=browser,
+            at=at,
+            offset=args.offset,
         )
     print(run.summary())
     return 0
