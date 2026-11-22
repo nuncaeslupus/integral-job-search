@@ -1608,7 +1608,7 @@ def test_a_shrunken_array_path_table_reports_unmeasured_rather_than_a_clean_zero
     """The denominator's whole job. With one pair evaluated the record must not
     read as a pass, and `_main` must exit 1 — not the 3 `make evidence` records
     as `unmeasured (recorded)` and continues past (#297, #309)."""
-    monkeypatch.setattr(connectors, "ARRAY_PATH_CONTRACTS", ARRAY_PATH_CONTRACTS[:1])
+    monkeypatch.setattr(connectors.probes, "ARRAY_PATH_CONTRACTS", ARRAY_PATH_CONTRACTS[:1])
     measured = measure_array_paths()
     assert measured["connector_array_paths_misresolved"] == 0
     assert measured["gate_status"] == "unmeasured"
@@ -3280,7 +3280,8 @@ def test_the_two_builders_read_one_dot_segment_rule(monkeypatch: pytest.MonkeyPa
     refuse that value and both let `..` through. The real set is RFC 3986
     §3.3's two, written out here from the RFC."""
     assert frozenset({".", ".."}) == DOT_SEGMENTS
-    monkeypatch.setattr(connectors, "DOT_SEGMENTS", frozenset({"swapped"}))
+    for module in (connectors.model, connectors.read):
+        monkeypatch.setattr(module, "DOT_SEGMENTS", frozenset({"swapped"}))
     listing = parse_connector(_with_path_query_slot())
     template = parse_connector(TEMPLATE_CONNECTOR)
 

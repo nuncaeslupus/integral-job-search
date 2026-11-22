@@ -978,9 +978,9 @@ def test_the_attribution_metric_reads_a_board_marked_wrongly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The control: the metric is not independent of what it measures."""
-    import integral.connectors as connectors
+    import integral.connectors.read as connectors_read
 
-    monkeypatch.setattr(connectors, "source_kind_of", lambda connector: "employer")
+    monkeypatch.setattr(connectors_read, "source_kind_of", lambda connector: "employer")
     stored, summary = attribution_round()
     wrong = sorted(source for source, _ in stored if ATTRIBUTION_BOARDS[source][0] != "employer")
     assert (

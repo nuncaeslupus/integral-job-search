@@ -409,15 +409,15 @@ def _reads_without_bound(directory: Path) -> frozenset[int]:
     **only** with the bound off count: a detail-route row the shared detail page
     already reads is not refused by anything.
     """
-    from integral import connectors
+    from integral.connectors import read  # the module that calls the bound (#928)
 
     on = frozenset(v.index for v in _verdicts(directory) if v.salary is not None)
-    real = connectors._outside_annual_bound
-    connectors._outside_annual_bound = lambda *_a, **_k: False
+    real = read._outside_annual_bound
+    read._outside_annual_bound = lambda *_a, **_k: False
     try:
         return frozenset(v.index for v in _verdicts(directory) if v.salary is not None) - on
     finally:
-        connectors._outside_annual_bound = real
+        read._outside_annual_bound = real
 
 
 def _expectations(directory: Path) -> dict[str, dict[str, Any]]:

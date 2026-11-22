@@ -84,8 +84,14 @@ def memoised_connector_parsing() -> Iterator[None]:
     at module teardown, so it cannot reach another file.
     """
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(connectors, "parse_connector", functools.cache(connectors.parse_connector))
-        patch.setattr(connectors, "parse_html", functools.cache(connectors.parse_html))
+        parse_connector = functools.cache(connectors.parse_connector)
+        parse_html = functools.cache(connectors.parse_html)
+        for module in (connectors, connectors.markup, connectors.model, connectors.read):
+            for name, memo in (("parse_connector", parse_connector), ("parse_html", parse_html)):
+                if hasattr(module, name):
+                    patch.setattr(module, name, memo)
+        if hasattr(connectors.probes, "parse_connector"):
+            patch.setattr(connectors.probes, "parse_connector", parse_connector)
         yield
 
 
