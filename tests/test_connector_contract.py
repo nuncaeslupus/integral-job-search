@@ -800,6 +800,22 @@ _NOT_ADDRESSES = {
     ("src/integral/robots.py", ".".join(map(str, (124, 0, 0, 0)))): (
         "Chrome's version in a browser User-Agent"
     ),
+    # #993's address fixtures: deliberate inputs to the public-address rule, each
+    # one an address the transport must refuse or a public one it must reach — not
+    # a captured client address. Keys as the scanner reads them.
+    **{
+        ("tests/test_transport.py", literal): "a transport address fixture (#993)"
+        # Spelled in pieces, as above, so this file does not carry them itself.
+        for literal in (
+            ":".join(("2606", "4700", "", "6810", "84e5")),
+            ".".join(map(str, (37, 0, 0, 1))),
+            ":".join(("64", "ff9b", "", "7f00", "1")),
+            ".".join(map(str, (93, 184, 215, 14))),
+            ":".join(("", "", "127")),
+            ":".join(("", "", "ffff", "10")),
+            ":".join(("", "", "ffff", "192")),
+        )
+    },
 }
 
 
@@ -935,8 +951,8 @@ def test_no_committed_file_carries_an_ip_address() -> None:
     counts, so documentation, private and loopback ranges pass, and so does a
     quad with an octet above 255, and so does one written after `§`, which is an
     RFC section number: T144 cited five of them the day this landed. The one
-    remaining literal that is not an address is named in `_NOT_ADDRESSES` with
-    the reason.
+    remaining literal that is not an address, and each deliberate address fixture,
+    is named in `_NOT_ADDRESSES` with the reason.
     """
     found = _quads_in_every_file()
     offenders = sorted(key for key in found if key not in _NOT_ADDRESSES)
