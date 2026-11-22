@@ -661,7 +661,9 @@ def test_an_oversized_exchange_answer_is_refused(monkeypatch: pytest.MonkeyPatch
 
     class _Reply:
         status = 200
-        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.headers: dict[str, str] = {}
 
         def read(self, limit: int = -1) -> bytes:
             return b"x" * (limit if limit >= 0 else 10**7)

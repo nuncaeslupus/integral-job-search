@@ -91,7 +91,7 @@ from integral.connectors import (
 )
 from integral.robots import Robots
 from integral.state_home import candidate_root
-from integral.transport import FetchRefused, Send, Transport, urllib_send
+from integral.transport import FetchRefused, Send, Transport
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T54.json"
@@ -178,7 +178,7 @@ MAX_EXCHANGE_BYTES = 1024 * 1024
 
 
 def https_fetcher(
-    timeout: float = 20.0, send: Send = urllib_send, robots: Robots | None = None
+    timeout: float = 20.0, send: Send | None = None, robots: Robots | None = None
 ) -> Fetch:
     """The real reader, through `integral.transport`: https, robots and the cap on every hop.
 

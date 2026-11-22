@@ -52,7 +52,6 @@ from integral.transport import (
     Send,
     Transport,
     shared_robots,
-    urllib_send,
 )
 
 Outcome = Literal["canonical", "fallback"]
@@ -91,7 +90,7 @@ Fetch = Callable[[str], Response]
 
 
 def guarded_fetch(
-    robots: Robots, floor: float = DEFAULT_DELAY_FLOOR, send: Send = urllib_send
+    robots: Robots, floor: float = DEFAULT_DELAY_FLOOR, send: Send | None = None
 ) -> Fetch:
     """A GET through `integral.transport`: every hop checked, spaced and size-capped.
 

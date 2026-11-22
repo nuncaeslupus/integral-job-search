@@ -97,16 +97,16 @@ def _no_real_request_spacing() -> Iterator[None]:
     attribution matrix) is covered too: a function-scoped patch is applied
     after it, and it used to sleep for real for about 90 s.
     """
-    from integral import sourcing
+    from integral import transport
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(sourcing, "_pause", lambda _seconds: None)
+        patch.setattr(transport, "_pause", lambda _seconds: None)
         yield
 
 
 @pytest.fixture(autouse=True)
 def _fresh_request_spacing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Each test starts with no request on record for any origin."""
-    from integral import sourcing
+    from integral import transport
 
-    monkeypatch.setattr(sourcing, "_last_request_at", {})
+    monkeypatch.setattr(transport, "_last_request_at", {})

@@ -46,12 +46,8 @@ from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from integral.gate_exit import worst
-from integral.transport import (
-    USER_AGENT,
-    FetchRefused,
-    fetch_policy,
-    is_public_web_url,
-)
+from integral.transport import USER_AGENT as USER_AGENT  # the name callers import from here
+from integral.transport import FetchRefused, fetch_policy, is_public_web_url
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_EVIDENCE_PATH = _REPO_ROOT / "status" / "evidence" / "T70.json"

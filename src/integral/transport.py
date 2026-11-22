@@ -108,8 +108,8 @@ def origin(url: str) -> str:
     try:
         port = parts.port or {"http": 80, "https": 443}.get(scheme)
     except ValueError:  # a malformed port in a board's own link: keep it as written
-        port = parts.netloc.rpartition(":")[2]
-    return f"{scheme}://{(parts.hostname or '').lower()}:{port}"
+        port = parts.netloc.rpartition(":")[2].lower()
+    return f"{scheme}://{parts.hostname or ''}:{port}"
 
 
 @dataclass(frozen=True)
@@ -235,10 +235,11 @@ def _hop_target(url: str, hop: Hop) -> str | None:
 def fetch_policy(
     url: str,
     user_agent: str = USER_AGENT,
-    send: Send = urllib_send,
+    send: Send | None = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> Hop:
     """A robots.txt: public addresses only, no https->http downgrade, capped, <= 5 hops."""
+    send = send if send is not None else urllib_send
     for _ in range(MAX_REDIRECTS + 1):
         if not is_public_web_url(url):
             raise FetchRefused(f"{url} is not a public web address")
@@ -281,12 +282,12 @@ class Transport:
         robots: Policy | None = None,
         *,
         refuse: Callable[[str], str | None] | None = None,
-        send: Send = urllib_send,
+        send: Send | None = None,
         floor: float = REQUEST_FLOOR_SECONDS,
     ) -> None:
         self.robots = robots if robots is not None else shared_robots()
         self._refuse = refuse
-        self._send = send
+        self._send = send if send is not None else urllib_send
         self._floor = floor
 
     def admit(self, url: str) -> None:

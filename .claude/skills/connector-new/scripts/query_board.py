@@ -37,39 +37,27 @@ from __future__ import annotations
 
 import argparse
 import sys
-import urllib.error
 import urllib.parse
-import urllib.request
 
 sys.path.insert(0, "src")
 
-from integral import connector_policy  # noqa: E402
-from integral.connector_procedure import (  # noqa: E402
+from integral import connector_policy
+from integral.connector_procedure import (
     CLIENTS,
     second_reader_verdict,
 )
-from integral.robots import USER_AGENT, Robots  # noqa: E402
+from integral.robots import USER_AGENT, Robots
+from integral.transport import Transport, fetch_policy
+
 
 def fetch(url: str, headers: dict[str, str]) -> tuple[int | None, int, str]:
-    """(status, byte count, error) for one GET. Never raises."""
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-            # urllib does not decompress, and a gzipped body decodes as
-            # nothing. Asking for none is honest and costs a few KB.
-            "Accept-Encoding": "identity",
-            **headers,
-        },
-    )
+    """(status, byte count, error) for one GET through `integral.transport`. Never raises."""
+    accept = "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
     try:
-        with urllib.request.urlopen(request, timeout=25) as response:
-            return response.status, len(response.read()), ""
-    except urllib.error.HTTPError as error:
-        return error.code, 0, str(error)
-    except Exception as error:  # transport: there is no status to report
+        hop = Transport().request(url, headers={"Accept": accept, **headers}, timeout=25)
+    except Exception as error:  # a refusal or a transport fault: there is no status to report
         return None, 0, f"{type(error).__name__}: {error}"
+    return hop.status, len(hop.raw), "" if hop.status < 400 else f"HTTP {hop.status}"
 
 
 def robots_report(allowed: list[str], refused: list[str]) -> tuple[bool, list[str]]:
@@ -80,11 +68,11 @@ def robots_report(allowed: list[str], refused: list[str]) -> tuple[bool, list[st
     for url in allowed:
         verdict = matcher.allows(url)
         ok = ok and verdict
-        lines.append(f"  {str(verdict):5}  {url}")
+        lines.append(f"  {verdict!s:5}  {url}")
     for url in refused:
         verdict = matcher.allows(url)
         ok = ok and not verdict
-        lines.append(f"  {str(verdict):5}  {url}   <- negative control, must be False")
+        lines.append(f"  {verdict!s:5}  {url}   <- negative control, must be False")
     if not refused:
         lines.append("  (no --refused path given: a True with no False beside it is not a verdict)")
         ok = False
@@ -124,11 +112,10 @@ def second_reader(paths: list[str]) -> list[str]:
         return ["  second reader: not run - no path given", "  standing: single_parser"]
     origin = "/".join(paths[0].split("/")[:3])
     try:
-        request = urllib.request.Request(
-            origin + "/robots.txt", headers={"User-Agent": USER_AGENT}
-        )
-        with urllib.request.urlopen(request, timeout=20) as response:
-            text = response.read().decode("utf-8", "replace")
+        hop = fetch_policy(origin + "/robots.txt")
+        if hop.status >= 400:
+            raise OSError(f"robots.txt answered {hop.status}")
+        text = hop.raw.decode("utf-8", "replace")
     except Exception as error:  # a reader that could not read is not a reader
         reason = f"not run - {type(error).__name__}: {error}"
         return [f"  second reader: {reason}", "  standing: single_parser"]

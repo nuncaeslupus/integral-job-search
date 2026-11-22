@@ -567,6 +567,6 @@ def test_an_over_size_page_is_a_fetch_error(tmp_path: Path) -> None:
 
 
 def test_resolving_many_offers_shares_one_robots() -> None:
-    from integral import canonical_ad
+    from integral import transport
 
-    assert canonical_ad.shared_robots() is canonical_ad.shared_robots()
+    assert transport.shared_robots() is transport.shared_robots()

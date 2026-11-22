@@ -1,7 +1,7 @@
 """Every hop of a fetch is checked, not just the URL we started from.
 
-`requests` follows redirects itself, which would check the first URL and fetch
-the last. A board that redirects a permitted path onto a disallowed one — or
+A client that follows redirects itself checks the first URL and fetches the
+last. A board that redirects a permitted path onto a disallowed one — or
 onto a different host whose robots.txt was never read — would walk straight
 through the gate `get()` exists to be. These drive the loop with a fake session
 so the failure is reproducible without a board.
@@ -11,12 +11,16 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-pytest.importorskip("requests", reason="the optional `collect` extra is not installed here")
+pytest.importorskip("bs4", reason="the optional `collect` extra is not installed here")
+
+from integral import transport
+from integral.transport import Transport
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,25 +45,27 @@ OTHER_HOST = "https://otro.test/ofertas"
 
 class FakeResponse:
     def __init__(self, location: str | None = None) -> None:
-        self.headers = {"Location": location} if location else {}
-        self.is_redirect = location is not None
-        self.raised = False
-
-    def raise_for_status(self) -> None:
-        self.raised = True
+        self.location = location
 
 
-class FakeSession:
-    """Records what was actually requested — the point of most of these."""
+class FakeSession(Transport):
+    """A real `Transport` over a scripted socket; records what was actually requested."""
 
     def __init__(self, script: dict[str, FakeResponse]) -> None:
+        super().__init__(FakeRobots(set()), refuse=COLLECT.ledger_refusal, send=self._send)
         self.script = script
         self.fetched: list[str] = []
+        self.agents: list[str] = []
 
-    def get(self, url: str, **kw: Any) -> FakeResponse:
-        assert kw["allow_redirects"] is False, "redirects must be followed by hand"
+    def _send(
+        self, _method: str, url: str, headers: Mapping[str, str], *_rest: object
+    ) -> transport.Hop:
         self.fetched.append(url)
-        return self.script[url]
+        self.agents.append(headers["User-Agent"])
+        location = self.script[url].location
+        if location is not None:
+            return transport.Hop(302, {"Location": location}, b"", url)
+        return transport.Hop(200, {}, b"<html>ok</html>", url)
 
 
 class FakeRobots:
@@ -77,11 +83,11 @@ class FakeRobots:
 
 @pytest.fixture(autouse=True)
 def _no_waiting(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(COLLECT.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(transport, "_pause", lambda _seconds: None)
 
 
 def _run(monkeypatch: pytest.MonkeyPatch, robots: FakeRobots, session: FakeSession) -> Any:
-    monkeypatch.setattr(COLLECT, "ROBOTS", robots)
+    session.robots = robots
     # `board.test` and `otro.test` are boards for the purposes of these fixtures: every
     # hop is put through the policy ledger, and a host `SOURCE_HOSTS` does not record is
     # refused before robots.txt is ever asked.
@@ -95,7 +101,7 @@ def test_a_plain_response_is_returned_and_status_checked(
 ) -> None:
     session = FakeSession({ALLOWED: FakeResponse()})
     response = _run(monkeypatch, FakeRobots(set()), session)
-    assert response.raised
+    assert response.text == "<html>ok</html>"
     assert session.fetched == [ALLOWED]
 
 
@@ -132,9 +138,9 @@ def test_a_relative_location_is_resolved_against_the_url_it_came_from(
 
 def test_a_redirect_loop_stops_rather_than_spinning(monkeypatch: pytest.MonkeyPatch) -> None:
     session = FakeSession({ALLOWED: FakeResponse(location=ALLOWED)})
-    with pytest.raises(RuntimeError, match="redirects"):
+    with pytest.raises(PermissionError, match="redirects"):
         _run(monkeypatch, FakeRobots(set()), session)
-    assert len(session.fetched) == COLLECT.MAX_REDIRECTS + 1
+    assert len(session.fetched) == transport.MAX_REDIRECTS + 1
 
 
 def test_a_redirect_off_https_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,17 +150,10 @@ def test_a_redirect_off_https_is_refused(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_the_declared_agent_is_sent_on_every_hop(monkeypatch: pytest.MonkeyPatch) -> None:
-    sent: list[str] = []
-
-    class Recording(FakeSession):
-        def get(self, url: str, **kw: Any) -> FakeResponse:
-            sent.append(kw["headers"]["User-Agent"])
-            return super().get(url, **kw)
-
-    session = Recording({ALLOWED: FakeResponse(location=OTHER_HOST), OTHER_HOST: FakeResponse()})
+    session = FakeSession({ALLOWED: FakeResponse(location=OTHER_HOST), OTHER_HOST: FakeResponse()})
     _run(monkeypatch, FakeRobots(set()), session)
-    assert sent == [COLLECT.USER_AGENT, COLLECT.USER_AGENT]
-    assert "Mozilla" not in COLLECT.USER_AGENT
+    assert session.agents == [transport.USER_AGENT, transport.USER_AGENT]
+    assert "Mozilla" not in transport.USER_AGENT
 
 
 # T98 — the collector cannot write a row nothing can account for.
@@ -391,11 +390,9 @@ def test_a_redirect_between_two_permitted_boards_still_succeeds(
     first = "https://feinaactiva.gencat.cat/search/offers/detail/1"
     second = "https://www.tecnoempleo.com/ofertas-trabajo/rf-abc"
     session = FakeSession({first: FakeResponse(location=second), second: FakeResponse()})
-    monkeypatch.setattr(COLLECT, "ROBOTS", FakeRobots(set()))
-
     response = COLLECT.get(session, first)
 
-    assert response.raised
+    assert response.text == "<html>ok</html>"
     assert session.fetched == [first, second]
 
 

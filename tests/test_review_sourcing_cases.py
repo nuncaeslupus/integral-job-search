@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import integral.sourcing as sourcing
+import integral.transport as transport
 from integral.connectors import ListRequest
 from integral.dedup import find_duplicates
 from integral.identity import ProfileStore, create_profile, file_safe, id_from_name
@@ -114,42 +115,42 @@ _ROBOTS = Robots(fetch=lambda url: "User-agent: *\nAllow: /\n")
 
 def _spacing(monkeypatch: pytest.MonkeyPatch) -> _Clock:
     clock = _Clock()
-    monkeypatch.setattr(sourcing, "_pause", clock.pause)
-    monkeypatch.setattr(sourcing, "_clock", lambda: clock.now)
-    monkeypatch.setattr(sourcing, "_last_request_at", {})
+    monkeypatch.setattr(transport, "_pause", clock.pause)
+    monkeypatch.setattr(transport, "_clock", lambda: clock.now)
+    monkeypatch.setattr(transport, "_last_request_at", {})
     return clock
 
 
 def test_a_second_request_to_one_origin_waits_the_floor(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = _spacing(monkeypatch)
     robots = Robots(fetch=lambda url: "User-agent: *\nAllow: /\n")
-    sourcing._space(robots, "https://a.example/1")
+    transport.space(robots, "https://a.example/1")
     assert clock.waits == []
-    sourcing._space(robots, "https://a.example/2")
-    assert clock.waits == [sourcing.REQUEST_FLOOR_SECONDS]
+    transport.space(robots, "https://a.example/2")
+    assert clock.waits == [transport.REQUEST_FLOOR_SECONDS]
 
 
 def test_time_already_spent_counts_toward_the_gap(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = _spacing(monkeypatch)
     robots = Robots(fetch=lambda url: "User-agent: *\nAllow: /\n")
-    sourcing._space(robots, "https://a.example/1")
+    transport.space(robots, "https://a.example/1")
     clock.now += 0.75
-    sourcing._space(robots, "https://a.example/2")
+    transport.space(robots, "https://a.example/2")
     assert clock.waits == [pytest.approx(0.25)]
     clock.now += 5
-    sourcing._space(robots, "https://a.example/3")
+    transport.space(robots, "https://a.example/3")
     assert clock.waits == [pytest.approx(0.25)]
 
 
 def test_spacing_is_per_origin_not_global(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = _spacing(monkeypatch)
     robots = Robots(fetch=lambda url: "User-agent: *\nAllow: /\n")
-    sourcing._space(robots, "https://a.example/1")
-    sourcing._space(robots, "https://b.example/1")
-    sourcing._space(robots, "http://a.example/1")  # another scheme is another origin
+    transport.space(robots, "https://a.example/1")
+    transport.space(robots, "https://b.example/1")
+    transport.space(robots, "http://a.example/1")  # another scheme is another origin
     assert clock.waits == []
-    sourcing._space(robots, "https://a.example:443/2")  # the default port is the same origin
-    assert clock.waits == [sourcing.REQUEST_FLOOR_SECONDS]
+    transport.space(robots, "https://a.example:443/2")  # the default port is the same origin
+    assert clock.waits == [transport.REQUEST_FLOOR_SECONDS]
 
 
 def test_a_longer_crawl_delay_wins_and_a_shorter_one_does_not(
@@ -162,9 +163,9 @@ def test_a_longer_crawl_delay_wins_and_a_shorter_one_does_not(
     }
     robots = Robots(fetch=lambda url: texts[url])
     for host in ("slow", "quick"):
-        sourcing._space(robots, f"https://{host}.example/1")
-        sourcing._space(robots, f"https://{host}.example/2")
-    assert clock.waits == [7.0, sourcing.REQUEST_FLOOR_SECONDS]
+        transport.space(robots, f"https://{host}.example/1")
+        transport.space(robots, f"https://{host}.example/2")
+    assert clock.waits == [7.0, transport.REQUEST_FLOOR_SECONDS]
 
 
 # --- #932 -------------------------------------------------------------------
@@ -263,7 +264,7 @@ def test_a_list_page_actually_fetched_still_waits_for_the_host_gap(
     sourcing._list_of_the_day(
         store, _request("https://boards.example/beta/jobs"), AT, fetch, _ROBOTS
     )
-    assert clock.waits == [sourcing.REQUEST_FLOOR_SECONDS]
+    assert clock.waits == [transport.REQUEST_FLOOR_SECONDS]
 
 
 # --- review follow-up on #943: directory readers count one offer once ----------
@@ -294,9 +295,9 @@ def test_a_constructed_round_can_skip_the_spacing_wait_and_restores_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clock = _spacing(monkeypatch)
-    with sourcing.no_waiting():
-        sourcing._space(_ROBOTS, "https://a.example/1")
-        sourcing._space(_ROBOTS, "https://a.example/2")
+    with transport.no_waiting():
+        transport.space(_ROBOTS, "https://a.example/1")
+        transport.space(_ROBOTS, "https://a.example/2")
     assert clock.waits == []
-    sourcing._space(_ROBOTS, "https://a.example/3")
-    assert clock.waits == [sourcing.REQUEST_FLOOR_SECONDS]
+    transport.space(_ROBOTS, "https://a.example/3")
+    assert clock.waits == [transport.REQUEST_FLOOR_SECONDS]
