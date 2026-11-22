@@ -27,6 +27,7 @@ it goes through `fetch_policy`, which keeps 1, 2 and 6 and follows at most
 from __future__ import annotations
 
 import contextlib
+import http.client
 import ipaddress
 import socket
 import time
@@ -58,6 +59,8 @@ MAX_POLICY_BYTES = 512 * 1024
 #: Crawl-delay still wins, and a host that asks for less is not given less.
 REQUEST_FLOOR_SECONDS = 1.0
 _REDIRECTS = frozenset({301, 302, 303, 307, 308})
+#: What survives a redirect to another origin: ours, and nothing the caller added.
+_CROSS_ORIGIN_HEADERS = frozenset({"user-agent", "accept", "accept-encoding"})
 
 
 class FetchRefused(Exception):
@@ -72,15 +75,62 @@ class BodyTooLarge(FetchRefused):
     """The answer was larger than the cap the caller set."""
 
 
+class RobotsRefused(FetchRefused):
+    """robots.txt disallows the URL for this tool, or could not be read (fail closed)."""
+
+
+def _embedded_ipv4(address: ipaddress.IPv6Address) -> list[ipaddress.IPv4Address]:
+    """Every IPv4 address an IPv6 literal can carry: mapped, 6to4, Teredo, and the low 32 bits.
+
+    A closed rule rather than a list of prefixes: IPv4-compatible (`::127.0.0.1`),
+    NAT64 (`64:ff9b::7f00:1`, RFC 6052) and any translator prefix not yet named all
+    put the IPv4 address in the last 32 bits. Taking those bits from *every* IPv6
+    literal also refuses a public IPv6 address whose last four bytes happen to read
+    as a private IPv4 one — accepted, since no board is reached by IPv6 literal.
+    """
+    found = [ipaddress.IPv4Address(int(address) & 0xFFFFFFFF)]
+    if address.ipv4_mapped is not None:
+        found.append(address.ipv4_mapped)
+    if address.sixtofour is not None:
+        found.append(address.sixtofour)
+    if address.teredo is not None:
+        found.extend(address.teredo)
+    return found
+
+
+def is_public_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Globally routable, and so is every IPv4 address an IPv6 one carries."""
+    if not address.is_global:
+        return False
+    if isinstance(address, ipaddress.IPv6Address):
+        return all(inner.is_global for inner in _embedded_ipv4(address))
+    return True
+
+
+def _unsafe_host_text(host: str) -> bool:
+    """`%`, NUL, whitespace or a control character: no hostname needs one (#993 F1).
+
+    urllib unquotes the host before it connects, so `127%2e0%2e0%2e1` classified as
+    a name here would reach 127.0.0.1. Refusing the characters closes every
+    spelling at once, rather than decoding and classifying again.
+    """
+    return any(c == "%" or c.isspace() or ord(c) < 0x20 or ord(c) == 0x7F for c in host)
+
+
 def is_public_web_url(url: str) -> bool:
     """http(s) to a named host or a public IP; never localhost or a private address.
 
     Links come from scraped adverts, so one pointing at `http://127.0.0.1:8080/` or an
-    intranet address must not be requested from the candidate's machine.
+    intranet address must not be requested from the candidate's machine. A named host
+    passes here and is checked again where it is resolved (`_checked_connection`).
+    A URL carrying userinfo (`https://u@host/`) is refused: no board needs one.
     """
     parts = urlsplit(url)
+    raw_host = parts.netloc.rpartition("@")[2]
     host = (parts.hostname or "").lower().rstrip(".")
     if parts.scheme.lower() not in ("http", "https") or not host:
+        return False
+    if "@" in parts.netloc or _unsafe_host_text(raw_host) or _unsafe_host_text(host):
         return False
     if host == "localhost" or host.endswith(".localhost"):
         return False
@@ -93,7 +143,7 @@ def is_public_web_url(url: str) -> bool:
             address = ipaddress.IPv4Address(socket.inet_aton(host))
         except OSError:
             return True
-    return address.is_global
+    return is_public_address(address)
 
 
 def origin(url: str) -> str:
@@ -149,7 +199,78 @@ class _NoRedirects(urllib.request.HTTPRedirectHandler):
         return None
 
 
-_OPENER = urllib.request.build_opener(_NoRedirects())
+def _checked_addresses(host: str, port: int) -> list[tuple[str, int]]:
+    """Resolve `host` and refuse unless EVERY address is public (#993 F2).
+
+    One non-public answer refuses the name: a name that resolves anywhere private
+    is not a public board, and trying the public addresses first would let a
+    rebinding answer through on a retry.
+    """
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    checked: list[tuple[str, int]] = []
+    for *_, sockaddr in infos:
+        ip = str(sockaddr[0]).split("%", 1)[0]
+        if not is_public_address(ipaddress.ip_address(ip)):
+            raise FetchRefused(f"{host} resolves to {ip}, which is not a public address")
+        checked.append((ip, port))
+    if not checked:
+        raise OSError(f"{host} did not resolve")
+    return checked
+
+
+def _checked_create_connection(conn: http.client.HTTPConnection) -> Callable[..., socket.socket]:
+    """`socket.create_connection` that connects only to the addresses it checked.
+
+    The connection is made to the checked IP, so the name is resolved once and
+    the answer that was checked is the one used (no rebinding between the two).
+    TLS still verifies against the hostname: `HTTPSConnection` wraps this socket
+    with `server_hostname=self.host`. Through a proxy (`CONNECT`), the proxy makes
+    the connection: the target's own resolution is checked here, but what the
+    proxy resolves cannot be — that remainder is recorded as a follow-up task.
+    """
+
+    def create(
+        address: tuple[str, int], timeout: Any = None, source_address: Any = None
+    ) -> socket.socket:
+        tunnel = getattr(conn, "_tunnel_host", None)
+        if tunnel:
+            _checked_addresses(tunnel, getattr(conn, "_tunnel_port", None) or 443)
+            return socket.create_connection(address, timeout, source_address)
+        last: OSError | None = None
+        for checked in _checked_addresses(address[0], address[1]):
+            try:
+                return socket.create_connection(checked, timeout, source_address)
+            except OSError as exc:
+                last = exc
+        assert last is not None  # `_checked_addresses` returns at least one address
+        raise last
+
+    return create
+
+
+class _CheckedHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        setattr(self, "_create_connection", _checked_create_connection(self))  # noqa: B010
+
+
+class _CheckedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        setattr(self, "_create_connection", _checked_create_connection(self))  # noqa: B010
+
+
+class _CheckedHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req: urllib.request.Request) -> Any:
+        return self.do_open(_CheckedHTTPConnection, req)
+
+
+class _CheckedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req: urllib.request.Request) -> Any:
+        return self.do_open(_CheckedHTTPSConnection, req, context=getattr(self, "_context", None))
+
+
+_OPENER = urllib.request.build_opener(_NoRedirects(), _CheckedHTTPHandler(), _CheckedHTTPSHandler())
 
 
 def _read_capped(reply: Any, max_bytes: int, url: str) -> bytes:
@@ -303,9 +424,11 @@ class Transport:
         try:
             allowed = self.robots.allows(url)
         except RobotsError as exc:
-            raise FetchRefused(f"robots.txt could not be read for {url}: {exc}") from exc
+            raise RobotsRefused(f"robots.txt could not be read for {url}: {exc}") from exc
+        except ValueError as exc:  # a URL the robots fetch itself cannot send
+            raise FetchRefused(f"{url} cannot be requested: {exc}") from exc
         if not allowed:
-            raise FetchRefused(f"robots.txt disallows {url} for {USER_AGENT}")
+            raise RobotsRefused(f"robots.txt disallows {url} for {USER_AGENT}")
 
     def request(
         self,
@@ -329,12 +452,19 @@ class Transport:
             self.admit(url)
             if not (hop_number == 0 and first_hop_spaced):
                 space(self.robots, url, self._floor)
-            hop = self._send(method, url, sent, body, timeout, max_bytes)
+            try:
+                hop = self._send(method, url, sent, body, timeout, max_bytes)
+            except ValueError as exc:  # http.client.InvalidURL: a URL it cannot send
+                raise FetchRefused(f"{url} cannot be requested: {exc}") from exc
             target = _hop_target(url, hop)
             if target is None:
                 return hop
             if hop.status not in (307, 308):  # RFC 9110 §15.4: these become a GET
                 method, body = "GET", None
                 sent = {k: v for k, v in sent.items() if k.lower() != "content-type"}
+            if origin(target) != origin(url):
+                # RFC 9110 §15.4: a caller's headers are for the origin it asked.
+                keep = _CROSS_ORIGIN_HEADERS | ({"content-type"} if body is not None else set())
+                sent = {k: v for k, v in sent.items() if k.lower() in keep}
             url = target
         raise FetchRefused(f"more than {MAX_REDIRECTS} redirects fetching {url}")

@@ -30,7 +30,7 @@ from integral.lifecycle import (
 )
 from integral.offers import connect_manual, load_offer, load_offers, save_offer
 from integral.robots import Robots
-from integral.transport import FetchRefused
+from integral.transport import FetchRefused, RobotsRefused
 
 URL = "https://careers.real.example/jobs/42"
 NOW = datetime(2026, 10, 19, 12, 0, tzinfo=UTC)
@@ -326,7 +326,7 @@ def test_b3_each_redirect_hop_is_checked_against_robots(monkeypatch: pytest.Monk
 
 def test_b3_a_refused_redirect_is_recorded_as_robots_refused(tmp_path: Path) -> None:
     store, agg_id = _setup(tmp_path)
-    result, _ = _run(store, agg_id, FetchRefused("robots.txt disallows the redirect target"))
+    result, _ = _run(store, agg_id, RobotsRefused("robots.txt disallows the redirect target"))
     _fell_back(store, agg_id, result, "robots_refused")
 
 
@@ -556,6 +556,13 @@ def test_an_over_size_page_is_refused_not_truncated(monkeypatch: pytest.MonkeyPa
     with pytest.raises(transport.BodyTooLarge):
         _fetch_reply(monkeypatch, reply)
     assert reply.asked == transport.MAX_PAGE_BYTES + 1  # never read whole
+
+
+def test_a_refusal_that_is_not_robots_is_not_labelled_robots_refused(tmp_path: Path) -> None:
+    """#993 F6: https-only or a private address is a refused fetch, not robots.txt."""
+    store, agg_id = _setup(tmp_path)
+    result, _ = _run(store, agg_id, FetchRefused("https://10.0.0.1/x is not a public web address"))
+    _fell_back(store, agg_id, result, "fetch_error")
 
 
 def test_an_over_size_page_is_a_fetch_error(tmp_path: Path) -> None:
