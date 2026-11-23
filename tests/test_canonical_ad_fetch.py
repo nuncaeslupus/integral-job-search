@@ -483,6 +483,47 @@ def test_r3_an_employer_is_matched_whole_not_by_prefix(tmp_path: Path) -> None:
     assert _promotes(tmp_path / "ok", {**POSTING, "hiringOrganization": {"name": "Real, S.L."}})
 
 
+def test_two_different_legal_forms_are_two_companies(tmp_path: Path) -> None:
+    """#884 F2: `Real GmbH` and `Real AG` were both stripped to `Real` and called equal."""
+    store, agg_id = _setup(tmp_path)
+    brief = load_brief(store, agg_id)
+    assert brief is not None
+    save_brief(store, brief.model_copy(update={"real_employer": "Real GmbH"}))
+    other = {**POSTING, "hiringOrganization": {"name": "Real AG"}}
+    result, _ = _run(store, agg_id, Response(200, _page(other), URL))
+    _fell_back(store, agg_id, result, "mismatch")
+    assert _promotes_with(tmp_path / "ok", "Real GmbH", "Real, GmbH")
+    assert _promotes_with(tmp_path / "bare", "Real GmbH", "Real")
+
+
+def _promotes_with(tmp_path: Path, employer: str, page_name: str) -> bool:
+    store, agg_id = _setup(tmp_path)
+    brief = load_brief(store, agg_id)
+    assert brief is not None
+    save_brief(store, brief.model_copy(update={"real_employer": employer}))
+    posting = {**POSTING, "hiringOrganization": {"name": page_name}}
+    result, _ = _run(store, agg_id, Response(200, _page(posting), URL))
+    return result.outcome == "canonical"
+
+
+@pytest.mark.parametrize("change", [{"exclusions_tripped": ("x",)}, {"source_posting_url": None}])
+def test_r5_a_re_recorded_brief_does_not_overwrite_the_promotion(
+    tmp_path: Path, change: dict[str, object]
+) -> None:
+    """#884 F1: the `no_source_url` / `brief_excluded` fallbacks ran before the R5 guard."""
+    store, agg_id = _setup(tmp_path)
+    first, _ = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert first.outcome == "canonical"
+    brief = load_brief(store, agg_id)
+    assert brief is not None
+    save_brief(store, brief.model_copy(update=change))
+    again, _ = _run(store, agg_id, Response(200, _page(POSTING), URL))
+    assert again.outcome == "canonical" and again.canonical_id == first.canonical_id
+    record = load_result(store, agg_id)
+    assert record and record["outcome"] == "canonical"
+    assert primary_offer(store, agg_id).id == first.canonical_id != agg_id
+
+
 def test_r5_a_second_run_keeps_the_existing_promotion(tmp_path: Path) -> None:
     store, agg_id = _setup(tmp_path)
     first, _ = _run(store, agg_id, Response(200, _page(POSTING), URL))

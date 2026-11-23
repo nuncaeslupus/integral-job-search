@@ -158,18 +158,23 @@ _LEGAL_FORM = frozenset(
 )
 
 
-def _company_tokens(value: str) -> list[str]:
+def _company_tokens(value: str) -> tuple[list[str], list[str]]:
+    """The name without its trailing legal forms, and those forms."""
     tokens = _tokens(value)
+    forms: list[str] = []
     while len(tokens) > 1 and tokens[-1] in _LEGAL_FORM:
-        tokens.pop()
-    return tokens
+        forms.insert(0, tokens.pop())
+    return tokens, forms
 
 
 def _same_employer(posting: dict[str, Any], employer: str) -> bool:
     """Whole-name equality, legal form aside: `Real` is not `Real Estate Staffing Agency`."""
     org = posting.get("hiringOrganization")
-    name = _company_tokens(_text(org.get("name") if isinstance(org, dict) else org) or "")
-    return bool(name) and name == _company_tokens(employer)
+    name, forms = _company_tokens(_text(org.get("name") if isinstance(org, dict) else org) or "")
+    mine, my_forms = _company_tokens(employer)
+    # A form missing on one side is the same company (`Acme` / `Acme Inc`); two
+    # different forms (`Acme GmbH` / `Acme AG`) are two companies.
+    return bool(name) and name == mine and (not forms or not my_forms or forms == my_forms)
 
 
 def _same_title(posting: dict[str, Any], title: str | None) -> bool:
@@ -331,10 +336,7 @@ def resolve_canonical(
             CanonicalResult(offer_id, "fallback", None, reason, detail, url or None, stamp),
         )
 
-    if brief is None or not url:
-        return fallback("no_source_url", "the brief names no source posting")
-    if brief.exclusions_tripped:
-        return fallback("brief_excluded", "the brief tripped an exclusion: nothing is fetched")
+    # The R5 guard comes first: a fallback below would overwrite the promotion record.
     prior = load_result(store, offer_id)
     if prior and prior.get("outcome") == "canonical" and prior.get("canonical_offer_id"):
         kept = str(prior["canonical_offer_id"])
@@ -348,6 +350,10 @@ def resolve_canonical(
                 prior.get("source_posting_url"),
                 str(prior.get("checked_at") or stamp),
             )
+    if brief is None or not url:
+        return fallback("no_source_url", "the brief names no source posting")
+    if brief.exclusions_tripped:
+        return fallback("brief_excluded", "the brief tripped an exclusion: nothing is fetched")
     if aggregator.status != "new":
         return fallback("already_in_progress", f"the advert is already {aggregator.status}")
     checker = robots or shared_robots()

@@ -250,8 +250,14 @@ def connector_hosts(directory: Path = CONNECTORS_DIR) -> dict[str, frozenset[str
         pattern = listing.get("url_pattern") or ""
         # A host slot (`https://{employer}.teamtailor.com/…`) serves each declared
         # employer from its own host, so each of those hosts is the list host.
+        # A slug must be one DNS label, the rule `connectors.employer_in_host` applies
+        # (mirrored, not imported: T98); a dotted slug would name a sub-subdomain.
         patterns = (
-            [pattern.replace("{employer}", slug) for slug in listing.get("employers") or {}]
+            [
+                pattern.replace("{employer}", slug)
+                for slug in listing.get("employers") or {}
+                if _LABEL_RE.fullmatch(str(slug)) and len(str(slug)) <= 63
+            ]
             if pattern.startswith("https://{employer}.")
             else [pattern]
         )
