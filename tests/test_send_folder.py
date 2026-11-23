@@ -692,3 +692,38 @@ def test_the_real_engines_page_join_keeps_each_document_whole_and_in_order(
     assert render_pdf_pages(["only"]) == b"%PDF-stub:only/1,only/2"
     with pytest.raises(RenderError):
         render_pdf_pages([])
+
+
+@pytest.mark.parametrize("family", ["", "   "])
+def test_a_blank_family_name_reads_as_none_and_the_profile_loads(
+    tmp_path: Path, family: str
+) -> None:
+    create_profile(tmp_path, "Ada Lovelace", handle="ada", language="en")
+    store = ProfileStore(tmp_path, "ada")
+    path = store.path("identity.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**data, "family_name": family}), encoding="utf-8")
+    assert store.identity().family_name is None
+    assert create_profile(tmp_path, "Bo Li", handle="bo", family_name=family).family_name is None
+
+
+def test_a_family_name_reaches_the_staged_and_verified_file_names(
+    tmp_path: Path, master: CVMaster
+) -> None:
+    root = tmp_path / "other"
+    create_profile(
+        root, "José María García López", handle="jose", language="en", family_name="García"
+    )
+    store = ProfileStore(root, "jose")
+    write_master(store, master)
+    version = _staged(store, master)
+    names = sorted(p.name for p in _send(store, version).iterdir())
+    assert "Jose-Garcia-CV.pdf" in names
+    assert "Jose-Garcia-Application.pdf" in names
+    assert not any("Lopez" in n for n in names)
+    assert verify_send(store, OFFER, version) == []
+    # verify derives names from the same identity: dropping the family name must be caught
+    path = store.path("identity.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**data, "family_name": None}), encoding="utf-8")
+    assert verify_send(store, OFFER, version) != []
