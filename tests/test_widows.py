@@ -168,7 +168,7 @@ def test_a_rendered_paragraph_with_a_short_last_line_is_a_widow() -> None:
 
 def test_a_list_marker_does_not_move_its_items_first_line_to_another_column() -> None:
     fragments = [
-        frag("\u2022", 80.0, 86.0, 0),
+        w.Fragment(1, 80.0, 86.0, 100.0, LH, "\u2022", marker=True),
         frag("a full line of bullet text that runs", 90.0, 90.0 + FULL, 0),
         frag("daily", 90.0, 120.0, 1),
     ]
@@ -204,6 +204,60 @@ def test_the_render_fails_on_a_widow_in_a_two_line_bullet() -> None:
             break
     else:
         raise AssertionError("no length of tail left one word on a bullet's second line")
+    with pytest.raises(dr.RenderError, match="widow"):
+        dr.render_pdf(dr.render(document))
+
+
+def test_an_unmarked_quote_or_dash_fragment_is_item_text_not_a_marker() -> None:
+    fragments = [
+        frag("\u201c", 80.0, 86.0, 0),
+        frag("a full line of bullet text that runs", 86.0, 86.0 + FULL, 0),
+        frag("daily", 80.0, 110.0, 1),
+    ]
+    assert [x.text for x in w.find_widows(fragments)] == ["daily"]
+
+
+def _two_line_block_ending_in_one_word(blocks: Any) -> dict[str, Any]:
+    """The document whose single block wraps to exactly two lines, the last one word.
+
+    ``blocks(tail)`` builds the document; the tail grows until the renderer breaks so.
+    """
+    for extra in range(1, 40):
+        document: dict[str, Any] = blocks(" ".join(["daily"] * extra))
+        runs = w.runs_of(dr.layout_fragments(dr.render(document)))
+        lines = [r for r in runs if "Moved" in r.text or "daily" in r.text]
+        if len(lines) == 2 and lines[1].words == 1:
+            return document
+    raise AssertionError("no length of tail left one word on a second line")
+
+
+_QUOTED = "\u201c<em>Moved</em>\u201d the nightly load to streaming and cut the time to "
+
+
+@needs_engine
+@pytest.mark.parametrize("opener", ["\u201c", "\u2014<strong>"])
+def test_the_render_fails_on_a_widow_in_a_two_line_text_block_opening_with_markup(
+    opener: str,
+) -> None:
+    close = "</strong>" if "strong" in opener else ""
+    lead = f"{opener}Moved{close} the nightly load to streaming and cut the time to "
+    if opener == "\u201c":
+        lead = _QUOTED
+    document = _two_line_block_ending_in_one_word(
+        lambda tail: {"title": "L", "blocks": [{"type": "text", "text": lead + tail}]}
+    )
+    with pytest.raises(dr.RenderError, match="widow"):
+        dr.render_pdf(dr.render(document))
+
+
+@needs_engine
+def test_the_render_fails_on_a_widow_in_a_two_line_bullet_opening_with_a_quoted_em() -> None:
+    def build(tail: str) -> dict[str, Any]:
+        document = _cv_with_bullet(tail)
+        document["blocks"][1]["bullets"] = [_QUOTED + tail]
+        return document
+
+    document = _two_line_block_ending_in_one_word(build)
     with pytest.raises(dr.RenderError, match="widow"):
         dr.render_pdf(dr.render(document))
 

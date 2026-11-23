@@ -59,6 +59,9 @@ class Fragment:
     top: float
     line_height: float
     text: str
+    # Set for text inside a ``::marker`` box (bullet or number): the renderer says what
+    # a marker is, so a quote or dash opening the item's own text is never mistaken for one.
+    marker: bool = False
 
 
 @dataclass(frozen=True)
@@ -122,15 +125,11 @@ def runs_of(fragments: Iterable[Fragment]) -> list[Run]:
     return runs
 
 
-def _is_marker(frag: Fragment) -> bool:
-    return not any(c.isalnum() for c in frag.text)
-
-
 def _join(group: Sequence[Fragment]) -> Run:
     # A list marker sits left of its item's text, so the item's first line would start
     # at another left edge than its next lines; the text's edge is the column's.
     lead = 0
-    while lead < len(group) - 1 and _is_marker(group[lead]):
+    while lead < len(group) - 1 and group[lead].marker:
         lead += 1
     text = group[lead:]
     first = text[0]
@@ -193,8 +192,9 @@ def fragments_of_pages(pages: Sequence[Any]) -> list[Fragment]:
     """The text fragments of laid-out WeasyPrint pages, each with its line's extent."""
     out: list[Fragment] = []
 
-    def walk(box: Any, number: int, line: Any) -> None:
+    def walk(box: Any, number: int, line: Any, marker: bool = False) -> None:
         kind = type(box).__name__
+        marker = marker or str(getattr(box, "element_tag", None) or "").endswith("::marker")
         if kind == "LineBox":
             line = box
         if kind == "TextBox" and line is not None:
@@ -206,10 +206,11 @@ def fragments_of_pages(pages: Sequence[Any]) -> list[Fragment]:
                     float(line.position_y),
                     float(line.height),
                     str(box.text),
+                    marker,
                 )
             )
         for child in getattr(box, "children", ()):
-            walk(child, number, line)
+            walk(child, number, line, marker)
 
     for number, page in enumerate(pages, start=1):
         walk(page._page_box, number, None)
