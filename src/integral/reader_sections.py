@@ -180,13 +180,26 @@ def _names_output_dir(arg: str) -> bool:
     return len(name) > len("--o") and "--output-dir".startswith(name)
 
 
+#: Generous: `uv run --with markdown` may download the package first.
+GENERATOR_SECONDS = 300
+
+
+def _run(cmd: list[str]) -> int:
+    """Run the generator; a hung one is a failure with a message, not an endless wait."""
+    try:
+        return subprocess.run(cmd, check=False, timeout=GENERATOR_SECONDS).returncode
+    except subprocess.TimeoutExpired:
+        print(f"✗ the reader generator did not finish in {GENERATOR_SECONDS}s", file=sys.stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run `create_reader.py` with the same arguments over a sectioned copy of `--input`."""
     argv = list(sys.argv[1:] if argv is None else argv)
     found = _input_arg(argv)
     cmd = ["uv", "run", "--with", "markdown", "python3", str(CREATE_READER)]
     if found is None:
-        return subprocess.run([*cmd, *argv], check=False).returncode
+        return _run([*cmd, *argv])
     idx, value, joined = found
     source = Path(value)
     if not source.is_file():
@@ -203,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         # `--output-dir` counts as the caller having chosen one.
         if not any(_names_output_dir(a) for a in argv):
             new += ["--output-dir", str(source.resolve().parent)]
-        return subprocess.run([*cmd, *new], check=False).returncode
+        return _run([*cmd, *new])
 
 
 if __name__ == "__main__":

@@ -206,7 +206,9 @@ class _Run:
         self.cmd: list[str] = []
         self.copied = ""
 
-    def __call__(self, cmd: list[str], check: bool) -> subprocess.CompletedProcess[str]:
+    def __call__(
+        self, cmd: list[str], check: bool, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
         self.cmd = cmd
         path = next(
             (a.split("=", 1)[1] if a.startswith("--input=") else a)
@@ -255,3 +257,13 @@ def test_the_generators_exit_code_is_returned(
 ) -> None:
     monkeypatch.setattr(subprocess, "run", _Run(code=3))
     assert reader_sections.main(["--input", str(_doc(tmp_path))]) == 3
+
+
+def test_a_hung_generator_is_a_failure_not_an_endless_wait(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def hang(cmd: list[str], check: bool, timeout: float) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd, timeout)
+
+    monkeypatch.setattr(subprocess, "run", hang)
+    assert reader_sections.main(["--input", str(_doc(tmp_path))]) == 1
