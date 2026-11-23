@@ -638,5 +638,20 @@ def test_a_host_slot_package_lists_every_declared_employer_host() -> None:
         Path("connectors/teamtailor_en/connector.yaml").read_text(encoding="utf-8")
     )
     expected = {f"{slug}.teamtailor.com" for slug in declared["list"]["employers"]}
-    assert expected <= SOURCE_HOSTS["teamtailor"]
+    expected |= {host.lower() for host in declared.get("serves_from") or []}
+    assert expected == SOURCE_HOSTS["teamtailor"]
     assert "{employer}.teamtailor.com" not in SOURCE_HOSTS["teamtailor"]
+
+
+def test_a_host_slot_slug_that_is_not_one_dns_label_is_not_a_host(tmp_path: Path) -> None:
+    """#940 F2: `a.b` filled into `{employer}.ats.com` is a sub-subdomain, not an employer."""
+    package = tmp_path / "ats_en"
+    package.mkdir()
+    (package / "connector.yaml").write_text(
+        "site: ats\n"
+        "list:\n"
+        "  url_pattern: https://{employer}.ats.com/jobs.json\n"
+        "  employers:\n    acme: Acme\n    a.b: Dotted\n",
+        encoding="utf-8",
+    )
+    assert reaction_elicit.connector_hosts(tmp_path) == {"ats": frozenset({"acme.ats.com"})}

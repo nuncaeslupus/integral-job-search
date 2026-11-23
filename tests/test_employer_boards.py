@@ -1067,6 +1067,16 @@ def test_a_host_slot_refuses_a_slug_that_is_not_one_dns_label() -> None:
         parse_connector(_yaml(HOST_SLOT, "  employers:\n    a.b: Dotted\n"))
 
 
+def test_list_urls_refuse_a_dotted_slug_on_a_copy_that_skipped_the_validator() -> None:
+    """#940 F1: `_list_targets` repeats the slug check for `model_copy(update=...)` objects."""
+    connector = parse_connector(_yaml(HOST_SLOT))
+    dotted = connector.model_copy(
+        update={"list": connector.list.model_copy(update={"employers": {"a.b": "Dotted"}})}
+    )
+    with pytest.raises(ConnectorError, match="bad employer slug"):
+        build_list_urls(dotted, query="python")
+
+
 def test_a_host_slot_asks_each_employers_own_robots_txt(tmp_path: Path) -> None:
     """A refused or unreadable robots.txt skips that employer; the rest are read."""
     import urllib.error
