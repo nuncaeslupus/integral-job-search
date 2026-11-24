@@ -24,6 +24,14 @@ If the runtime (`integral.step_runtime.offered`) is not offering `application` f
 
 An offer with status `shortlisted`, and `cv/master.json` with enough in it to draw on. With a thin store, say what is missing and offer Intake or History rather than producing a padded document.
 
+**Apply from the employer's own page.** Stated once, and pinned by its test:
+
+```text
+Before giving the candidate an application link, find the advert on the employer's own careers site and read it whole there.
+An aggregator's copy is a pointer, never the advert: its work mode, its open or closed status and its closing asks can be stale or missing.
+The link the candidate gets, and the URL the package records, is the employer's own; an aggregator's is given only when the employer publishes none, and then said so.
+```
+
 **Reads:** `cv/master.json`; the offer and its extraction; `profile/stories.jsonl`; previous versions in `cv/generated/<offer_id>/`; and the digest of the candidate's other generated documents (next section).
 
 ## Lead with the recommendation
