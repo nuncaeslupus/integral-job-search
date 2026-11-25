@@ -1,8 +1,8 @@
 {
   "silent_connector_failures": 0,
-  "connector_runs_evaluated": 27,
-  "silent_connector_failures_evaluated": 27,
-  "connector_runs_probed": 27,
+  "connector_runs_evaluated": 28,
+  "silent_connector_failures_evaluated": 28,
+  "connector_runs_probed": 28,
   "disabled": [],
   "gate_status": "measured",
   "readings": [
@@ -37,6 +37,17 @@
       "reasons": [],
       "probed": true,
       "probe_captured_at": "2026-08-30",
+      "rate_limited": null
+    },
+    {
+      "connector": "factorial",
+      "site": "factorial.es",
+      "health": "healthy",
+      "baseline_items": 6,
+      "probe_items": 11,
+      "reasons": [],
+      "probed": true,
+      "probe_captured_at": "2026-11-25",
       "rate_limited": null
     },
     {

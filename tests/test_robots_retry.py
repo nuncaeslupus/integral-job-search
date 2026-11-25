@@ -86,7 +86,9 @@ def _run(store: ProfileStore, robots: Robots) -> tuple[list[str], list[str | Non
         directory=_CONNECTORS,
         robots=robots,
     )
-    return asked, [o.skipped for o in run.outcomes]
+    # A board whose slot is in the host (factorial_es) reports a refusal of
+    # every employer as `error`, not `skipped`; both carry the robots reason.
+    return asked, [o.skipped or o.error for o in run.outcomes]
 
 
 def _http(code: int) -> urllib.error.HTTPError:
@@ -178,7 +180,7 @@ def test_a_robots_disallow_is_worded_as_refused(store: ProfileStore) -> None:
     robots, slept = _robots(_Flaky(0, OSError("x"), "User-agent: *\nDisallow: /\n"))
     asked, skipped = _run(store, robots)
     assert asked == []
-    assert skipped and all(s and s.startswith("refused") for s in skipped), skipped
+    assert skipped and all(s and "refused" in s for s in skipped), skipped
     assert not any("unreachable" in (s or "") for s in skipped)
     assert slept == []
 

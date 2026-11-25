@@ -1,0 +1,22 @@
+# An ATS host: `site` is the provider's domain; every employer in `employers`
+# has its career site on a subdomain of it.
+site: factorial.es
+country: ES
+language: es
+maintainer: "@nuncaeslupus"
+last_verified: "2026-11-25"
+
+policy:
+  listings: public
+  robots_txt: respected
+  authentication: none
+
+# Sampled for this purpose on the date below, from an advert unrelated to any
+# search a candidate was running. Pages as served, with the per-session CSRF
+# token and the Sentry DSN replaced by `REDACTED`. `probe/list.html` is a
+# second employer's listing, naming adverts the fixture does not.
+fixture:
+  provenance: sampled
+  recorded: "2026-11-25"
+  bodies: verbatim
+  client_ip: redacted

@@ -179,6 +179,23 @@ adjudications:
       cannot exist here. Recorded as its own verdict because "no control is
       possible" and "no control was run" were previously the same silence.
 
+  - site: playtomic.factorial.es
+    package: connectors/factorial_es
+    checked: 2026-11-25
+    agent: "integral-job-search/0.1"
+    standing: no_negative_control_possible
+    second_reader: "urllib.robotparser"
+    source: connectors/factorial_es/meta.yaml
+    reason: >
+      The whole file is `User-agent: *` followed by `Allow: /`, the same on
+      both tenants read (playtomic, holaluz-1). It disallows nothing, so no
+      path on these hosts is refused to this agent by any correct parser and a
+      negative control cannot exist. The slot is in the host, so sourcing still
+      asks each employer's own robots.txt before its listing.
+    robots_txt: |
+      User-agent: *
+      Allow: /
+
   # ---------------------------------------------------------------------
   # Single-parser: the second reader could not refuse, or never ran.
   # The two measured in #310 come first, with what was measured.

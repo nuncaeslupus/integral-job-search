@@ -69,9 +69,10 @@ def _spans(raw: str, css_class: str) -> list[tuple[int, int, str]]:
     # `<div data-… id="job-post-body-…" class="… html-parsed-content">`, which a
     # pattern anchored on `<div class=` cannot see, so that fixture could not be
     # re-excerpted at all. `(?=[\s>])` keeps `<divider>` out, and requiring
-    # whitespace before `class` keeps `data-class` out.
-    for match in re.finditer(r'<div(?=[\s>])[^>]*?\sclass="([^"]*)"[^>]*>', raw):
-        if css_class not in match.group(1).split():
+    # whitespace before `class` keeps `data-class` out. Either quote is valid
+    # HTML, and `factorial_es` serves `class='styledText'`.
+    for match in re.finditer(r"""<div(?=[\s>])[^>]*?\sclass=(?:"([^"]*)"|'([^']*)')[^>]*>""", raw):
+        if css_class not in (match.group(1) or match.group(2) or "").split():
             continue
         close = raw.find("</div>", match.end())
         if close != -1:

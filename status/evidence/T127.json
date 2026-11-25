@@ -1,6 +1,6 @@
 {
   "connectors_whose_probe_repeats_its_fixture": 0,
-  "probes_compared": 27,
+  "probes_compared": 28,
   "probes_compared_floor": 12,
   "gate_status": "measured",
   "tautological_probes": [],
@@ -42,6 +42,17 @@
       "package": "examplejobs_es",
       "compared": false,
       "reason": "no probe"
+    },
+    {
+      "package": "factorial_es",
+      "compared": true,
+      "reason": null,
+      "fixture_offers": 6,
+      "probe_offers": 11,
+      "shared_offers": 0,
+      "overlap": 0.0,
+      "repeats_the_fixture": false,
+      "byte_identical": false
     },
     {
       "package": "foorilla_en",

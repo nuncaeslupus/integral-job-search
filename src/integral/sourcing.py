@@ -1673,8 +1673,13 @@ def _one_board(
             if request.employer and per_origin:
                 # The slot is in the host, so this robots.txt is one
                 # employer's origin: unreadable there is that employer's
-                # refusal, and the next employer's origin is still asked.
-                failed.append(f"{request.employer} (refused: robots.txt unreadable: {exc})")
+                # refusal, and the next employer's origin is still asked. Worded
+                # as the single-origin skip below is (T238): a network fault is
+                # "unreachable", never "refused".
+                if isinstance(exc, (RobotsUnreachable, OSError)):
+                    failed.append(f"{request.employer} (unreachable: robots.txt {exc})")
+                else:
+                    failed.append(f"{request.employer} (refused: robots.txt unreadable: {exc})")
                 continue
             if isinstance(exc, (RobotsUnreachable, OSError)):
                 # T238: no answer at all, after the retries — a network fault, not
