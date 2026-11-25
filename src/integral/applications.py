@@ -33,13 +33,13 @@ from integral.identity import IdentityError, ProfileLeak, ProfileStore
 from integral.lifecycle import (
     LifecycleError,
     _parse_at,
-    canonicalize_url,
+    advert_identity,
     load_lifecycle_offer,
     read_application_status,
     record_application_status,
     save_lifecycle_offer,
 )
-from integral.offers import OfferError, OfferStatus, load_offers
+from integral.offers import Offer, OfferError, OfferStatus, load_offers
 from integral.profile import ProfileError
 from integral.profile_capture import capture_offer_decision_reason
 from integral.state_home import StateHomeRefused, ensure_outside_a_work_tree, profiles_root
@@ -88,19 +88,31 @@ def mark(
     save_lifecycle_offer(store, new_offer, new_record)
 
 
-def known(store: ProfileStore, urls: list[str]) -> list[str]:
-    """One line per url: `NEW <url>`, or the stored offer's status and its
-    application status (`-` when none), title, company and url."""
-    stored = {canonicalize_url(o.url): o for o in load_offers(store).offers if o.url}
-    lines = []
+def known(store: ProfileStore, urls: list[str]) -> tuple[list[str], list[str]]:
+    """Lines for stdout and stderr. Per url: `NEW <url>`, or one line per stored
+    copy of that advert (status, application status or `-`, title, company,
+    url), matched on `advert_identity`. Every offer file that could not be read
+    is named on stderr: an unread file may be the copy that was applied to."""
+    scan = load_offers(store)
+    by_identity: dict[str, list[Offer]] = {}
+    for o in scan.offers:
+        key = advert_identity(o.url, o.source)
+        if key:
+            by_identity.setdefault(key, []).append(o)
+    # The found url has no source; its identity is resolved by host, and by
+    # each stored source as a fallback, so no source's rule is missed.
+    sources = {o.source for o in scan.offers}
+    out = []
     for url in urls:
-        offer = stored.get(canonicalize_url(url))
-        if offer is None:
-            lines.append(f"NEW {url}")
-            continue
-        application = read_application_status(store, offer.id) or "-"
-        lines.append(f"{offer.status} {application} | {offer.title} | {offer.company} | {url}")
-    return lines
+        keys = sorted({k for s in sources if (k := advert_identity(url, s))})
+        copies = [o for k in keys for o in by_identity.get(k, [])]
+        if not copies:
+            out.append(f"NEW {url}")
+        for o in copies:
+            application = read_application_status(store, o.id) or "-"
+            out.append(f"{o.status} {application} | {o.title} | {o.company} | {url}")
+    err = [f"UNREADABLE {s.offer_id}: {s.reason}" for s in scan.skipped]
+    return out, err
 
 
 def _cli(argv: list[str]) -> int:
@@ -130,8 +142,11 @@ def _cli(argv: list[str]) -> int:
         store = ProfileStore(root, args.handle)
         store.identity()
         if args.command == "known":
-            print("\n".join(known(store, args.urls)))
-            return 0
+            out, err = known(store, args.urls)
+            print("\n".join(out))
+            if err:
+                print("\n".join(err), file=sys.stderr)
+            return 1 if err else 0
         mark(store, args.offer_id, args.status, at=at, reason=args.reason)
     except (
         LifecycleError,
