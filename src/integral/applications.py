@@ -6,6 +6,12 @@ transition (`lifecycle.transition`, so `ALLOWED_TRANSITIONS` decides) and, for
 `applied` and `rejected`, the §5.2 application status. `expired` has no
 application status — an expired advert was never sent.
 
+`python -m integral.applications known --id <handle> <url>...` answers, for an
+advert found outside `source()` (a careers-page scan, an aggregator, a link the
+candidate pastes), whether it is already in the store and how far it got. A scan
+diffed against the previous scan says what is new on the page, not what is new
+to the candidate; this says the second.
+
 What is guaranteed: every refusal (a transition the table forbids, a bad `--at`,
 a corrupt or candidate-confirmed application record) happens before the first
 write. What is not: an I/O failure part-way through the writes can still split
@@ -27,12 +33,13 @@ from integral.identity import IdentityError, ProfileLeak, ProfileStore
 from integral.lifecycle import (
     LifecycleError,
     _parse_at,
+    canonicalize_url,
     load_lifecycle_offer,
     read_application_status,
     record_application_status,
     save_lifecycle_offer,
 )
-from integral.offers import OfferError, OfferStatus
+from integral.offers import OfferError, OfferStatus, load_offers
 from integral.profile import ProfileError
 from integral.profile_capture import capture_offer_decision_reason
 from integral.state_home import StateHomeRefused, ensure_outside_a_work_tree, profiles_root
@@ -81,6 +88,21 @@ def mark(
     save_lifecycle_offer(store, new_offer, new_record)
 
 
+def known(store: ProfileStore, urls: list[str]) -> list[str]:
+    """One line per url: `NEW <url>`, or the stored offer's status and its
+    application status (`-` when none), title, company and url."""
+    stored = {canonicalize_url(o.url): o for o in load_offers(store).offers if o.url}
+    lines = []
+    for url in urls:
+        offer = stored.get(canonicalize_url(url))
+        if offer is None:
+            lines.append(f"NEW {url}")
+            continue
+        application = read_application_status(store, offer.id) or "-"
+        lines.append(f"{offer.status} {application} | {offer.title} | {offer.company} | {url}")
+    return lines
+
+
 def _cli(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="python -m integral.applications")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -91,8 +113,14 @@ def _cli(argv: list[str]) -> int:
     cmd.add_argument("--input-dir", default=None)
     cmd.add_argument("--at", default=None, help="ISO-8601 with timezone; default now (UTC)")
     cmd.add_argument("--reason", default=None)
+    seen = sub.add_parser("known")
+    seen.add_argument("urls", nargs="+")
+    seen.add_argument("--id", required=True, dest="handle")
+    seen.add_argument("--input-dir", default=None)
     args = parser.parse_args(argv)
-    at = args.at if args.at is not None else datetime.now(UTC).isoformat(timespec="seconds")
+    at = getattr(args, "at", None)
+    if at is None:
+        at = datetime.now(UTC).isoformat(timespec="seconds")
     try:
         root = (
             ensure_outside_a_work_tree(args.input_dir, source="--input-dir")
@@ -101,6 +129,9 @@ def _cli(argv: list[str]) -> int:
         )
         store = ProfileStore(root, args.handle)
         store.identity()
+        if args.command == "known":
+            print("\n".join(known(store, args.urls)))
+            return 0
         mark(store, args.offer_id, args.status, at=at, reason=args.reason)
     except (
         LifecycleError,
