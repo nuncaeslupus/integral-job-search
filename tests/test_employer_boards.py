@@ -487,7 +487,7 @@ def test_lever_reads_the_requirements_the_api_keeps_apart() -> None:
 
 def test_a_row_admitting_only_the_first_employer_does_not_count(tmp_path: Path) -> None:
     """#445 round 2, B1: the gate replayed the first list URL only, so a
-    well-formed row refusing 12 of Lever's 13 employer boards still counted."""
+    well-formed row refusing all but one of Lever's employer boards still counted."""
     directory = _library(tmp_path, "lever_en")
     ledger = _ledger_with(
         tmp_path,
@@ -500,9 +500,10 @@ def test_a_row_admitting_only_the_first_employer_does_not_count(tmp_path: Path) 
     measured = measure(directory, ledger)
     assert measured["ats_host_connectors_conforming"] == 0
     why = measured["not_conforming"]["lever_en"]
+    refused = len(load_connector(directory / "lever_en").list.employers) - 1  # all but aircall
     # Every reason is the replay's — the row's own checks pass, so this case
     # reaches the code it pins rather than being refused earlier.
-    assert len(why) == 12 and all("disallows" in w for w in why), why
+    assert len(why) == refused and all("disallows" in w for w in why), why
 
 
 def test_a_row_refusing_only_the_first_employer_does_not_count(tmp_path: Path) -> None:

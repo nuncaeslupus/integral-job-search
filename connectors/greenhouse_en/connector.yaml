@@ -62,7 +62,9 @@ list:
     algolia: Algolia
     anthropic: Anthropic
     axiom: Axiom
+    cabify: Cabify
     canonical: Canonical
+    celonis: Celonis
     chainguard: Chainguard
     circleci: CircleCI
     cloudflare: Cloudflare
@@ -70,6 +72,7 @@ list:
     coursera: Coursera
     databricks: Databricks
     datadog: Datadog
+    dataiku: Dataiku
     discord: Discord
     dropbox: Dropbox
     duolingo: Duolingo
@@ -87,16 +90,20 @@ list:
     khanacademy: Khan Academy
     labelbox: Labelbox
     launchdarkly: LaunchDarkly
+    lokalise: Lokalise
     mongodb: MongoDB
     mozilla: Mozilla
     neo4j: Neo4j
     netlify: Netlify
     newrelic: New Relic
+    okta: Okta
+    onetrust: OneTrust
     pagerduty: PagerDuty
     planetscale: PlanetScale
     polyai: PolyAI
     postman: Postman
     reddit: Reddit
+    rubrik: Rubrik
     scaleai: Scale AI
     sourcegraph91: Sourcegraph
     speechmatics: Speechmatics
@@ -109,6 +116,7 @@ list:
     typeform: Typeform
     udemy: Udemy
     vercel: Vercel
+    vonage: Vonage
     wallapop: Wallapop
     warp: Warp
     wayve: Wayve

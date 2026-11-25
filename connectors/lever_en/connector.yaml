@@ -66,6 +66,7 @@ list:
     scaleway: Scaleway
     spotify: Spotify
     swile: Swile
+    tinybird: Tinybird
 
 detail:
   fields:

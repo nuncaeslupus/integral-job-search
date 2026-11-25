@@ -72,6 +72,7 @@ list:
     astronomer: Astronomer
     baseten: Baseten
     buffer: Buffer
+    camunda: Camunda
     clickhouse: ClickHouse
     coder: Coder
     cognition: Cognition
@@ -81,6 +82,7 @@ list:
     deepl: DeepL
     deepnote: Deepnote
     docker: Docker
+    docplanner: Docplanner
     dust: Dust
     elevenlabs: ElevenLabs
     gitbook: GitBook
@@ -89,6 +91,7 @@ list:
     hex: Hex
     hightouch: Hightouch
     incident: incident.io
+    kong: Kong
     langchain: LangChain
     linear: Linear
     livekit: LiveKit
@@ -103,6 +106,7 @@ list:
     oyster: Oyster
     perplexity: Perplexity
     photoroom: Photoroom
+    phrase: Phrase
     pinecone: Pinecone
     poolside: Poolside
     posthog: PostHog
@@ -114,6 +118,7 @@ list:
     runway: Runway
     sentry: Sentry
     sierra: Sierra
+    snowflake: Snowflake
     supabase: Supabase
     synthesia: Synthesia
     temporal: Temporal
