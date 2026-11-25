@@ -1043,6 +1043,7 @@ def test_the_committed_employer_boards_declare_it() -> None:
     }
     assert declared == {
         "ashby_en",
+        "factorial_es",
         "greenhouse_en",
         "lever_en",
         "rippling_en",

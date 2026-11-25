@@ -1,13 +1,13 @@
 {
   "robots_adjudications_misrepresenting_their_standing": 0,
-  "robots_adjudications_without_a_competent_second_reader": 23,
+  "robots_adjudications_without_a_competent_second_reader": 24,
   "controls_checked": 16,
   "competence_fixtures_checked": 16,
   "packages_without_an_adjudication_record": 0,
   "standings": {
     "two_parsers_agreed": 6,
     "single_parser": 18,
-    "no_negative_control_possible": 5
+    "no_negative_control_possible": 6
   },
   "single_parser_cases": {
     "second_reader_ran_and_could_not_refuse": 3,
@@ -34,6 +34,7 @@
     "justjoin.it",
     "landing.jobs",
     "nofluffjobs.com",
+    "playtomic.factorial.es",
     "python.org",
     "remoteok.com",
     "remotive.com",

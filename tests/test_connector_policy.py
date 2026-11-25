@@ -869,8 +869,9 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     """
     measured = cp.measure_second_readers()
 
-    # 19, plus T144's four ATS hosts whose files leave nothing to refuse.
-    assert measured["robots_adjudications_without_a_competent_second_reader"] == 23
+    # 19, plus T144's four ATS hosts whose files leave nothing to refuse, plus
+    # factorial_es, whose file disallows nothing.
+    assert measured["robots_adjudications_without_a_competent_second_reader"] == 24
     assert measured["robots_adjudications_misrepresenting_their_standing"] == 0
     # The count is every row minus those standing on a demonstrated agreement —
     # asserted as that relationship and not only as a literal, because the
@@ -878,7 +879,7 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     # edited to stay true rather than being re-derived.
     live = cp.adjudications()
     earned = [row for row in live if row.standing == cp.TWO_PARSERS_AGREED and not row.problems()]
-    assert len(live) - len(earned) == 23
+    assert len(live) - len(earned) == 24
     # **It was 20 until 2026-09-08, and what moved it is the point of T120.**
     # foorilla.com carried a committed robots.txt and stood as `single_parser`
     # because `urllib.robotparser` could not refuse anything on a file opening
@@ -892,7 +893,7 @@ def test_the_honest_count_of_incompetent_second_readers_is_reported_under_its_ow
     # Both survive into the committed record: hiding the honest count behind
     # the gate's zero is the defect, so it is committed beside it.
     committed = cp.record_second_readers(measured)
-    assert committed["robots_adjudications_without_a_competent_second_reader"] == 23
+    assert committed["robots_adjudications_without_a_competent_second_reader"] == 24
 
 
 def test_single_parser_names_which_of_its_two_findings_each_row_is() -> None:

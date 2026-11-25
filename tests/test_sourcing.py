@@ -300,7 +300,12 @@ def test_robots_is_consulted_before_the_request_is_made(store: ProfileStore) -> 
     )
     assert asked == [], "a disallowed URL was fetched"
     assert run.added == 0
-    assert all(o.skipped and "robots" in o.skipped for o in run.outcomes), run.summary()
+    # A board whose slot is in the host (factorial_es) asks each employer's own
+    # robots.txt, so a refusal of every employer ends it with `error`, not `skipped`.
+    assert all(
+        "robots" in (o.skipped or "") or "robots.txt disallows" in (o.error or "")
+        for o in run.outcomes
+    ), run.summary()
 
 
 def test_an_unreadable_robots_refuses_rather_than_permits(store: ProfileStore) -> None:
@@ -326,7 +331,9 @@ def test_an_unreadable_robots_refuses_rather_than_permits(store: ProfileStore) -
         robots=Robots(fetch=broken, sleep=lambda _: None),
     )
     assert asked == []
-    assert all(o.skipped for o in run.outcomes), run.summary()
+    assert all(o.skipped or "unreachable: robots.txt" in (o.error or "") for o in run.outcomes), (
+        run.summary()
+    )
 
 
 def test_an_unsteered_board_without_terms_is_skipped(store: ProfileStore) -> None:
