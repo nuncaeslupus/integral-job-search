@@ -1,0 +1,18 @@
+# integral-job-search
+
+> A candidate-centred job search that runs as a conversation in Claude Code, judging every offer in terms of what you actually need.
+
+One dimension model (how social the office is, whether "remote" means remote, whether the schedule survives a school run) is carried through every stage: the questions asked, the evidence quoted from each advert, the ranking, the CV and letter, and the interview. Each step ends when a checkpoint script says so.
+
+## Docs
+
+- [README](https://github.com/nuncaeslupus/integral-job-search/blob/main/README.md)
+- [Methods](https://github.com/nuncaeslupus/integral-job-search/blob/main/docs/METHODS.md)
+- [Dimension catalogue](https://github.com/nuncaeslupus/integral-job-search/blob/main/docs/dimension-catalogue.md)
+- [Product shape](https://github.com/nuncaeslupus/integral-job-search/blob/main/docs/product-shape.md)
+- [Distribution](https://github.com/nuncaeslupus/integral-job-search/blob/main/docs/distribution.md)
+
+## Optional
+
+- [Contributing](https://github.com/nuncaeslupus/integral-job-search/blob/main/CONTRIBUTING.md)
+- [Security policy](https://github.com/nuncaeslupus/integral-job-search/blob/main/SECURITY.md)

@@ -173,3 +173,5 @@ was taken, and what was assessed and not adopted, is recorded in
 ## License
 
 [MIT](LICENSE).
+
+More tools by the same author: [github.com/nuncaeslupus](https://github.com/nuncaeslupus).
