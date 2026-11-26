@@ -670,10 +670,11 @@ def contribute(
         destination.write_text(text, encoding="utf-8")
     command = _submission_command(disclosure, contents)
     (outbox / SUBMISSION_NOTE).write_text(
-        "This bundle has not been sent. To open the pull request:\n\n"
-        + " ".join(command)
-        + f"\n\nOr open an issue at https://github.com/{SOURCES_REPO}/issues with "
-        "these files attached.\n",
+        "This bundle has not been sent. Pull requests are not accepted for now;\n"
+        f"to share it, open an issue at https://github.com/{SOURCES_REPO}/issues/new,\n"
+        "attach the files in this folder and paste the description below.\n\n"
+        + contribution_body(disclosure, contents)
+        + "\n",
         encoding="utf-8",
     )
 
