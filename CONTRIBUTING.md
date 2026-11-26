@@ -1,5 +1,13 @@
 # Contributing a connector or a language pack
 
+> **Issues are welcome; pull requests are not accepted for now.** Share a
+> connector or language pack by opening an
+> [issue](https://github.com/nuncaeslupus/integral-job-search/issues/new/choose)
+> and attaching the bundle the tool writes to `~/.integral-job-search/outbox/`
+> instead of running the `gh pr create` command it prints. Outside pull requests
+> are closed without review. Security problems: see [SECURITY.md](SECURITY.md).
+> The rest of this page describes what a good bundle contains.
+
 Two kinds of contribution are wanted here, and both are **data, not code**: a
 connector package under `connectors/`, and a language's strings in
 `strings/catalogue.json`. Neither needs a change under `src/`, and a pull
