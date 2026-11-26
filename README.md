@@ -97,7 +97,7 @@ The product is a Claude Code project; the agent is the interface.
   [integral-connectors](https://github.com/nuncaeslupus/integral-connectors)
   over plain HTTPS and must pass their fixture check before first use. Contributing
   one back is consent-gated: the tool discloses the files, asks once, and writes
-  the bundle and a `gh pr create` command to the outbox; it never sends anything.
+  the bundle and a note on sharing it as an issue to the outbox; it never sends anything.
 - **Hooks.** `.claude/settings.json` runs `tools/bootstrap_hook.sh` at session
   start (dependency install) and `tools/profile_guard.sh` before file and shell
   tools (keeps candidate data out of the repository).

@@ -4,7 +4,7 @@
 > connector or language pack by opening an
 > [issue](https://github.com/nuncaeslupus/integral-job-search/issues/new/choose)
 > and attaching the bundle the tool writes to `~/.integral-job-search/outbox/`
-> instead of running the `gh pr create` command it prints. Outside pull requests
+> with the description its `SUBMISSION.txt` note gives. Outside pull requests
 > are closed without review. Security problems: see [SECURITY.md](SECURITY.md).
 > The rest of this page describes what a good bundle contains.
 
@@ -15,9 +15,10 @@ request that mixes one with the other is much harder for one person to review.
 
 The tool can build the connector bundle for you — it discloses exactly which
 files would be sent, asks once, and writes the bundle to
-`~/.integral-job-search/outbox/` along with the `gh pr create` command. It never
-sends anything itself. The pull request body is generated from your
-`meta.yaml`, so whatever you record there is what a reviewer reads.
+`~/.integral-job-search/outbox/` with a `SUBMISSION.txt` note: open an issue, attach
+the files and paste the description from it. It never sends anything itself. The
+description is generated from your `meta.yaml`, so whatever you record there is what
+a reviewer reads.
 
 ## The failure mode that matters: a probe that repeats its fixture
 

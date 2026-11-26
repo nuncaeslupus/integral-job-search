@@ -290,6 +290,8 @@ def test_the_submission_is_prepared_and_not_sent(home: Path, installed: Path) ->
     assert record["submission"][:3] == ["gh", "pr", "create"]
     note = (home / "outbox" / installed.name / SUBMISSION_NOTE).read_text(encoding="utf-8")
     assert "has not been sent" in note
+    assert "/issues/new" in note
+    assert "gh pr create" not in note
 
 
 # ---------------------------------------------------------------------------
